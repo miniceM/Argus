@@ -1,5 +1,4 @@
-# Enterprise Agent Evaluation PoC
-
+# Argue
 > **Langfuse + Remote Agent Eval Runner + Demo Agent v1/v2**
 >
 > 目标：证明企业可以把 Agent 评测做成平台能力，而不是把评测 SDK、Dataset Runner 和 Judge 逻辑侵入每个 Agent 应用。

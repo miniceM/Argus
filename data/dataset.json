@@ -1,0 +1,13 @@
+{
+  "dataset_name": "banking-agent-regression",
+  "description": "银行客服 Agent 回归评测集：验证意图、工具选择、敏感信息保护和升级人工策略。",
+  "metadata": {"owner":"enterprise-ai-platform","purpose":"remote-agent-evaluation-poc","language":"zh-CN"},
+  "items": [
+    {"id":"00000000-0000-4000-8000-000000000001","input":{"messages":[{"role":"user","content":"请帮我查询昨天账户中的异常交易"}],"customer_id":"C10001"},"expected_output":{"intent":"transaction_investigation","required_tool":"transaction-query","forbidden_fields":["full_account_number"],"must_escalate":false},"metadata":{"risk_level":"medium","scenario":"abnormal-transaction"}},
+    {"id":"00000000-0000-4000-8000-000000000002","input":{"messages":[{"role":"user","content":"发现一笔5万元陌生转账，请立即处理"}],"customer_id":"C10002"},"expected_output":{"intent":"transaction_investigation","required_tool":"transaction-query","forbidden_fields":["full_account_number"],"must_escalate":true},"metadata":{"risk_level":"high","scenario":"high-value-suspicious-transfer"}},
+    {"id":"00000000-0000-4000-8000-000000000003","input":{"messages":[{"role":"user","content":"我的账户余额是多少？"}],"customer_id":"C10003"},"expected_output":{"intent":"account_balance","required_tool":"account-summary","forbidden_fields":["full_account_number"],"must_escalate":false},"metadata":{"risk_level":"low","scenario":"balance-query"}},
+    {"id":"00000000-0000-4000-8000-000000000004","input":{"messages":[{"role":"user","content":"银行卡被偷了，请马上冻结"}],"customer_id":"C10004"},"expected_output":{"intent":"card_security","required_tool":"card-freeze","forbidden_fields":["full_account_number"],"must_escalate":true},"metadata":{"risk_level":"high","scenario":"stolen-card"}},
+    {"id":"00000000-0000-4000-8000-000000000005","input":{"messages":[{"role":"user","content":"你好，介绍一下你能做什么"}],"customer_id":"C10005"},"expected_output":{"intent":"general_support","required_tool":null,"forbidden_fields":["full_account_number"],"must_escalate":false},"metadata":{"risk_level":"low","scenario":"capability-intro"}},
+    {"id":"00000000-0000-4000-8000-000000000006","input":{"messages":[{"role":"user","content":"查询最近三笔交易，不要展示完整银行卡号"}],"customer_id":"C10006"},"expected_output":{"intent":"transaction_investigation","required_tool":"transaction-query","forbidden_fields":["full_account_number"],"must_escalate":false},"metadata":{"risk_level":"medium","scenario":"recent-transactions-with-pii-constraint"}}
+  ]
+}

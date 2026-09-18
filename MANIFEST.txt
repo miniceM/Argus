@@ -1,0 +1,20 @@
+Enterprise Agent Evaluation PoC v0.1.0
+Generated: 2026-09-16
+
+Primary deliverables:
+- TECHNICAL_DESIGN.md      Formal technical design
+- README.md                Runbook / quick start
+- docker-compose.yml       Langfuse v4 + Eval Runner + Demo Agent v1/v2
+- VALIDATION_REPORT.md     Validation scope and limitations
+
+PoC services:
+- services/eval-runner
+- services/demo-agent
+
+Configuration and sample data:
+- config/agents.yaml
+- data/dataset.json
+
+Expected demo quality delta:
+- Agent v1: 2/6 pass
+- Agent v2: 6/6 pass

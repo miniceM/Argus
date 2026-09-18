@@ -1,0 +1,61 @@
+name: enterprise-agent-eval-poc-cloud
+
+# 方案 B：Langfuse 使用 Cloud 托管，本地只跑 demo-agent + eval-runner。
+#
+# 用法：
+#   cp .env.cloud.example .env.cloud   # 填入 Cloud 凭据
+#   docker compose -f docker-compose.cloud.yml --env-file .env.cloud up -d --build
+#   ./scripts/run-demo-cloud.sh
+#
+# 与本机全栈版（docker-compose.yml）的区别：
+#   不含 langfuse-web / langfuse-worker / postgres / clickhouse / redis / minio。
+#   eval-runner 通过 .env.cloud 提供的 LANGFUSE_BASE_URL + PUBLIC/SECRET KEY 直连 Cloud。
+#   agent registry 中的 endpoint 仍是容器内 DNS，故 demo-agent 必须与本服务同网络。
+#
+# 内存需求约 0.6-1.0 GB，磁盘约 1 GB；无需 ClickHouse/Postgres。
+
+services:
+  demo-agent-v1:
+    build: {context: ./services/demo-agent}
+    restart: unless-stopped
+    environment: {AGENT_VERSION: v1}
+    ports: ["127.0.0.1:18081:8080"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  demo-agent-v2:
+    build: {context: ./services/demo-agent}
+    restart: unless-stopped
+    environment: {AGENT_VERSION: v2}
+    ports: ["127.0.0.1:18082:8080"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  eval-runner:
+    build: {context: ./services/eval-runner}
+    restart: unless-stopped
+    depends_on:
+      demo-agent-v1: {condition: service_healthy}
+      demo-agent-v2: {condition: service_healthy}
+    env_file: [./.env.cloud]
+    environment:
+      LANGFUSE_TRACING_ENVIRONMENT: poc-cloud
+      AGENT_REGISTRY_PATH: /app/config/agents.yaml
+      DATASET_SEED_PATH: /app/data/dataset.json
+      RUNNER_VERSION: 0.1.0
+    volumes: [./config:/app/config:ro, ./data:/app/data:ro]
+    ports: ["18080:8080"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 10s

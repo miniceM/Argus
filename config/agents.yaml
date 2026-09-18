@@ -1,0 +1,23 @@
+agents:
+  banking-agent:
+    name: 银行客服 Agent
+    description: 演示用银行客服 Agent；v1 包含故意保留的缺陷，v2 修复这些缺陷。
+    versions:
+      v1:
+        endpoint: http://demo-agent-v1:8080/invoke
+        method: POST
+        timeout_seconds: 10
+        max_retries: 2
+        rate_limit_per_minute: 600
+        request_mapping:
+          messages: input.messages
+          customer_id: input.customer_id
+      v2:
+        endpoint: http://demo-agent-v2:8080/invoke
+        method: POST
+        timeout_seconds: 10
+        max_retries: 2
+        rate_limit_per_minute: 600
+        request_mapping:
+          messages: input.messages
+          customer_id: input.customer_id

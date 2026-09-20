@@ -1052,13 +1052,15 @@ index 1a5181e..c2e1009 100644
  import Head from "next/head";
  import { type Session } from "next-auth";
  import { SessionProvider, useSession } from "next-auth/react";
-@@ -99,6 +104,13 @@ import {
+@@ -99,6 +104,15 @@ import {
    isPostHogClientEnabled,
    isProductAnalyticsAvailable,
  } from "@/src/features/posthog-analytics/productAnalyticsAvailability";
 +import { NextIntlClientProvider, type AbstractIntlMessages } from "next-intl";
 +import {
 +  FALLBACK_LOCALE,
++  readLocaleCookie,
++  resolveLocale,
 +  resolveRequestLocale,
 +  type AppLocale,
 +} from "@/src/features/i18n/config";
@@ -1093,7 +1095,7 @@ index 1a5181e..c2e1009 100644
  }) => {
    const router = useRouter();
    const skipAppLayout =
-@@ -172,72 +199,92 @@ const MyApp: AppType<{ session: Session | null }> = ({
+@@ -172,72 +199,97 @@ const MyApp: AppType<{ session: Session | null }> = ({
    );
  
    return (
@@ -1228,7 +1230,12 @@ index 1a5181e..c2e1009 100644
 +  )) as AppInitialProps<I18nAppProps>;
 +  const locale = appContext.ctx.req
 +    ? resolveRequestLocale(appContext.ctx.req.headers)
-+    : FALLBACK_LOCALE;
++    : resolveLocale({
++        cookieLocale:
++          typeof document === "undefined"
++            ? undefined
++            : readLocaleCookie(document.cookie),
++      });
 +
 +  return {
 +    ...appProps,
@@ -1310,3 +1317,28 @@ index e4d351c..34bf2bb 100644
 +    );
 +  }
  }
+diff --git a/web/src/pages/api/public/argus-image-identity.ts b/web/src/pages/api/public/argus-image-identity.ts
+new file mode 100644
+index 0000000..a1b2c3d
+--- /dev/null
++++ b/web/src/pages/api/public/argus-image-identity.ts
+@@ -0,0 +1,19 @@
++import type { NextApiRequest, NextApiResponse } from "next";
++
++type IdentityResponse = { buildId: string } | { error: string };
++
++export default function handler(
++  req: NextApiRequest,
++  res: NextApiResponse<IdentityResponse>,
++) {
++  if (req.method !== "GET") {
++    res.setHeader("Allow", "GET");
++    return res.status(405).json({ error: "method_not_allowed" });
++  }
++
++  const buildId = process.env.BUILD_ID;
++  if (!buildId) return res.status(503).json({ error: "build_id_unavailable" });
++
++  res.setHeader("Cache-Control", "no-store");
++  return res.status(200).json({ buildId });
++}

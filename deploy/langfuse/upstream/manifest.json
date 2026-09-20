@@ -24,7 +24,7 @@
   "patches": [
     {
       "path": "patches/0001-i18n-infrastructure.patch",
-      "sha256": "12033d22fa6f72a78952150538934e63a6a6c69d156bd37783ec9c0cd4aaba1e"
+      "sha256": "391d79fc7afcb14a5f6459e8b67e11add9c4bccf2b2fa9f97017da930ee578c0"
     },
     {
       "path": "patches/0002-navigation-language-switcher.patch",

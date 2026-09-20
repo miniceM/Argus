@@ -186,3 +186,24 @@ def test_i18n_workflow_filters_changes_and_publishes_ghcr_image() -> None:
     assert build["with"]["load"] == "${{ github.event_name == 'pull_request' }}"
     assert build["with"]["push"] == "${{ github.event_name != 'pull_request' }}"
     assert build["with"]["tags"] == "${{ steps.meta.outputs.tags }}"
+
+
+def test_client_navigation_reads_the_browser_locale_cookie() -> None:
+    patch = (I18N_ROOT / "patches" / "0001-i18n-infrastructure.patch").read_text()
+    integration_ui = (I18N_ROOT / "scripts" / "integration-ui.mjs").read_text()
+
+    assert "readLocaleCookie" in patch
+    assert "document.cookie" in patch
+    assert 'getByRole("link", { name: "链路追踪" })' in integration_ui
+
+
+def test_remote_acceptance_isolates_env_and_verifies_image_identity() -> None:
+    validate = (I18N_ROOT / "scripts" / "validate-integration.sh").read_text()
+    compose_cloud = (ROOT / "docker-compose.cloud.yml").read_text()
+
+    assert "mktemp" in validate
+    assert "ARGUS_CLOUD_ENV_FILE" in validate
+    assert 'if [[ ! -f "$ROOT/.env.cloud" ]]' not in validate
+    assert "LANGFUSE_I18N_BUILD_ID" in validate
+    assert "/api/public/argus-image-identity" in validate
+    assert "ARGUS_CLOUD_ENV_FILE:-.env.cloud" in compose_cloud

@@ -97,9 +97,13 @@ LANGFUSE_ADMIN_EMAIL
 LANGFUSE_ADMIN_PASSWORD
 LANGFUSE_PROJECT_ID
 LANGFUSE_I18N_IMAGE_DIGEST
+LANGFUSE_I18N_BUILD_ID
 ```
 
-缺少任何变量时，集成入口以退出码 `2` 报告 `NOT_RUN`。凭据只通过环境变量或权限受控的 `.env.cloud` 传入，不写入 manifest、截图或 Git。
+缺少任何变量时，集成入口以退出码 `2` 报告 `NOT_RUN`。`LANGFUSE_I18N_BUILD_ID`
+必须与发布 artifact 中的 `argus-i18n-<git-sha>` 相同；验收会从正在运行的 Langfuse
+服务读取镜像内置的 build identity，确认当前服务确实来自这次发布。凭据只通过环境变量
+或权限受控的临时 env 文件传入，不写入 manifest、截图或 Git。
 
 ## 门禁如何失败
 

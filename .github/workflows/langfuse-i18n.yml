@@ -191,6 +191,7 @@ jobs:
           IMAGE_REF: ghcr.io/minicem/argus-langfuse-i18n
           IMAGE_TAG: ghcr.io/minicem/argus-langfuse-i18n:4.38.0-i18n-${{ github.sha }}
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_BUILD_ID: argus-i18n-${{ github.sha }}
         run: |
           mkdir -p artifacts/i18n-image
           cp deploy/langfuse/upstream/manifest.json artifacts/i18n-image/
@@ -200,7 +201,10 @@ jobs:
             docker image inspect --format '{{.Id}}' "$IMAGE_TAG" \
               > artifacts/i18n-image/image-id.txt
           else
-            printf '%s@%s\n' "$IMAGE_REF" "$IMAGE_DIGEST" \
+            {
+              printf '%s@%s\n' "$IMAGE_REF" "$IMAGE_DIGEST"
+              printf 'buildId=%s\n' "$IMAGE_BUILD_ID"
+            } \
               | tee artifacts/i18n-image/release-image.txt
           fi
 
@@ -225,6 +229,7 @@ jobs:
       LANGFUSE_ADMIN_PASSWORD: ${{ secrets.LANGFUSE_ADMIN_PASSWORD }}
       LANGFUSE_PROJECT_ID: ${{ vars.LANGFUSE_PROJECT_ID }}
       LANGFUSE_I18N_IMAGE_DIGEST: ${{ vars.LANGFUSE_I18N_IMAGE_DIGEST }}
+      LANGFUSE_I18N_BUILD_ID: ${{ vars.LANGFUSE_I18N_BUILD_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -83,6 +83,18 @@ try {
   await zhPage.goto(`${baseUrl}/project/${projectId}/datasets?view=active`, {
     waitUntil: "networkidle",
   });
+  await zhPage.getByRole("link", { name: "链路追踪" }).first().click();
+  await zhPage.waitForURL(
+    (url) => url.pathname === `/project/${projectId}/traces`,
+  );
+  await zhPage
+    .locator('[data-testid="page-header-title"]')
+    .filter({ hasText: "链路追踪" })
+    .waitFor();
+
+  await zhPage.goto(`${baseUrl}/project/${projectId}/datasets?view=active`, {
+    waitUntil: "networkidle",
+  });
   await zhPage.getByRole("combobox", { name: "语言" }).selectOption("en");
   await zhPage.waitForLoadState("networkidle");
   if (!zhPage.url().includes(`/project/${projectId}/datasets?view=active`)) {

@@ -105,6 +105,23 @@ def test_create_launch_rejects_empty_evaluators(client):
     assert r.status_code == 422
 
 
+def test_create_launch_rejects_run_scope_evaluator(client):
+    # Run-scope evaluator (e.g. run_pass_rate) must be rejected with 400 Bad Request
+    r = client.post(
+        "/api/v1/experiment-launches",
+        json={
+            "agent_id": "banking-agent",
+            "agent_version": "v1",
+            "dataset_name": "banking-agent-regression",
+            "evaluator_ids": ["pii_safe", "run_pass_rate"],
+        },
+    )
+    assert r.status_code == 400
+    detail = r.json().get("detail", "")
+    assert "run-scope" in detail.lower() or "not supported" in detail.lower()
+
+
+
 def test_experiment_launches_apis_and_execution(client):
     # Ensure banking-agent v1 exists from auto-import
     # 1. Create Launch

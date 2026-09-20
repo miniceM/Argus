@@ -57,6 +57,7 @@ class LaunchService:
         launch_id: str | None = None,
         dataset_snapshot: dict[str, Any] | None = None,
         dataset_client: Any | None = None,
+        allow_run_scope: bool = False,
     ) -> ExperimentLaunchRecord:
         if evaluator_ids is not None and len(evaluator_ids) == 0:
             raise ValueError("evaluator_ids must not be empty. A launch must have at least one evaluator.")
@@ -67,6 +68,15 @@ class LaunchService:
             "pii_safe",
             "required_tool_match",
         ]
+
+        eval_specs = [default_evaluator_registry.resolve(eid) for eid in eval_list]
+        if not allow_run_scope:
+            run_scoped = [e["id"] for e in eval_specs if e.get("scope") != "item"]
+            if run_scoped:
+                raise ValueError(
+                    f"Run-scope evaluators ({', '.join(run_scoped)}) are not supported by the standalone launch runner. "
+                    "Only item-scope evaluators are supported."
+                )
 
 
         # Request payload for idempotency checking (calculated upfront)
@@ -108,8 +118,6 @@ class LaunchService:
             effective_concurrency = max_concurrency
         else:
             effective_concurrency = ver_rec.max_concurrency
-
-        eval_specs = [default_evaluator_registry.resolve(eid) for eid in eval_list]
 
         # Resolve full frozen dataset snapshot
         if dataset_snapshot is not None:

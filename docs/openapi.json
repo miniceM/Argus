@@ -1297,7 +1297,7 @@
             "type": "array",
             "minItems": 1,
             "title": "Evaluator Ids",
-            "description": "List of evaluator IDs to run; must contain at least one evaluator"
+            "description": "List of item-scope evaluator IDs to run; must contain at least one evaluator. Run-scope evaluators are not supported by the standalone launch runner."
           },
           "max_concurrency": {
             "anyOf": [

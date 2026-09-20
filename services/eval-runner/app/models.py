@@ -173,7 +173,7 @@ class ExperimentLaunchCreateRequest(BaseModel):
     evaluator_ids: list[str] = Field(
         default_factory=lambda: ["intent_match", "required_tool_match", "pii_safe", "escalation_match"],
         min_length=1,
-        description="List of evaluator IDs to run; must contain at least one evaluator",
+        description="List of item-scope evaluator IDs to run; must contain at least one evaluator. Run-scope evaluators are not supported by the standalone launch runner.",
     )
     max_concurrency: int | None = Field(default=None, ge=1, le=50, description="Optional concurrency override; if omitted, inherits from AgentVersion")
 

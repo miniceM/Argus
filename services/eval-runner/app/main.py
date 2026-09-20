@@ -188,6 +188,7 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
             evaluator_ids=legacy_evaluator_ids,
             launch_id=launch_id,
             dataset_client=dataset,
+            allow_run_scope=True,
         )
         launch_id = persisted.id
         acquire_launch_execution(db_manager, launch_id)

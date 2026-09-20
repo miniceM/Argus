@@ -167,3 +167,30 @@ def test_api_request_model_concurrency_defaults_to_none():
     assert req.max_concurrency is None
 
 
+def test_create_launch_rejects_run_scope_evaluator_by_default(tmp_path):
+    db_mgr, registry = setup_db(tmp_path)
+    launch_svc = LaunchService(db_mgr, registry, runner_version="0.1.0")
+
+    # Default allow_run_scope=False: must reject run_pass_rate
+    with pytest.raises(ValueError, match="Run-scope evaluators .* not supported"):
+        launch_svc.create_launch(
+            agent_id="banking-agent",
+            agent_version="v1",
+            dataset_name="banking-agent-regression",
+            evaluator_ids=["pii_safe", "run_pass_rate"],
+        )
+
+    # When allow_run_scope=True (e.g. for legacy Langfuse pipeline): should succeed
+    launch = launch_svc.create_launch(
+        agent_id="banking-agent",
+        agent_version="v1",
+        dataset_name="banking-agent-regression",
+        evaluator_ids=["pii_safe", "run_pass_rate"],
+        allow_run_scope=True,
+    )
+    assert launch is not None
+    eval_ids = [e["id"] for e in launch.manifest["evaluators"]]
+    assert "run_pass_rate" in eval_ids
+
+
+

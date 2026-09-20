@@ -141,10 +141,12 @@ jobs:
       - name: Add swap for the upstream Next.js production build
         shell: bash
         run: |
-          sudo fallocate -l 8G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
+          swap_file="/mnt/argus-langfuse-${GITHUB_RUN_ID}.swap"
+          sudo fallocate -l 8G "$swap_file"
+          sudo chmod 600 "$swap_file"
+          sudo mkswap "$swap_file"
+          sudo swapon "$swap_file"
+          swapon --show
 
       - name: Build the release image
         uses: docker/build-push-action@v6

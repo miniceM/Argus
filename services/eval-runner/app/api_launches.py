@@ -233,23 +233,31 @@ async def _execute_single_item(
         quality_conclusion = "fail"
 
     if execution_status == "succeeded" and agent_output is not None:
-        try:
-            eval_specs = manifest.get("evaluators", [])
-            for ev_spec in eval_specs:
-                ev_id = ev_spec["id"]
-                ev_fn = default_evaluator_registry.get_evaluator_fn(ev_id, ev_spec.get("version"))
-                ev_res = ev_fn(output=agent_output, expected_output=expected_output)
-                scores_dict[ev_id] = float(getattr(ev_res, "value", 0.0))
-
-            quality_conclusion = evaluate_item_quality(
-                scores_dict,
-                eval_specs,
-                manifest.get("quality_policy"),
-            )
-        except Exception as exc:
-            eval_status = "failed"
-            eval_error = str(exc)
+        item_eval_specs = [
+            ev_spec for ev_spec in manifest.get("evaluators", [])
+            if ev_spec.get("scope", "item") == "item"
+        ]
+        if not item_eval_specs:
+            eval_status = "skipped"
             quality_conclusion = "unknown"
+        else:
+            try:
+                for ev_spec in item_eval_specs:
+                    ev_id = ev_spec["id"]
+                    ev_fn = default_evaluator_registry.get_evaluator_fn(ev_id, ev_spec.get("version"))
+                    ev_res = ev_fn(output=agent_output, expected_output=expected_output)
+                    scores_dict[ev_id] = float(getattr(ev_res, "value", 0.0))
+
+                quality_conclusion = evaluate_item_quality(
+                    scores_dict,
+                    item_eval_specs,
+                    manifest.get("quality_policy"),
+                )
+            except Exception as exc:
+                eval_status = "failed"
+                eval_error = str(exc)
+                quality_conclusion = "unknown"
+
 
     completed_at = datetime.utcnow()
     with db_mgr.get_session() as session:

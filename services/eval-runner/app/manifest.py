@@ -58,12 +58,16 @@ class LaunchService:
         dataset_snapshot: dict[str, Any] | None = None,
         dataset_client: Any | None = None,
     ) -> ExperimentLaunchRecord:
+        if evaluator_ids is not None and len(evaluator_ids) == 0:
+            raise ValueError("evaluator_ids must not be empty. A launch must have at least one evaluator.")
+
         eval_list = sorted(evaluator_ids) if evaluator_ids is not None else [
             "escalation_match",
             "intent_match",
             "pii_safe",
             "required_tool_match",
         ]
+
 
         # Request payload for idempotency checking (calculated upfront)
         payload_data = {

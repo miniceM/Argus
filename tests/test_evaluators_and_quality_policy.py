@@ -62,3 +62,9 @@ def test_evaluate_item_quality_multiple_evaluators_without_overall_pass():
     # One passed, one failed -> must fail
     assert evaluate_item_quality({"intent_match": 1.0, "pii_safe": 0.0}, specs, quality_policy) == "fail"
     assert evaluate_item_quality({"intent_match": 0.0, "pii_safe": 1.0}, specs, quality_policy) == "fail"
+
+
+def test_evaluate_item_quality_empty_evaluators_returns_unknown():
+    # Empty evaluators list must NEVER conclude 'pass'
+    assert evaluate_item_quality({}, []) == "unknown"
+

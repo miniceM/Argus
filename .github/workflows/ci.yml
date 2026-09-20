@@ -70,6 +70,11 @@ jobs:
           fi
           grep -q 'inject(headers)' services/eval-runner/app/main.py
 
+      - name: Verify OpenAPI specification is up to date
+        run: |
+          python scripts/export_openapi.py
+          git diff --exit-code docs/openapi.json || (echo "docs/openapi.json is out of date; run 'python scripts/export_openapi.py' and commit changes" >&2 && exit 1)
+
   unit-tests:
     name: Full Python Tests
     runs-on: ubuntu-latest

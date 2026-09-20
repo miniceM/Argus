@@ -16,7 +16,7 @@ from .api_registry import router as registry_router
 from .config import find_path, settings
 from .db import DatabaseManager, MigrationRunner
 from .db_models import ExperimentLaunchRecord
-from .evaluators import RUN_EVALUATORS, default_evaluator_registry
+from .evaluators import default_evaluator_registry
 from .executor import RemoteAgentExecutor
 from .manifest import LaunchService, acquire_launch_execution
 from .models import BootstrapResult, ExperimentRequest, ExperimentResult
@@ -167,13 +167,14 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
         executor = RemoteAgentExecutor(spec)
         experiment_name = request.experiment_name or f"{request.agent_id}-{request.agent_version}"
 
-        # Legacy experiment evaluator set: 5 item evaluators
+        # Legacy experiment evaluator set: 5 item evaluators + 1 run evaluator
         legacy_evaluator_ids = [
             "intent_match",
             "required_tool_match",
             "pii_safe",
             "escalation_match",
             "overall_pass",
+            "run_pass_rate",
         ]
 
         # Persist Launch in Argus DB with deterministic ID binding and dataset client reuse
@@ -191,11 +192,17 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
         launch_id = persisted.id
         acquire_launch_execution(db_manager, launch_id)
 
-        # Execution core derives exact evaluators and concurrency from frozen manifest
+        # Execution core derives exact item and run evaluators from frozen manifest
         frozen_eval_specs = persisted.manifest.get("evaluators", [])
         frozen_item_evaluators = [
             default_evaluator_registry.get_evaluator_fn(ev["id"], ev.get("version"))
             for ev in frozen_eval_specs
+            if ev.get("scope", "item") == "item"
+        ]
+        frozen_run_evaluators = [
+            default_evaluator_registry.get_evaluator_fn(ev["id"], ev.get("version"))
+            for ev in frozen_eval_specs
+            if ev.get("scope") == "run"
         ]
         effective_max_concurrency = persisted.manifest["execution_policy"]["max_concurrency"]
 
@@ -236,7 +243,7 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
             ),
             task=remote_task,
             evaluators=frozen_item_evaluators,
-            run_evaluators=RUN_EVALUATORS,
+            run_evaluators=frozen_run_evaluators,
             max_concurrency=effective_max_concurrency,
             metadata={
                 "launch_id": launch_id,
@@ -258,7 +265,13 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
                     run_scores = summary.get("run_scores", {})
                     pass_rate = run_scores.get("overall_pass_rate")
                     if pass_rate is not None:
-                        rec.quality_conclusion = "pass" if float(pass_rate) == 1.0 else "fail"
+                        # Extract threshold from frozen run_pass_rate evaluator
+                        run_threshold = 1.0
+                        for ev in frozen_eval_specs:
+                            if ev.get("id") == "run_pass_rate":
+                                run_threshold = float(ev.get("threshold", 1.0))
+                                break
+                        rec.quality_conclusion = "pass" if float(pass_rate) >= run_threshold else "fail"
                     else:
                         rec.quality_conclusion = "unknown"
                     run_id = (
@@ -274,7 +287,6 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
                     rec.completed_at = datetime.utcnow()
                     session.commit()
         except Exception:
-
             pass
 
         return ExperimentResult(

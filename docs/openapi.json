@@ -704,16 +704,6 @@
       },
       "AgentVersionCreateRequest": {
         "properties": {
-          "agent_id": {
-            "type": "string",
-            "title": "Agent Id",
-            "description": "Parent agent ID"
-          },
-          "version": {
-            "type": "string",
-            "title": "Version",
-            "description": "Version tag, e.g. v1, 2.0.0"
-          },
           "endpoint": {
             "type": "string",
             "title": "Endpoint",
@@ -806,6 +796,7 @@
           "trace_propagation": {
             "type": "string",
             "title": "Trace Propagation",
+            "description": "Trace context propagation standard, W3C only",
             "default": "W3C"
           },
           "is_idempotent": {
@@ -848,13 +839,23 @@
               }
             ],
             "title": "Metadata"
+          },
+          "agent_id": {
+            "type": "string",
+            "title": "Agent Id",
+            "description": "Parent agent ID"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "description": "Version tag, e.g. v1, 2.0.0"
           }
         },
         "type": "object",
         "required": [
+          "endpoint",
           "agent_id",
-          "version",
-          "endpoint"
+          "version"
         ],
         "title": "AgentVersionCreateRequest"
       },
@@ -1294,14 +1295,23 @@
               "type": "string"
             },
             "type": "array",
-            "title": "Evaluator Ids"
+            "minItems": 1,
+            "title": "Evaluator Ids",
+            "description": "List of evaluator IDs to run; must contain at least one evaluator"
           },
           "max_concurrency": {
-            "type": "integer",
-            "maximum": 50.0,
-            "minimum": 1.0,
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 50.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Max Concurrency",
-            "default": 4
+            "description": "Optional concurrency override; if omitted, inherits from AgentVersion"
           },
           "idempotency_key": {
             "anyOf": [
@@ -1521,11 +1531,18 @@
             "title": "Experiment Name"
           },
           "max_concurrency": {
-            "type": "integer",
-            "maximum": 50.0,
-            "minimum": 1.0,
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 50.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Max Concurrency",
-            "default": 4
+            "description": "Optional concurrency override; if omitted, inherits from AgentVersion"
           }
         },
         "type": "object",

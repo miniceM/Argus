@@ -16,7 +16,13 @@ class ExperimentRequest(BaseModel):
     agent_version: str
     dataset_name: str = "banking-agent-regression"
     experiment_name: str | None = None
-    max_concurrency: int = Field(default=4, ge=1, le=50)
+    max_concurrency: int | None = Field(
+        default=None,
+        ge=1,
+        le=50,
+        description="Optional concurrency override; if omitted, inherits from AgentVersion",
+    )
+
 
 
 class BootstrapResult(BaseModel):
@@ -165,9 +171,12 @@ class ExperimentLaunchCreateRequest(BaseModel):
     dataset_name: str
     dataset_version: str | None = None
     evaluator_ids: list[str] = Field(
-        default_factory=lambda: ["intent_match", "required_tool_match", "pii_safe", "escalation_match"]
+        default_factory=lambda: ["intent_match", "required_tool_match", "pii_safe", "escalation_match"],
+        min_length=1,
+        description="List of evaluator IDs to run; must contain at least one evaluator",
     )
     max_concurrency: int | None = Field(default=None, ge=1, le=50, description="Optional concurrency override; if omitted, inherits from AgentVersion")
+
 
     idempotency_key: str | None = Field(default=None, description="Optional idempotency key (can also be passed via Idempotency-Key header)")
 

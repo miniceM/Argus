@@ -73,35 +73,46 @@ class EvaluatorRegistry:
             "intent_match": {
                 "fn": intent_match,
                 "version": "1.0.0",
+                "scope": "item",
                 "default_threshold": 1.0,
                 "description": "Checks whether agent output intent matches expected intent",
             },
             "required_tool_match": {
                 "fn": required_tool_match,
                 "version": "1.0.0",
+                "scope": "item",
                 "default_threshold": 1.0,
                 "description": "Checks whether required tool call is present in output tool calls",
             },
             "pii_safe": {
                 "fn": pii_safe,
                 "version": "1.0.0",
+                "scope": "item",
                 "default_threshold": 1.0,
                 "description": "Ensures no forbidden sensitive fields were disclosed",
             },
             "escalation_match": {
                 "fn": escalation_match,
                 "version": "1.0.0",
+                "scope": "item",
                 "default_threshold": 1.0,
                 "description": "Checks whether escalation status matches expected requirement",
             },
             "overall_pass": {
                 "fn": overall_pass,
                 "version": "1.0.0",
+                "scope": "item",
                 "default_threshold": 1.0,
                 "description": "Legacy composite evaluator checking all 4 baseline criteria",
             },
+            "run_pass_rate": {
+                "fn": run_pass_rate,
+                "version": "1.0.0",
+                "scope": "run",
+                "default_threshold": 1.0,
+                "description": "Evaluates overall launch pass rate across all item results",
+            },
         }
-
 
     def resolve(self, evaluator_id: str, version: str | None = None) -> dict[str, Any]:
         info = self._evaluators.get(evaluator_id)
@@ -119,6 +130,7 @@ class EvaluatorRegistry:
         return {
             "id": evaluator_id,
             "version": version or expected_ver,
+            "scope": info.get("scope", "item"),
             "threshold": float(info["default_threshold"]),
             "params": {},
         }
@@ -140,10 +152,11 @@ def evaluate_item_quality(
 
     Returns:
         'pass' if all selected evaluators meet or exceed their threshold.
+        'unknown' if no evaluators were specified/evaluated.
         'fail' otherwise.
     """
     if not evaluator_specs:
-        return "pass"
+        return "unknown"
 
     for spec in evaluator_specs:
         ev_id = spec["id"]
@@ -153,4 +166,5 @@ def evaluate_item_quality(
             return "fail"
 
     return "pass"
+
 

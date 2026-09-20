@@ -91,9 +91,24 @@ def test_agent_registry_apis_zero_path_variables(client):
     assert r_arc.json()["is_active"] is False
 
 
+def test_create_launch_rejects_empty_evaluators(client):
+    # Empty evaluator_ids list must be rejected with 422 Unprocessable Entity
+    r = client.post(
+        "/api/v1/experiment-launches",
+        json={
+            "agent_id": "banking-agent",
+            "agent_version": "v1",
+            "dataset_name": "banking-agent-regression",
+            "evaluator_ids": [],
+        },
+    )
+    assert r.status_code == 422
+
+
 def test_experiment_launches_apis_and_execution(client):
     # Ensure banking-agent v1 exists from auto-import
     # 1. Create Launch
+
     r_create = client.post(
         "/api/v1/experiment-launches",
         headers={"Idempotency-Key": "test-idem-api-1"},
@@ -219,9 +234,10 @@ def test_legacy_experiments_run_completes_persisted_launch(client):
         # Ensure Langfuse get_dataset was called exactly ONCE (no double fetching)
         assert mock_lf.get_dataset.call_count == 1
 
-        # Ensure run_experiment was executed with the 5 frozen evaluators
+        # Ensure run_experiment was executed with the 5 frozen item evaluators + 1 run evaluator
         call_kwargs = mock_dataset.run_experiment.call_args[1]
         assert len(call_kwargs["evaluators"]) == 5
+        assert len(call_kwargs["run_evaluators"]) == 1
 
     # Verify launch in database is completed, not left in PENDING
     r_get = client.get(f"/api/v1/experiment-launches?id={launch_id}")
@@ -232,10 +248,71 @@ def test_legacy_experiments_run_completes_persisted_launch(client):
     assert launch_data["langfuse_sync_status"] == "SYNCED"
     assert launch_data["langfuse_experiment_id"] == "test-run-id"
     assert launch_data["completed_at"] is not None
-    # Frozen manifest evaluators must also contain all 5 evaluators
-    assert len(launch_data["manifest"]["evaluators"]) == 5
+    # Frozen manifest evaluators must contain all 6 evaluators (5 item + 1 run)
+    assert len(launch_data["manifest"]["evaluators"]) == 6
     frozen_eval_ids = [e["id"] for e in launch_data["manifest"]["evaluators"]]
     assert "overall_pass" in frozen_eval_ids
+    assert "run_pass_rate" in frozen_eval_ids
+
+
+def test_legacy_experiments_run_inherits_agent_version_max_concurrency(client):
+    from unittest.mock import MagicMock
+    # Register an agent with max_concurrency=1
+    r_reg = client.post(
+        "/api/v1/agents",
+        json={"id": "single-worker-agent", "name": "Single Worker Agent"},
+    )
+    assert r_reg.status_code == 201
+
+    r_ver = client.post(
+        "/api/v1/agent-versions",
+        json={
+            "agent_id": "single-worker-agent",
+            "version": "v1",
+            "endpoint": "http://single-worker:8080/invoke",
+            "max_concurrency": 1,
+        },
+    )
+    assert r_ver.status_code == 201
+
+    mock_dataset = MagicMock()
+    mock_result = MagicMock()
+    mock_result.experiment_id = "test-run-single"
+    mock_result.dataset_run_id = "test-run-single"
+    mock_result.dataset_run_url = "http://langfuse/runs/single"
+    mock_result.run_name = "test-run-single"
+    mock_result.item_results = []
+    mock_score = MagicMock()
+    mock_score.name = "overall_pass_rate"
+    mock_score.value = 1.0
+    mock_result.run_evaluations = [mock_score]
+    mock_dataset.run_experiment.return_value = mock_result
+    mock_dataset.id = "ds-single"
+
+    mock_lf = MagicMock()
+    mock_lf.get_dataset.return_value = mock_dataset
+
+    with patch("app.main._wait_for_langfuse"), patch("app.main._client", return_value=mock_lf):
+        # Omit max_concurrency in legacy request
+        r = client.post(
+            "/experiments/run",
+            json={
+                "agent_id": "single-worker-agent",
+                "agent_version": "v1",
+                "dataset_name": "banking-agent-regression",
+            },
+        )
+        assert r.status_code == 200
+        launch_id = r.json()["launch_id"]
+
+        call_kwargs = mock_dataset.run_experiment.call_args[1]
+        assert call_kwargs["max_concurrency"] == 1
+
+    r_get = client.get(f"/api/v1/experiment-launches?id={launch_id}")
+    assert r_get.status_code == 200
+    launch_data = r_get.json()
+    assert launch_data["manifest"]["execution_policy"]["max_concurrency"] == 1
+
 
 
 

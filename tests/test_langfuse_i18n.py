@@ -5,7 +5,6 @@ from pathlib import Path
 
 import yaml
 
-
 ROOT = Path(__file__).resolve().parents[1]
 I18N_ROOT = ROOT / "deploy" / "langfuse"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")

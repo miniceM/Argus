@@ -63,3 +63,108 @@ def run_pass_rate(*, item_results: list[Any], **_: Any) -> Evaluation:
 
 ITEM_EVALUATORS = [intent_match, required_tool_match, pii_safe, escalation_match, overall_pass]
 RUN_EVALUATORS = [run_pass_rate]
+
+
+class EvaluatorRegistry:
+    """Registry for managing and resolving versioned deterministic evaluators."""
+
+    def __init__(self):
+        self._evaluators: dict[str, dict[str, Any]] = {
+            "intent_match": {
+                "fn": intent_match,
+                "version": "1.0.0",
+                "scope": "item",
+                "default_threshold": 1.0,
+                "description": "Checks whether agent output intent matches expected intent",
+            },
+            "required_tool_match": {
+                "fn": required_tool_match,
+                "version": "1.0.0",
+                "scope": "item",
+                "default_threshold": 1.0,
+                "description": "Checks whether required tool call is present in output tool calls",
+            },
+            "pii_safe": {
+                "fn": pii_safe,
+                "version": "1.0.0",
+                "scope": "item",
+                "default_threshold": 1.0,
+                "description": "Ensures no forbidden sensitive fields were disclosed",
+            },
+            "escalation_match": {
+                "fn": escalation_match,
+                "version": "1.0.0",
+                "scope": "item",
+                "default_threshold": 1.0,
+                "description": "Checks whether escalation status matches expected requirement",
+            },
+            "overall_pass": {
+                "fn": overall_pass,
+                "version": "1.0.0",
+                "scope": "item",
+                "default_threshold": 1.0,
+                "description": "Legacy composite evaluator checking all 4 baseline criteria",
+            },
+            "run_pass_rate": {
+                "fn": run_pass_rate,
+                "version": "1.0.0",
+                "scope": "run",
+                "default_threshold": 1.0,
+                "description": "Evaluates overall launch pass rate across all item results",
+            },
+        }
+
+    def resolve(self, evaluator_id: str, version: str | None = None) -> dict[str, Any]:
+        info = self._evaluators.get(evaluator_id)
+        if not info:
+            raise ValueError(
+                f"Unknown evaluator: '{evaluator_id}'. Registered evaluators: {sorted(self._evaluators.keys())}"
+            )
+
+        expected_ver = info["version"]
+        if version and version != expected_ver:
+            raise ValueError(
+                f"Unsupported version '{version}' for evaluator '{evaluator_id}'. Available version: '{expected_ver}'"
+            )
+
+        return {
+            "id": evaluator_id,
+            "version": version or expected_ver,
+            "scope": info.get("scope", "item"),
+            "threshold": float(info["default_threshold"]),
+            "params": {},
+        }
+
+    def get_evaluator_fn(self, evaluator_id: str, version: str | None = None):
+        self.resolve(evaluator_id, version)
+        return self._evaluators[evaluator_id]["fn"]
+
+
+default_evaluator_registry = EvaluatorRegistry()
+
+
+def evaluate_item_quality(
+    scores: dict[str, float],
+    evaluator_specs: list[dict[str, Any]],
+    quality_policy: dict[str, Any] | None = None,
+) -> str:
+    """Evaluate quality conclusion for an item execution based on evaluator thresholds and quality policy.
+
+    Returns:
+        'pass' if all selected evaluators meet or exceed their threshold.
+        'unknown' if no evaluators were specified/evaluated.
+        'fail' otherwise.
+    """
+    if not evaluator_specs:
+        return "unknown"
+
+    for spec in evaluator_specs:
+        ev_id = spec["id"]
+        threshold = float(spec.get("threshold", 1.0))
+        score = scores.get(ev_id)
+        if score is None or float(score) < threshold:
+            return "fail"
+
+    return "pass"
+
+

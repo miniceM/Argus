@@ -70,10 +70,29 @@ jobs:
           fi
           grep -q 'inject(headers)' services/eval-runner/app/main.py
 
+      - name: Verify OpenAPI specification is up to date
+        run: |
+          python scripts/export_openapi.py
+          git diff --exit-code docs/openapi.json || (echo "docs/openapi.json is out of date; run 'python scripts/export_openapi.py' and commit changes" >&2 && exit 1)
+
   unit-tests:
     name: Full Python Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: argus
+          POSTGRES_PASSWORD: argus_password
+          POSTGRES_DB: argus_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -92,8 +111,17 @@ jobs:
           python -m pip install -r requirements-dev.txt
 
       - name: Run all tests with coverage
+        env:
+          TEST_POSTGRES_URL: postgresql+psycopg://argus:argus_password@localhost:5432/argus_test
         run: |
-          python -m pytest tests -q             --junitxml=artifacts/junit.xml             --cov=services/demo-agent             --cov=services/eval-runner/app             --cov-branch             --cov-report=term-missing             --cov-report=xml:artifacts/coverage.xml
+          python -m pytest tests -q \
+            --junitxml=artifacts/junit.xml \
+            --cov=services/demo-agent \
+            --cov=services/eval-runner/app \
+            --cov-branch \
+            --cov-report=term-missing \
+            --cov-report=xml:artifacts/coverage.xml
+
 
       - name: Upload test reports
         if: always()

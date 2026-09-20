@@ -148,7 +148,9 @@ services:
       TZ: UTC
       PGTZ: UTC
     ports: ["127.0.0.1:5432:5432"]
-    volumes: [langfuse_postgres_data:/var/lib/postgresql/data]
+    volumes:
+      - langfuse_postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-argus-db.sql:/docker-entrypoint-initdb.d/init-argus-db.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 3s
@@ -181,11 +183,13 @@ services:
     build: {context: ./services/eval-runner}
     restart: unless-stopped
     depends_on:
+      postgres: {condition: service_healthy}
       langfuse-web: {condition: service_healthy}
       langfuse-worker: {condition: service_healthy}
       demo-agent-v1: {condition: service_healthy}
       demo-agent-v2: {condition: service_healthy}
     environment:
+      DATABASE_URL: ${ARGUS_DATABASE_URL:-postgresql+psycopg://argus:arguspassword@postgres:5432/argus}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:-lf_pk_poc_0123456789abcdef}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:-lf_sk_poc_0123456789abcdef}
       LANGFUSE_BASE_URL: http://langfuse-web:3000
@@ -194,7 +198,7 @@ services:
       AGENT_REGISTRY_PATH: /app/config/agents.yaml
       DATASET_SEED_PATH: /app/data/dataset.json
       RUNNER_VERSION: 0.1.0
-    volumes: [./config:/app/config:ro, ./data:/app/data:ro]
+    volumes: [./config:/app/config:ro, ./data:/app/data:ro, ./migrations:/app/migrations:ro]
     ports: ["18080:8080"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]

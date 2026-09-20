@@ -39,8 +39,9 @@ echo "[4/7] Verify runner contains remote experiment + W3C propagation"
 grep -q 'run_experiment' services/eval-runner/app/main.py
 grep -q 'inject(headers)' services/eval-runner/app/main.py
 
-echo "[5/7] Validate Langfuse i18n release resources"
-./deploy/langfuse/scripts/check-i18n-coverage.py
+echo "[5/7] Verify OpenAPI specification is up to date"
+"$PYTHON_BIN" scripts/export_openapi.py
+git diff --exit-code docs/openapi.json || (echo "docs/openapi.json is out of date; run '$PYTHON_BIN scripts/export_openapi.py'" >&2 && exit 1)
 
 echo "[6/7] Run local behavior tests"
 "$PYTHON_BIN" -m pytest -q tests

@@ -69,16 +69,6 @@ class LaunchService:
             "required_tool_match",
         ]
 
-        eval_specs = [default_evaluator_registry.resolve(eid) for eid in eval_list]
-        if not allow_run_scope:
-            run_scoped = [e["id"] for e in eval_specs if e.get("scope") != "item"]
-            if run_scoped:
-                raise ValueError(
-                    f"Run-scope evaluators ({', '.join(run_scoped)}) are not supported by the standalone launch runner. "
-                    "Only item-scope evaluators are supported."
-                )
-
-
         # Request payload for idempotency checking (calculated upfront)
         payload_data = {
             "agent_id": agent_id,
@@ -108,6 +98,15 @@ class LaunchService:
             raise ValueError(f"AgentVersion '{agent_id}:{agent_version}' not found")
         if not ver_rec.is_active:
             raise ValueError(f"AgentVersion '{agent_id}:{agent_version}' is archived/inactive")
+
+        eval_specs = [default_evaluator_registry.resolve(eid) for eid in eval_list]
+        if not allow_run_scope:
+            run_scoped = [e["id"] for e in eval_specs if e.get("scope") != "item"]
+            if run_scoped:
+                raise ValueError(
+                    f"Run-scope evaluators ({', '.join(run_scoped)}) are not supported by the standalone launch runner. "
+                    "Only item-scope evaluators are supported."
+                )
 
         # Concurrency policy: inherit from AgentVersion if None, enforce limit if specified
         if max_concurrency is not None:

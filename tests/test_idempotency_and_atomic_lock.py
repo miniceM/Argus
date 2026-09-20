@@ -182,3 +182,39 @@ def test_concurrent_idempotent_launch_creation(tmp_path):
     first_id = results[0].id
     for r in results:
         assert r.id == first_id
+
+
+def test_idempotent_replay_succeeds_even_when_evaluator_unregistered(tmp_path):
+    """If a Launch with same idempotency_key exists, re-request must return it without calling EvaluatorRegistry."""
+    from unittest.mock import patch
+
+    db_file = tmp_path / "idem_eval.db"
+    db_mgr = DatabaseManager(f"sqlite:///{db_file}")
+    MigrationRunner(engine=db_mgr.engine, migrations_dir=ROOT / "migrations").apply_all()
+    registry = AgentRegistry(db_mgr)
+    registry.import_yaml(ROOT / "config" / "agents.yaml")
+
+    launch_svc = LaunchService(db_mgr, registry)
+    launch1 = launch_svc.create_launch(
+        agent_id="banking-agent",
+        agent_version="v1",
+        dataset_name="banking-agent-regression",
+        evaluator_ids=["intent_match"],
+        idempotency_key="key-eval-unregistered",
+    )
+
+    # Now simulate EvaluatorRegistry completely unregistering or failing on the evaluator
+    with patch("app.manifest.default_evaluator_registry.resolve") as mock_resolve:
+        mock_resolve.side_effect = KeyError("Evaluator 'intent_match' has been deprecated/removed")
+
+        # Replay with same key and payload MUST succeed by returning existing launch without calling resolve
+        launch2 = launch_svc.create_launch(
+            agent_id="banking-agent",
+            agent_version="v1",
+            dataset_name="banking-agent-regression",
+            evaluator_ids=["intent_match"],
+            idempotency_key="key-eval-unregistered",
+        )
+        assert launch2.id == launch1.id
+        mock_resolve.assert_not_called()
+

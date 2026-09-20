@@ -1,0 +1,6 @@
+-r services/eval-runner/requirements.txt
+-r services/demo-agent/requirements.txt
+
+pytest>=8.4,<9
+pytest-cov>=6,<8
+ruff>=0.13,<1

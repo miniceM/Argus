@@ -271,3 +271,76 @@ PoC 为了把核心理念做清楚，当前只实现：
 - Headless Initialization (`LANGFUSE_INIT_*`)
 
 建议真正落地时将镜像从 major tag 改为企业验证过的**精确版本或 digest**，并将 SDK 升级纳入兼容性测试。
+
+## 12. CI 流水线
+
+仓库使用 `.github/workflows/ci.yml` 作为统一质量门禁，分为四层：
+
+```text
+Code Quality
+    +
+Full Python Tests
+    +
+Docker / Compose Validation
+    ↓
+Langfuse Cloud E2E
+```
+
+前三层不依赖外部 Secret，在所有 PR 和 `main` push 上运行：
+
+- Ruff 静态检查；
+- Python 源码编译与 YAML/JSON 配置校验；
+- 零 Evaluation SDK、W3C Trace 等架构约束检查；
+- 全量 `pytest` + branch coverage 报告；
+- self-hosted/cloud 两套 Compose 配置校验；
+- Demo Agent 与 Eval Runner Docker 镜像构建。
+
+### Langfuse Cloud E2E
+
+Cloud E2E 使用专用 GitHub Environment：`langfuse-e2e`。建议在 Langfuse Cloud 创建**独立 CI Project**，不要复用开发或生产 Project。
+
+在 GitHub 仓库中配置：
+
+1. `Settings → Environments → New environment`，名称：`langfuse-e2e`。
+2. 在该 Environment 中配置 Secrets：
+   - `LANGFUSE_BASE_URL`
+   - `LANGFUSE_PUBLIC_KEY`
+   - `LANGFUSE_SECRET_KEY`
+3. 在 `Settings → Secrets and variables → Actions → Variables` 中设置：
+   - `LANGFUSE_E2E_ENABLED=true`
+
+`LANGFUSE_BASE_URL` 必须与 Langfuse Cloud Project 所在区域一致。
+
+E2E 不会在 fork PR 上运行，避免将 Cloud Secret 暴露给不可信代码。建议为 `langfuse-e2e` Environment 配置 Required reviewers；如果仓库只允许受信任成员创建分支，可将该检查设置为合并前必需状态检查。
+
+E2E 实际执行：
+
+```text
+GitHub Runner
+   ├─ Demo Agent v1
+   ├─ Demo Agent v2
+   └─ Eval Runner
+           │
+           └──── HTTPS ────► Langfuse Cloud CI Project
+```
+
+`scripts/ci-e2e-cloud.sh` 会使用唯一 Experiment 名称运行 v1/v2，并硬性断言：
+
+- Dataset bootstrap = 6 items；
+- v1 = 2/6 overall_pass；
+- v2 = 6/6 overall_pass；
+- Langfuse 返回有效 `dataset_run_url`。
+
+测试结果 JSON、失败时的 Compose 状态和容器日志会作为 GitHub Actions Artifact 保留 14 天。
+
+### 推荐的 Branch Protection
+
+`main` 建议要求以下检查通过后才能合并：
+
+- `Code Quality`
+- `Full Python Tests`
+- `Docker / Compose Validation`
+- 启用 Cloud E2E 后：`Langfuse Cloud E2E`
+
+外部 fork PR 因安全原因不会获得 Langfuse Secret；合并前如需完整 E2E，应由维护者在可信分支上重新验证。
+

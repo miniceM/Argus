@@ -181,3 +181,43 @@ def test_run_launch_crash_fails_gracefully(client):
     assert r_get.json()["status"] == "FAILED"
     assert r_get.json()["quality_conclusion"] == "fail"
 
+
+def test_legacy_experiments_run_completes_persisted_launch(client):
+    from unittest.mock import MagicMock
+    mock_dataset = MagicMock()
+    mock_result = MagicMock()
+    mock_result.dataset_run_id = "test-run-id"
+    mock_result.dataset_run_url = "http://langfuse/runs/1"
+    mock_result.run_name = "test-run"
+    mock_result.item_results = []
+    mock_score = MagicMock()
+    mock_score.name = "overall_pass_rate"
+    mock_score.value = 1.0
+    mock_result.run_evaluations = [mock_score]
+    mock_dataset.run_experiment.return_value = mock_result
+    mock_dataset.id = "ds-123"
+
+    mock_lf = MagicMock()
+    mock_lf.get_dataset.return_value = mock_dataset
+
+    with patch("app.main._wait_for_langfuse"), patch("app.main._client", return_value=mock_lf):
+        r = client.post(
+            "/experiments/run",
+            json={
+                "agent_id": "banking-agent",
+                "agent_version": "v1",
+                "dataset_name": "banking-agent-regression",
+            },
+        )
+        assert r.status_code == 200
+        launch_id = r.json()["launch_id"]
+
+    # Verify launch in database is completed, not left in PENDING
+    r_get = client.get(f"/api/v1/experiment-launches?id={launch_id}")
+    assert r_get.status_code == 200
+    launch_data = r_get.json()
+    assert launch_data["status"] == "SUCCEEDED"
+    assert launch_data["quality_conclusion"] == "pass"
+    assert launch_data["completed_at"] is not None
+
+

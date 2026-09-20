@@ -79,6 +79,31 @@ def test_launch_manifest_snapshot_freeze(tmp_path):
             max_concurrency=4,  # Different concurrency!
         )
 
+    # Idempotent re-creation with same key but different requested name must raise Conflict
+    with pytest.raises(ValueError, match="Idempotency key conflict"):
+        launch_svc.create_launch(
+            agent_id="banking-agent",
+            agent_version="v1",
+            dataset_name="banking-agent-regression",
+            name="different-launch-name-v1",  # Different name!
+            idempotency_key="key-123",
+            max_concurrency=2,
+        )
+
+    # Agent with is_idempotent=True must preserve this flag in the frozen manifest
+    registry.create_version(
+        agent_id="banking-agent",
+        version="v-idempotent",
+        endpoint="http://demo-agent-v1:8080/invoke",
+        is_idempotent=True,
+    )
+    launch_idem = launch_svc.create_launch(
+        agent_id="banking-agent",
+        agent_version="v-idempotent",
+        dataset_name="banking-agent-regression",
+    )
+    assert launch_idem.manifest["agent"]["is_idempotent"] is True
+
     # Creating launch with explicitly supplied launch_id
     custom_id = "custom-launch-uuid-123"
     custom_launch = launch_svc.create_launch(

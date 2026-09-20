@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -14,9 +15,10 @@ from .api_launches import router as launches_router
 from .api_registry import router as registry_router
 from .config import find_path, settings
 from .db import DatabaseManager, MigrationRunner
+from .db_models import ExperimentLaunchRecord
 from .evaluators import ITEM_EVALUATORS, RUN_EVALUATORS
 from .executor import RemoteAgentExecutor
-from .manifest import LaunchService
+from .manifest import LaunchService, acquire_launch_execution
 from .models import BootstrapResult, ExperimentRequest, ExperimentResult
 from .registry import AgentRegistry, map_request
 
@@ -159,17 +161,16 @@ def bootstrap() -> BootstrapResult:
 
 @app.post("/experiments/run", response_model=ExperimentResult)
 def run_experiment(request: ExperimentRequest) -> ExperimentResult:
+    launch_id = str(uuid.uuid4())
     try:
         _wait_for_langfuse()
         lf = _client()
         spec = registry.get(request.agent_id, request.agent_version)
         dataset = lf.get_dataset(request.dataset_name)
         executor = RemoteAgentExecutor(spec)
-        launch_id = str(uuid.uuid4())
         experiment_name = request.experiment_name or f"{request.agent_id}-{request.agent_version}"
 
         # Persist Launch in Argus DB with deterministic ID binding
-        launch_id = str(uuid.uuid4())
         try:
             persisted = launch_service.create_launch(
                 agent_id=request.agent_id,
@@ -181,6 +182,7 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
                 launch_id=launch_id,
             )
             launch_id = persisted.id
+            acquire_launch_execution(db_manager, launch_id)
         except Exception:
             # Fallback tolerating launch creation if already running
             pass
@@ -234,6 +236,24 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
         )
         lf.flush()
         summary = _safe_summary(result)
+
+        # Mark launch completed in Argus DB
+        try:
+            with db_manager.get_session() as session:
+                rec = session.get(ExperimentLaunchRecord, launch_id)
+                if rec:
+                    rec.status = "SUCCEEDED"
+                    run_scores = summary.get("run_scores", {})
+                    pass_rate = run_scores.get("overall_pass_rate")
+                    if pass_rate is not None:
+                        rec.quality_conclusion = "pass" if float(pass_rate) == 1.0 else "fail"
+                    else:
+                        rec.quality_conclusion = "unknown"
+                    rec.completed_at = datetime.utcnow()
+                    session.commit()
+        except Exception:
+            pass
+
         return ExperimentResult(
             launch_id=launch_id,
             agent_id=spec.agent_id,
@@ -243,6 +263,26 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
             result=summary,
         )
     except KeyError as exc:
+        try:
+            with db_manager.get_session() as session:
+                rec = session.get(ExperimentLaunchRecord, launch_id)
+                if rec and rec.status in ("PENDING", "RUNNING"):
+                    rec.status = "FAILED"
+                    rec.quality_conclusion = "fail"
+                    rec.completed_at = datetime.utcnow()
+                    session.commit()
+        except Exception:
+            pass
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
+        try:
+            with db_manager.get_session() as session:
+                rec = session.get(ExperimentLaunchRecord, launch_id)
+                if rec and rec.status in ("PENDING", "RUNNING"):
+                    rec.status = "FAILED"
+                    rec.quality_conclusion = "fail"
+                    rec.completed_at = datetime.utcnow()
+                    session.commit()
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=f"experiment failed: {exc}") from exc

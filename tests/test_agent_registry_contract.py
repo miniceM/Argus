@@ -38,6 +38,13 @@ def test_credential_ref_validation(monkeypatch):
     with pytest.raises(ValueError, match="not in allowed credential whitelist"):
         validate_credential_ref("env://SYSTEM_ROOT_PASSWORD")
 
+    # Unsupported schemes that cannot be resolved must be rejected
+    with pytest.raises(ValueError, match="not supported"):
+        validate_credential_ref("vault://secret/my-token")
+
+    with pytest.raises(ValueError, match="not supported"):
+        validate_credential_ref("k8s-secret://argus-ns/token")
+
     # Invalid scheme
     with pytest.raises(ValueError, match="Unsupported credential reference scheme"):
         validate_credential_ref("plain://my-secret-token")

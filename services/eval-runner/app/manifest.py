@@ -64,6 +64,7 @@ class LaunchService:
 
         # Request payload for idempotency checking
         payload_data = {
+            "name": name,
             "agent_id": agent_id,
             "agent_version": agent_version,
             "dataset_name": dataset_name,
@@ -106,6 +107,7 @@ class LaunchService:
                     "credential_ref": ver_rec.credential_ref,
                     "spec_digest": ver_rec.spec_digest,
                     "artifact_ref": ver_rec.artifact_ref,
+                    "is_idempotent": ver_rec.is_idempotent,
                 },
                 "evaluators": [{"id": eid, "version": "1.0.0", "threshold": 1.0} for eid in eval_list],
                 "runner": {

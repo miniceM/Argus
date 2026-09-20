@@ -40,10 +40,10 @@ def validate_credential_ref(ref: str | None) -> None:
                 f"Environment variable '{env_name}' is not in allowed credential whitelist: {sorted(allowed)}"
             )
     elif ref.startswith("vault://") or ref.startswith("k8s-secret://"):
-        # Allowed structured credential provider schemes
-        pass
+        scheme = ref.split("://")[0]
+        raise ValueError(f"Credential provider '{scheme}://' is not supported for resolution in current version.")
     else:
-        raise ValueError(f"Unsupported credential reference scheme: '{ref}'. Expected env://, vault://, or k8s-secret://")
+        raise ValueError(f"Unsupported credential reference scheme: '{ref}'. Expected env://")
 
 
 def resolve_credential(ref: str | None) -> str | None:

@@ -308,6 +308,7 @@ async def run_launch_synchronously(
             max_concurrency=exec_policy["max_concurrency"],
             credential_ref=agent_spec_dict.get("credential_ref"),
             id=agent_spec_dict.get("agent_version_id", ""),
+            is_idempotent=bool(agent_spec_dict.get("is_idempotent", False)),
         )
 
         executor = RemoteAgentExecutor(spec)

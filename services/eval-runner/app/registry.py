@@ -20,7 +20,7 @@ class AgentVersionSpec:
 
 class AgentRegistry:
     def __init__(self, path: str):
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             self._raw = yaml.safe_load(f) or {}
 
     def list(self) -> dict[str, Any]:

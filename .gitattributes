@@ -1,0 +1,2 @@
+# Unified diff context lines intentionally start with one space.
+deploy/langfuse/patches/*.patch -whitespace

@@ -1,0 +1,358 @@
+diff --git a/web/src/components/CrashModal/CrashModal.tsx b/web/src/components/CrashModal/CrashModal.tsx
+index 5b488b4..c45d793 100644
+--- a/web/src/components/CrashModal/CrashModal.tsx
++++ b/web/src/components/CrashModal/CrashModal.tsx
+@@ -1,6 +1,7 @@
+ import Link from "next/link";
+ import { CircleAlert } from "lucide-react";
+ import { Button } from "@/src/components/ui/button";
++import { useTranslations } from "next-intl";
+ 
+ type CrashModalProps = {
+   description: string;
+@@ -15,6 +16,8 @@ export const CrashModal = ({
+   showReturnHome,
+   statusCode,
+ }: CrashModalProps) => {
++  const common = useTranslations("common");
++  const states = useTranslations("states");
+   return (
+     <div className="border-border bg-card w-full max-w-xl rounded-xl border p-6 shadow-sm sm:p-8">
+       <div className="bg-destructive/10 text-destructive flex size-10 items-center justify-center rounded-full">
+@@ -22,9 +25,7 @@ export const CrashModal = ({
+       </div>
+ 
+       <div className="mt-4 min-w-0">
+-        <h1 className="text-2xl font-bold tracking-tight">
+-          Something went wrong
+-        </h1>
++        <h1 className="text-2xl font-bold tracking-tight">{states("error")}</h1>
+         <p className="text-muted-foreground mt-2 text-sm leading-5">
+           {statusCode ? (
+             <span className="text-foreground mr-2 font-bold whitespace-nowrap">
+@@ -39,7 +40,7 @@ export const CrashModal = ({
+             <dl>
+               <div>
+                 <dt className="text-muted-foreground text-xs font-bold">
+-                  Error ID
++                  {states("errorId")}
+                 </dt>
+                 <dd className="mt-1.5 font-mono text-xs leading-5 break-all">
+                   {sentryEventId}
+@@ -51,7 +52,7 @@ export const CrashModal = ({
+ 
+         {showReturnHome ? (
+           <Button asChild className="mt-6">
+-            <Link href="/">Return home</Link>
++            <Link href="/">{common("returnHome")}</Link>
+           </Button>
+         ) : null}
+       </div>
+diff --git a/web/src/components/NoDataOrLoading.tsx b/web/src/components/NoDataOrLoading.tsx
+index 2d8c580..1243e47 100644
+--- a/web/src/components/NoDataOrLoading.tsx
++++ b/web/src/components/NoDataOrLoading.tsx
+@@ -3,6 +3,7 @@ import React from "react";
+ import { cn } from "@/src/utils/tailwind";
+ import DocPopup from "@/src/components/layouts/doc-popup";
+ import { Skeleton } from "@/src/components/ui/skeleton";
++import { LocalizedUiLabel } from "@/src/features/i18n/LocalizedUiLabel";
+ 
+ interface NoDataOrLoadingProps {
+   isLoading: boolean;
+@@ -28,7 +29,9 @@ const NoData = ({
+         className,
+       )}
+     >
+-      <p className="text-muted-foreground">{noDataText}</p>
++      <p className="text-muted-foreground">
++        <LocalizedUiLabel>{noDataText}</LocalizedUiLabel>
++      </p>
+       {children}
+     </div>
+   );
+diff --git a/web/src/components/layouts/breadcrumb.tsx b/web/src/components/layouts/breadcrumb.tsx
+index 34101f2..d0137d7 100644
+--- a/web/src/components/layouts/breadcrumb.tsx
++++ b/web/src/components/layouts/breadcrumb.tsx
+@@ -20,6 +20,11 @@ import Link from "next/link";
+ import { Badge } from "@/src/components/ui/badge";
+ import { OrganizationDropdownMenu } from "@/src/components/OrganizationDropdownMenu/OrganizationDropdownMenu";
+ import { ProjectDropdownMenu } from "@/src/components/ProjectDropdownMenu/ProjectDropdownMenu";
++import { useTranslations } from "next-intl";
++import {
++  isKnownUiLabel,
++  KNOWN_UI_LABEL_KEYS,
++} from "@/src/features/i18n/knownUiLabels";
+ 
+ const BreadcrumbComponent = ({
+   items,
+@@ -31,6 +36,9 @@ const BreadcrumbComponent = ({
+   const session = useSession();
+   const { organization, project } = useQueryProjectOrOrganization();
+   const { getProjectPath, getOrgPath } = useOrgProjectSwitchPaths();
++  const navigation = useTranslations("navigation");
++  const localize = (label: string) =>
++    isKnownUiLabel(label) ? navigation(KNOWN_UI_LABEL_KEYS[label]) : label;
+ 
+   const organizations = session.data?.user?.organizations;
+ 
+@@ -57,7 +65,7 @@ const BreadcrumbComponent = ({
+                 className="text-primary flex h-5 items-center gap-1 p-0 text-sm leading-none"
+                 {...getTriggerProps()}
+               >
+-                {organization?.name ?? "Organization"}
++                {organization?.name ?? navigation("organization")}
+                 {isCloudPlan(organization?.plan) &&
+                   organization.id !== env.NEXT_PUBLIC_DEMO_ORG_ID && (
+                     <Badge
+@@ -111,10 +119,10 @@ const BreadcrumbComponent = ({
+             <BreadcrumbItem key={index}>
+               {item.href ? (
+                 <BreadcrumbLink asChild>
+-                  <Link href={item.href}>{item.name}</Link>
++                  <Link href={item.href}>{localize(item.name)}</Link>
+                 </BreadcrumbLink>
+               ) : (
+-                <span>{item.name}</span>
++                <span>{localize(item.name)}</span>
+               )}
+             </BreadcrumbItem>
+           </Fragment>
+diff --git a/web/src/components/layouts/page-header.tsx b/web/src/components/layouts/page-header.tsx
+index 286aab8..a0c75d6 100644
+--- a/web/src/components/layouts/page-header.tsx
++++ b/web/src/components/layouts/page-header.tsx
+@@ -30,6 +30,11 @@ import {
+   APP_SHELL_CHROME_ROW_CLASS,
+   APP_SHELL_CHROME_ROW_TEST_ID,
+ } from "@/src/components/layouts/app-shell-chrome";
++import { useTranslations } from "next-intl";
++import {
++  isKnownUiLabel,
++  KNOWN_UI_LABEL_KEYS,
++} from "@/src/features/i18n/knownUiLabels";
+ 
+ const containerLayoutClassName =
+   "lg:mx-auto lg:w-full lg:max-w-screen-lg lg:px-8 xl:max-w-screen-xl 2xl:max-w-[1400px]";
+@@ -83,6 +88,10 @@ const PageHeader = ({
+   const hasAppSidebar = useHasAppSidebar();
+   const envLabel = useEnvLabel();
+   const isInAppAgentLauncherVisible = useIsInAppAgentLauncherVisible();
++  const navigation = useTranslations("navigation");
++  const localizedTitle = isKnownUiLabel(title)
++    ? navigation(KNOWN_UI_LABEL_KEYS[title])
++    : title;
+   // The sidebar trigger + brand mark only make sense where a real AppSidebar
+   // exists to toggle/mirror. On the sidebar-less MinimalLayout (public/shared
+   // trace and session views) show the page's own leadingControl instead — no
+@@ -189,7 +198,7 @@ const PageHeader = ({
+                               className="cursor-help wrap-break-word"
+                               data-testid="page-header-title"
+                             >
+-                              {title}
++                              {localizedTitle}
+                             </span>
+                           </TooltipTrigger>
+                           <TooltipContent side="bottom" className="max-w-xs">
+@@ -200,10 +209,10 @@ const PageHeader = ({
+                     ) : (
+                       <span
+                         className="wrap-break-word"
+-                        title={title}
++                        title={localizedTitle}
+                         data-testid="page-header-title"
+                       >
+-                        {title}
++                        {localizedTitle}
+                       </span>
+                     )}
+                     {help && (
+diff --git a/web/src/components/layouts/page-tabs.tsx b/web/src/components/layouts/page-tabs.tsx
+index d6b596f..8c68d3e 100644
+--- a/web/src/components/layouts/page-tabs.tsx
++++ b/web/src/components/layouts/page-tabs.tsx
+@@ -3,6 +3,7 @@ import { cn } from "@/src/utils/tailwind";
+ import Link from "next/link";
+ import { useRouter } from "next/router";
+ import { type ParsedUrlQuery } from "querystring";
++import { LocalizedUiLabel } from "@/src/features/i18n/LocalizedUiLabel";
+ 
+ type TabDefinition = {
+   value: string;
+@@ -66,7 +67,7 @@ export const PageTabs = ({
+                 className={tabClassName}
+                 onClick={tab.onClick}
+               >
+-                {tab.label}
++                <LocalizedUiLabel>{tab.label}</LocalizedUiLabel>
+               </Link>
+             );
+           }
+@@ -80,7 +81,7 @@ export const PageTabs = ({
+                 className={tabClassName}
+                 disabled={tab.disabled}
+               >
+-                {tab.label}
++                <LocalizedUiLabel>{tab.label}</LocalizedUiLabel>
+               </button>
+             );
+           }
+diff --git a/web/src/components/table/data-table.tsx b/web/src/components/table/data-table.tsx
+index a56bf7c..02cdb10 100644
+--- a/web/src/components/table/data-table.tsx
++++ b/web/src/components/table/data-table.tsx
+@@ -58,6 +58,7 @@ import { useRouter } from "next/router";
+ import { useColumnSizing } from "@/src/components/table/hooks/useColumnSizing";
+ 
+ import { useAnimatedBusy } from "@/src/hooks/useAnimatedBusy";
++import { LocalizedUiLabel } from "@/src/features/i18n/LocalizedUiLabel";
+ import {
+   type TableSelectionStoreLike,
+   useTableRowIsSelected,
+@@ -558,10 +559,12 @@ export function DataTable<TData extends object, TValue>({
+                               // Opted out of the single truncated line, so a
+                               // header can carry more than the column's name.
+                               <div className="min-w-0 flex-1 leading-normal">
+-                                {flexRender(
+-                                  header.column.columnDef.header,
+-                                  header.getContext(),
+-                                )}
++                                <LocalizedUiLabel>
++                                  {flexRender(
++                                    header.column.columnDef.header,
++                                    header.getContext(),
++                                  )}
++                                </LocalizedUiLabel>
+                               </div>
+                             ) : (
+                               <span
+@@ -573,10 +576,12 @@ export function DataTable<TData extends object, TValue>({
+                                   ),
+                                 )}
+                               >
+-                                {flexRender(
+-                                  header.column.columnDef.header,
+-                                  header.getContext(),
+-                                )}
++                                <LocalizedUiLabel>
++                                  {flexRender(
++                                    header.column.columnDef.header,
++                                    header.getContext(),
++                                  )}
++                                </LocalizedUiLabel>
+                               </span>
+                             )}
+                             {columnDef.headerTooltip && (
+@@ -1037,7 +1042,7 @@ function TableBodyComponent<TData>({
+             <div className="pointer-events-none absolute left-[50%] flex -translate-x-1/2 -translate-y-1/2 items-center justify-center text-center">
+               {noResultsMessage ?? (
+                 <>
+-                  No results.{" "}
++                  <LocalizedUiLabel>No results.</LocalizedUiLabel>{" "}
+                   {help && (
+                     <DocPopup description={help.description} href={help.href} />
+                   )}
+diff --git a/web/src/components/table/simple-data-table.tsx b/web/src/components/table/simple-data-table.tsx
+index e33d55d..cba0bec 100644
+--- a/web/src/components/table/simple-data-table.tsx
++++ b/web/src/components/table/simple-data-table.tsx
+@@ -9,6 +9,7 @@ import { Fragment, type ReactNode } from "react";
+ import { Skeleton } from "@/src/components/ui/skeleton";
+ import { type LangfuseColumnDef } from "@/src/components/table/types";
+ import { cn } from "@/src/utils/tailwind";
++import { LocalizedUiLabel } from "@/src/features/i18n/LocalizedUiLabel";
+ 
+ const ROW_CLICK_IGNORE_SELECTOR = "[data-row-click-ignore]";
+ 
+@@ -93,12 +94,14 @@ export function SimpleDataTable<TData extends object>({
+                     : { width: header.getSize() }
+                 }
+               >
+-                {header.isPlaceholder
+-                  ? null
+-                  : flexRender(
++                {header.isPlaceholder ? null : (
++                  <LocalizedUiLabel>
++                    {flexRender(
+                       header.column.columnDef.header,
+                       header.getContext(),
+                     )}
++                  </LocalizedUiLabel>
++                )}
+               </th>
+             ))}
+           </tr>
+diff --git a/web/src/components/ui/button.tsx b/web/src/components/ui/button.tsx
+index b4f1957..bd6b59b 100644
+--- a/web/src/components/ui/button.tsx
++++ b/web/src/components/ui/button.tsx
+@@ -6,6 +6,7 @@ import { cva, type VariantProps } from "class-variance-authority";
+ import { cn } from "@/src/utils/tailwind";
+ 
+ import { Spinner as SpinnerLib } from "@/src/components/design-system/Spinner/Spinner";
++import { LocalizedUiLabel } from "@/src/features/i18n/LocalizedUiLabel";
+ 
+ const buttonVariants = cva(
+   // No font-* here: buttons follow the text-sm token weight (one weight per
+@@ -95,10 +96,12 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+         {loading ? (
+           <>
+             <Spinner />
+-            {loadingText}
++            <LocalizedUiLabel>{loadingText}</LocalizedUiLabel>
+           </>
+-        ) : (
++        ) : asChild ? (
+           children
++        ) : (
++          <LocalizedUiLabel>{children}</LocalizedUiLabel>
+         )}
+       </Comp>
+     );
+diff --git a/web/src/features/i18n/LocalizedUiLabel.tsx b/web/src/features/i18n/LocalizedUiLabel.tsx
+new file mode 100644
+index 0000000..061ea4b
+--- /dev/null
++++ b/web/src/features/i18n/LocalizedUiLabel.tsx
+@@ -0,0 +1,40 @@
++import { Children, type ReactNode } from "react";
++import { useTranslations } from "next-intl";
++import {
++  COMMON_LABEL_KEYS,
++  isKnownCommonLabel,
++  isKnownStateLabel,
++  isKnownTableLabel,
++  isKnownUiLabel,
++  KNOWN_UI_LABEL_KEYS,
++  TABLE_LABEL_KEYS,
++  STATE_LABEL_KEYS,
++} from "./knownUiLabels";
++
++export function LocalizedUiLabel({ children }: { children: ReactNode }) {
++  const navigation = useTranslations("navigation");
++  const tables = useTranslations("tables");
++  const common = useTranslations("common");
++  const states = useTranslations("states");
++
++  const localize = (value: ReactNode): ReactNode => {
++    if (typeof value !== "string") return value;
++    if (isKnownUiLabel(value)) {
++      return navigation(KNOWN_UI_LABEL_KEYS[value]);
++    }
++    if (isKnownTableLabel(value)) {
++      return tables(TABLE_LABEL_KEYS[value]);
++    }
++    if (isKnownCommonLabel(value)) {
++      return common(COMMON_LABEL_KEYS[value]);
++    }
++    if (isKnownStateLabel(value)) {
++      return states(STATE_LABEL_KEYS[value]);
++    }
++    return value;
++  };
++
++  return typeof children === "string"
++    ? localize(children)
++    : Children.map(children, localize);
++}

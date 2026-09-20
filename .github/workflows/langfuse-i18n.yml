@@ -1,0 +1,210 @@
+name: Langfuse i18n
+
+on:
+  pull_request:
+    paths:
+      - "deploy/langfuse/**"
+      - "docker-compose.yml"
+      - "Makefile"
+      - "scripts/validate.sh"
+      - "tests/test_langfuse_i18n.py"
+      - ".github/workflows/langfuse-i18n.yml"
+  push:
+    branches: [main]
+    paths:
+      - "deploy/langfuse/**"
+      - "docker-compose.yml"
+      - "Makefile"
+      - "scripts/validate.sh"
+      - "tests/test_langfuse_i18n.py"
+      - ".github/workflows/langfuse-i18n.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: langfuse-i18n-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  patch-and-ui:
+    name: Patch, resources and bilingual UI
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Prepare and apply the locked patch set
+        shell: bash
+        run: |
+          source_dir="$RUNNER_TEMP/langfuse"
+          ./deploy/langfuse/scripts/prepare-upstream.sh "$source_dir"
+          ./deploy/langfuse/scripts/apply-patches.sh "$source_dir"
+          echo "LANGFUSE_UPSTREAM_DIR=$source_dir" >> "$GITHUB_ENV"
+
+      - name: Install the locked upstream dependencies
+        shell: bash
+        run: |
+          cd "$LANGFUSE_UPSTREAM_DIR"
+          corepack enable
+          corepack prepare pnpm@12.4.1 --activate
+          pnpm install --frozen-lockfile
+
+      - name: Validate ICU, hard-coded copy and TypeScript
+        shell: bash
+        run: |
+          node deploy/langfuse/scripts/check-icu.mjs "$LANGFUSE_UPSTREAM_DIR"
+          node deploy/langfuse/scripts/check-hardcoded-ui.mjs \
+            "$LANGFUSE_UPSTREAM_DIR" deploy/langfuse/hardcoded-ui-baseline.json
+          cd "$LANGFUSE_UPSTREAM_DIR"
+          pnpm exec turbo run typecheck --filter=web...
+          pnpm --dir web exec eslint \
+            src/pages/_app.tsx src/pages/_document.tsx src/features/i18n \
+            src/components/nav/AppSidebar/AppSidebar.tsx \
+            src/components/nav/nav-main.tsx \
+            src/components/layouts/routes.tsx \
+            src/components/layouts/page-header.tsx \
+            src/components/layouts/breadcrumb.tsx \
+            src/components/layouts/page-tabs.tsx \
+            src/components/table/data-table.tsx \
+            src/components/table/simple-data-table.tsx \
+            --max-warnings 0
+
+      - name: Run locale and switcher tests
+        shell: bash
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          NEXTAUTH_URL: http://localhost:3000
+          SALT: argus-i18n-ci
+          CLICKHOUSE_URL: http://localhost:8123
+          CLICKHOUSE_USER: clickhouse
+          CLICKHOUSE_PASSWORD: clickhouse
+        run: |
+          cd "$LANGFUSE_UPSTREAM_DIR"
+          pnpm --dir web exec vitest run --project client \
+            src/features/i18n/config.clienttest.ts \
+            src/features/i18n/LanguageSwitcher.clienttest.tsx
+
+      - name: Build Storybook and capture bilingual smoke screenshots
+        shell: bash
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          NEXTAUTH_SECRET: argus-i18n-storybook-secret
+          NEXTAUTH_URL: http://localhost:3000
+          SALT: argus-i18n-storybook-salt-at-least-32-characters
+          CLICKHOUSE_URL: http://localhost:8123
+          CLICKHOUSE_USER: clickhouse
+          CLICKHOUSE_PASSWORD: clickhouse
+        run: |
+          cd "$LANGFUSE_UPSTREAM_DIR"
+          pnpm --filter web exec playwright install --with-deps chromium
+          pnpm --filter web build-storybook --output-dir "$RUNNER_TEMP/storybook"
+          python3 -m http.server 6006 --directory "$RUNNER_TEMP/storybook" >/tmp/storybook.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for attempt in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:6006/index.json >/dev/null && break
+            sleep 1
+          done
+          LANGFUSE_UPSTREAM_DIR="$LANGFUSE_UPSTREAM_DIR" \
+          I18N_SCREENSHOT_DIR="$GITHUB_WORKSPACE/artifacts/i18n" \
+            node "$GITHUB_WORKSPACE/deploy/langfuse/scripts/storybook-smoke.mjs"
+
+      - name: Upload bilingual UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: langfuse-i18n-ui-${{ github.run_id }}
+          path: artifacts/i18n/
+          if-no-files-found: warn
+          retention-days: 14
+
+  image:
+    name: Build patched Langfuse image
+    needs: patch-and-ui
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Add swap for the upstream Next.js production build
+        shell: bash
+        run: |
+          sudo fallocate -l 8G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+
+      - name: Build the release image
+        uses: docker/build-push-action@v6
+        with:
+          context: deploy/langfuse
+          file: deploy/langfuse/Dockerfile
+          load: true
+          push: false
+          tags: argus/langfuse-i18n:4.38.0
+          build-args: |
+            LANGFUSE_REPOSITORY=https://github.com/langfuse/langfuse.git
+            LANGFUSE_TAG=v4.38.0
+            LANGFUSE_COMMIT=4ecaabed8d9c39d0d3ba483f02ba1cca020388a9
+            NEXT_PUBLIC_BUILD_ID=argus-i18n-${{ github.sha }}
+          cache-from: type=gha,scope=langfuse-i18n
+          cache-to: type=gha,mode=max,scope=langfuse-i18n
+
+      - name: Record local image identity
+        shell: bash
+        run: |
+          mkdir -p artifacts/i18n-image
+          docker image inspect argus/langfuse-i18n:4.38.0 \
+            > artifacts/i18n-image/inspect.json
+          docker image inspect --format '{{.Id}}' argus/langfuse-i18n:4.38.0 \
+            > artifacts/i18n-image/image-id.txt
+          cp deploy/langfuse/upstream/manifest.json artifacts/i18n-image/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: langfuse-i18n-image-${{ github.run_id }}
+          path: artifacts/i18n-image/
+          retention-days: 14
+
+  remote-integration:
+    name: Remote self-hosted acceptance
+    needs: image
+    if: github.event_name == 'workflow_dispatch' && vars.LANGFUSE_I18N_INTEGRATION_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: langfuse-i18n-integration
+    env:
+      LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
+      LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+      LANGFUSE_ADMIN_EMAIL: ${{ secrets.LANGFUSE_ADMIN_EMAIL }}
+      LANGFUSE_ADMIN_PASSWORD: ${{ secrets.LANGFUSE_ADMIN_PASSWORD }}
+      LANGFUSE_PROJECT_ID: ${{ vars.LANGFUSE_PROJECT_ID }}
+      LANGFUSE_I18N_IMAGE_DIGEST: ${{ vars.LANGFUSE_I18N_IMAGE_DIGEST }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Run API, runner and bilingual UI acceptance
+        run: make validate-langfuse-integration
+      - name: Upload remote acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: langfuse-i18n-integration-${{ github.run_id }}
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 30

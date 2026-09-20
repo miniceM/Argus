@@ -1,0 +1,11 @@
+{
+  "common.english": "Language names remain recognizable in their own language.",
+  "navigation.prompts": "Prompt is the established product term.",
+  "navigation.traces": "Trace is the established observability term.",
+  "navigation.observations": "Observation is the established Langfuse data model term.",
+  "pages.prompt.title": "Prompt is the established product term.",
+  "pages.prompt.singular": "Prompt is the established product term.",
+  "pages.trace.singular": "Trace is the established observability term.",
+  "pages.observation.title": "Observation is the established Langfuse data model term.",
+  "pages.observation.singular": "Observation is the established Langfuse data model term."
+}

@@ -887,8 +887,8 @@ Persistent Queue
 
 PoC Docker Compose 采用：
 
-- `docker.langfuse.com/langfuse/langfuse:4`
-- `docker.langfuse.com/langfuse/langfuse-worker:4`
+- `argus/langfuse-i18n:4.38.0`（官方源码 + 独立 i18n Patch Layer）
+- `docker.langfuse.com/langfuse/langfuse-worker:4.38.0@sha256:8631cf429efc4a2981d4e6ced4c005b9f6f620a4e34625baf60152301ec6d006`
 - PostgreSQL 17
 - ClickHouse 25.12
 - Redis 7

@@ -1,9 +1,18 @@
 SHELL := /bin/bash
 COMPOSE := docker compose --env-file .env.poc
 
-.PHONY: validate up down logs bootstrap demo ps clean
+.PHONY: validate validate-i18n build-langfuse-i18n validate-langfuse-integration up down logs bootstrap demo ps clean
 validate:
 	./scripts/validate.sh
+
+validate-i18n:
+	./deploy/langfuse/scripts/validate-i18n.sh
+
+build-langfuse-i18n:
+	./deploy/langfuse/scripts/build-image.sh
+
+validate-langfuse-integration:
+	./deploy/langfuse/scripts/validate-integration.sh
 
 up:
 	$(COMPOSE) up -d --build

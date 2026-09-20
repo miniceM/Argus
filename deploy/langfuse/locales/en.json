@@ -1,0 +1,92 @@
+{
+  "common": {
+    "language": "Language",
+    "english": "English",
+    "simplifiedChinese": "Simplified Chinese",
+    "switchLanguage": "Switch language",
+    "save": "Save",
+    "cancel": "Cancel",
+    "create": "Create",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "search": "Search",
+    "loading": "Loading",
+    "returnHome": "Return home"
+  },
+  "navigation": {
+    "goTo": "Go to...",
+    "organizations": "Organizations",
+    "organization": "Organization",
+    "projects": "Projects",
+    "home": "Home",
+    "dashboards": "Dashboards",
+    "tracing": "Tracing",
+    "traces": "Traces",
+    "observations": "Observations",
+    "sessions": "Sessions",
+    "users": "Users",
+    "alerts": "Alerts",
+    "prompts": "Prompts",
+    "playground": "Playground",
+    "scores": "Scores",
+    "evaluators": "Evaluators",
+    "humanAnnotation": "Human Annotation",
+    "datasets": "Datasets",
+    "experiments": "Experiments",
+    "settings": "Settings",
+    "update": "Update",
+    "cloudStatus": "Cloud Status",
+    "v4Preview": "V4 Preview",
+    "upgradePlan": "Upgrade Plan",
+    "bookCall": "Book a call",
+    "support": "Support"
+  },
+  "routeGroups": {
+    "observability": "Observability",
+    "promptManagement": "Prompt Management",
+    "evaluation": "Evaluation"
+  },
+  "pages": {
+    "project": {"title": "Projects"},
+    "dataset": {"title": "Datasets", "singular": "Dataset"},
+    "experiment": {"title": "Experiments", "singular": "Experiment"},
+    "trace": {"title": "Tracing", "singular": "Trace"},
+    "observation": {"title": "Observations", "singular": "Observation"},
+    "session": {"title": "Sessions", "singular": "Session"},
+    "score": {"title": "Scores", "singular": "Score"},
+    "prompt": {"title": "Prompts", "singular": "Prompt"},
+    "settings": {"title": "Settings"},
+    "users": {"title": "Users", "singular": "User"},
+    "organization": {"title": "Organization"}
+  },
+  "tables": {
+    "name": "Name",
+    "createdAt": "Created at",
+    "updatedAt": "Updated at",
+    "status": "Status",
+    "input": "Input",
+    "output": "Output",
+    "metadata": "Metadata",
+    "latency": "Latency",
+    "cost": "Cost",
+    "usage": "Usage",
+    "actions": "Actions"
+  },
+  "states": {
+    "empty": "No data available",
+    "error": "Something went wrong",
+    "retry": "Try again",
+    "noResults": "No results found",
+    "errorId": "Error ID"
+  },
+  "validation": {
+    "required": "This field is required",
+    "invalid": "The value is invalid"
+  },
+  "dialogs": {
+    "confirm": "Confirm",
+    "discardChanges": "Discard unsaved changes?",
+    "destructiveWarning": "This action cannot be undone."
+  }
+}

@@ -263,14 +263,17 @@ PoC 为了把核心理念做清楚，当前只实现：
 本 PoC 按以下 2026-09-16 官方能力设计：
 
 - Langfuse self-host: v4 Docker Compose
-- Langfuse images: `docker.langfuse.com/langfuse/langfuse:4` / `langfuse-worker:4`
+- Langfuse web: `argus/langfuse-i18n:4.38.0`（由锁定官方源码与 Patch Layer 构建）
+- Langfuse worker: `docker.langfuse.com/langfuse/langfuse-worker:4.38.0@sha256:8631cf…`
 - ClickHouse: `25.12`
 - Python SDK: `langfuse==4.15.3`
 - Python SDK v4 / Observation-first / OpenTelemetry
 - Dataset `run_experiment()` + item/run evaluators
 - Headless Initialization (`LANGFUSE_INIT_*`)
 
-建议真正落地时将镜像从 major tag 改为企业验证过的**精确版本或 digest**，并将 SDK 升级纳入兼容性测试。
+自 Issue #8 起，自托管组合锁定为 Langfuse `v4.38.0` / commit `4ecaabed8d9c39d0d3ba483f02ba1cca020388a9`：web 由独立 i18n Patch Layer 构建，worker 使用匹配版本的官方不可变 digest。版本、patch、locale 和构建输入摘要见 [`deploy/langfuse/upstream/manifest.json`](./deploy/langfuse/upstream/manifest.json)。
+
+中文界面默认使用 `zh-CN`，可在 Sidebar 切换为英文。构建、升级、回滚和远程验收步骤见 [`deploy/langfuse/README.md`](./deploy/langfuse/README.md)。
 
 ## 12. CI 流水线
 
@@ -343,4 +346,3 @@ GitHub Runner
 - 启用 Cloud E2E 后：`Langfuse Cloud E2E`
 
 外部 fork PR 因安全原因不会获得 Langfuse Secret；合并前如需完整 E2E，应由维护者在可信分支上重新验证。
-

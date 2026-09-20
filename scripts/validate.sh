@@ -10,7 +10,7 @@ elif command -v python3 >/dev/null 2>&1; then
   PYTHON_BIN="python3"
 fi
 
-echo "[1/6] Parse YAML/JSON"
+echo "[1/7] Parse YAML/JSON"
 "$PYTHON_BIN" - <<'PY'
 import json, yaml
 from pathlib import Path
@@ -22,10 +22,10 @@ assert len({x['id'] for x in seed['items']}) == 6
 print('configuration parse: OK')
 PY
 
-echo "[2/6] Compile Python sources"
+echo "[2/7] Compile Python sources"
 "$PYTHON_BIN" -m compileall -q services tests
 
-echo "[3/6] Verify zero evaluation-SDK dependency in Demo Agent"
+echo "[3/7] Verify zero evaluation-SDK dependency in Demo Agent"
 if grep -RinE '^[[:space:]]*(from|import)[[:space:]]+langfuse|Evaluation\(|run_experiment' services/demo-agent --include='*.py' || grep -in 'langfuse' services/demo-agent/requirements.txt; then
   echo "Demo Agent unexpectedly contains evaluation-platform dependencies" >&2
   exit 1
@@ -35,14 +35,17 @@ if ! grep -q 'traceparent' services/demo-agent/app.py; then
   exit 1
 fi
 
-echo "[4/6] Verify runner contains remote experiment + W3C propagation"
+echo "[4/7] Verify runner contains remote experiment + W3C propagation"
 grep -q 'run_experiment' services/eval-runner/app/main.py
 grep -q 'inject(headers)' services/eval-runner/app/main.py
 
-echo "[5/6] Run local behavior tests"
+echo "[5/7] Validate Langfuse i18n release resources"
+./deploy/langfuse/scripts/check-i18n-coverage.py
+
+echo "[6/7] Run local behavior tests"
 "$PYTHON_BIN" -m pytest -q tests
 
-echo "[6/6] Docker Compose validation"
+echo "[7/7] Docker Compose validation"
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   docker compose --env-file .env.poc config -q
   echo "docker compose config: OK"

@@ -6,6 +6,7 @@ Primary deliverables:
 - README.md                Runbook / quick start
 - docker-compose.yml       Langfuse v4 + Eval Runner + Demo Agent v1/v2
 - VALIDATION_REPORT.md     Validation scope and limitations
+- deploy/langfuse/         Reproducible Langfuse zh-CN patch and image layer
 
 PoC services:
 - services/eval-runner

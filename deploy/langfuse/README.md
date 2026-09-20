@@ -57,6 +57,34 @@ make validate-langfuse-integration
 
 完整 Next.js 生产构建需要约 12 GiB 可用内存（物理内存与 swap 合计）。CI 镜像任务会额外配置 8 GiB swap；本地 Docker Desktop 需要为构建虚拟机配置足够内存。
 
+## GHCR 发布与部署
+
+PR 只执行补丁验证和 `linux/amd64` 镜像构建，不推送镜像。相关变更合并到
+`main` 或手动执行工作流后，GitHub Actions 使用仓库的 `GITHUB_TOKEN` 将镜像推送到：
+
+```text
+ghcr.io/minicem/argus-langfuse-i18n
+```
+
+每次发布都会生成不可变的 `4.38.0-i18n-<git-sha>` 标签；`main` 同时更新
+`4.38.0-i18n` 标签。工作流 artifact 中的 `release-image.txt` 保存 registry
+返回的完整 digest。正式部署必须在环境文件中固定这个 digest：
+
+```text
+LANGFUSE_WEB_IMAGE=ghcr.io/minicem/argus-langfuse-i18n@sha256:<registry-digest>
+```
+
+服务器只拉取成品镜像，不在部署机编译 Langfuse：
+
+```bash
+docker compose --env-file .env.remote pull langfuse-web
+docker compose --env-file .env.remote up -d --no-build langfuse-web langfuse-worker
+```
+
+私有 package 需要先用具备 `read:packages` 的凭据登录 `ghcr.io`；公开 package
+可以匿名拉取。工作流只在 `deploy/langfuse/**` 或工作流文件自身发生变化时自动运行，
+也可通过 `workflow_dispatch` 手动发布和验收。
+
 `make validate` 继续验证 Argus 原有回归，并增加 manifest/locale 的快速静态检查；它不会下载或构建 Langfuse。
 
 远程验收必须提供：

@@ -94,7 +94,9 @@ def test_compose_uses_patched_web_and_matching_immutable_worker() -> None:
     worker = compose["services"]["langfuse-worker"]
 
     assert web["build"]["context"] == "./deploy/langfuse"
-    assert web["image"] == "argus/langfuse-i18n:4.38.0"
+    assert web["image"] == (
+        "${LANGFUSE_WEB_IMAGE:-argus/langfuse-i18n:4.38.0}"
+    )
     assert web["environment"]["LANGFUSE_UI_DEFAULT_LOCALE"] == (
         "${LANGFUSE_UI_DEFAULT_LOCALE:-zh-CN}"
     )
@@ -151,3 +153,36 @@ def test_storybook_gate_supplies_required_build_environment() -> None:
         if step.get("name") == "Add swap for the upstream Next.js production build"
     )
     assert "swapon" in swap["run"]
+
+
+def test_i18n_workflow_filters_changes_and_publishes_ghcr_image() -> None:
+    workflow_path = ROOT / ".github" / "workflows" / "langfuse-i18n.yml"
+    workflow = yaml.safe_load(workflow_path.read_text())
+    triggers = workflow.get("on", workflow.get(True))
+    expected_paths = [
+        "deploy/langfuse/**",
+        ".github/workflows/langfuse-i18n.yml",
+    ]
+
+    assert triggers["pull_request"]["branches"] == ["main"]
+    assert triggers["pull_request"]["paths"] == expected_paths
+    assert triggers["push"]["branches"] == ["main"]
+    assert triggers["push"]["paths"] == expected_paths
+    assert "workflow_dispatch" in triggers
+
+    image_job = workflow["jobs"]["image"]
+    assert image_job["permissions"] == {"contents": "read", "packages": "write"}
+    steps = image_job["steps"]
+
+    metadata = next(step for step in steps if step.get("id") == "meta")
+    assert metadata["uses"] == "docker/metadata-action@v5"
+    assert metadata["with"]["images"] == "ghcr.io/minicem/argus-langfuse-i18n"
+
+    login = next(step for step in steps if step.get("name") == "Log in to GHCR")
+    assert login["if"] == "github.event_name != 'pull_request'"
+    assert login["with"]["password"] == "${{ secrets.GITHUB_TOKEN }}"
+
+    build = next(step for step in steps if step.get("id") == "build")
+    assert build["with"]["load"] == "${{ github.event_name == 'pull_request' }}"
+    assert build["with"]["push"] == "${{ github.event_name != 'pull_request' }}"
+    assert build["with"]["tags"] == "${{ steps.meta.outputs.tags }}"

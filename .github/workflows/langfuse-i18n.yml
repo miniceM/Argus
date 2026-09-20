@@ -2,21 +2,14 @@ name: Langfuse i18n
 
 on:
   pull_request:
+    branches: [main]
     paths:
       - "deploy/langfuse/**"
-      - "docker-compose.yml"
-      - "Makefile"
-      - "scripts/validate.sh"
-      - "tests/test_langfuse_i18n.py"
       - ".github/workflows/langfuse-i18n.yml"
   push:
     branches: [main]
     paths:
       - "deploy/langfuse/**"
-      - "docker-compose.yml"
-      - "Makefile"
-      - "scripts/validate.sh"
-      - "tests/test_langfuse_i18n.py"
       - ".github/workflows/langfuse-i18n.yml"
   workflow_dispatch:
 
@@ -133,6 +126,9 @@ jobs:
     needs: patch-and-ui
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
@@ -148,14 +144,38 @@ jobs:
           sudo swapon "$swap_file"
           swapon --show
 
-      - name: Build the release image
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/minicem/argus-langfuse-i18n
+          flavor: latest=false
+          tags: |
+            type=raw,value=4.38.0-i18n-${{ github.sha }}
+            type=raw,value=4.38.0-i18n,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish the release image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: deploy/langfuse
           file: deploy/langfuse/Dockerfile
-          load: true
-          push: false
-          tags: argus/langfuse-i18n:4.38.0
+          platforms: linux/amd64
+          load: ${{ github.event_name == 'pull_request' }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=4.38.0-i18n
           build-args: |
             LANGFUSE_REPOSITORY=https://github.com/langfuse/langfuse.git
             LANGFUSE_TAG=v4.38.0
@@ -164,15 +184,25 @@ jobs:
           cache-from: type=gha,scope=langfuse-i18n
           cache-to: type=gha,mode=max,scope=langfuse-i18n
 
-      - name: Record local image identity
+      - name: Record image identity
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          IMAGE_REF: ghcr.io/minicem/argus-langfuse-i18n
+          IMAGE_TAG: ghcr.io/minicem/argus-langfuse-i18n:4.38.0-i18n-${{ github.sha }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           mkdir -p artifacts/i18n-image
-          docker image inspect argus/langfuse-i18n:4.38.0 \
-            > artifacts/i18n-image/inspect.json
-          docker image inspect --format '{{.Id}}' argus/langfuse-i18n:4.38.0 \
-            > artifacts/i18n-image/image-id.txt
           cp deploy/langfuse/upstream/manifest.json artifacts/i18n-image/
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            docker image inspect "$IMAGE_TAG" \
+              > artifacts/i18n-image/inspect.json
+            docker image inspect --format '{{.Id}}' "$IMAGE_TAG" \
+              > artifacts/i18n-image/image-id.txt
+          else
+            printf '%s@%s\n' "$IMAGE_REF" "$IMAGE_DIGEST" \
+              | tee artifacts/i18n-image/release-image.txt
+          fi
 
       - uses: actions/upload-artifact@v4
         with:

@@ -58,7 +58,7 @@ services:
       start_period: 30s
 
   langfuse-web:
-    image: argus/langfuse-i18n:4.38.0
+    image: ${LANGFUSE_WEB_IMAGE:-argus/langfuse-i18n:4.38.0}
     build:
       context: ./deploy/langfuse
       dockerfile: Dockerfile

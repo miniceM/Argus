@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import UTC
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -8,6 +9,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "services" / "eval-runner"))
+
 
 from app.dataset import DatasetResolver  # noqa: E402
 from app.db import DatabaseManager, MigrationRunner  # noqa: E402
@@ -94,3 +96,83 @@ def test_launch_manifest_has_frozen_dataset_and_evaluators(monkeypatch, tmp_path
 
     # Quality policy must be explicitly recorded
     assert manifest["quality_policy"]["mode"] == "all_selected_must_pass"
+
+
+def test_parse_dataset_version_contract():
+    from datetime import datetime, timezone
+
+    from app.dataset import parse_dataset_version
+
+    assert parse_dataset_version(None) is None
+    assert parse_dataset_version("") is None
+
+    # Valid UTC ISO-8601 strings
+    dt1 = parse_dataset_version("2026-09-01T10:00:00Z")
+    assert dt1 == datetime(2026, 9, 1, 10, 0, 0, tzinfo=UTC)
+
+    dt2 = parse_dataset_version("2026-09-01T10:00:00+00:00")
+    assert dt2 == datetime(2026, 9, 1, 10, 0, 0, tzinfo=UTC)
+
+    # Valid UTC datetime object
+    dt_in = datetime(2026, 9, 1, 10, 0, 0, tzinfo=UTC)
+    assert parse_dataset_version(dt_in) == dt_in
+
+    # Non-UTC timezone must fail
+    from datetime import timedelta
+    non_utc = datetime(2026, 9, 1, 10, 0, 0, tzinfo=timezone(timedelta(hours=8)))
+    with pytest.raises(ValueError, match="UTC"):
+        parse_dataset_version(non_utc)
+
+    # Naive datetime must fail
+    naive_dt = datetime(2026, 9, 1, 10, 0, 0)
+    with pytest.raises(ValueError, match="UTC"):
+        parse_dataset_version(naive_dt)
+
+    # Invalid ISO-8601 strings must fail
+    with pytest.raises(ValueError, match="ISO-8601"):
+        parse_dataset_version("invalid-date-string")
+
+
+def test_dataset_resolver_langfuse_passes_version_datetime(monkeypatch):
+    from datetime import datetime
+    monkeypatch.setenv("ARGUS_DATASET_SOURCE", "langfuse")
+    resolver = DatasetResolver()
+
+    with patch("app.dataset._get_langfuse_client") as mock_client:
+        mock_lf = MagicMock()
+        mock_ds = MagicMock()
+        mock_ds.id = "lf-ds-1"
+        mock_ds.version = "2026-09-01T10:00:00+00:00"
+        mock_ds.items = []
+        mock_lf.get_dataset.return_value = mock_ds
+        mock_client.return_value = mock_lf
+
+        snapshot = resolver.resolve("test-ds", "2026-09-01T10:00:00Z")
+
+        # Assert Langfuse SDK get_dataset was called with version=<UTC datetime>
+        expected_dt = datetime(2026, 9, 1, 10, 0, 0, tzinfo=UTC)
+        mock_lf.get_dataset.assert_called_once_with("test-ds", version=expected_dt)
+        assert snapshot["dataset_version"] == "2026-09-01T10:00:00+00:00"
+
+
+def test_launch_dataset_version_persisted_in_db_and_manifest(monkeypatch, tmp_path):
+    monkeypatch.setenv("ARGUS_DATASET_SOURCE", "seed")
+    db_file = tmp_path / "test_version_db.db"
+    db_mgr = DatabaseManager(f"sqlite:///{db_file}")
+    MigrationRunner(engine=db_mgr.engine, migrations_dir=ROOT / "migrations").apply_all()
+
+    reg = AgentRegistry(db_mgr)
+    reg.create_agent("agent-1", "Agent One")
+    reg.create_version(agent_id="agent-1", version="v1", endpoint="http://example.com/api")
+    launch_svc = LaunchService(db_mgr, reg)
+
+    # When dataset_version is not provided in seed mode, it resolves to seed version
+    launch = launch_svc.create_launch(
+        agent_id="agent-1",
+        agent_version="v1",
+        dataset_name="banking-agent-regression",
+    )
+    # DB column must be populated, NOT NULL
+    assert launch.dataset_version is not None
+    assert launch.dataset_version == launch.manifest["dataset"]["dataset_version"]
+

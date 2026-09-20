@@ -115,3 +115,70 @@ def test_non_idempotency_integrity_error_reraised(tmp_path, monkeypatch):
             launch_id="fixed-pk-1",  # Same PK, no idempotency key
         )
 
+
+
+def test_idempotent_replay_succeeds_even_when_dataset_source_down(tmp_path, monkeypatch):
+    """If a Launch with same idempotency_key exists, re-request must return it without accessing Langfuse/seed."""
+    from unittest.mock import patch
+
+    db_file = tmp_path / "idem_down.db"
+    db_mgr = DatabaseManager(f"sqlite:///{db_file}")
+    MigrationRunner(engine=db_mgr.engine, migrations_dir=ROOT / "migrations").apply_all()
+    registry = AgentRegistry(db_mgr)
+    registry.import_yaml(ROOT / "config" / "agents.yaml")
+
+    launch_svc = LaunchService(db_mgr, registry)
+    launch1 = launch_svc.create_launch(
+        agent_id="banking-agent",
+        agent_version="v1",
+        dataset_name="banking-agent-regression",
+        idempotency_key="key-langfuse-down",
+    )
+
+    # Now simulate Langfuse / DatasetResolver completely broken
+    with patch("app.manifest.DatasetResolver") as mock_resolver_cls:
+        mock_resolver = mock_resolver_cls.return_value
+        mock_resolver.resolve.side_effect = RuntimeError("Langfuse is down (503 Service Unavailable)")
+
+        # Replaying identical request MUST succeed by returning cached launch, without touching DatasetResolver
+        launch2 = launch_svc.create_launch(
+            agent_id="banking-agent",
+            agent_version="v1",
+            dataset_name="banking-agent-regression",
+            idempotency_key="key-langfuse-down",
+        )
+        assert launch2.id == launch1.id
+        mock_resolver.resolve.assert_not_called()
+
+
+def test_concurrent_idempotent_launch_creation(tmp_path):
+    """Concurrent threads attempting to create launch with same idempotency_key must all succeed with same launch."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    db_file = tmp_path / "idem_concurrent.db"
+    db_mgr = DatabaseManager(f"sqlite:///{db_file}")
+    MigrationRunner(engine=db_mgr.engine, migrations_dir=ROOT / "migrations").apply_all()
+    registry = AgentRegistry(db_mgr)
+    registry.import_yaml(ROOT / "config" / "agents.yaml")
+    launch_svc = LaunchService(db_mgr, registry)
+
+    results = []
+
+    def _worker(thread_idx):
+        return launch_svc.create_launch(
+            agent_id="banking-agent",
+            agent_version="v1",
+            dataset_name="banking-agent-regression",
+            idempotency_key="concurrent-key-same",
+        )
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures = [pool.submit(_worker, i) for i in range(5)]
+        for f in futures:
+            results.append(f.result())
+
+    # All 5 concurrent workers must have received the exact same Launch ID
+    assert len(results) == 5
+    first_id = results[0].id
+    for r in results:
+        assert r.id == first_id

@@ -90,8 +90,10 @@ def create_agent_version(
             artifact_ref=payload.artifact_ref,
             environment=payload.environment,
             metadata=payload.metadata,
+            trace_propagation=payload.trace_propagation,
         )
         return AgentVersionResponse.model_validate(version)
+
     except ValueError as exc:
         msg = str(exc)
         if "already exists" in msg:

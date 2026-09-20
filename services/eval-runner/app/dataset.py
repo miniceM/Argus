@@ -3,9 +3,41 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from datetime import datetime
 from typing import Any
 
 from .config import find_path, settings
+
+
+def parse_dataset_version(v: str | datetime | None) -> datetime | None:
+    """Parse and validate dataset version into a timezone-aware UTC datetime."""
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        if v.tzinfo is None:
+            raise ValueError("dataset_version must be timezone-aware UTC datetime")
+        offset = v.utcoffset()
+        if offset is None or offset.total_seconds() != 0:
+            raise ValueError("dataset_version must be in UTC timezone")
+        return v
+    if isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return None
+        iso_str = s.replace("Z", "+00:00") if s.endswith("Z") else s
+        try:
+            dt = datetime.fromisoformat(iso_str)
+        except Exception as exc:
+            raise ValueError(
+                f"Invalid dataset_version format: '{v}'. Expected ISO-8601 UTC timestamp (e.g. '2026-09-01T10:00:00Z')"
+            ) from exc
+        if dt.tzinfo is None:
+            raise ValueError("dataset_version string must be a timezone-aware ISO-8601 UTC timestamp")
+        offset = dt.utcoffset()
+        if offset is None or offset.total_seconds() != 0:
+            raise ValueError("dataset_version must be in UTC timezone")
+        return dt
+    raise ValueError(f"dataset_version must be a str or datetime, got {type(v).__name__}")
 
 
 def _get_langfuse_client():
@@ -35,20 +67,38 @@ class DatasetResolver:
             else:
                 self.source = "langfuse"
 
-    def resolve(self, dataset_name: str, dataset_version: str | None = None) -> dict[str, Any]:
+    def resolve(
+        self,
+        dataset_name: str,
+        dataset_version: str | None = None,
+        dataset_client: Any | None = None,
+    ) -> dict[str, Any]:
         if self.source == "langfuse":
-            return self._resolve_from_langfuse(dataset_name, dataset_version)
+            return self._resolve_from_langfuse(dataset_name, dataset_version, dataset_client=dataset_client)
         elif self.source == "seed":
             return self._resolve_from_seed(dataset_name, dataset_version)
         else:
             raise ValueError(f"Unknown dataset source: '{self.source}'. Must be 'langfuse' or 'seed'.")
 
-    def _resolve_from_langfuse(self, dataset_name: str, dataset_version: str | None) -> dict[str, Any]:
-        try:
-            lf = _get_langfuse_client()
-            dataset = lf.get_dataset(dataset_name)
-        except Exception as exc:
-            raise RuntimeError(f"Failed to fetch dataset '{dataset_name}' from Langfuse: {exc}") from exc
+    def _resolve_from_langfuse(
+        self,
+        dataset_name: str,
+        dataset_version: str | None,
+        dataset_client: Any | None = None,
+    ) -> dict[str, Any]:
+        if dataset_client is not None:
+            dataset = dataset_client
+        else:
+            version_dt = parse_dataset_version(dataset_version)
+            try:
+                lf = _get_langfuse_client()
+                if version_dt is not None:
+                    dataset = lf.get_dataset(dataset_name, version=version_dt)
+                else:
+                    dataset = lf.get_dataset(dataset_name)
+            except Exception as exc:
+                raise RuntimeError(f"Failed to fetch dataset '{dataset_name}' from Langfuse: {exc}") from exc
+
 
         raw_items = getattr(dataset, "items", []) or []
         items: list[dict[str, Any]] = []
@@ -65,7 +115,8 @@ class DatasetResolver:
         snapshot_digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
         dataset_id = str(getattr(dataset, "id", "")) or f"lf-{dataset_name}"
-        effective_version = dataset_version or str(getattr(dataset, "version", "latest"))
+        effective_version = str(getattr(dataset, "version", None) or dataset_version or "latest")
+
 
         return {
             "source": "langfuse",

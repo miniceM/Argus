@@ -114,3 +114,56 @@ def test_launch_manifest_snapshot_freeze(tmp_path):
     )
     assert custom_launch.id == custom_id
 
+
+def test_launch_concurrency_inherits_agent_version_policy(tmp_path):
+    db_mgr, registry = setup_db(tmp_path)
+    launch_svc = LaunchService(db_mgr, registry)
+
+    # Register an agent version with strict max_concurrency=1
+    registry.create_version(
+        agent_id="banking-agent",
+        version="v-single-thread",
+        endpoint="http://demo-agent-v1:8080/invoke",
+        max_concurrency=1,
+    )
+
+    # 1. Launch without max_concurrency override MUST inherit from AgentVersion (1)
+    launch = launch_svc.create_launch(
+        agent_id="banking-agent",
+        agent_version="v-single-thread",
+        dataset_name="banking-agent-regression",
+        max_concurrency=None,  # No override
+    )
+    assert launch.manifest["execution_policy"]["max_concurrency"] == 1
+
+    # 2. Launch with valid override (1 <= 1) succeeds
+    launch_valid = launch_svc.create_launch(
+        agent_id="banking-agent",
+        agent_version="v-single-thread",
+        dataset_name="banking-agent-regression",
+        max_concurrency=1,
+    )
+    assert launch_valid.manifest["execution_policy"]["max_concurrency"] == 1
+
+    # 3. Launch with excessive override (4 > 1) MUST fail fast with ValueError
+    with pytest.raises(ValueError, match="exceeds AgentVersion limit"):
+        launch_svc.create_launch(
+            agent_id="banking-agent",
+            agent_version="v-single-thread",
+            dataset_name="banking-agent-regression",
+            max_concurrency=4,
+        )
+
+
+def test_api_request_model_concurrency_defaults_to_none():
+    from app.models import ExperimentLaunchCreateRequest
+
+    req = ExperimentLaunchCreateRequest(
+        agent_id="banking-agent",
+        agent_version="v1",
+        dataset_name="banking-agent-regression",
+    )
+    # Default must be None, NOT hardcoded 4
+    assert req.max_concurrency is None
+
+

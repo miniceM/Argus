@@ -188,6 +188,8 @@ def test_legacy_experiments_run_completes_persisted_launch(client):
     from unittest.mock import MagicMock
     mock_dataset = MagicMock()
     mock_result = MagicMock()
+    mock_result.experiment_id = "test-run-id"
+
     mock_result.dataset_run_id = "test-run-id"
     mock_result.dataset_run_url = "http://langfuse/runs/1"
     mock_result.run_name = "test-run"
@@ -214,6 +216,13 @@ def test_legacy_experiments_run_completes_persisted_launch(client):
         assert r.status_code == 200
         launch_id = r.json()["launch_id"]
 
+        # Ensure Langfuse get_dataset was called exactly ONCE (no double fetching)
+        assert mock_lf.get_dataset.call_count == 1
+
+        # Ensure run_experiment was executed with the 5 frozen evaluators
+        call_kwargs = mock_dataset.run_experiment.call_args[1]
+        assert len(call_kwargs["evaluators"]) == 5
+
     # Verify launch in database is completed, not left in PENDING
     r_get = client.get(f"/api/v1/experiment-launches?id={launch_id}")
     assert r_get.status_code == 200
@@ -223,6 +232,11 @@ def test_legacy_experiments_run_completes_persisted_launch(client):
     assert launch_data["langfuse_sync_status"] == "SYNCED"
     assert launch_data["langfuse_experiment_id"] == "test-run-id"
     assert launch_data["completed_at"] is not None
+    # Frozen manifest evaluators must also contain all 5 evaluators
+    assert len(launch_data["manifest"]["evaluators"]) == 5
+    frozen_eval_ids = [e["id"] for e in launch_data["manifest"]["evaluators"]]
+    assert "overall_pass" in frozen_eval_ids
+
 
 
 def test_attempt_ownership_verification_enforced(tmp_path):

@@ -212,3 +212,89 @@ def test_002_migration_applied_successfully(tmp_path):
     assert "001_initial_schema.sql" in applied
     assert "002_final_attempt_fk.sql" in applied
 
+
+def test_002_final_attempt_foreign_key_on_postgresql():
+    """Real PostgreSQL integration test verifying physical foreign key constraint and ON DELETE SET NULL cascade."""
+    import os
+
+    pg_url = os.getenv("TEST_POSTGRES_URL")
+    if not pg_url:
+        pytest.skip("TEST_POSTGRES_URL is not configured; skipping real PostgreSQL foreign key test")
+
+    engine = create_engine(pg_url)
+    runner = MigrationRunner(engine=engine, migrations_dir=ROOT / "migrations")
+    runner.apply_all()
+
+    with engine.connect() as conn:
+        # Clean test tables to ensure complete isolation
+        conn.execute(
+            text(
+                "TRUNCATE TABLE execution_attempts, experiment_item_executions, "
+                "experiment_launches, agent_versions, agents CASCADE;"
+            )
+        )
+        conn.commit()
+
+        # Insert Agent & Version
+        conn.execute(
+            text("INSERT INTO agents (id, name, status) VALUES ('agent-pg', 'PG Agent', 'active');")
+        )
+        conn.execute(
+            text(
+                "INSERT INTO agent_versions (id, agent_id, version, spec_digest, endpoint) "
+                "VALUES ('v1-pg', 'agent-pg', 'v1', 'digest-pg', 'http://localhost:8080/invoke');"
+            )
+        )
+        # Insert Launch
+        conn.execute(
+            text(
+                "INSERT INTO experiment_launches "
+                "(id, name, dataset_name, agent_id, agent_version, agent_version_id, manifest, idempotency_key) "
+                "VALUES ('launch-pg', 'L PG', 'ds-pg', 'agent-pg', 'v1', 'v1-pg', '{\"schema_version\": \"1.0\"}', 'idem-pg');"
+            )
+        )
+        # Insert Item Execution
+        conn.execute(
+            text(
+                "INSERT INTO experiment_item_executions (id, launch_id, dataset_item_id) "
+                "VALUES ('item-pg-1', 'launch-pg', 'ds-item-1');"
+            )
+        )
+        # Insert Attempt
+        conn.execute(
+            text(
+                "INSERT INTO execution_attempts (id, item_execution_id, attempt_no) "
+                "VALUES ('att-pg-1', 'item-pg-1', 1);"
+            )
+        )
+        conn.commit()
+
+        # 1. Non-existent final_attempt_id must trigger PostgreSQL Foreign Key IntegrityError
+        with pytest.raises(IntegrityError):
+            conn.execute(
+                text("UPDATE experiment_item_executions SET final_attempt_id = 'non-existent-attempt' WHERE id = 'item-pg-1';")
+            )
+            conn.commit()
+        conn.rollback()
+
+        # 2. Valid final_attempt_id must succeed
+        conn.execute(
+            text("UPDATE experiment_item_executions SET final_attempt_id = 'att-pg-1' WHERE id = 'item-pg-1';")
+        )
+        conn.commit()
+
+        row = conn.execute(
+            text("SELECT final_attempt_id FROM experiment_item_executions WHERE id = 'item-pg-1';")
+        ).fetchone()
+        assert row[0] == "att-pg-1"
+
+        # 3. Deleting Attempt must trigger database-level ON DELETE SET NULL cascade
+        conn.execute(text("DELETE FROM execution_attempts WHERE id = 'att-pg-1';"))
+        conn.commit()
+
+        row_after_del = conn.execute(
+            text("SELECT final_attempt_id FROM experiment_item_executions WHERE id = 'item-pg-1';")
+        ).fetchone()
+        assert row_after_del[0] is None
+
+

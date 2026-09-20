@@ -16,7 +16,7 @@ from .api_registry import router as registry_router
 from .config import find_path, settings
 from .db import DatabaseManager, MigrationRunner
 from .db_models import ExperimentLaunchRecord
-from .evaluators import ITEM_EVALUATORS, RUN_EVALUATORS
+from .evaluators import RUN_EVALUATORS, default_evaluator_registry
 from .executor import RemoteAgentExecutor
 from .manifest import LaunchService, acquire_launch_execution
 from .models import BootstrapResult, ExperimentRequest, ExperimentResult
@@ -167,22 +167,37 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
         executor = RemoteAgentExecutor(spec)
         experiment_name = request.experiment_name or f"{request.agent_id}-{request.agent_version}"
 
-        # Persist Launch in Argus DB with deterministic ID binding
-        try:
-            persisted = launch_service.create_launch(
-                agent_id=request.agent_id,
-                agent_version=request.agent_version,
-                dataset_name=request.dataset_name,
-                dataset_id=str(getattr(dataset, "id", "")) or None,
-                name=experiment_name,
-                max_concurrency=request.max_concurrency,
-                launch_id=launch_id,
-            )
-            launch_id = persisted.id
-            acquire_launch_execution(db_manager, launch_id)
-        except Exception:
-            # Fallback tolerating launch creation if already running
-            pass
+        # Legacy experiment evaluator set: 5 item evaluators
+        legacy_evaluator_ids = [
+            "intent_match",
+            "required_tool_match",
+            "pii_safe",
+            "escalation_match",
+            "overall_pass",
+        ]
+
+        # Persist Launch in Argus DB with deterministic ID binding and dataset client reuse
+        persisted = launch_service.create_launch(
+            agent_id=request.agent_id,
+            agent_version=request.agent_version,
+            dataset_name=request.dataset_name,
+            dataset_id=str(getattr(dataset, "id", "")) or None,
+            name=experiment_name,
+            max_concurrency=request.max_concurrency,
+            evaluator_ids=legacy_evaluator_ids,
+            launch_id=launch_id,
+            dataset_client=dataset,
+        )
+        launch_id = persisted.id
+        acquire_launch_execution(db_manager, launch_id)
+
+        # Execution core derives exact evaluators and concurrency from frozen manifest
+        frozen_eval_specs = persisted.manifest.get("evaluators", [])
+        frozen_item_evaluators = [
+            default_evaluator_registry.get_evaluator_fn(ev["id"], ev.get("version"))
+            for ev in frozen_eval_specs
+        ]
+        effective_max_concurrency = persisted.manifest["execution_policy"]["max_concurrency"]
 
         async def remote_task(*, item: Any, **_: Any) -> dict[str, Any]:
             payload = map_request(item.input, spec.request_mapping)
@@ -220,9 +235,9 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
                 "the runner calls an existing agent endpoint without adding evaluation code to the agent."
             ),
             task=remote_task,
-            evaluators=ITEM_EVALUATORS,
+            evaluators=frozen_item_evaluators,
             run_evaluators=RUN_EVALUATORS,
-            max_concurrency=request.max_concurrency,
+            max_concurrency=effective_max_concurrency,
             metadata={
                 "launch_id": launch_id,
                 "agent_id": spec.agent_id,
@@ -247,10 +262,11 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
                     else:
                         rec.quality_conclusion = "unknown"
                     run_id = (
-                        getattr(result, "dataset_run_id", None)
+                        getattr(result, "experiment_id", None)
+                        or getattr(result, "dataset_run_id", None)
                         or getattr(result, "id", None)
-                        or summary.get("dataset_run_id")
                         or summary.get("experiment_id")
+                        or summary.get("dataset_run_id")
                     )
                     rec.langfuse_experiment_id = str(run_id) if run_id else None
                     rec.langfuse_sync_status = "SYNCED"
@@ -258,6 +274,7 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
                     rec.completed_at = datetime.utcnow()
                     session.commit()
         except Exception:
+
             pass
 
         return ExperimentResult(

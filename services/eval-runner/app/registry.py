@@ -13,7 +13,6 @@ from sqlalchemy import select
 from .config import find_path
 from .db import DatabaseManager
 from .db_models import AgentRecord, AgentVersionRecord
-from .security import validate_credential_ref, validate_endpoint_url
 
 
 def compute_spec_digest(spec_dict: dict[str, Any]) -> str:
@@ -46,57 +45,26 @@ def compute_spec_digest(spec_dict: dict[str, Any]) -> str:
 
 
 def normalize_and_validate_spec(data: dict[str, Any]) -> dict[str, Any]:
-    """Validate and normalize AgentVersion specification fields.
+    """Validate and normalize AgentVersion specification fields using shared Pydantic validator."""
+    from .models import AgentVersionSpecValidator
 
-    Enforces:
-    - Protocol MUST be 'HTTP_JSON'
-    - Method MUST be 'POST'
-    - Trace propagation MUST be 'W3C'
-    - Endpoint URL must pass SSRF and scheme validation
-    - Credential ref must not contain plaintext secrets
-    """
-    protocol = data.get("protocol", "HTTP_JSON")
-    if protocol != "HTTP_JSON":
-        raise ValueError(f"Only HTTP_JSON protocol is supported, got: '{protocol}'")
+    try:
+        model = AgentVersionSpecValidator.model_validate(data)
+    except Exception as exc:
+        msg = str(exc)
+        if hasattr(exc, "errors"):
+            errs = exc.errors()
+            if errs and "msg" in errs[0]:
+                custom_msg = errs[0]["msg"]
+                if "Value error," in custom_msg:
+                    msg = custom_msg.split("Value error,", 1)[1].strip()
+        raise ValueError(msg) from exc
 
-    method = data.get("method", "POST").upper()
-    if method != "POST":
-        raise ValueError(f"Only POST method is supported, got: '{method}'")
-
-    trace_propagation = data.get("trace_propagation", "W3C")
-    if trace_propagation != "W3C":
-        raise ValueError(f"Only 'W3C' trace_propagation is currently supported, got: '{trace_propagation}'")
-
-    endpoint = data.get("endpoint")
-    if not endpoint:
-        raise ValueError("AgentVersion endpoint is required")
-    validate_endpoint_url(endpoint)
-
-    credential_ref = data.get("credential_ref")
-    validate_credential_ref(credential_ref)
-
-    mapping = dict(data.get("request_mapping") or {})
-
-    normalized = {
-        "endpoint": endpoint,
-        "protocol": protocol,
-        "method": method,
-        "request_mapping": mapping,
-        "request_schema": data.get("request_schema"),
-        "response_schema": data.get("response_schema"),
-        "credential_ref": credential_ref,
-        "timeout_seconds": float(data.get("timeout_seconds", 30.0)),
-        "max_retries": int(data.get("max_retries", 2)),
-        "rate_limit_per_minute": int(data.get("rate_limit_per_minute", 600)),
-        "max_concurrency": int(data.get("max_concurrency", 4)),
-        "is_idempotent": bool(data.get("is_idempotent", False)),
-        "artifact_ref": data.get("artifact_ref"),
-        "environment": data.get("environment"),
-        "trace_propagation": "W3C",
-    }
+    normalized = model.model_dump()
     digest = compute_spec_digest(normalized)
     normalized["spec_digest"] = digest
     return normalized
+
 
 
 @dataclass(frozen=True)
@@ -118,17 +86,20 @@ class AgentVersionSpec:
 
 
 class AgentRegistry:
+    """Persistent Agent and AgentVersion registry."""
+
     def __init__(self, target: DatabaseManager | str | Path):
         if isinstance(target, (str, Path)):
             path = Path(target)
             self.db_manager = DatabaseManager("sqlite:///:memory:")
-            # Locate migrations dir safely
             migrations_dir = find_path("/app/migrations", "migrations")
             from .db import MigrationRunner
+
             MigrationRunner(self.db_manager.engine, migrations_dir).apply_all()
             self.import_yaml(path)
         else:
             self.db_manager = target
+
 
     def create_agent(
         self,
@@ -182,6 +153,7 @@ class AgentRegistry:
         artifact_ref: str | None = None,
         environment: str | None = None,
         metadata: dict[str, Any] | None = None,
+        trace_propagation: str = "W3C",
     ) -> AgentVersionRecord:
         raw_spec = {
             "endpoint": endpoint,
@@ -198,7 +170,8 @@ class AgentRegistry:
             "is_idempotent": is_idempotent,
             "artifact_ref": artifact_ref,
             "environment": environment,
-            "trace_propagation": "W3C",
+            "trace_propagation": trace_propagation,
+            "metadata": metadata,
         }
         normalized = normalize_and_validate_spec(raw_spec)
 
@@ -235,7 +208,7 @@ class AgentRegistry:
                 max_retries=normalized["max_retries"],
                 rate_limit_per_minute=normalized["rate_limit_per_minute"],
                 max_concurrency=normalized["max_concurrency"],
-                trace_propagation="W3C",
+                trace_propagation=normalized["trace_propagation"],
                 is_idempotent=normalized["is_idempotent"],
                 environment=normalized["environment"],
                 metadata_=metadata,

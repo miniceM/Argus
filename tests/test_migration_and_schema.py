@@ -178,3 +178,37 @@ def test_schema_constraints_enforced(tmp_path):
             )
             conn.commit()
         conn.rollback()
+
+
+def test_migration_checksum_tamper_fails(tmp_path):
+    db_file = tmp_path / "tamper_test.db"
+    db_url = f"sqlite:///{db_file}"
+    engine = create_engine(db_url)
+
+    mig_dir = tmp_path / "migrations"
+    mig_dir.mkdir()
+    f1 = mig_dir / "001_test.sql"
+    f1.write_text("CREATE TABLE t1 (id VARCHAR(32) PRIMARY KEY);", encoding="utf-8")
+
+    runner = MigrationRunner(engine=engine, migrations_dir=mig_dir)
+    applied = runner.apply_all()
+    assert "001_test.sql" in applied
+
+    # Tamper with file content
+    f1.write_text("CREATE TABLE t1 (id VARCHAR(32) PRIMARY KEY, name TEXT);", encoding="utf-8")
+
+    # Re-running must fail fast on checksum mismatch
+    with pytest.raises(RuntimeError, match="checksum mismatch"):
+        runner.apply_all()
+
+
+def test_002_migration_applied_successfully(tmp_path):
+    db_file = tmp_path / "test_002.db"
+    db_url = f"sqlite:///{db_file}"
+    engine = create_engine(db_url)
+
+    runner = MigrationRunner(engine=engine, migrations_dir=ROOT / "migrations")
+    applied = runner.apply_all()
+    assert "001_initial_schema.sql" in applied
+    assert "002_final_attempt_fk.sql" in applied
+

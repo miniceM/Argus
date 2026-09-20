@@ -7,9 +7,12 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 
+from .dataset import DatasetResolver
 from .db import DatabaseManager
 from .db_models import ExperimentLaunchRecord
+from .evaluators import default_evaluator_registry
 from .registry import AgentRegistry
 
 
@@ -59,7 +62,14 @@ class LaunchService:
         if not ver_rec.is_active:
             raise ValueError(f"AgentVersion '{agent_id}:{agent_version}' is archived/inactive")
 
-        eval_list = evaluator_ids or ["intent_match", "required_tool_match", "pii_safe", "escalation_match", "overall_pass"]
+        eval_list = evaluator_ids or ["intent_match", "required_tool_match", "pii_safe", "escalation_match"]
+        eval_specs = [default_evaluator_registry.resolve(eid) for eid in eval_list]
+
+        # Resolve full frozen dataset snapshot
+        resolver = DatasetResolver()
+        dataset_snapshot = resolver.resolve(dataset_name, dataset_version)
+        effective_dataset_id = dataset_id or dataset_snapshot["dataset_id"]
+
         launch_name = name or f"{agent_id}-{agent_version}-{dataset_name}"
 
         # Request payload for idempotency checking
@@ -89,13 +99,7 @@ class LaunchService:
             # Build 4D Manifest snapshot
             manifest = {
                 "schema_version": "1.0",
-                "dataset": {
-                    "dataset_name": dataset_name,
-                    "dataset_id": dataset_id,
-                    "dataset_version": dataset_version or "frozen-baseline",
-                    "items_count": items_count or 6,
-                    "item_ids": item_ids or [],
-                },
+                "dataset": dataset_snapshot,
                 "agent": {
                     "agent_id": ver_rec.agent_id,
                     "version": ver_rec.version,
@@ -109,7 +113,11 @@ class LaunchService:
                     "artifact_ref": ver_rec.artifact_ref,
                     "is_idempotent": ver_rec.is_idempotent,
                 },
-                "evaluators": [{"id": eid, "version": "1.0.0", "threshold": 1.0} for eid in eval_list],
+                "evaluators": eval_specs,
+                "quality_policy": {
+                    "mode": "all_selected_must_pass",
+                    "threshold_rule": "score >= threshold",
+                },
                 "runner": {
                     "runner_version": self.runner_version,
                     "mapping_engine_version": "sha256-mapping-engine-v1",
@@ -130,7 +138,7 @@ class LaunchService:
                 quality_conclusion="unknown",
                 idempotency_key=idempotency_key,
                 request_payload_digest=payload_digest,
-                dataset_id=dataset_id,
+                dataset_id=effective_dataset_id,
                 dataset_name=dataset_name,
                 dataset_version=dataset_version,
                 agent_id=agent_id,
@@ -140,10 +148,26 @@ class LaunchService:
                 langfuse_sync_status="PENDING",
                 created_by=created_by,
             )
-            session.add(launch)
-            session.commit()
-            session.refresh(launch)
-            return launch
+
+            try:
+                session.add(launch)
+                session.commit()
+                session.refresh(launch)
+                return launch
+            except IntegrityError as exc:
+                session.rollback()
+                if idempotency_key and ("idempotency_key" in str(exc).lower() or "uq_experiment_launches_idempotency_key" in str(exc).lower()):
+                    existing = session.scalars(
+                        select(ExperimentLaunchRecord).where(ExperimentLaunchRecord.idempotency_key == idempotency_key)
+                    ).first()
+                    if existing:
+                        if existing.request_payload_digest == payload_digest:
+                            return existing
+                        raise ValueError(
+                            f"Idempotency key conflict: key '{idempotency_key}' already used with different payload."
+                        ) from exc
+                raise
+
 
     def get_launch(self, launch_id: str) -> ExperimentLaunchRecord | None:
         with self.db_manager.get_session() as session:
@@ -153,3 +177,4 @@ class LaunchService:
         with self.db_manager.get_session() as session:
             stmt = select(ExperimentLaunchRecord).order_by(ExperimentLaunchRecord.created_at.desc())
             return list(session.scalars(stmt).all())
+

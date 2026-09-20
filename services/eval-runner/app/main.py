@@ -41,11 +41,8 @@ registry = AgentRegistry(db_manager)
 if settings.argus_auto_import_yaml:
     yaml_path = find_path(settings.agent_registry_path, "config", "agents.yaml")
     if yaml_path.exists():
-        try:
-            registry.import_yaml(yaml_path)
-        except Exception:
-            # Tolerates re-import conflicts in dirty dev containers
-            pass
+        registry.import_yaml(yaml_path)
+
 
 # 3. Initialize Launch Service
 launch_service = LaunchService(db_manager, registry, runner_version=settings.runner_version)
@@ -237,7 +234,7 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
         lf.flush()
         summary = _safe_summary(result)
 
-        # Mark launch completed in Argus DB
+        # Mark launch completed and synced to Langfuse in Argus DB
         try:
             with db_manager.get_session() as session:
                 rec = session.get(ExperimentLaunchRecord, launch_id)
@@ -249,6 +246,15 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
                         rec.quality_conclusion = "pass" if float(pass_rate) == 1.0 else "fail"
                     else:
                         rec.quality_conclusion = "unknown"
+                    run_id = (
+                        getattr(result, "dataset_run_id", None)
+                        or getattr(result, "id", None)
+                        or summary.get("dataset_run_id")
+                        or summary.get("experiment_id")
+                    )
+                    rec.langfuse_experiment_id = str(run_id) if run_id else None
+                    rec.langfuse_sync_status = "SYNCED"
+                    rec.langfuse_sync_error = None
                     rec.completed_at = datetime.utcnow()
                     session.commit()
         except Exception:
@@ -269,6 +275,8 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
                 if rec and rec.status in ("PENDING", "RUNNING"):
                     rec.status = "FAILED"
                     rec.quality_conclusion = "fail"
+                    rec.langfuse_sync_status = "FAILED"
+                    rec.langfuse_sync_error = str(exc)
                     rec.completed_at = datetime.utcnow()
                     session.commit()
         except Exception:
@@ -281,8 +289,11 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
                 if rec and rec.status in ("PENDING", "RUNNING"):
                     rec.status = "FAILED"
                     rec.quality_conclusion = "fail"
+                    rec.langfuse_sync_status = "FAILED"
+                    rec.langfuse_sync_error = str(exc)
                     rec.completed_at = datetime.utcnow()
                     session.commit()
         except Exception:
             pass
         raise HTTPException(status_code=500, detail=f"experiment failed: {exc}") from exc
+

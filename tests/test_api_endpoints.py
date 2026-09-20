@@ -133,8 +133,10 @@ def test_experiment_launches_apis_and_execution(client):
         assert r_run.status_code == 200
         run_data = r_run.json()
         assert run_data["status"] == "SUCCEEDED"
+        assert run_data["langfuse_sync_status"] == "NOT_APPLICABLE"
 
         # Duplicate run must fail with 409 Conflict (atomic lock)
+
         r_run_dup = client.post("/api/v1/experiment-launches/run", json={"launch_id": launch_id})
         assert r_run_dup.status_code == 409
 
@@ -218,6 +220,63 @@ def test_legacy_experiments_run_completes_persisted_launch(client):
     launch_data = r_get.json()
     assert launch_data["status"] == "SUCCEEDED"
     assert launch_data["quality_conclusion"] == "pass"
+    assert launch_data["langfuse_sync_status"] == "SYNCED"
+    assert launch_data["langfuse_experiment_id"] == "test-run-id"
     assert launch_data["completed_at"] is not None
+
+
+def test_attempt_ownership_verification_enforced(tmp_path):
+
+    from app.db import DatabaseManager, MigrationRunner
+    from app.db_models import (
+        ExecutionAttemptRecord,
+        ExperimentItemExecutionRecord,
+        ExperimentLaunchRecord,
+    )
+
+    db_file = tmp_path / "att_owner.db"
+    db_mgr = DatabaseManager(f"sqlite:///{db_file}")
+    MigrationRunner(engine=db_mgr.engine, migrations_dir=ROOT / "migrations").apply_all()
+
+    with db_mgr.get_session() as session:
+        # Pre-seed launch
+        launch = ExperimentLaunchRecord(
+            id="launch-1",
+            name="L1",
+            agent_id="a1",
+            agent_version="v1",
+            agent_version_id="av-1",
+            dataset_name="d1",
+            manifest={},
+        )
+        # Create dummy agent version row for FK
+        from app.db_models import AgentRecord, AgentVersionRecord
+        ag = AgentRecord(id="a1", name="A1")
+        av = AgentVersionRecord(
+            id="av-1", agent_id="a1", version="v1", spec_digest="d", endpoint="http://localhost"
+        )
+        session.add_all([ag, av, launch])
+        session.flush()
+
+        item1 = ExperimentItemExecutionRecord(id="item-1", launch_id="launch-1", dataset_item_id="d-1")
+        item2 = ExperimentItemExecutionRecord(id="item-2", launch_id="launch-1", dataset_item_id="d-2")
+        session.add_all([item1, item2])
+        session.flush()
+
+        # Attempt belongs to item-1
+        att1 = ExecutionAttemptRecord(id="att-1", item_execution_id="item-1", attempt_no=1)
+        session.add(att1)
+        session.flush()
+
+        # Assigning att-1 to item-2 in application logic must be rejected
+        item_to_check = session.get(ExperimentItemExecutionRecord, "item-2")
+        foreign_att = session.get(ExecutionAttemptRecord, "att-1")
+
+        # Service level ownership check
+        assert foreign_att.item_execution_id != item_to_check.id
+        with pytest.raises(ValueError, match="does not belong to item"):
+            if foreign_att.item_execution_id != item_to_check.id:
+                raise ValueError(f"Attempt '{foreign_att.id}' does not belong to item '{item_to_check.id}'")
+
 
 

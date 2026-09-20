@@ -113,9 +113,10 @@ class ExperimentLaunchCreateRequest(BaseModel):
     dataset_name: str
     dataset_version: str | None = None
     evaluator_ids: list[str] = Field(
-        default_factory=lambda: ["intent_match", "required_tool_match", "pii_safe", "escalation_match", "overall_pass"]
+        default_factory=lambda: ["intent_match", "required_tool_match", "pii_safe", "escalation_match"]
     )
     max_concurrency: int = Field(default=4, ge=1, le=50)
+
     idempotency_key: str | None = Field(default=None, description="Optional idempotency key (can also be passed via Idempotency-Key header)")
 
 

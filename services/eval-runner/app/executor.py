@@ -54,23 +54,27 @@ class SlidingWindowRateLimiter:
 
 
 class RemoteAgentExecutor:
+    """Remote Agent invocation executor with HTTP error classification, idempotency protection, and rate limiting.
+
+    Rate limiting:
+        The SlidingWindowRateLimiter is shared across all concurrent executions within this executor (Launch scope)
+        to protect the agent endpoint from rate spikes. Cross-launch global rate limiting will be implemented
+        via distributed token bucket in future releases.
+    """
+
     def __init__(self, spec: AgentVersionSpec):
         self.spec = spec
         self._limiter = SlidingWindowRateLimiter(spec.rate_limit_per_minute)
-        self._on_attempt_start: Callable[[int], str | None] | None = None
-        self._on_attempt_end: (
-            Callable[[str | None, int | None, str | None, str | None, int, bool], None] | None
-        ) = None
 
-    def set_attempt_hooks(
+    async def invoke(
         self,
-        on_start: Callable[[int], str | None],
-        on_end: Callable[[str | None, int | None, str | None, str | None, int, bool], None],
-    ) -> None:
-        self._on_attempt_start = on_start
-        self._on_attempt_end = on_end
-
-    async def invoke(self, payload: dict[str, Any], headers: dict[str, str]) -> RemoteCallResult:
+        payload: dict[str, Any],
+        headers: dict[str, str],
+        *,
+        on_attempt_start: Callable[[int], str | None] | None = None,
+        on_attempt_end: Callable[[str | None, int | None, str | None, str | None, int, bool], None] | None = None,
+        client_transport: httpx.BaseTransport | None = None,
+    ) -> RemoteCallResult:
         if self.spec.method != "POST":
             raise ValueError(f"Executor currently supports POST only, got: {self.spec.method}")
 
@@ -91,12 +95,12 @@ class RemoteAgentExecutor:
             write=self.spec.timeout_seconds,
         )
 
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with httpx.AsyncClient(timeout=timeout, transport=client_transport) as client:
             for attempt in range(self.spec.max_retries + 1):
                 total_attempts = attempt + 1
                 attempt_id: str | None = None
-                if self._on_attempt_start:
-                    attempt_id = self._on_attempt_start(total_attempts)
+                if on_attempt_start:
+                    attempt_id = on_attempt_start(total_attempts)
 
                 await self._limiter.acquire()
                 attempt_started = time.monotonic()
@@ -109,8 +113,8 @@ class RemoteAgentExecutor:
                     # 1. Check HTTP 429
                     if response.status_code == 429:
                         if attempt < self.spec.max_retries:
-                            if self._on_attempt_end:
-                                self._on_attempt_end(
+                            if on_attempt_end:
+                                on_attempt_end(
                                     attempt_id,
                                     429,
                                     ErrorClassification.HTTP_429,
@@ -127,8 +131,8 @@ class RemoteAgentExecutor:
                             await asyncio.sleep(delay)
                             continue
                         else:
-                            if self._on_attempt_end:
-                                self._on_attempt_end(
+                            if on_attempt_end:
+                                on_attempt_end(
                                     attempt_id,
                                     429,
                                     ErrorClassification.HTTP_429,
@@ -141,8 +145,8 @@ class RemoteAgentExecutor:
                     # 2. Check HTTP 5xx
                     if response.status_code >= 500:
                         if attempt < self.spec.max_retries:
-                            if self._on_attempt_end:
-                                self._on_attempt_end(
+                            if on_attempt_end:
+                                on_attempt_end(
                                     attempt_id,
                                     response.status_code,
                                     ErrorClassification.HTTP_5XX,
@@ -153,8 +157,8 @@ class RemoteAgentExecutor:
                             await asyncio.sleep(min(2**attempt, 5))
                             continue
                         else:
-                            if self._on_attempt_end:
-                                self._on_attempt_end(
+                            if on_attempt_end:
+                                on_attempt_end(
                                     attempt_id,
                                     response.status_code,
                                     ErrorClassification.HTTP_5XX,
@@ -168,8 +172,8 @@ class RemoteAgentExecutor:
 
                     # 3. Check HTTP 4xx (Non-retryable)
                     if 400 <= response.status_code < 500:
-                        if self._on_attempt_end:
-                            self._on_attempt_end(
+                        if on_attempt_end:
+                            on_attempt_end(
                                 attempt_id,
                                 response.status_code,
                                 ErrorClassification.HTTP_4XX,
@@ -187,8 +191,8 @@ class RemoteAgentExecutor:
                         if not isinstance(body, dict):
                             raise ValueError("Remote agent response must be a JSON object")
                     except Exception as exc:
-                        if self._on_attempt_end:
-                            self._on_attempt_end(
+                        if on_attempt_end:
+                            on_attempt_end(
                                 attempt_id,
                                 response.status_code,
                                 ErrorClassification.INVALID_RESPONSE,
@@ -201,8 +205,8 @@ class RemoteAgentExecutor:
                         ) from exc
 
                     # Success!
-                    if self._on_attempt_end:
-                        self._on_attempt_end(attempt_id, response.status_code, None, None, duration_ms, trace_received)
+                    if on_attempt_end:
+                        on_attempt_end(attempt_id, response.status_code, None, None, duration_ms, trace_received)
 
                     return RemoteCallResult(
                         status_code=response.status_code,
@@ -215,8 +219,8 @@ class RemoteAgentExecutor:
                 except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
                     duration_ms = int((time.monotonic() - attempt_started) * 1000)
                     if attempt < self.spec.max_retries:
-                        if self._on_attempt_end:
-                            self._on_attempt_end(
+                        if on_attempt_end:
+                            on_attempt_end(
                                 attempt_id,
                                 None,
                                 ErrorClassification.CONNECT_ERROR,
@@ -227,8 +231,8 @@ class RemoteAgentExecutor:
                         await asyncio.sleep(min(2**attempt, 5))
                         continue
                     else:
-                        if self._on_attempt_end:
-                            self._on_attempt_end(
+                        if on_attempt_end:
+                            on_attempt_end(
                                 attempt_id,
                                 None,
                                 ErrorClassification.CONNECT_ERROR,
@@ -244,8 +248,8 @@ class RemoteAgentExecutor:
                     duration_ms = int((time.monotonic() - attempt_started) * 1000)
                     # Side-effect protection: only retry if spec explicitly says is_idempotent=True!
                     if self.spec.is_idempotent and attempt < self.spec.max_retries:
-                        if self._on_attempt_end:
-                            self._on_attempt_end(
+                        if on_attempt_end:
+                            on_attempt_end(
                                 attempt_id,
                                 None,
                                 ErrorClassification.READ_TIMEOUT,
@@ -256,8 +260,8 @@ class RemoteAgentExecutor:
                         await asyncio.sleep(min(2**attempt, 5))
                         continue
                     else:
-                        if self._on_attempt_end:
-                            self._on_attempt_end(
+                        if on_attempt_end:
+                            on_attempt_end(
                                 attempt_id,
                                 None,
                                 ErrorClassification.READ_TIMEOUT,
@@ -275,8 +279,8 @@ class RemoteAgentExecutor:
 
                 except Exception as exc:
                     duration_ms = int((time.monotonic() - attempt_started) * 1000)
-                    if self._on_attempt_end:
-                        self._on_attempt_end(
+                    if on_attempt_end:
+                        on_attempt_end(
                             attempt_id,
                             None,
                             ErrorClassification.UNKNOWN_ERROR,
@@ -285,6 +289,7 @@ class RemoteAgentExecutor:
                             False,
                         )
                     raise RuntimeError(f"Remote agent call failed: {exc}") from exc
+
 
         raise RuntimeError(f"Remote agent failed after {total_attempts} attempt(s)")
 

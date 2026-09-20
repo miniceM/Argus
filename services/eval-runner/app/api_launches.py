@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import uuid
 from datetime import datetime
 from typing import Any
@@ -9,14 +8,13 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import select
 
-from .config import find_path, settings
 from .db import DatabaseManager
 from .db_models import (
     ExecutionAttemptRecord,
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
 )
-from .evaluators import ITEM_EVALUATORS
+from .evaluators import default_evaluator_registry, evaluate_item_quality
 from .executor import RemoteAgentExecutor, aggregate_launch_status
 from .manifest import acquire_launch_execution
 from .models import (
@@ -136,6 +134,7 @@ async def _execute_single_item(
     launch_id: str,
     item_row: dict[str, Any],
     spec: AgentVersionSpec,
+    manifest: dict[str, Any],
 ) -> dict[str, Any]:
     item_id = str(item_row["id"])
     dataset_input = item_row.get("input", {})
@@ -196,8 +195,6 @@ async def _execute_single_item(
                 att.trace_context_received = trace_received
                 att.completed_at = datetime.utcnow()
 
-    executor.set_attempt_hooks(on_attempt_start, on_attempt_end)
-
     mapped_payload = map_request(dataset_input, spec.request_mapping)
     headers = {
         "Content-Type": "application/json",
@@ -222,7 +219,12 @@ async def _execute_single_item(
     agent_output: dict[str, Any] | None = None
 
     try:
-        call_res = await executor.invoke(mapped_payload, headers)
+        call_res = await executor.invoke(
+            mapped_payload,
+            headers,
+            on_attempt_start=on_attempt_start,
+            on_attempt_end=on_attempt_end,
+        )
         agent_output = call_res.body
     except Exception as exc:
         execution_status = "failed"
@@ -232,15 +234,18 @@ async def _execute_single_item(
 
     if execution_status == "succeeded" and agent_output is not None:
         try:
-            # Evaluate using registered evaluators
-            for evaluator in ITEM_EVALUATORS:
-                ev_res = evaluator(output=agent_output, expected_output=expected_output)
-                val = float(getattr(ev_res, "value", 0.0))
-                name = getattr(ev_res, "name", evaluator.__name__)
-                scores_dict[name] = val
+            eval_specs = manifest.get("evaluators", [])
+            for ev_spec in eval_specs:
+                ev_id = ev_spec["id"]
+                ev_fn = default_evaluator_registry.get_evaluator_fn(ev_id, ev_spec.get("version"))
+                ev_res = ev_fn(output=agent_output, expected_output=expected_output)
+                scores_dict[ev_id] = float(getattr(ev_res, "value", 0.0))
 
-            overall = scores_dict.get("overall_pass", 0.0)
-            quality_conclusion = "pass" if overall == 1.0 else "fail"
+            quality_conclusion = evaluate_item_quality(
+                scores_dict,
+                eval_specs,
+                manifest.get("quality_policy"),
+            )
         except Exception as exc:
             eval_status = "failed"
             eval_error = str(exc)
@@ -256,7 +261,12 @@ async def _execute_single_item(
             rec.execution_error = execution_error
             rec.eval_error = eval_error
             rec.scores = scores_dict
-            rec.final_attempt_id = last_attempt_id
+            if last_attempt_id:
+                # Enforce attempt ownership verification
+                att = session.get(ExecutionAttemptRecord, last_attempt_id)
+                if not att or att.item_execution_id != item_exec_id:
+                    raise ValueError(f"Attempt '{last_attempt_id}' does not belong to item '{item_exec_id}'")
+                rec.final_attempt_id = last_attempt_id
             rec.completed_at = completed_at
 
     return {
@@ -268,6 +278,7 @@ async def _execute_single_item(
         "output": agent_output,
         "error": execution_error or eval_error,
     }
+
 
 
 async def run_launch_synchronously(
@@ -313,17 +324,15 @@ async def run_launch_synchronously(
 
         executor = RemoteAgentExecutor(spec)
 
-        # 3. Read dataset seed items
-        dataset_file = find_path(settings.dataset_seed_path, "data", "dataset.json")
-        seed = json.loads(dataset_file.read_text(encoding="utf-8"))
-        items = seed.get("items", [])
+        # 3. Read frozen dataset items directly from manifest snapshot
+        items = manifest.get("dataset", {}).get("items", [])
 
         # 4. Concurrently run items with semaphore
         semaphore = asyncio.Semaphore(spec.max_concurrency)
 
         async def _worker(item_row):
             async with semaphore:
-                return await _execute_single_item(db_mgr, executor, launch_id, item_row, spec)
+                return await _execute_single_item(db_mgr, executor, launch_id, item_row, spec, manifest)
 
         item_results = await asyncio.gather(*[_worker(row) for row in items])
 
@@ -337,6 +346,8 @@ async def run_launch_synchronously(
             assert launch_rec is not None
             launch_rec.status = agg_status
             launch_rec.quality_conclusion = agg_quality
+            launch_rec.langfuse_sync_status = "NOT_APPLICABLE"
+            launch_rec.langfuse_experiment_id = None
             launch_rec.completed_at = completed_at
             session.commit()
             session.refresh(launch_rec)
@@ -347,9 +358,11 @@ async def run_launch_synchronously(
             if launch_rec and launch_rec.status == "RUNNING":
                 launch_rec.status = "FAILED"
                 launch_rec.quality_conclusion = "fail"
+                launch_rec.langfuse_sync_status = "NOT_APPLICABLE"
                 launch_rec.completed_at = datetime.utcnow()
                 session.commit()
         raise
+
 
 
 @router.post(

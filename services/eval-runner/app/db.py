@@ -52,13 +52,28 @@ class MigrationRunner:
                 checksum = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
                 if version in applied_versions:
+                    recorded_checksum = applied_versions[version]
+                    if recorded_checksum != checksum:
+                        raise RuntimeError(
+                            f"Migration checksum mismatch for '{version}'. "
+                            f"Recorded: {recorded_checksum}, Current: {checksum}. "
+                            "Migration scripts must be immutable."
+                        )
                     continue
 
                 # Remove SQL comments
                 clean_content = re.sub(r"--[^\n]*", "", content)
                 statements = [s.strip() for s in clean_content.split(";") if s.strip()]
                 for statement in statements:
-                    conn.execute(text(statement))
+                    try:
+                        conn.execute(text(statement))
+                    except Exception as exc:
+                        # SQLite dialect does not support adding foreign keys via ALTER TABLE
+                        if conn.dialect.name == "sqlite" and any(
+                            k in str(exc).lower() for k in ("near \"constraint\"", "near \"foreign\"")
+                        ):
+                            continue
+                        raise
 
                 conn.execute(
                     text("INSERT INTO schema_migrations (version, checksum) VALUES (:version, :checksum)"),
@@ -79,6 +94,16 @@ class MigrationRunner:
                 f"Database schema is not up to date. Missing migrations: {missing}. "
                 "Please run migration scripts before starting the service."
             )
+        for f in migration_files:
+            content = f.read_text(encoding="utf-8")
+            checksum = hashlib.sha256(content.encode("utf-8")).hexdigest()
+            if f.name in applied and applied[f.name] != checksum:
+                raise RuntimeError(
+                    f"Migration checksum mismatch for '{f.name}'. "
+                    f"Recorded: {applied[f.name]}, Current: {checksum}. "
+                    "Migration scripts must be immutable."
+                )
+
 
 
 class DatabaseManager:

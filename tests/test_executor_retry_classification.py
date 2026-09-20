@@ -44,12 +44,15 @@ def test_non_retryable_http_4xx():
         def on_end(att_id: str, status: int | None, err_type: str | None, err_msg: str | None, latency: int, trace: bool):
             attempts_ended.append((status, err_type))
 
-        executor.set_attempt_hooks(on_start, on_end)
-
         mock_resp = httpx.Response(400, json={"error": "bad request"})
         with patch.object(httpx.AsyncClient, "post", AsyncMock(return_value=mock_resp)):
             with pytest.raises(RuntimeError, match="HTTP_4XX"):
-                await executor.invoke({"msg": "hello"}, {})
+                await executor.invoke(
+                    {"msg": "hello"},
+                    {},
+                    on_attempt_start=on_start,
+                    on_attempt_end=on_end,
+                )
 
         # Must only attempt ONCE (no retry on 4xx)
         assert len(attempts_started) == 1
@@ -68,15 +71,24 @@ def test_non_retryable_invalid_json_format():
         attempts_started: list[int] = []
         attempts_ended: list[tuple[int, str | None]] = []
 
-        executor.set_attempt_hooks(
-            lambda no: attempts_started.append(no) or f"att-{no}",
-            lambda a_id, st, err_type, msg, lat, tr: attempts_ended.append((st, err_type)),
-        )
+        def on_start(no: int) -> str:
+            attempts_started.append(no)
+            return f"att-{no}"
+
+        def on_end(a_id, st, err_type, msg, lat, tr):
+            attempts_ended.append((st, err_type))
+
 
         mock_resp = httpx.Response(200, text="not valid json")
         with patch.object(httpx.AsyncClient, "post", AsyncMock(return_value=mock_resp)):
             with pytest.raises(RuntimeError, match="INVALID_RESPONSE"):
-                await executor.invoke({"msg": "hello"}, {})
+                await executor.invoke(
+                    {"msg": "hello"},
+                    {},
+                    on_attempt_start=on_start,
+                    on_attempt_end=on_end,
+                )
+
 
         assert len(attempts_started) == 1
         assert attempts_ended[0][1] == ErrorClassification.INVALID_RESPONSE

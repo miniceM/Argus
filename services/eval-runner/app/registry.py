@@ -19,18 +19,21 @@ from .security import validate_credential_ref, validate_endpoint_url
 def compute_spec_digest(spec_dict: dict[str, Any]) -> str:
     """Compute deterministic SHA-256 digest of normalized execution specification."""
     keys_to_include = [
+        "artifact_ref",
+        "credential_ref",
         "endpoint",
-        "protocol",
+        "environment",
+        "is_idempotent",
+        "max_concurrency",
+        "max_retries",
         "method",
+        "protocol",
+        "rate_limit_per_minute",
         "request_mapping",
         "request_schema",
         "response_schema",
-        "credential_ref",
         "timeout_seconds",
-        "max_retries",
-        "rate_limit_per_minute",
-        "max_concurrency",
-        "is_idempotent",
+        "trace_propagation",
     ]
     normalized: dict[str, Any] = {}
     for k in sorted(keys_to_include):
@@ -40,6 +43,60 @@ def compute_spec_digest(spec_dict: dict[str, Any]) -> str:
 
     canonical_json = json.dumps(normalized, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+
+def normalize_and_validate_spec(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate and normalize AgentVersion specification fields.
+
+    Enforces:
+    - Protocol MUST be 'HTTP_JSON'
+    - Method MUST be 'POST'
+    - Trace propagation MUST be 'W3C'
+    - Endpoint URL must pass SSRF and scheme validation
+    - Credential ref must not contain plaintext secrets
+    """
+    protocol = data.get("protocol", "HTTP_JSON")
+    if protocol != "HTTP_JSON":
+        raise ValueError(f"Only HTTP_JSON protocol is supported, got: '{protocol}'")
+
+    method = data.get("method", "POST").upper()
+    if method != "POST":
+        raise ValueError(f"Only POST method is supported, got: '{method}'")
+
+    trace_propagation = data.get("trace_propagation", "W3C")
+    if trace_propagation != "W3C":
+        raise ValueError(f"Only 'W3C' trace_propagation is currently supported, got: '{trace_propagation}'")
+
+    endpoint = data.get("endpoint")
+    if not endpoint:
+        raise ValueError("AgentVersion endpoint is required")
+    validate_endpoint_url(endpoint)
+
+    credential_ref = data.get("credential_ref")
+    validate_credential_ref(credential_ref)
+
+    mapping = dict(data.get("request_mapping") or {})
+
+    normalized = {
+        "endpoint": endpoint,
+        "protocol": protocol,
+        "method": method,
+        "request_mapping": mapping,
+        "request_schema": data.get("request_schema"),
+        "response_schema": data.get("response_schema"),
+        "credential_ref": credential_ref,
+        "timeout_seconds": float(data.get("timeout_seconds", 30.0)),
+        "max_retries": int(data.get("max_retries", 2)),
+        "rate_limit_per_minute": int(data.get("rate_limit_per_minute", 600)),
+        "max_concurrency": int(data.get("max_concurrency", 4)),
+        "is_idempotent": bool(data.get("is_idempotent", False)),
+        "artifact_ref": data.get("artifact_ref"),
+        "environment": data.get("environment"),
+        "trace_propagation": "W3C",
+    }
+    digest = compute_spec_digest(normalized)
+    normalized["spec_digest"] = digest
+    return normalized
 
 
 @dataclass(frozen=True)
@@ -126,31 +183,24 @@ class AgentRegistry:
         environment: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> AgentVersionRecord:
-        # Validate protocol and method
-        if protocol != "HTTP_JSON":
-            raise ValueError(f"Only HTTP_JSON protocol is supported, got: '{protocol}'")
-        if method.upper() != "POST":
-            raise ValueError(f"Only POST method is supported, got: '{method}'")
-
-        validate_endpoint_url(endpoint)
-        validate_credential_ref(credential_ref)
-
-        mapping = dict(request_mapping or {})
-        spec_fields = {
+        raw_spec = {
             "endpoint": endpoint,
             "protocol": protocol,
-            "method": method.upper(),
-            "request_mapping": mapping,
+            "method": method,
+            "request_mapping": request_mapping,
             "request_schema": request_schema,
             "response_schema": response_schema,
             "credential_ref": credential_ref,
-            "timeout_seconds": float(timeout_seconds),
-            "max_retries": int(max_retries),
-            "rate_limit_per_minute": int(rate_limit_per_minute),
-            "max_concurrency": int(max_concurrency),
-            "is_idempotent": bool(is_idempotent),
+            "timeout_seconds": timeout_seconds,
+            "max_retries": max_retries,
+            "rate_limit_per_minute": rate_limit_per_minute,
+            "max_concurrency": max_concurrency,
+            "is_idempotent": is_idempotent,
+            "artifact_ref": artifact_ref,
+            "environment": environment,
+            "trace_propagation": "W3C",
         }
-        digest = compute_spec_digest(spec_fields)
+        normalized = normalize_and_validate_spec(raw_spec)
 
         with self.db_manager.get_session() as session:
             # Check agent existence
@@ -172,22 +222,22 @@ class AgentRegistry:
                 id=str(uuid.uuid4()),
                 agent_id=agent_id,
                 version=version,
-                spec_digest=digest,
-                artifact_ref=artifact_ref,
-                endpoint=endpoint,
-                protocol=protocol,
-                method=method.upper(),
-                request_mapping=mapping,
-                request_schema=request_schema,
-                response_schema=response_schema,
-                credential_ref=credential_ref,
-                timeout_seconds=float(timeout_seconds),
-                max_retries=int(max_retries),
-                rate_limit_per_minute=int(rate_limit_per_minute),
-                max_concurrency=int(max_concurrency),
+                spec_digest=normalized["spec_digest"],
+                artifact_ref=normalized["artifact_ref"],
+                endpoint=normalized["endpoint"],
+                protocol=normalized["protocol"],
+                method=normalized["method"],
+                request_mapping=normalized["request_mapping"],
+                request_schema=normalized["request_schema"],
+                response_schema=normalized["response_schema"],
+                credential_ref=normalized["credential_ref"],
+                timeout_seconds=normalized["timeout_seconds"],
+                max_retries=normalized["max_retries"],
+                rate_limit_per_minute=normalized["rate_limit_per_minute"],
+                max_concurrency=normalized["max_concurrency"],
                 trace_propagation="W3C",
-                is_idempotent=bool(is_idempotent),
-                environment=environment,
+                is_idempotent=normalized["is_idempotent"],
+                environment=normalized["environment"],
                 metadata_=metadata,
                 is_active=True,
             )
@@ -296,21 +346,8 @@ class AgentRegistry:
 
                 versions_data = agent_info.get("versions", {})
                 for ver_name, ver_info in versions_data.items():
-                    spec_fields = {
-                        "endpoint": ver_info["endpoint"],
-                        "protocol": ver_info.get("protocol", "HTTP_JSON"),
-                        "method": ver_info.get("method", "POST").upper(),
-                        "request_mapping": dict(ver_info.get("request_mapping", {})),
-                        "request_schema": ver_info.get("request_schema"),
-                        "response_schema": ver_info.get("response_schema"),
-                        "credential_ref": ver_info.get("credential_ref"),
-                        "timeout_seconds": float(ver_info.get("timeout_seconds", 30)),
-                        "max_retries": int(ver_info.get("max_retries", 2)),
-                        "rate_limit_per_minute": int(ver_info.get("rate_limit_per_minute", 600)),
-                        "max_concurrency": int(ver_info.get("max_concurrency", 4)),
-                        "is_idempotent": bool(ver_info.get("is_idempotent", False)),
-                    }
-                    digest = compute_spec_digest(spec_fields)
+                    normalized = normalize_and_validate_spec(ver_info)
+                    digest = normalized["spec_digest"]
 
                     stmt = select(AgentVersionRecord).where(
                         AgentVersionRecord.agent_id == agent_id, AgentVersionRecord.version == ver_name
@@ -330,20 +367,21 @@ class AgentRegistry:
                         agent_id=agent_id,
                         version=ver_name,
                         spec_digest=digest,
-                        artifact_ref=ver_info.get("artifact_ref"),
-                        endpoint=spec_fields["endpoint"],
-                        protocol=spec_fields["protocol"],
-                        method=spec_fields["method"],
-                        request_mapping=spec_fields["request_mapping"],
-                        request_schema=spec_fields["request_schema"],
-                        response_schema=spec_fields["response_schema"],
-                        credential_ref=spec_fields["credential_ref"],
-                        timeout_seconds=spec_fields["timeout_seconds"],
-                        max_retries=spec_fields["max_retries"],
-                        rate_limit_per_minute=spec_fields["rate_limit_per_minute"],
-                        max_concurrency=spec_fields["max_concurrency"],
-                        is_idempotent=spec_fields["is_idempotent"],
-                        environment=ver_info.get("environment"),
+                        artifact_ref=normalized["artifact_ref"],
+                        endpoint=normalized["endpoint"],
+                        protocol=normalized["protocol"],
+                        method=normalized["method"],
+                        request_mapping=normalized["request_mapping"],
+                        request_schema=normalized["request_schema"],
+                        response_schema=normalized["response_schema"],
+                        credential_ref=normalized["credential_ref"],
+                        timeout_seconds=normalized["timeout_seconds"],
+                        max_retries=normalized["max_retries"],
+                        rate_limit_per_minute=normalized["rate_limit_per_minute"],
+                        max_concurrency=normalized["max_concurrency"],
+                        trace_propagation="W3C",
+                        is_idempotent=normalized["is_idempotent"],
+                        environment=normalized["environment"],
                         metadata_=ver_info.get("metadata"),
                         is_active=True,
                     )
@@ -353,6 +391,7 @@ class AgentRegistry:
             session.commit()
 
         return {"created": created, "skipped": skipped}
+
 
 
 def _resolve_dot_path(obj: Any, path: str) -> Any:

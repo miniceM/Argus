@@ -128,14 +128,21 @@ class ExperimentItemExecutionRecord(Base):
     eval_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     observation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    final_attempt_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    final_attempt_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("execution_attempts.id", ondelete="SET NULL", use_alter=True, name="fk_item_executions_final_attempt"),
+        nullable=True,
+    )
     scores: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     launch: Mapped[ExperimentLaunchRecord] = relationship("ExperimentLaunchRecord", back_populates="item_executions")
     attempts: Mapped[list[ExecutionAttemptRecord]] = relationship(
-        "ExecutionAttemptRecord", back_populates="item_execution", cascade="all, delete-orphan"
+        "ExecutionAttemptRecord",
+        back_populates="item_execution",
+        cascade="all, delete-orphan",
+        foreign_keys="ExecutionAttemptRecord.item_execution_id",
     )
 
 
@@ -160,5 +167,5 @@ class ExecutionAttemptRecord(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     item_execution: Mapped[ExperimentItemExecutionRecord] = relationship(
-        "ExperimentItemExecutionRecord", back_populates="attempts"
+        "ExperimentItemExecutionRecord", back_populates="attempts", foreign_keys=[item_execution_id]
     )

@@ -230,6 +230,8 @@ jobs:
       LANGFUSE_PROJECT_ID: ${{ vars.LANGFUSE_PROJECT_ID }}
       LANGFUSE_I18N_IMAGE_DIGEST: ${{ vars.LANGFUSE_I18N_IMAGE_DIGEST }}
       LANGFUSE_I18N_BUILD_ID: ${{ vars.LANGFUSE_I18N_BUILD_ID }}
+      LANGFUSE_GHCR_USERNAME: ${{ secrets.LANGFUSE_GHCR_USERNAME }}
+      LANGFUSE_GHCR_TOKEN: ${{ secrets.LANGFUSE_GHCR_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

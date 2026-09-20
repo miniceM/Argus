@@ -68,7 +68,7 @@ ghcr.io/minicem/argus-langfuse-i18n
 
 每次发布都会生成不可变的 `4.38.0-i18n-<git-sha>` 标签；`main` 同时更新
 `4.38.0-i18n` 标签。工作流 artifact 中的 `release-image.txt` 保存 registry
-返回的完整 digest。正式部署必须在环境文件中固定这个 digest：
+返回的完整 digest 和 build ID。正式部署必须在环境文件中固定这个完整 digest：
 
 ```text
 LANGFUSE_WEB_IMAGE=ghcr.io/minicem/argus-langfuse-i18n@sha256:<registry-digest>
@@ -96,14 +96,16 @@ LANGFUSE_SECRET_KEY
 LANGFUSE_ADMIN_EMAIL
 LANGFUSE_ADMIN_PASSWORD
 LANGFUSE_PROJECT_ID
-LANGFUSE_I18N_IMAGE_DIGEST
+LANGFUSE_I18N_IMAGE_DIGEST=ghcr.io/minicem/argus-langfuse-i18n@sha256:<registry-digest>
 LANGFUSE_I18N_BUILD_ID
 ```
 
-缺少任何变量时，集成入口以退出码 `2` 报告 `NOT_RUN`。`LANGFUSE_I18N_BUILD_ID`
-必须与发布 artifact 中的 `argus-i18n-<git-sha>` 相同；验收会从正在运行的 Langfuse
-服务读取镜像内置的 build identity，确认当前服务确实来自这次发布。凭据只通过环境变量
-或权限受控的临时 env 文件传入，不写入 manifest、截图或 Git。
+缺少任何变量时，集成入口以退出码 `2` 报告 `NOT_RUN`。`LANGFUSE_I18N_IMAGE_DIGEST`
+必须使用发布 artifact 中的完整 GHCR digest；`LANGFUSE_I18N_BUILD_ID` 必须与其中的
+`argus-i18n-<git-sha>` 相同。验收会读取该 digest 的 OCI config 和正在运行的 Langfuse
+服务的 build identity，确认两者相同。私有 GHCR package 还需提供 `LANGFUSE_GHCR_USERNAME`
+与 `LANGFUSE_GHCR_TOKEN`（`read:packages`）；公开 package 可匿名查询。凭据只通过环境
+变量或权限受控的临时 env 文件传入，不写入 manifest、截图或 Git。
 
 ## 门禁如何失败
 

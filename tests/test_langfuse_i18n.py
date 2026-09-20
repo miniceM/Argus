@@ -115,6 +115,7 @@ def test_documented_i18n_entrypoints_and_fail_fast_scripts_exist() -> None:
         "check-i18n-coverage.py",
         "prepare-upstream.sh",
         "verify-upstream.sh",
+        "verify-image-identity.py",
     ):
         path = I18N_ROOT / "scripts" / name
         assert path.is_file(), name
@@ -200,10 +201,13 @@ def test_client_navigation_reads_the_browser_locale_cookie() -> None:
 def test_remote_acceptance_isolates_env_and_verifies_image_identity() -> None:
     validate = (I18N_ROOT / "scripts" / "validate-integration.sh").read_text()
     compose_cloud = (ROOT / "docker-compose.cloud.yml").read_text()
+    identity = (I18N_ROOT / "scripts" / "verify-image-identity.py").read_text()
 
     assert "mktemp" in validate
     assert "ARGUS_CLOUD_ENV_FILE" in validate
     assert 'if [[ ! -f "$ROOT/.env.cloud" ]]' not in validate
     assert "LANGFUSE_I18N_BUILD_ID" in validate
-    assert "/api/public/argus-image-identity" in validate
+    assert "verify-image-identity.py" in validate
+    assert "/api/public/argus-image-identity" in identity
+    assert "manifests" in identity and "blobs" in identity
     assert "ARGUS_CLOUD_ENV_FILE:-.env.cloud" in compose_cloud

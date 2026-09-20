@@ -19,8 +19,8 @@ done
 export E2E_RUN_SUFFIX=${E2E_RUN_SUFFIX:-i18n-$(date -u +%Y%m%dT%H%M%SZ)}
 export LANGFUSE_DATASET_NAME=${LANGFUSE_DATASET_NAME:-banking-agent-regression}
 
-if [[ ! "$LANGFUSE_I18N_IMAGE_DIGEST" =~ ^(sha256:[0-9a-f]{64}|ghcr\.io/[a-z0-9._/-]+@sha256:[0-9a-f]{64})$ ]]; then
-  echo "NOT_RUN: LANGFUSE_I18N_IMAGE_DIGEST must be a valid sha256 digest" >&2
+if [[ ! "$LANGFUSE_I18N_IMAGE_DIGEST" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[0-9a-f]{64}$ ]]; then
+  echo "NOT_RUN: LANGFUSE_I18N_IMAGE_DIGEST must be a full GHCR digest reference" >&2
   exit 2
 fi
 
@@ -51,26 +51,17 @@ LANGFUSE_UPSTREAM_DIR="$SOURCE_DIR" \
 I18N_EVIDENCE_DIR="$ROOT/artifacts/i18n-integration" \
 node "$LAYER_ROOT/scripts/integration-ui.mjs"
 
-identity_json=$(curl -fsS "$LANGFUSE_BASE_URL/api/public/argus-image-identity")
-python3 - "$identity_json" "$LANGFUSE_I18N_BUILD_ID" <<'PY'
-import json
-import sys
+identity_json=$(python3 "$LAYER_ROOT/scripts/verify-image-identity.py" \
+  "$LANGFUSE_I18N_IMAGE_DIGEST" "$LANGFUSE_BASE_URL" "$LANGFUSE_I18N_BUILD_ID")
 
-actual = json.loads(sys.argv[1]).get("buildId")
-expected = sys.argv[2]
-if actual != expected:
-    raise SystemExit(
-        f"deployed Langfuse build identity mismatch: expected {expected}, got {actual}"
-    )
-PY
-
-python3 - "$ROOT/artifacts/i18n-integration/report.json" <<'PY'
+python3 - "$ROOT/artifacts/i18n-integration/report.json" "$identity_json" <<'PY'
 import json, os, pathlib, sys
 path=pathlib.Path(sys.argv[1]); path.parent.mkdir(parents=True, exist_ok=True)
 path.write_text(json.dumps({
   "status":"PASS",
   "imageDigest":os.environ["LANGFUSE_I18N_IMAGE_DIGEST"],
   "imageBuildId":os.environ["LANGFUSE_I18N_BUILD_ID"],
+  "imageIdentity":json.loads(sys.argv[2]),
   "baseUrl":os.environ["LANGFUSE_BASE_URL"],
   "dataset":os.environ["LANGFUSE_DATASET_NAME"],
 }, indent=2)+"\n")

@@ -11,18 +11,58 @@ from fastapi import FastAPI, HTTPException
 from langfuse import get_client
 from opentelemetry.propagate import inject
 
+from .api_launches import router as launches_router
+from .api_registry import router as registry_router
 from .config import settings
+from .db import DatabaseManager, MigrationRunner
 from .evaluators import ITEM_EVALUATORS, RUN_EVALUATORS
 from .executor import RemoteAgentExecutor
+from .manifest import LaunchService
 from .models import BootstrapResult, ExperimentRequest, ExperimentResult
 from .registry import AgentRegistry, map_request
 
 app = FastAPI(
-    title="Enterprise Remote Agent Eval Runner PoC",
+    title="Enterprise Remote Agent Eval Runner",
     version=settings.runner_version,
-    description="Platform-side dataset replay and evaluation. Business agents remain evaluation-SDK free.",
+    description="Enterprise Agent Evaluation Control Plane with Persistent Registry, Version Snapshots, and Zero-SDK Agents.",
 )
-registry = AgentRegistry(settings.agent_registry_path)
+
+# 1. Initialize Database Manager & Migrations
+db_manager = DatabaseManager.from_env()
+
+# Locate migrations dir
+_possible_migrations = [
+    Path(__file__).resolve().parents[3] / "migrations",
+    Path(settings.migrations_path),
+    Path("/app/migrations"),
+]
+migrations_dir = next((p for p in _possible_migrations if p.exists()), _possible_migrations[0])
+if migrations_dir.exists():
+    migration_runner = MigrationRunner(db_manager.engine, migrations_dir)
+    migration_runner.apply_all()
+
+# 2. Initialize AgentRegistry & Optional YAML Import
+registry = AgentRegistry(db_manager)
+if settings.argus_auto_import_yaml:
+    _possible_yaml = [
+        Path(settings.agent_registry_path),
+        Path(__file__).resolve().parents[3] / "config" / "agents.yaml",
+        Path("/app/config/agents.yaml"),
+    ]
+    yaml_path = next((p for p in _possible_yaml if p.exists()), None)
+    if yaml_path:
+        try:
+            registry.import_yaml(yaml_path)
+        except Exception:
+            # Tolerates re-import conflicts in dirty dev containers
+            pass
+
+# 3. Initialize Launch Service
+launch_service = LaunchService(db_manager, registry, runner_version=settings.runner_version)
+
+# 4. Mount Enterprise REST Routers (Zero URL Path Variables)
+app.include_router(registry_router)
+app.include_router(launches_router)
 
 
 def _client():
@@ -47,11 +87,6 @@ def _wait_for_langfuse() -> None:
 
 
 def _safe_summary(result: Any) -> dict[str, Any]:
-    """Convert the SDK result to a small API-friendly summary.
-
-    This avoids coupling the PoC API to private SDK serialization details.
-    The complete result remains stored in Langfuse.
-    """
     summary: dict[str, Any] = {}
     for key in ["run_name", "dataset_run_id", "dataset_run_url", "experiment_id"]:
         value = getattr(result, key, None)
@@ -106,7 +141,10 @@ def bootstrap() -> BootstrapResult:
     try:
         _wait_for_langfuse()
         lf = _client()
-        seed = json.loads(Path(settings.dataset_seed_path).read_text(encoding="utf-8"))
+        seed_path = Path(settings.dataset_seed_path)
+        if not seed_path.exists():
+            seed_path = Path(__file__).resolve().parents[3] / "data" / "dataset.json"
+        seed = json.loads(seed_path.read_text(encoding="utf-8"))
         dataset_name = seed.get("name") or seed["dataset_name"]
 
         try:
@@ -144,6 +182,23 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
         launch_id = str(uuid.uuid4())
         experiment_name = request.experiment_name or f"{request.agent_id}-{request.agent_version}"
 
+        # Persist Launch in Argus DB with deterministic ID binding
+        launch_id = str(uuid.uuid4())
+        try:
+            persisted = launch_service.create_launch(
+                agent_id=request.agent_id,
+                agent_version=request.agent_version,
+                dataset_name=request.dataset_name,
+                dataset_id=str(getattr(dataset, "id", "")) or None,
+                name=experiment_name,
+                max_concurrency=request.max_concurrency,
+                launch_id=launch_id,
+            )
+            launch_id = persisted.id
+        except Exception:
+            # Fallback tolerating launch creation if already running
+            pass
+
         async def remote_task(*, item: Any, **_: Any) -> dict[str, Any]:
             payload = map_request(item.input, spec.request_mapping)
             headers = {
@@ -153,9 +208,6 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
                 "X-Eval-Agent-Version": spec.version,
             }
 
-            # run_experiment creates an active traced task for each dataset row.
-            # This nested observation captures the remote call itself, while
-            # OpenTelemetry inject() propagates the active W3C trace context.
             with lf.start_as_current_observation(
                 as_type="tool",
                 name="remote-agent-http",

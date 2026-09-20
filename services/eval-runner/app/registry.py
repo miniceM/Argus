@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 from sqlalchemy import select
 
+from .config import find_path
 from .db import DatabaseManager
 from .db_models import AgentRecord, AgentVersionRecord
 from .security import validate_credential_ref, validate_endpoint_url
@@ -64,10 +65,8 @@ class AgentRegistry:
         if isinstance(target, (str, Path)):
             path = Path(target)
             self.db_manager = DatabaseManager("sqlite:///:memory:")
-            # Locate migrations dir
-            migrations_dir = Path(__file__).resolve().parents[3] / "migrations"
-            if not migrations_dir.exists():
-                migrations_dir = Path("/app/migrations")
+            # Locate migrations dir safely
+            migrations_dir = find_path("/app/migrations", "migrations")
             from .db import MigrationRunner
             MigrationRunner(self.db_manager.engine, migrations_dir).apply_all()
             self.import_yaml(path)

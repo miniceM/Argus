@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -13,7 +12,7 @@ from opentelemetry.propagate import inject
 
 from .api_launches import router as launches_router
 from .api_registry import router as registry_router
-from .config import settings
+from .config import find_path, settings
 from .db import DatabaseManager, MigrationRunner
 from .evaluators import ITEM_EVALUATORS, RUN_EVALUATORS
 from .executor import RemoteAgentExecutor
@@ -30,13 +29,7 @@ app = FastAPI(
 # 1. Initialize Database Manager & Migrations
 db_manager = DatabaseManager.from_env()
 
-# Locate migrations dir
-_possible_migrations = [
-    Path(__file__).resolve().parents[3] / "migrations",
-    Path(settings.migrations_path),
-    Path("/app/migrations"),
-]
-migrations_dir = next((p for p in _possible_migrations if p.exists()), _possible_migrations[0])
+migrations_dir = find_path(settings.migrations_path, "migrations")
 if migrations_dir.exists():
     migration_runner = MigrationRunner(db_manager.engine, migrations_dir)
     migration_runner.apply_all()
@@ -44,13 +37,8 @@ if migrations_dir.exists():
 # 2. Initialize AgentRegistry & Optional YAML Import
 registry = AgentRegistry(db_manager)
 if settings.argus_auto_import_yaml:
-    _possible_yaml = [
-        Path(settings.agent_registry_path),
-        Path(__file__).resolve().parents[3] / "config" / "agents.yaml",
-        Path("/app/config/agents.yaml"),
-    ]
-    yaml_path = next((p for p in _possible_yaml if p.exists()), None)
-    if yaml_path:
+    yaml_path = find_path(settings.agent_registry_path, "config", "agents.yaml")
+    if yaml_path.exists():
         try:
             registry.import_yaml(yaml_path)
         except Exception:
@@ -141,9 +129,7 @@ def bootstrap() -> BootstrapResult:
     try:
         _wait_for_langfuse()
         lf = _client()
-        seed_path = Path(settings.dataset_seed_path)
-        if not seed_path.exists():
-            seed_path = Path(__file__).resolve().parents[3] / "data" / "dataset.json"
+        seed_path = find_path(settings.dataset_seed_path, "data", "dataset.json")
         seed = json.loads(seed_path.read_text(encoding="utf-8"))
         dataset_name = seed.get("name") or seed["dataset_name"]
 

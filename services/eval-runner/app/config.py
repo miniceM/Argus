@@ -2,6 +2,22 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
+
+
+def find_path(configured_path: str | Path, *subpaths: str) -> Path:
+    """Safely resolve a path either from configured path, or by searching parent directories."""
+    p = Path(configured_path)
+    if p.exists():
+        return p
+
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        candidate = parent.joinpath(*subpaths)
+        if candidate.exists():
+            return candidate
+
+    return p
 
 
 @dataclass(frozen=True)
@@ -18,3 +34,4 @@ class Settings:
 
 
 settings = Settings()
+

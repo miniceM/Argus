@@ -4,13 +4,12 @@ import asyncio
 import json
 import uuid
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import select
 
-from .config import settings
+from .config import find_path, settings
 from .db import DatabaseManager
 from .db_models import (
     ExecutionAttemptRecord,
@@ -314,10 +313,7 @@ async def run_launch_synchronously(
         executor = RemoteAgentExecutor(spec)
 
         # 3. Read dataset seed items
-        dataset_file = Path(settings.dataset_seed_path)
-        if not dataset_file.exists():
-            # Fallback to local data dir if relative
-            dataset_file = Path(__file__).resolve().parents[3] / "data" / "dataset.json"
+        dataset_file = find_path(settings.dataset_seed_path, "data", "dataset.json")
         seed = json.loads(dataset_file.read_text(encoding="utf-8"))
         items = seed.get("items", [])
 

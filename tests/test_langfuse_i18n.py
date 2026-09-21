@@ -184,6 +184,25 @@ def test_i18n_workflow_filters_changes_and_publishes_ghcr_image() -> None:
     assert login["with"]["password"] == "${{ secrets.GITHUB_TOKEN }}"
 
     build = next(step for step in steps if step.get("id") == "build")
+    qemu = next(
+        step for step in steps if step.get("uses") == "docker/setup-qemu-action@v3"
+    )
+    assert qemu["with"] == {"platforms": "arm64"}
+    buildx_index = next(
+        i
+        for i, step in enumerate(steps)
+        if step.get("uses") == "docker/setup-buildx-action@v3"
+    )
+    qemu_index = next(
+        i
+        for i, step in enumerate(steps)
+        if step.get("uses") == "docker/setup-qemu-action@v3"
+    )
+    assert qemu_index < buildx_index
+    assert build["with"]["platforms"] == (
+        "${{ github.event_name == 'pull_request' && 'linux/amd64' || "
+        "'linux/amd64,linux/arm64' }}"
+    )
     assert build["with"]["load"] == "${{ github.event_name == 'pull_request' }}"
     assert build["with"]["push"] == "${{ github.event_name != 'pull_request' }}"
     assert build["with"]["tags"] == "${{ steps.meta.outputs.tags }}"

@@ -402,7 +402,7 @@ Langfuse Cloud E2E
 - `Docker / Compose Validation`
 - `Langfuse Cloud E2E`
 
-`.github/workflows/langfuse-i18n.yml` 只在 `deploy/langfuse/**` 或该工作流自身发生变化时执行；也可以通过 `workflow_dispatch` 手动执行。Pull Request 会验证补丁、资源、类型检查、UI 测试并构建镜像，但不会推送 GHCR。合并到 `main` 后，工作流会将成品推送到 `ghcr.io/minicem/argus-langfuse-i18n`，并生成不可变的 `4.38.0-i18n-<git-sha>` 标签。
+`.github/workflows/langfuse-i18n.yml` 只在 `deploy/langfuse/**` 或该工作流自身发生变化时执行；也可以通过 `workflow_dispatch` 手动执行。Pull Request 会验证补丁、资源、类型检查、UI 测试并构建可加载的 `linux/amd64` smoke 镜像，但不会推送 GHCR。合并到 `main` 后，工作流使用 QEMU + Buildx 发布 `linux/amd64` 与 `linux/arm64` 多架构镜像到 `ghcr.io/minicem/argus-langfuse-i18n`，并生成不可变的 `4.38.0-i18n-<git-sha>` 标签。
 
 Cloud E2E 建议使用独立 Langfuse CI Project，并通过 GitHub Environment 管理：
 

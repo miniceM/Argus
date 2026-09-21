@@ -59,8 +59,9 @@ make validate-langfuse-integration
 
 ## GHCR 发布与部署
 
-PR 只执行补丁验证和 `linux/amd64` 镜像构建，不推送镜像。相关变更合并到
-`main` 或手动执行工作流后，GitHub Actions 使用仓库的 `GITHUB_TOKEN` 将镜像推送到：
+PR 只执行补丁验证和可加载的 `linux/amd64` smoke 镜像构建，不推送镜像。相关变更合并到
+`main` 或手动执行工作流后，GitHub Actions 使用 QEMU + Buildx 构建并推送
+`linux/amd64` 与 `linux/arm64` 多架构镜像到：
 
 ```text
 ghcr.io/minicem/argus-langfuse-i18n

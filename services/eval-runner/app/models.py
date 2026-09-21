@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .security import validate_credential_ref, validate_endpoint_url
 
@@ -50,7 +50,7 @@ class AgentCreateRequest(BaseModel):
     owner: str | None = Field(default=None, description="Team or owner identifier")
 
 
-class AgentResponse(BaseModel):
+class AgentSummaryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -58,8 +58,14 @@ class AgentResponse(BaseModel):
     description: str | None = None
     owner: str | None = None
     status: str
+    version_count: int = 0
+    latest_version: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class AgentResponse(AgentSummaryResponse):
+    pass
 
 
 
@@ -182,6 +188,21 @@ class ExperimentLaunchCreateRequest(BaseModel):
 
 
 
+class EvaluatorResponse(BaseModel):
+    id: str
+    version: str
+    scope: str
+    threshold: float
+    description: str | None = None
+
+
+class SystemInfoResponse(BaseModel):
+    service: str = "argus-control-plane"
+    version: str
+    build_id: str
+    environment: str
+
+
 class ExperimentLaunchResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -198,12 +219,23 @@ class ExperimentLaunchResponse(BaseModel):
     agent_version_id: str
     manifest: dict[str, Any]
     langfuse_experiment_id: str | None = None
+    langfuse_experiment_url: str | None = None
     langfuse_sync_status: str
     langfuse_sync_error: str | None = None
+    links: dict[str, str | None] | None = None
     created_by: str | None = None
     created_at: datetime
     started_at: datetime | None = None
     completed_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def populate_links(self) -> Self:
+        if self.links is None:
+            self.links = {
+                "langfuse_experiment": self.langfuse_experiment_url,
+                "langfuse_trace": None,
+            }
+        return self
 
 
 class ExperimentLaunchRunRequest(BaseModel):
@@ -241,5 +273,8 @@ class ExperimentItemExecutionResponse(BaseModel):
     observation_id: str | None = None
     final_attempt_id: str | None = None
     scores: dict[str, Any] | None = None
+    attempt_count: int = 0
+    final_attempt_http_status: int | None = None
+    final_attempt_latency_ms: int | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None

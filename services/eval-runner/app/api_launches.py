@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from .db import DatabaseManager
 from .db_models import (
@@ -71,10 +71,16 @@ def create_experiment_launch(
 
 @router.get(
     "/experiment-launches",
-    summary="Query Experiment Launch by ID (?id=...) or list all",
+    response_model=ExperimentLaunchResponse | list[ExperimentLaunchResponse],
+    summary="Query Experiment Launch by ID (?id=...) or list all with optional filters",
 )
 def get_or_list_launches(
     id: str | None = Query(default=None, description="Optional Launch ID. If omitted, returns all launches."),
+    agent_id: str | None = Query(default=None, description="Optional filter by Agent ID"),
+    status: str | None = Query(default=None, description="Optional filter by execution status"),
+    quality_conclusion: str | None = Query(default=None, description="Optional filter by quality conclusion"),
+    limit: int | None = Query(default=None, ge=1, le=500, description="Optional limit"),
+    offset: int = Query(default=0, ge=0, description="Optional offset"),
     services=Depends(get_services),
 ) -> Any:
     _, _, launch_svc = services
@@ -84,7 +90,13 @@ def get_or_list_launches(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Launch '{id}' not found")
         return ExperimentLaunchResponse.model_validate(launch)
     else:
-        launches = launch_svc.list_launches()
+        launches = launch_svc.list_launches(
+            agent_id=agent_id,
+            status=status,
+            quality_conclusion=quality_conclusion,
+            limit=limit,
+            offset=offset,
+        )
         return [ExperimentLaunchResponse.model_validate(item) for item in launches]
 
 
@@ -105,7 +117,40 @@ def list_launch_items(
             .order_by(ExperimentItemExecutionRecord.started_at)
         )
         items = session.scalars(stmt).all()
-        return [ExperimentItemExecutionResponse.model_validate(i) for i in items]
+        if not items:
+            return []
+
+        item_ids = [i.id for i in items]
+        final_attempt_ids = [i.final_attempt_id for i in items if i.final_attempt_id]
+
+        # Aggregate attempt count per item in single query
+        counts_res = session.execute(
+            select(
+                ExecutionAttemptRecord.item_execution_id,
+                func.count(ExecutionAttemptRecord.id),
+            )
+            .where(ExecutionAttemptRecord.item_execution_id.in_(item_ids))
+            .group_by(ExecutionAttemptRecord.item_execution_id)
+        ).all()
+        counts_map = {row[0]: row[1] for row in counts_res}
+
+        final_attempts_map = {}
+        if final_attempt_ids:
+            final_attempts = session.scalars(
+                select(ExecutionAttemptRecord).where(ExecutionAttemptRecord.id.in_(final_attempt_ids))
+            ).all()
+            for fa in final_attempts:
+                final_attempts_map[fa.id] = fa
+
+        responses = []
+        for i in items:
+            res = ExperimentItemExecutionResponse.model_validate(i)
+            res.attempt_count = counts_map.get(i.id, 0)
+            fa = final_attempts_map.get(i.final_attempt_id) if i.final_attempt_id else None
+            res.final_attempt_http_status = fa.http_status if fa else None
+            res.final_attempt_latency_ms = fa.latency_ms if fa else None
+            responses.append(res)
+        return responses
 
 
 @router.get(
@@ -294,82 +339,10 @@ async def run_launch_synchronously(
     registry: AgentRegistry,
     launch_id: str,
 ) -> ExperimentLaunchRecord:
-    # 1. Acquire atomic execution lock
-    acquired = acquire_launch_execution(db_mgr, launch_id)
-    if not acquired:
-        with db_mgr.get_session() as session:
-            launch = session.get(ExperimentLaunchRecord, launch_id)
-            if not launch:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Launch '{launch_id}' not found")
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Launch '{launch_id}' is already in status '{launch.status}', duplicate run rejected.",
-            )
+    from .execution import LaunchExecutionService
 
-    try:
-        # 2. Load launch and frozen manifest
-        with db_mgr.get_session() as session:
-            launch = session.get(ExperimentLaunchRecord, launch_id)
-            assert launch is not None
-            manifest = launch.manifest
-            agent_spec_dict = manifest["agent"]
-            exec_policy = manifest["execution_policy"]
-
-        spec = AgentVersionSpec(
-            agent_id=agent_spec_dict["agent_id"],
-            version=agent_spec_dict["version"],
-            endpoint=agent_spec_dict["endpoint"],
-            method=agent_spec_dict["method"],
-            timeout_seconds=exec_policy["timeout_seconds"],
-            max_retries=exec_policy["max_retries"],
-            rate_limit_per_minute=exec_policy["rate_limit_per_minute"],
-            request_mapping=agent_spec_dict["request_mapping"],
-            max_concurrency=exec_policy["max_concurrency"],
-            credential_ref=agent_spec_dict.get("credential_ref"),
-            id=agent_spec_dict.get("agent_version_id", ""),
-            is_idempotent=bool(agent_spec_dict.get("is_idempotent", False)),
-        )
-
-        executor = RemoteAgentExecutor(spec)
-
-        # 3. Read frozen dataset items directly from manifest snapshot
-        items = manifest.get("dataset", {}).get("items", [])
-
-        # 4. Concurrently run items with semaphore
-        semaphore = asyncio.Semaphore(spec.max_concurrency)
-
-        async def _worker(item_row):
-            async with semaphore:
-                return await _execute_single_item(db_mgr, executor, launch_id, item_row, spec, manifest)
-
-        item_results = await asyncio.gather(*[_worker(row) for row in items])
-
-        # 5. Aggregate launch status
-        agg_status, agg_quality = aggregate_launch_status(item_results)
-
-        # 6. Update launch record in DB
-        completed_at = datetime.utcnow()
-        with db_mgr.get_session() as session:
-            launch_rec = session.get(ExperimentLaunchRecord, launch_id)
-            assert launch_rec is not None
-            launch_rec.status = agg_status
-            launch_rec.quality_conclusion = agg_quality
-            launch_rec.langfuse_sync_status = "NOT_APPLICABLE"
-            launch_rec.langfuse_experiment_id = None
-            launch_rec.completed_at = completed_at
-            session.commit()
-            session.refresh(launch_rec)
-            return launch_rec
-    except Exception:
-        with db_mgr.get_session() as session:
-            launch_rec = session.get(ExperimentLaunchRecord, launch_id)
-            if launch_rec and launch_rec.status == "RUNNING":
-                launch_rec.status = "FAILED"
-                launch_rec.quality_conclusion = "fail"
-                launch_rec.langfuse_sync_status = "NOT_APPLICABLE"
-                launch_rec.completed_at = datetime.utcnow()
-                session.commit()
-        raise
+    svc = LaunchExecutionService(db_mgr, registry, gather_fn=asyncio.gather)
+    return await svc.execute_launch(launch_id)
 
 
 

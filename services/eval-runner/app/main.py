@@ -11,8 +11,10 @@ from fastapi import FastAPI, HTTPException
 from langfuse import get_client
 from opentelemetry.propagate import inject
 
+from .api_evaluators import router as evaluators_router
 from .api_launches import router as launches_router
 from .api_registry import router as registry_router
+from .api_system import router as system_router
 from .config import find_path, settings
 from .db import DatabaseManager, MigrationRunner
 from .db_models import ExperimentLaunchRecord
@@ -50,6 +52,8 @@ launch_service = LaunchService(db_manager, registry, runner_version=settings.run
 # 4. Mount Enterprise REST Routers (Zero URL Path Variables)
 app.include_router(registry_router)
 app.include_router(launches_router)
+app.include_router(evaluators_router)
+app.include_router(system_router)
 
 
 def _client():

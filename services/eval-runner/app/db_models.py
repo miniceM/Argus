@@ -99,6 +99,7 @@ class ExperimentLaunchRecord(Base):
     )
     manifest: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     langfuse_experiment_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    langfuse_experiment_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     langfuse_sync_status: Mapped[str] = mapped_column(String(32), default="PENDING", nullable=False)
     langfuse_sync_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(128), nullable=True)

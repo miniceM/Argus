@@ -29,8 +29,16 @@ class Settings:
     agent_registry_path: str = os.getenv("AGENT_REGISTRY_PATH", "/app/config/agents.yaml")
     dataset_seed_path: str = os.getenv("DATASET_SEED_PATH", "/app/data/dataset.json")
     migrations_path: str = os.getenv("ARGUS_MIGRATIONS_PATH", "/app/migrations")
-    runner_version: str = os.getenv("RUNNER_VERSION", "0.1.0")
+    runner_version: str = os.getenv("RUNNER_VERSION", "0.2.0")
     ready_timeout_seconds: int = int(os.getenv("LANGFUSE_READY_TIMEOUT_SECONDS", "120"))
+
+    @property
+    def environment(self) -> str:
+        return os.getenv("ARGUS_ENVIRONMENT", "local")
+
+    @property
+    def build_id(self) -> str:
+        return os.getenv("ARGUS_BUILD_ID", "dev")
 
 
 settings = Settings()

@@ -3,7 +3,7 @@
   "info": {
     "title": "Enterprise Remote Agent Eval Runner",
     "description": "Enterprise Agent Evaluation Control Plane with Persistent Registry, Version Snapshots, and Zero-SDK Agents.",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "paths": {
     "/api/v1/agents": {
@@ -78,6 +78,17 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AgentResponse"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AgentSummaryResponse"
+                      }
+                    }
+                  ],
                   "title": "Response Get Or List Agents Api V1 Agents Get"
                 }
               }
@@ -179,6 +190,17 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AgentVersionResponse"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AgentVersionResponse"
+                      }
+                    }
+                  ],
                   "title": "Response Get Or List Agent Versions Api V1 Agent Versions Get"
                 }
               }
@@ -300,7 +322,7 @@
         "tags": [
           "Experiment Launches"
         ],
-        "summary": "Query Experiment Launch by ID (?id=...) or list all",
+        "summary": "Query Experiment Launch by ID (?id=...) or list all with optional filters",
         "operationId": "get_or_list_launches_api_v1_experiment_launches_get",
         "parameters": [
           {
@@ -320,6 +342,93 @@
               "title": "Id"
             },
             "description": "Optional Launch ID. If omitted, returns all launches."
+          },
+          {
+            "name": "agent_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional filter by Agent ID",
+              "title": "Agent Id"
+            },
+            "description": "Optional filter by Agent ID"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional filter by execution status",
+              "title": "Status"
+            },
+            "description": "Optional filter by execution status"
+          },
+          {
+            "name": "quality_conclusion",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional filter by quality conclusion",
+              "title": "Quality Conclusion"
+            },
+            "description": "Optional filter by quality conclusion"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 500,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional limit",
+              "title": "Limit"
+            },
+            "description": "Optional limit"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Optional offset",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Optional offset"
           }
         ],
         "responses": {
@@ -328,6 +437,17 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ExperimentLaunchResponse"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ExperimentLaunchResponse"
+                      }
+                    }
+                  ],
                   "title": "Response Get Or List Launches Api V1 Experiment Launches Get"
                 }
               }
@@ -476,6 +596,52 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evaluators": {
+      "get": {
+        "tags": [
+          "Evaluators"
+        ],
+        "summary": "List all registered Evaluators and their specifications",
+        "operationId": "list_evaluators_api_v1_evaluators_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EvaluatorResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Evaluators Api V1 Evaluators Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/info": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Get Argus Control Plane runtime build and environment information",
+        "operationId": "get_system_info_api_v1_system_info_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemInfoResponse"
                 }
               }
             }
@@ -663,6 +829,22 @@
             "type": "string",
             "title": "Status"
           },
+          "version_count": {
+            "type": "integer",
+            "title": "Version Count",
+            "default": 0
+          },
+          "latest_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Version"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -683,6 +865,79 @@
           "updated_at"
         ],
         "title": "AgentResponse"
+      },
+      "AgentSummaryResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "version_count": {
+            "type": "integer",
+            "title": "Version Count",
+            "default": 0
+          },
+          "latest_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Version"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AgentSummaryResponse"
       },
       "AgentVersionArchiveRequest": {
         "properties": {
@@ -1035,6 +1290,45 @@
         ],
         "title": "BootstrapResult"
       },
+      "EvaluatorResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "threshold": {
+            "type": "number",
+            "title": "Threshold"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "scope",
+          "threshold"
+        ],
+        "title": "EvaluatorResponse"
+      },
       "ExecutionAttemptResponse": {
         "properties": {
           "id": {
@@ -1216,6 +1510,33 @@
               }
             ],
             "title": "Scores"
+          },
+          "attempt_count": {
+            "type": "integer",
+            "title": "Attempt Count",
+            "default": 0
+          },
+          "final_attempt_http_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Attempt Http Status"
+          },
+          "final_attempt_latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Attempt Latency Ms"
           },
           "started_at": {
             "anyOf": [
@@ -1417,6 +1738,17 @@
             ],
             "title": "Langfuse Experiment Id"
           },
+          "langfuse_experiment_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Experiment Url"
+          },
           "langfuse_sync_status": {
             "type": "string",
             "title": "Langfuse Sync Status"
@@ -1431,6 +1763,27 @@
               }
             ],
             "title": "Langfuse Sync Error"
+          },
+          "links": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Links"
           },
           "created_by": {
             "anyOf": [
@@ -1608,6 +1961,34 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "SystemInfoResponse": {
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "Service",
+            "default": "argus-control-plane"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "build_id": {
+            "type": "string",
+            "title": "Build Id"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "build_id",
+          "environment"
+        ],
+        "title": "SystemInfoResponse"
       },
       "ValidationError": {
         "properties": {

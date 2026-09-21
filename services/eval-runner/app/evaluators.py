@@ -139,6 +139,19 @@ class EvaluatorRegistry:
         self.resolve(evaluator_id, version)
         return self._evaluators[evaluator_id]["fn"]
 
+    def list_specs(self) -> list[dict[str, Any]]:
+        """Return public specification descriptors of all registered evaluators."""
+        specs = []
+        for ev_id, info in self._evaluators.items():
+            specs.append({
+                "id": ev_id,
+                "version": info["version"],
+                "scope": info.get("scope", "item"),
+                "threshold": float(info.get("default_threshold", 1.0)),
+                "description": info.get("description", ""),
+            })
+        return sorted(specs, key=lambda s: s["id"])
+
 
 default_evaluator_registry = EvaluatorRegistry()
 

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from .models import (
     AgentCreateRequest,
     AgentResponse,
+    AgentSummaryResponse,
     AgentVersionArchiveRequest,
     AgentVersionCreateRequest,
     AgentVersionResponse,
@@ -45,6 +46,7 @@ def create_agent(
 
 @router.get(
     "/agents",
+    response_model=AgentResponse | list[AgentSummaryResponse],
     summary="Query an Agent by ID (?id=...) or list all agents",
 )
 def get_or_list_agents(
@@ -52,13 +54,13 @@ def get_or_list_agents(
     reg: AgentRegistry = Depends(get_registry),
 ) -> Any:
     if id:
-        agent = reg.get_agent(id)
+        agent = reg.get_agent_summary(id)
         if not agent:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Agent '{id}' not found")
         return AgentResponse.model_validate(agent)
     else:
-        agents = reg.list_agents()
-        return [AgentResponse.model_validate(a) for a in agents]
+        agents = reg.list_agents_summary()
+        return [AgentSummaryResponse.model_validate(a) for a in agents]
 
 
 @router.post(
@@ -106,6 +108,7 @@ def create_agent_version(
 
 @router.get(
     "/agent-versions",
+    response_model=AgentVersionResponse | list[AgentVersionResponse],
     summary="Query Agent Versions by agent_id and optional version (?agent_id=...&version=...)",
 )
 def get_or_list_agent_versions(

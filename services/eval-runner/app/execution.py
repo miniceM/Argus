@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import HTTPException, status
 from opentelemetry.propagate import inject
+from sqlalchemy import select
 
 from .config import settings
 from .dataset import parse_dataset_version
@@ -51,18 +52,29 @@ async def _execute_single_item(
     item_exec_id = str(uuid.uuid4())
     started_at = datetime.utcnow()
 
-    # Pre-create ExperimentItemExecution record
+    # Pre-create or reuse ExperimentItemExecution record
     with db_mgr.get_session() as session:
-        item_rec = ExperimentItemExecutionRecord(
-            id=item_exec_id,
-            launch_id=launch_id,
-            dataset_item_id=item_id,
-            execution_status="running",
-            eval_status="pending",
-            quality_conclusion="unknown",
-            started_at=started_at,
-        )
-        session.add(item_rec)
+        existing = session.scalars(
+            select(ExperimentItemExecutionRecord).where(
+                ExperimentItemExecutionRecord.launch_id == launch_id,
+                ExperimentItemExecutionRecord.dataset_item_id == item_id,
+            )
+        ).first()
+        if existing:
+            item_exec_id = existing.id
+            existing.execution_status = "running"
+            existing.started_at = started_at
+        else:
+            item_rec = ExperimentItemExecutionRecord(
+                id=item_exec_id,
+                launch_id=launch_id,
+                dataset_item_id=item_id,
+                execution_status="running",
+                eval_status="pending",
+                quality_conclusion="unknown",
+                started_at=started_at,
+            )
+            session.add(item_rec)
 
     last_attempt_id: str | None = None
 

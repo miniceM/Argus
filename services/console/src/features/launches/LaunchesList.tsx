@@ -42,6 +42,13 @@ export const LaunchesList: React.FC = () => {
       const list = Array.isArray(res.data) ? res.data : [res.data];
       return list as LaunchResponse[];
     },
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      const hasActive = data?.some((l) =>
+        ["PENDING", "QUEUED", "RUNNING", "CANCELLING", "RETRY_WAIT"].includes(l.status.toUpperCase())
+      );
+      return hasActive ? 2000 : false;
+    },
   });
 
   return (
@@ -99,11 +106,14 @@ export const LaunchesList: React.FC = () => {
           className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-700"
         >
           <option value="">全部执行状态 (Status)</option>
-          <option value="PENDING">PENDING (排队中)</option>
+          <option value="PENDING">PENDING (准备中)</option>
+          <option value="QUEUED">QUEUED (队列中)</option>
           <option value="RUNNING">RUNNING (运行中)</option>
-          <option value="SUCCEEDED">SUCCEEDED (执行成功)</option>
-          <option value="FAILED">FAILED (执行失败)</option>
-          <option value="PARTIAL">PARTIAL (部分成功)</option>
+          <option value="RETRY_WAIT">RETRY_WAIT (重试等待)</option>
+          <option value="SUCCEEDED">SUCCEEDED (成功)</option>
+          <option value="PARTIAL_FAILED">PARTIAL_FAILED (部分失败)</option>
+          <option value="FAILED">FAILED (失败)</option>
+          <option value="CANCELLING">CANCELLING (取消中)</option>
           <option value="CANCELLED">CANCELLED (已取消)</option>
         </select>
 
@@ -203,7 +213,17 @@ export const LaunchesList: React.FC = () => {
                     </td>
 
                     <td className="px-6 py-4">
-                      <StatusBadge status={launch.status} />
+                      <div className="space-y-1">
+                        <StatusBadge status={launch.status} />
+                        {launch.progress && launch.progress.total > 0 && (
+                          <div className="text-[11px] text-slate-500 font-mono">
+                            <span>{launch.progress.percentage}%</span>
+                            <span className="text-slate-400 ml-1">
+                              ({launch.progress.completed}/{launch.progress.total})
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </td>
 
                     <td className="px-6 py-4">

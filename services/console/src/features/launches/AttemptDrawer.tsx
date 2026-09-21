@@ -31,11 +31,17 @@ export const AttemptDrawer: React.FC<AttemptDrawerProps> = ({
     queryKey: queryKeys.launches.attempts(itemExecutionId || ""),
     queryFn: async () => {
       if (!itemExecutionId) return [];
-      const res = await api.GET("/api/v1/execution-attempts", {
+      const res = await api.GET("/api/v1/experiment-item-executions/{item_execution_id}/attempts", {
+        params: { path: { item_execution_id: itemExecutionId } },
+      });
+      if (res.data) {
+        return res.data as ExecutionAttempt[];
+      }
+      const fallback = await api.GET("/api/v1/execution-attempts", {
         params: { query: { item_execution_id: itemExecutionId } },
       });
-      if (res.error) throw res.error;
-      const list = Array.isArray(res.data) ? res.data : [res.data];
+      if (fallback.error) throw fallback.error;
+      const list = Array.isArray(fallback.data) ? fallback.data : [fallback.data];
       return list as ExecutionAttempt[];
     },
     enabled: Boolean(isOpen && itemExecutionId),
@@ -101,6 +107,24 @@ export const AttemptDrawer: React.FC<AttemptDrawerProps> = ({
                         <span className="text-xs font-semibold text-slate-900">
                           第 {attempt.attempt_no} 次调用尝试
                         </span>
+                        {attempt.worker_id && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-100 text-slate-600 border border-slate-200">
+                            {attempt.worker_id}
+                          </span>
+                        )}
+                        {attempt.request_phase && (
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold ${
+                              attempt.request_phase === "RESPONSE_RECEIVED"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : attempt.request_phase === "MAY_HAVE_BEEN_SENT"
+                                ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                : "bg-slate-100 text-slate-600 border border-slate-200"
+                            }`}
+                          >
+                            {attempt.request_phase}
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-3 text-xs">
@@ -144,8 +168,21 @@ export const AttemptDrawer: React.FC<AttemptDrawerProps> = ({
                         </span>
                       </div>
 
+                      {/* Ambiguous Outcome Alert */}
+                      {attempt.error_type === "AMBIGUOUS_OUTCOME" && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 space-y-1">
+                          <div className="flex items-center gap-1.5 font-bold text-xs">
+                            <AlertCircle className="w-4 h-4 text-amber-600" />
+                            <span>非幂等请求结果未决 (AMBIGUOUS_OUTCOME)</span>
+                          </div>
+                          <p className="text-[11px] text-amber-800 leading-relaxed">
+                            当前被测 Agent 标记为非幂等，且 Worker 在请求发送后或网络中断期间崩溃。为防资金或业务重复扣款，系统已安全熔断重试。需在详情页点击“重试失败用例”并勾选强制重放确认后方可重新执行。
+                          </p>
+                        </div>
+                      )}
+
                       {/* Error Banner */}
-                      {attempt.error_message && (
+                      {attempt.error_message && attempt.error_type !== "AMBIGUOUS_OUTCOME" && (
                         <div className="p-3 bg-rose-50/80 border border-rose-200 rounded-lg text-rose-800 space-y-1">
                           <div className="flex items-center gap-1.5 font-semibold">
                             <AlertCircle className="w-3.5 h-3.5 text-rose-600" />

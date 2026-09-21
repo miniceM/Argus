@@ -31,6 +31,10 @@ class Settings:
     migrations_path: str = os.getenv("ARGUS_MIGRATIONS_PATH", "/app/migrations")
     runner_version: str = os.getenv("RUNNER_VERSION", "0.2.0")
     ready_timeout_seconds: int = int(os.getenv("LANGFUSE_READY_TIMEOUT_SECONDS", "120"))
+    argus_redis_url: str | None = os.getenv("ARGUS_REDIS_URL")
+    argus_worker_enabled: bool = os.getenv("ARGUS_WORKER_ENABLED", "true").lower() in ("true", "1", "yes")
+    argus_reconciler_enabled: bool = os.getenv("ARGUS_RECONCILER_ENABLED", "true").lower() in ("true", "1", "yes")
+    worker_concurrency: int = int(os.getenv("ARGUS_WORKER_CONCURRENCY", "10"))
 
     @property
     def environment(self) -> str:

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
 
@@ -20,15 +22,15 @@ from .db import DatabaseManager, MigrationRunner
 from .db_models import ExperimentLaunchRecord
 from .evaluators import default_evaluator_registry
 from .executor import RemoteAgentExecutor
+from .limiter import DistributedAgentLimiter, MemoryAgentLimiter, RedisDistributedLimiter
 from .manifest import LaunchService, acquire_launch_execution
+from .metrics import metrics_router
 from .models import BootstrapResult, ExperimentRequest, ExperimentResult
+from .orchestrator import LaunchOrchestrator
+from .queue import MemoryQueueAdapter, QueueAdapter, RedisStreamQueueAdapter
+from .reconciler import ExecutionReconciler
 from .registry import AgentRegistry, map_request
-
-app = FastAPI(
-    title="Enterprise Remote Agent Eval Runner",
-    version=settings.runner_version,
-    description="Enterprise Agent Evaluation Control Plane with Persistent Registry, Version Snapshots, and Zero-SDK Agents.",
-)
+from .worker import ExecutionWorker
 
 # 1. Initialize Database Manager & Migrations
 db_manager = DatabaseManager.from_env()
@@ -45,15 +47,81 @@ if settings.argus_auto_import_yaml:
     if yaml_path.exists():
         registry.import_yaml(yaml_path)
 
+# 3. Initialize Queue & Limiter
+if settings.argus_redis_url:
+    import redis
+    redis_client = redis.Redis.from_url(settings.argus_redis_url)
+    queue_adapter: QueueAdapter = RedisStreamQueueAdapter(redis_client)
+    limiter: DistributedAgentLimiter = RedisDistributedLimiter(redis_client)
+else:
+    # Fail-closed in production if no redis url; fallback to Memory only in test mode
+    if settings.argus_db_mode == "test":
+        queue_adapter = MemoryQueueAdapter()
+        limiter = MemoryAgentLimiter()
+    else:
+        raise RuntimeError("ARGUS_REDIS_URL must be configured in production mode")
 
-# 3. Initialize Launch Service
+# 4. Initialize Orchestrator, Worker, Reconciler
+orchestrator = LaunchOrchestrator(db_manager, queue_adapter, limiter)
+worker = ExecutionWorker(db_manager, queue_adapter, limiter)
+reconciler = ExecutionReconciler(db_manager, queue_adapter, limiter)
+
+# 5. Initialize Launch Service
 launch_service = LaunchService(db_manager, registry, runner_version=settings.runner_version)
 
-# 4. Mount Enterprise REST Routers (Zero URL Path Variables)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    worker_task = None
+    reconciler_task = None
+    stop_event = asyncio.Event()
+
+    async def _worker_loop():
+        while not stop_event.is_set():
+            try:
+                msgs = queue_adapter.read_group(worker.worker_id, count=5, block_ms=1000)
+                for msg_id, item_id, gen in msgs:
+                    await worker.execute_item_message(msg_id, item_id, gen)
+            except Exception:
+                await asyncio.sleep(1)
+
+    async def _reconciler_loop():
+        while not stop_event.is_set():
+            try:
+                reconciler.reconcile_retry_waits()
+                reconciler.reconcile_expired_leases()
+                reconciler.reconcile_launch_states()
+            except Exception:
+                pass
+            await asyncio.sleep(1)
+
+    if settings.argus_worker_enabled and settings.argus_db_mode != "test":
+        worker_task = asyncio.create_task(_worker_loop())
+    if settings.argus_reconciler_enabled and settings.argus_db_mode != "test":
+        reconciler_task = asyncio.create_task(_reconciler_loop())
+
+    yield
+
+    stop_event.set()
+    if worker_task:
+        worker_task.cancel()
+    if reconciler_task:
+        reconciler_task.cancel()
+
+
+app = FastAPI(
+    title="Enterprise Remote Agent Eval Runner",
+    version=settings.runner_version,
+    description="Enterprise Agent Evaluation Control Plane with Persistent Registry, Version Snapshots, and Zero-SDK Agents.",
+    lifespan=lifespan,
+)
+
+# Mount Routers
 app.include_router(registry_router)
 app.include_router(launches_router)
 app.include_router(evaluators_router)
 app.include_router(system_router)
+app.include_router(metrics_router)
 
 
 def _client():

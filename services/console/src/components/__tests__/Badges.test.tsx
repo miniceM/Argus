@@ -24,6 +24,24 @@ describe("Execution Status vs Quality Conclusion Semantic Decoupling", () => {
     expect(screen.getByText("CUSTOM_STATUS")).toBeInTheDocument();
   });
 
+  it("StatusBadge correctly renders S2 lifecycle statuses", () => {
+    const { rerender, container } = render(<StatusBadge status="QUEUED" />);
+    expect(screen.getByText("QUEUED")).toBeInTheDocument();
+    expect(container.firstChild).toHaveClass("text-indigo-700");
+
+    rerender(<StatusBadge status="PARTIAL_FAILED" />);
+    expect(screen.getByText("PARTIAL_FAILED")).toBeInTheDocument();
+    expect(container.firstChild).toHaveClass("text-orange-700");
+
+    rerender(<StatusBadge status="RETRY_WAIT" />);
+    expect(screen.getByText("RETRY_WAIT")).toBeInTheDocument();
+    expect(container.firstChild).toHaveClass("text-yellow-700");
+
+    rerender(<StatusBadge status="CANCELLED" />);
+    expect(screen.getByText("CANCELLED")).toBeInTheDocument();
+    expect(container.firstChild).toHaveClass("text-gray-600");
+  });
+
   it("QualityBadge correctly renders PASS quality conclusion", () => {
     const { container } = render(<QualityBadge quality="PASS" />);
     expect(screen.getByText("PASS")).toBeInTheDocument();

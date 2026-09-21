@@ -15,11 +15,19 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
   const [filterQuality, setFilterQuality] = useState<string>("ALL");
 
   const filteredItems = items.filter((item) => {
-    if (filterQuality === "PASS") return item.quality_conclusion?.toLowerCase() === "pass";
-    if (filterQuality === "FAIL") return item.quality_conclusion?.toLowerCase() === "fail";
-    if (filterQuality === "EXEC_FAIL") return item.execution_status?.toLowerCase() === "failed";
+    const q = item.quality_conclusion?.toLowerCase();
+    const st = item.execution_status?.toLowerCase();
+    if (filterQuality === "PASS") return q === "pass";
+    if (filterQuality === "FAIL") return q === "fail";
+    if (filterQuality === "FAILED") return st === "failed" || st === "timed_out";
+    if (filterQuality === "RETRY_WAIT") return st === "retry_wait";
+    if (filterQuality === "CANCELLED") return st === "cancelled";
     return true;
   });
+
+  const retryWaitCount = items.filter((i) => i.execution_status?.toLowerCase() === "retry_wait").length;
+  const failedCount = items.filter((i) => ["failed", "timed_out"].includes(i.execution_status?.toLowerCase() || "")).length;
+  const cancelledCount = items.filter((i) => i.execution_status?.toLowerCase() === "cancelled").length;
 
   return (
     <div className="space-y-4">
@@ -35,7 +43,7 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
           </span>
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
           <Filter className="w-3.5 h-3.5 text-slate-400" />
           <button
             onClick={() => setFilterQuality("ALL")}
@@ -67,6 +75,42 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
           >
             未通过 ({items.filter((i) => i.quality_conclusion?.toLowerCase() === "fail").length})
           </button>
+          {failedCount > 0 && (
+            <button
+              onClick={() => setFilterQuality("FAILED")}
+              className={`px-2.5 py-1 rounded-md font-medium cursor-pointer transition-colors ${
+                filterQuality === "FAILED"
+                  ? "bg-amber-600 text-white"
+                  : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+              }`}
+            >
+              失败/超时 ({failedCount})
+            </button>
+          )}
+          {retryWaitCount > 0 && (
+            <button
+              onClick={() => setFilterQuality("RETRY_WAIT")}
+              className={`px-2.5 py-1 rounded-md font-medium cursor-pointer transition-colors ${
+                filterQuality === "RETRY_WAIT"
+                  ? "bg-yellow-600 text-white"
+                  : "bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
+              }`}
+            >
+              等待重试 ({retryWaitCount})
+            </button>
+          )}
+          {cancelledCount > 0 && (
+            <button
+              onClick={() => setFilterQuality("CANCELLED")}
+              className={`px-2.5 py-1 rounded-md font-medium cursor-pointer transition-colors ${
+                filterQuality === "CANCELLED"
+                  ? "bg-gray-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              已取消 ({cancelledCount})
+            </button>
+          )}
         </div>
       </div>
 
@@ -96,7 +140,14 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
                     className="hover:bg-slate-50/80 transition-colors"
                   >
                     <td className="px-5 py-3.5 font-mono text-xs font-bold text-slate-900">
-                      {item.dataset_item_id}
+                      <div className="flex items-center gap-1.5">
+                        <span>{item.dataset_item_id}</span>
+                        {item.dispatch_generation && item.dispatch_generation > 1 && (
+                          <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            gen #{item.dispatch_generation}
+                          </span>
+                        )}
+                      </div>
                       {errorText && (
                         <p className="text-[11px] text-rose-600 font-normal truncate max-w-xs mt-0.5" title={errorText}>
                           {errorText}

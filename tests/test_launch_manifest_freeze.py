@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "services" / "eval-runner"))
 
 from app.db import DatabaseManager, MigrationRunner  # noqa: E402
+from app.db_models import ExperimentLaunchRecord  # noqa: E402
 from app.manifest import LaunchService  # noqa: E402
 from app.registry import AgentRegistry  # noqa: E402
 
@@ -191,6 +192,39 @@ def test_create_launch_rejects_run_scope_evaluator_by_default(tmp_path):
     assert launch is not None
     eval_ids = [e["id"] for e in launch.manifest["evaluators"]]
     assert "run_pass_rate" in eval_ids
+
+
+def test_list_launches_case_insensitive_filtering(tmp_path):
+    db_mgr, registry = setup_db(tmp_path)
+    launch_svc = LaunchService(db_mgr, registry, runner_version="0.1.0")
+
+    launch = launch_svc.create_launch(
+        agent_id="banking-agent",
+        agent_version="v1",
+        dataset_name="banking-agent-regression",
+        name="Filter Test",
+    )
+    # Simulate execution completion with quality_conclusion="pass"
+    with db_mgr.get_session() as session:
+        rec = session.get(ExperimentLaunchRecord, launch.id)
+        assert rec is not None
+        rec.status = "SUCCEEDED"
+        rec.quality_conclusion = "pass"
+        session.commit()
+
+    # Query with uppercase "PASS" and lowercase "succeeded"
+    res1 = launch_svc.list_launches(quality_conclusion="PASS")
+    assert len(res1) == 1
+    assert res1[0].id == launch.id
+
+    res2 = launch_svc.list_launches(status="succeeded")
+    assert len(res2) == 1
+    assert res2[0].id == launch.id
+
+    # Query with non-matching quality
+    res3 = launch_svc.list_launches(quality_conclusion="FAIL")
+    assert len(res3) == 0
+
 
 
 

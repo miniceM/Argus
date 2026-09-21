@@ -34,3 +34,15 @@ demo:
 
 clean:
 	$(COMPOSE) down -v --remove-orphans
+
+console-dev:
+	pnpm --dir services/console dev
+
+console-build:
+	pnpm --dir services/console build
+
+console-test:
+	pnpm --dir services/console test
+
+console-e2e:
+	pnpm --dir services/console test:e2e

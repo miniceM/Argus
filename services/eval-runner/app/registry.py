@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from .config import find_path
 from .db import DatabaseManager
@@ -129,10 +129,81 @@ class AgentRegistry:
         with self.db_manager.get_session() as session:
             return session.get(AgentRecord, agent_id)
 
+    def get_agent_summary(self, agent_id: str) -> dict[str, Any] | None:
+        with self.db_manager.get_session() as session:
+            agent = session.get(AgentRecord, agent_id)
+            if not agent:
+                return None
+            v_count = (
+                session.scalar(
+                    select(func.count(AgentVersionRecord.id)).where(AgentVersionRecord.agent_id == agent_id)
+                )
+                or 0
+            )
+            latest_active = session.scalar(
+                select(AgentVersionRecord.version)
+                .where(AgentVersionRecord.agent_id == agent_id, AgentVersionRecord.is_active.is_(True))
+                .order_by(AgentVersionRecord.created_at.desc())
+                .limit(1)
+            )
+            return {
+                "id": agent.id,
+                "name": agent.name,
+                "description": agent.description,
+                "owner": agent.owner,
+                "status": agent.status,
+                "version_count": v_count,
+                "latest_version": latest_active,
+                "created_at": agent.created_at,
+                "updated_at": agent.updated_at,
+            }
+
     def list_agents(self) -> list[AgentRecord]:
         with self.db_manager.get_session() as session:
             stmt = select(AgentRecord).order_by(AgentRecord.created_at)
             return list(session.scalars(stmt).all())
+
+    def list_agents_summary(self) -> list[dict[str, Any]]:
+        with self.db_manager.get_session() as session:
+            # 1. Total version count per agent
+            v_counts = dict(
+                session.execute(
+                    select(
+                        AgentVersionRecord.agent_id,
+                        func.count(AgentVersionRecord.id),
+                    ).group_by(AgentVersionRecord.agent_id)
+                ).all()
+            )
+
+            # 2. Latest active version by created_at per agent
+            active_rows = session.execute(
+                select(AgentVersionRecord.agent_id, AgentVersionRecord.version)
+                .where(AgentVersionRecord.is_active.is_(True))
+                .order_by(AgentVersionRecord.agent_id, AgentVersionRecord.created_at.desc())
+            ).all()
+            latest_active: dict[str, str] = {}
+            for aid, ver in active_rows:
+                if aid not in latest_active:
+                    latest_active[aid] = ver
+
+            # 3. Get all agents
+            agents = session.scalars(select(AgentRecord).order_by(AgentRecord.created_at)).all()
+            result = []
+            for agent in agents:
+                result.append(
+                    {
+                        "id": agent.id,
+                        "name": agent.name,
+                        "description": agent.description,
+                        "owner": agent.owner,
+                        "status": agent.status,
+                        "version_count": v_counts.get(agent.id, 0),
+                        "latest_version": latest_active.get(agent.id),
+                        "created_at": agent.created_at,
+                        "updated_at": agent.updated_at,
+                    }
+                )
+            return result
 
     def create_version(
         self,

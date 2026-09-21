@@ -22,8 +22,9 @@ assert len({x['id'] for x in seed['items']}) == 6
 print('configuration parse: OK')
 PY
 
-echo "[2/7] Compile Python sources"
+echo "[2/7] Compile Python sources and check code quality"
 "$PYTHON_BIN" -m compileall -q services tests
+"$PYTHON_BIN" -m ruff check services tests
 
 echo "[3/7] Verify zero evaluation-SDK dependency in Demo Agent"
 if grep -RinE '^[[:space:]]*(from|import)[[:space:]]+langfuse|Evaluation\(|run_experiment' services/demo-agent --include='*.py' || grep -in 'langfuse' services/demo-agent/requirements.txt; then
@@ -43,10 +44,27 @@ echo "[5/7] Verify OpenAPI specification is up to date"
 "$PYTHON_BIN" scripts/export_openapi.py
 git diff --exit-code docs/openapi.json || (echo "docs/openapi.json is out of date; run '$PYTHON_BIN scripts/export_openapi.py'" >&2 && exit 1)
 
-echo "[6/7] Run local behavior tests"
+echo "[6/8] Verify Console Frontend (contract sync, typecheck, unit tests, build)"
+if command -v pnpm >/dev/null 2>&1; then
+  echo "Checking Console OpenAPI TypeScript contract sync..."
+  pnpm --dir services/console api:generate
+  git diff --exit-code services/console/src/api/schema.d.ts || (echo "services/console/src/api/schema.d.ts is out of date; run 'pnpm --dir services/console api:generate'" >&2 && exit 1)
+  echo "Running Console typecheck..."
+  pnpm --dir services/console typecheck
+  echo "Running Console unit tests..."
+  pnpm --dir services/console test
+  echo "Running Console build..."
+  pnpm --dir services/console build
+  echo "Console frontend validation: OK"
+else
+  echo "Error: pnpm is required for Argus Console validation" >&2
+  exit 1
+fi
+
+echo "[7/8] Run local behavior tests"
 "$PYTHON_BIN" -m pytest -q tests
 
-echo "[7/7] Docker Compose validation"
+echo "[8/8] Docker Compose validation"
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   docker compose --env-file .env.poc config -q
   echo "docker compose config: OK"

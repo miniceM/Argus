@@ -210,8 +210,26 @@ class LaunchService:
         with self.db_manager.get_session() as session:
             return session.get(ExperimentLaunchRecord, launch_id)
 
-    def list_launches(self) -> list[ExperimentLaunchRecord]:
+    def list_launches(
+        self,
+        agent_id: str | None = None,
+        status: str | None = None,
+        quality_conclusion: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[ExperimentLaunchRecord]:
         with self.db_manager.get_session() as session:
-            stmt = select(ExperimentLaunchRecord).order_by(ExperimentLaunchRecord.created_at.desc())
+            stmt = select(ExperimentLaunchRecord)
+            if agent_id:
+                stmt = stmt.where(ExperimentLaunchRecord.agent_id == agent_id)
+            if status:
+                stmt = stmt.where(ExperimentLaunchRecord.status == status.upper())
+            if quality_conclusion:
+                stmt = stmt.where(ExperimentLaunchRecord.quality_conclusion == quality_conclusion.lower())
+            stmt = stmt.order_by(ExperimentLaunchRecord.created_at.desc())
+            if offset > 0:
+                stmt = stmt.offset(offset)
+            if limit is not None:
+                stmt = stmt.limit(limit)
             return list(session.scalars(stmt).all())
 

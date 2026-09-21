@@ -156,6 +156,18 @@ def test_storybook_gate_supplies_required_build_environment() -> None:
     assert "swapon" in swap["run"]
 
 
+def test_dockerfile_cross_compiles_migrate_binary_for_target_architecture() -> None:
+    dockerfile = (I18N_ROOT / "Dockerfile").read_text()
+
+    assert "GOOS=${TARGETOS}" in dockerfile
+    assert "GOARCH=${TARGETARCH}" in dockerfile
+    assert "go install" in dockerfile
+    assert 'find "$(/usr/local/go/bin/go env GOPATH)/bin"' in dockerfile
+    assert 'name migrate' in dockerfile
+    assert 'cp "$migrate_bin" /out/migrate' in dockerfile
+    assert "GOBIN=/out" not in dockerfile
+
+
 def test_i18n_workflow_filters_changes_and_publishes_ghcr_image() -> None:
     workflow_path = ROOT / ".github" / "workflows" / "langfuse-i18n.yml"
     workflow = yaml.safe_load(workflow_path.read_text())

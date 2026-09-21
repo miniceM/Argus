@@ -79,18 +79,26 @@ async def lifespan(app: FastAPI):
     async def _worker_loop():
         while not stop_event.is_set():
             try:
-                msgs = queue_adapter.read_group(worker.worker_id, count=5, block_ms=1000)
+                # Offload blocking queue read off the event loop thread
+                msgs = await asyncio.to_thread(worker.poll_queue, count=5, block_ms=1000)
+                if not msgs:
+                    # Yield event loop when queue is idle
+                    await asyncio.sleep(0.05)
+                    continue
                 for msg_id, item_id, gen in msgs:
                     await worker.execute_item_message(msg_id, item_id, gen)
+            except asyncio.CancelledError:
+                break
             except Exception:
                 await asyncio.sleep(1)
 
     async def _reconciler_loop():
         while not stop_event.is_set():
             try:
-                reconciler.reconcile_retry_waits()
-                reconciler.reconcile_expired_leases()
-                reconciler.reconcile_launch_states()
+                # Offload DB-intensive reconciliation cycle including backlog recovery off the event loop
+                await asyncio.to_thread(reconciler.run_reconcile_cycle)
+            except asyncio.CancelledError:
+                break
             except Exception:
                 pass
             await asyncio.sleep(1)

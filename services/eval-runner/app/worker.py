@@ -35,6 +35,31 @@ class ExecutionWorker:
         self.limiter = limiter
         self.worker_id = worker_id or f"worker-{uuid.uuid4().hex[:8]}"
         self.local_concurrency = asyncio.Semaphore(10)
+        self.heartbeat_interval = 5.0
+
+    def poll_queue(self, count: int = 10, block_ms: int = 1000) -> list[tuple[str, str, int]]:
+        """Synchronously reads/claims items from the queue adapter, meant to be run in asyncio.to_thread."""
+        return self.queue.read_group(self.worker_id, count=count, block_ms=block_ms)
+
+    def renew_lease(self, item_id: str, lease_token: str, extension_seconds: int = 30) -> bool:
+        """Renews active lease timestamp for in-flight items."""
+        now = datetime.now(UTC)
+        with self.db_mgr.get_session() as session:
+            stmt = (
+                update(ExperimentItemExecutionRecord)
+                .where(
+                    ExperimentItemExecutionRecord.id == item_id,
+                    ExperimentItemExecutionRecord.lease_token == lease_token,
+                    ExperimentItemExecutionRecord.execution_status == "running",
+                )
+                .values(
+                    lease_expires_at=now + timedelta(seconds=extension_seconds),
+                    updated_at=now,
+                )
+            )
+            res = session.execute(stmt)
+            session.commit()
+            return res.rowcount == 1
 
     def claim_item(
         self,
@@ -226,10 +251,41 @@ class ExecutionWorker:
                 request_mapping=agent_dict["request_mapping"],
                 max_concurrency=policy_dict["max_concurrency"],
                 is_idempotent=bool(agent_dict.get("is_idempotent", False)),
+                credential_ref=agent_dict.get("credential_ref"),
                 id=agent_dict.get("agent_version_id", f"{agent_dict['agent_id']}-{agent_dict['version']}"),
             )
 
-            # Acquire distributed rate & concurrency permit
+            # Ensure initial lease covers configured timeout
+            initial_lease_sec = max(30, int(spec.timeout_seconds * 1.5) + 15)
+            self.renew_lease(item_id, token, extension_seconds=initial_lease_sec)
+
+            # Acquire distributed rate permit
+            if spec.rate_limit_per_minute and spec.rate_limit_per_minute > 0:
+                rate_ok = self.limiter.acquire_rate_permit(spec.id, spec.rate_limit_per_minute)
+                if not rate_ok:
+                    # Rate limited -> delay to RETRY_WAIT and release lease
+                    with self.db_mgr.get_session() as session:
+                        stmt = (
+                            update(ExperimentItemExecutionRecord)
+                            .where(
+                                ExperimentItemExecutionRecord.id == item_id,
+                                ExperimentItemExecutionRecord.lease_token == token,
+                            )
+                            .values(
+                                execution_status="retry_wait",
+                                available_at=datetime.now(UTC) + timedelta(seconds=1.5),
+                                lease_owner=None,
+                                lease_token=None,
+                                lease_expires_at=None,
+                                updated_at=datetime.now(UTC),
+                            )
+                        )
+                        session.execute(stmt)
+                        session.commit()
+                    self.queue.ack(message_id)
+                    return False
+
+            # Acquire distributed concurrency permit
             permit_id = self.limiter.acquire_concurrency_permit(spec.id, spec.max_concurrency, owner_id=self.worker_id)
             if not permit_id:
                 # Could not acquire permit -> delay to RETRY_WAIT and release lease
@@ -246,6 +302,7 @@ class ExecutionWorker:
                             lease_owner=None,
                             lease_token=None,
                             lease_expires_at=None,
+                            updated_at=datetime.now(UTC),
                         )
                     )
                     session.execute(stmt)
@@ -276,8 +333,39 @@ class ExecutionWorker:
                         att.request_phase = "MAY_HAVE_BEEN_SENT"
                         session.commit()
 
-            # Invoke remote agent once
-            inv_res = await executor.invoke_once(mapped_payload, headers)
+            # Start background heartbeat to renew lease during invocation
+            stop_hb = asyncio.Event()
+            hb_interval = getattr(self, "heartbeat_interval", 5.0)
+            hb_extension = max(30, int(spec.timeout_seconds) + 15)
+
+            async def _heartbeat_loop():
+                while not stop_hb.is_set():
+                    try:
+                        await asyncio.sleep(hb_interval)
+                        if stop_hb.is_set():
+                            break
+                        self.renew_lease(item_id, token, extension_seconds=hb_extension)
+                    except asyncio.CancelledError:
+                        break
+                    except Exception:
+                        pass
+
+            hb_task = asyncio.create_task(_heartbeat_loop())
+
+            try:
+                # Invoke remote agent once
+                inv_res = await executor.invoke_once(mapped_payload, headers)
+            finally:
+                stop_hb.set()
+                hb_task.cancel()
+                try:
+                    await hb_task
+                except asyncio.CancelledError:
+                    pass
+
+            is_non_idem_read_timeout = (
+                not spec.is_idempotent and inv_res.error_category == "READ_TIMEOUT"
+            )
 
             # Update attempt record with outcome
             if current_attempt_id:
@@ -286,8 +374,12 @@ class ExecutionWorker:
                     if att:
                         att.status = "COMPLETED" if inv_res.status_code == 200 else "FAILED"
                         att.http_status = inv_res.status_code
-                        att.error_type = inv_res.error_category
-                        att.error_message = inv_res.error_message
+                        att.error_type = "AMBIGUOUS_OUTCOME" if is_non_idem_read_timeout else inv_res.error_category
+                        att.error_message = (
+                            f"AMBIGUOUS_OUTCOME: {inv_res.error_message}"
+                            if is_non_idem_read_timeout
+                            else inv_res.error_message
+                        )
                         att.latency_ms = inv_res.duration_ms
                         att.trace_context_received = inv_res.trace_context_received
                         att.request_phase = "RESPONSE_RECEIVED"
@@ -350,6 +442,18 @@ class ExecutionWorker:
                         quality_conclusion="unknown",
                         final_attempt_id=current_attempt_id,
                         execution_error=inv_res.error_message,
+                    )
+                elif is_non_idem_read_timeout:
+                    # Non-idempotent read timeout: prohibited from auto-retry, must be explicitly forced
+                    self.finalize_item(
+                        item_id=item_id,
+                        generation=generation,
+                        lease_token=token,
+                        status="FAILED",
+                        eval_status="skipped",
+                        quality_conclusion="fail",
+                        final_attempt_id=current_attempt_id,
+                        execution_error=f"AMBIGUOUS_OUTCOME: {inv_res.error_message}",
                     )
                 elif inv_res.is_retryable and attempt_no <= spec.max_retries:
                     # Retryable error with remaining budget -> enter RETRY_WAIT

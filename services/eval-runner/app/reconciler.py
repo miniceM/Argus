@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 
@@ -140,24 +140,40 @@ class ExecutionReconciler:
 
         return recovered_count
 
-    def reconcile_backlog(self, max_items: int = 100) -> int:
-        """Re-enqueues QUEUED items that may have been lost from Redis stream after restart."""
+    def reconcile_backlog(self, max_items: int = 100, min_idle_seconds: int = 30) -> int:
+        """Re-enqueues QUEUED items that have been waiting without claim for too long (e.g. lost Redis messages)."""
+        now = datetime.now(UTC)
+        cutoff = now - timedelta(seconds=min_idle_seconds)
         reenqueued = []
 
         with self.db_mgr.get_session() as session:
             queued_items = session.scalars(
                 select(ExperimentItemExecutionRecord)
-                .where(ExperimentItemExecutionRecord.execution_status == "queued")
+                .where(
+                    ExperimentItemExecutionRecord.execution_status == "queued",
+                    (ExperimentItemExecutionRecord.queued_at.is_(None)) | (ExperimentItemExecutionRecord.queued_at <= cutoff),
+                )
                 .limit(max_items)
             ).all()
 
             for it in queued_items:
+                it.queued_at = now
+                it.updated_at = now
                 reenqueued.append((it.id, it.dispatch_generation))
+
+            session.commit()
 
         if reenqueued:
             self.queue.enqueue_items(reenqueued)
 
         return len(reenqueued)
+
+    def run_reconcile_cycle(self) -> None:
+        """Executes one full pass of all reconciliation recovery actions."""
+        self.reconcile_retry_waits()
+        self.reconcile_expired_leases()
+        self.reconcile_backlog()
+        self.reconcile_launch_states()
 
     def reconcile_launch_states(self) -> int:
         """Checks RUNNING or CANCELLING launches; transitions to terminal status when all items finish."""

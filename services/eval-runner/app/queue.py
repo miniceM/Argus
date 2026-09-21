@@ -30,6 +30,16 @@ class QueueAdapter(abc.ABC):
         ...
 
     @abc.abstractmethod
+    def claim_pending_entries(
+        self, consumer_name: str, min_idle_ms: int = 30000, count: int = 10
+    ) -> list[tuple[str, str, int]]:
+        """Claims abandoned pending messages from crashed workers.
+
+        Returns: list of (message_id, item_execution_id, generation)
+        """
+        ...
+
+    @abc.abstractmethod
     def ack(self, message_id: str) -> None:
         """Acknowledge processed message."""
         ...
@@ -69,6 +79,11 @@ class MemoryQueueAdapter(QueueAdapter):
             if msg[0] not in self._acked:
                 res.append(msg)
         return res
+
+    def claim_pending_entries(
+        self, consumer_name: str, min_idle_ms: int = 30000, count: int = 10
+    ) -> list[tuple[str, str, int]]:
+        return []
 
     def ack(self, message_id: str) -> None:
         self._acked.add(message_id)
@@ -126,7 +141,7 @@ class RedisStreamQueueAdapter(QueueAdapter):
                 block=block_ms,
             )
             if not raw_entries:
-                return []
+                return self.claim_pending_entries(consumer_name, min_idle_ms=30000, count=count)
 
             results = []
             for _stream_name, messages in raw_entries:
@@ -145,6 +160,38 @@ class RedisStreamQueueAdapter(QueueAdapter):
             return results
         except Exception:
             raise
+
+    def claim_pending_entries(
+        self, consumer_name: str, min_idle_ms: int = 30000, count: int = 10
+    ) -> list[tuple[str, str, int]]:
+        """Claims abandoned pending messages from crashed workers using XAUTOCLAIM."""
+        try:
+            res = self.client.xautoclaim(
+                self.stream_key,
+                self.group_name,
+                consumer_name,
+                min_idle_time=min_idle_ms,
+                start_id="0-0",
+                count=count,
+            )
+            if not res or len(res) < 2:
+                return []
+            messages = res[1]
+            results = []
+            for msg_id, data in messages:
+                fields = {
+                    (k.decode() if isinstance(k, bytes) else k): (
+                        v.decode() if isinstance(v, bytes) else v
+                    )
+                    for k, v in data.items()
+                }
+                item_id = fields.get("item_execution_id", "")
+                gen = int(fields.get("dispatch_generation", 1))
+                m_id = msg_id.decode() if isinstance(msg_id, bytes) else str(msg_id)
+                results.append((m_id, item_id, gen))
+            return results
+        except Exception:
+            return []
 
     def ack(self, message_id: str) -> None:
         self.client.xack(self.stream_key, self.group_name, message_id)

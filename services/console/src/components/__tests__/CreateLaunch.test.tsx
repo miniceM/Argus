@@ -70,4 +70,39 @@ describe("CreateLaunch Evaluator Scope Invariant", () => {
     // Selected count should still be 2, run-scope MUST NOT be added
     expect(screen.getByText("已选 2 项")).toBeInTheDocument();
   });
+
+  it("allows setting custom launch name and submits it in payload", async () => {
+    (api.POST as any).mockResolvedValue({
+      data: { id: "launch-created-1", status: "PENDING" },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <CreateLaunch />
+        </BrowserRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("例如：release-v1.0-benchmark")).toBeInTheDocument();
+    });
+
+    const nameInput = screen.getByPlaceholderText("例如：release-v1.0-benchmark");
+    fireEvent.change(nameInput, { target: { value: "benchmark-v1.0" } });
+
+    const submitBtn = screen.getByRole("button", { name: /创建评测任务/ });
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledWith("/api/v1/experiment-launches", {
+        body: expect.objectContaining({
+          name: "benchmark-v1.0",
+          agent_id: "agent-1",
+          agent_version: "v1",
+          evaluator_ids: ["intent_match", "pii_safe"],
+        }),
+      });
+    });
+  });
 });

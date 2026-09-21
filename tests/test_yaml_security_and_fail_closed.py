@@ -151,3 +151,26 @@ def test_api_trace_propagation_validation():
     )
     assert resp.status_code == 422
 
+
+def test_init_queue_and_limiter_fail_closed():
+    from app.limiter import MemoryAgentLimiter
+    from app.main import init_queue_and_limiter
+    from app.queue import MemoryQueueAdapter
+
+    # 1. SQLite or test mode fallback to Memory without Redis
+    queue_adapter, limiter_adapter = init_queue_and_limiter(
+        redis_url=None, db_mode="prod", db_url="sqlite:////tmp/test.db"
+    )
+    assert isinstance(queue_adapter, MemoryQueueAdapter)
+    assert isinstance(limiter_adapter, MemoryAgentLimiter)
+
+    q2, l2_limiter = init_queue_and_limiter(
+        redis_url=None, db_mode="test", db_url="postgresql://user:pass@host/db"
+    )
+    assert isinstance(q2, MemoryQueueAdapter)
+    assert isinstance(l2_limiter, MemoryAgentLimiter)
+
+    # 2. Production mode with PostgreSQL and no Redis must fail closed
+    with pytest.raises(RuntimeError, match="ARGUS_REDIS_URL must be configured in production mode"):
+        init_queue_and_limiter(redis_url=None, db_mode="prod", db_url="postgresql+psycopg://user:pass@host/db")
+

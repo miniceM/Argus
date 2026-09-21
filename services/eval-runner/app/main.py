@@ -47,19 +47,34 @@ if settings.argus_auto_import_yaml:
     if yaml_path.exists():
         registry.import_yaml(yaml_path)
 
+def init_queue_and_limiter(
+    redis_url: str | None,
+    db_mode: str,
+    db_url: str,
+) -> tuple[QueueAdapter, DistributedAgentLimiter]:
+    """Initialize queue adapter and limiter.
+
+    - If redis_url is provided, uses Redis Streams queue adapter and distributed limiter.
+    - If in test mode or running on SQLite, falls back to in-memory queue and limiter.
+    - Otherwise (production PostgreSQL without Redis), fails closed to prevent uncoordinated multi-instance execution.
+    """
+    if redis_url:
+        import redis
+        redis_client = redis.Redis.from_url(redis_url)
+        return RedisStreamQueueAdapter(redis_client), RedisDistributedLimiter(redis_client)
+
+    if db_mode == "test" or db_url.startswith("sqlite"):
+        return MemoryQueueAdapter(), MemoryAgentLimiter()
+
+    raise RuntimeError("ARGUS_REDIS_URL must be configured in production mode")
+
+
 # 3. Initialize Queue & Limiter
-if settings.argus_redis_url:
-    import redis
-    redis_client = redis.Redis.from_url(settings.argus_redis_url)
-    queue_adapter: QueueAdapter = RedisStreamQueueAdapter(redis_client)
-    limiter: DistributedAgentLimiter = RedisDistributedLimiter(redis_client)
-else:
-    # Fail-closed in production if no redis url; fallback to Memory only in test mode
-    if settings.argus_db_mode == "test":
-        queue_adapter = MemoryQueueAdapter()
-        limiter = MemoryAgentLimiter()
-    else:
-        raise RuntimeError("ARGUS_REDIS_URL must be configured in production mode")
+queue_adapter, limiter = init_queue_and_limiter(
+    redis_url=settings.argus_redis_url,
+    db_mode=settings.argus_db_mode,
+    db_url=db_manager.db_url,
+)
 
 # 4. Initialize Orchestrator, Worker, Reconciler
 orchestrator = LaunchOrchestrator(db_manager, queue_adapter, limiter)

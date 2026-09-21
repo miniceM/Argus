@@ -184,12 +184,14 @@ services:
     restart: unless-stopped
     depends_on:
       postgres: {condition: service_healthy}
+      redis: {condition: service_started}
       langfuse-web: {condition: service_healthy}
       langfuse-worker: {condition: service_healthy}
       demo-agent-v1: {condition: service_healthy}
       demo-agent-v2: {condition: service_healthy}
     environment:
       DATABASE_URL: ${ARGUS_DATABASE_URL:-postgresql+psycopg://argus:arguspassword@postgres:5432/argus}
+      ARGUS_REDIS_URL: ${ARGUS_REDIS_URL:-redis://:${REDIS_AUTH:-myredissecret}@redis:6379/0}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:-lf_pk_poc_0123456789abcdef}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:-lf_sk_poc_0123456789abcdef}
       LANGFUSE_BASE_URL: http://langfuse-web:3000

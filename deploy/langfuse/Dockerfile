@@ -46,7 +46,6 @@ FROM --platform=${BUILDPLATFORM} golang:1.26 AS migrate-builder
 ARG TARGETOS
 ARG TARGETARCH
 ENV CGO_ENABLED=0 \
-    GOBIN=/out \
     GOOS=${TARGETOS} \
     GOARCH=${TARGETARCH}
 # Build only the ClickHouse migrate CLI Langfuse uses at runtime.
@@ -54,7 +53,11 @@ ENV CGO_ENABLED=0 \
 # because prebuilt bins bundle many unused drivers and thus inherit CVEs
 # eg.: https://github.com/golang-migrate/migrate/issues/1357
 RUN /usr/local/go/bin/go install -trimpath -tags 'clickhouse' -ldflags='-s -w' \
-    github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1
+    github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1 \
+    && mkdir -p /out \
+    && migrate_bin="$(find "$(/usr/local/go/bin/go env GOPATH)/bin" -type f -name migrate -print -quit)" \
+    && test -n "$migrate_bin" \
+    && cp "$migrate_bin" /out/migrate
 
 FROM --platform=${TARGETPLATFORM:-linux/amd64} build-base AS pruner
 

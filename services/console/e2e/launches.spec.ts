@@ -8,27 +8,38 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     let currentLaunchStatus = "PENDING";
     let currentQualityConclusion = "UNKNOWN";
 
+    let interceptedCreationPayload: any = null;
+
     const launchObj = {
       id: launchId,
       name: `run-${launchId}`,
       status: currentLaunchStatus,
       quality_conclusion: currentQualityConclusion,
       dataset_name: "calc-agent-eval",
-      dataset_version: "latest",
+      dataset_version: "2026-09-20T00:00:00Z",
       agent_id: "demo-banking-agent",
       agent_version: "1.0.0",
       agent_version_id: "ver-1",
       manifest: {
-        manifest_version: "1.0",
-        dataset: { name: "calc-agent-eval", version: "latest" },
+        schema_version: "1.0",
+        dataset: {
+          dataset_name: "calc-agent-eval",
+          dataset_version: "2026-09-20T00:00:00Z",
+          snapshot_digest: "sha256:e2edigest12345678",
+          items_count: 1,
+        },
         agent: {
           id: "demo-banking-agent",
           version: "1.0.0",
           endpoint: "http://demo-agent:8080/invoke",
-          execution_policy: { timeout_seconds: 30, max_retries: 2 },
+          spec_digest: "sha256:specs987654321",
         },
-        evaluators: [{ name: "exact_match", version: "1.0.0", type: "deterministic" }],
-        runner: { runner_version: "0.1.0", concurrency: 2 },
+        evaluators: [
+          { id: "intent_match", version: "1.0.0", scope: "item" },
+          { id: "pii_safe", version: "1.0.0", scope: "item" },
+        ],
+        execution_policy: { timeout_seconds: 30, max_retries: 2, max_concurrency: 2 },
+        runner: { runner_version: "0.1.0", mapping_engine_version: "sha256-mapping-engine-v1" },
       },
       langfuse_experiment_url: null as string | null,
       langfuse_sync_status: "PENDING",
@@ -79,16 +90,30 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
       });
     });
 
-    // Evaluators specs
+    // Evaluators specs: includes both item-scope and run-scope (real registry contract)
     await page.route("**/api/v1/evaluators", async (route) => {
       await route.fulfill({
         json: [
           {
-            id: "exact_match",
+            id: "intent_match",
             version: "1.0.0",
-            scope: "output",
+            scope: "item",
             threshold: 1.0,
-            description: "精确匹配期望输出",
+            description: "意图匹配评测器",
+          },
+          {
+            id: "pii_safe",
+            version: "1.0.0",
+            scope: "item",
+            threshold: 1.0,
+            description: "敏感数据保护评测器",
+          },
+          {
+            id: "run_pass_rate",
+            version: "1.0.0",
+            scope: "run",
+            threshold: 1.0,
+            description: "整体通过率门禁指标",
           },
         ],
       });
@@ -102,6 +127,7 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
       launchObj.status = "SUCCEEDED";
       launchObj.quality_conclusion = "FAIL";
       launchObj.langfuse_experiment_url = langfuseUrl;
+      launchObj.langfuse_sync_status = "SYNCED";
       launchObj.started_at = new Date(Date.now() - 3000).toISOString();
       launchObj.completed_at = new Date().toISOString();
       await route.fulfill({ json: launchObj });
@@ -114,6 +140,7 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
         return;
       }
       if (route.request().method() === "POST") {
+        interceptedCreationPayload = route.request().postDataJSON();
         await route.fulfill({ status: 201, json: launchObj });
         return;
       }
@@ -183,11 +210,24 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     await page.goto("/launches/new");
     await expect(page.getByRole("heading", { name: "发起新评测任务" })).toBeVisible();
 
-    // Verify Evaluators selection
-    await expect(page.getByText("exact_match")).toBeVisible();
+    // Verify Evaluators selection and scope restriction
+    await expect(page.getByText("intent_match")).toBeVisible();
+    await expect(page.getByText("pii_safe")).toBeVisible();
+    await expect(page.getByText("run_pass_rate")).toBeVisible();
+    await expect(page.getByText("(聚合指标，暂不支持在单次 Launch 中直接运行)")).toBeVisible();
+
+    // Adjust Concurrency
+    await page.getByRole("spinbutton").fill("2");
 
     // Submit Launch
     await page.getByRole("button", { name: "创建评测任务" }).click();
+
+    // Verify Creation Payload Contract: must NOT include run_pass_rate, dataset_version undefined when latest
+    expect(interceptedCreationPayload).not.toBeNull();
+    expect(interceptedCreationPayload.evaluator_ids).toEqual(["intent_match", "pii_safe"]);
+    expect(interceptedCreationPayload.evaluator_ids).not.toContain("run_pass_rate");
+    expect(interceptedCreationPayload.dataset_version).toBeUndefined();
+    expect(interceptedCreationPayload.max_concurrency).toBe(2);
 
     // 2. Navigates to Launch Detail
     await page.waitForURL(`**/launches/${launchId}`);
@@ -195,15 +235,22 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
 
     // Verify initial PENDING state and Run button visible
     await expect(page.getByTestId("status-badge").first()).toContainText("PENDING");
+    await expect(page.getByTestId("manifest-schema-version")).toContainText("Schema v1.0");
+    await expect(page.getByTestId("langfuse-sync-badge")).toContainText("PENDING");
+    await expect(page.getByTestId("dataset-snapshot-digest")).toContainText("sha256:e2edi");
+    await expect(page.getByTestId("runner-version")).toContainText("0.1.0");
+    await expect(page.getByText("sha256-mapping-engine-v1")).toBeVisible();
+
     const runBtn = page.getByRole("button", { name: "立即执行评测" });
     await expect(runBtn).toBeVisible();
 
     // 3. Click Run Evaluation
     await runBtn.click();
 
-    // 4. Verify Dual-Badge Decoupling (Execution: SUCCEEDED, Quality: FAIL)
+    // 4. Verify Dual-Badge Decoupling (Execution: SUCCEEDED, Quality: FAIL) & Langfuse sync status
     await expect(page.getByTestId("status-badge").first()).toContainText("SUCCEEDED");
     await expect(page.getByTestId("quality-badge").first()).toContainText("FAIL");
+    await expect(page.getByTestId("langfuse-sync-badge")).toContainText("SYNCED");
 
     // 5. Verify Langfuse Deep Link from backend
     const langfuseLink = page.getByRole("link", { name: "在 Langfuse 中查看" });

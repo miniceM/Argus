@@ -36,6 +36,7 @@ interface ManifestData {
     dataset_id?: string;
     dataset_version?: string;
     snapshot_digest?: string;
+    items_count?: number;
     name?: string;
     version?: string;
   };
@@ -262,8 +263,8 @@ export const LaunchDetail: React.FC = () => {
         </div>
       )}
 
-      {/* Primary Status Banner (Dual Badges & Metrics) */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {/* Primary Status Banner (Dual Badges, Langfuse & Metrics) */}
+      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <div>
           <span className="text-xs font-medium text-slate-400 block mb-1.5">
             执行调度状态 (Execution Status)
@@ -276,6 +277,33 @@ export const LaunchDetail: React.FC = () => {
             质量门禁结论 (Quality Conclusion)
           </span>
           <QualityBadge quality={launch.quality_conclusion} />
+        </div>
+
+        <div>
+          <span className="text-xs font-medium text-slate-400 block mb-1.5">
+            Langfuse 同步状态 (Sync Status)
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span
+              data-testid="langfuse-sync-badge"
+              className={`px-2.5 py-0.5 rounded-full text-xs font-semibold font-mono inline-flex items-center gap-1 ${
+                launch.langfuse_sync_status === "SYNCED"
+                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                  : launch.langfuse_sync_status === "FAILED"
+                  ? "bg-rose-50 text-rose-700 border border-rose-200"
+                  : launch.langfuse_sync_status === "NOT_APPLICABLE"
+                  ? "bg-slate-100 text-slate-600 border border-slate-200"
+                  : "bg-amber-50 text-amber-700 border border-amber-200"
+              }`}
+            >
+              {launch.langfuse_sync_status}
+            </span>
+          </div>
+          {launch.langfuse_sync_error && (
+            <p className="text-[11px] text-rose-600 mt-1 truncate" title={launch.langfuse_sync_error}>
+              {launch.langfuse_sync_error}
+            </p>
+          )}
         </div>
 
         <div>
@@ -314,6 +342,12 @@ export const LaunchDetail: React.FC = () => {
             <h3 className="text-sm font-bold text-slate-900">
               四维不可变冻结快照 (Frozen Manifest Snapshot)
             </h3>
+            <span
+              data-testid="manifest-schema-version"
+              className="px-2 py-0.5 rounded text-[11px] font-mono bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold"
+            >
+              Schema v{manifest.schema_version || manifest.manifest_version || "1.0"}
+            </span>
           </div>
 
           <div className="flex items-center gap-3">
@@ -375,6 +409,18 @@ export const LaunchDetail: React.FC = () => {
                   {manifest.dataset?.dataset_version || manifest.dataset?.version || launch.dataset_version || "-"}
                 </span>
               </div>
+              <div className="truncate" title={manifest.dataset?.snapshot_digest || ""}>
+                <span className="text-slate-400">Digest:</span>{" "}
+                <span data-testid="dataset-snapshot-digest" className="font-mono text-[11px]">
+                  {manifest.dataset?.snapshot_digest ? `${manifest.dataset.snapshot_digest.slice(0, 12)}...` : "-"}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400">Items:</span>{" "}
+                <span className="font-mono font-semibold">
+                  {manifest.dataset?.items_count ?? (manifest.dataset as any)?.items?.length ?? totalItems}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -408,7 +454,13 @@ export const LaunchDetail: React.FC = () => {
             <div className="space-y-1 text-slate-600">
               <div>
                 <span className="text-slate-400">Runner Ver:</span>{" "}
-                <span className="font-mono text-[11px]">{manifestRunner.runner_version || "1.0.0"}</span>
+                <span data-testid="runner-version" className="font-mono text-[11px]">
+                  {manifestRunner.runner_version || "1.0.0"}
+                </span>
+              </div>
+              <div className="truncate" title={manifestRunner.mapping_engine_version || ""}>
+                <span className="text-slate-400">Engine:</span>{" "}
+                <span className="font-mono text-[11px]">{manifestRunner.mapping_engine_version || "-"}</span>
               </div>
               <div>
                 <span className="text-slate-400">Concurrency:</span>{" "}

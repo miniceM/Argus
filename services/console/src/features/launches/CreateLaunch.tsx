@@ -84,14 +84,20 @@ export const CreateLaunch: React.FC = () => {
     }
   }, [versions]);
 
-  // Auto select all evaluators by default
+  // Auto select only item-scope evaluators by default (standalone launch runner rejects run-scope)
   useEffect(() => {
     if (evaluators && evaluators.length > 0 && selectedEvaluators.length === 0) {
-      setSelectedEvaluators(evaluators.map((e) => e.id));
+      setSelectedEvaluators(
+        evaluators.filter((e) => e.scope === "item").map((e) => e.id)
+      );
     }
   }, [evaluators, selectedEvaluators.length]);
 
   const toggleEvaluator = (evalId: string) => {
+    const target = evaluators?.find((e) => e.id === evalId);
+    if (target && target.scope !== "item") {
+      return; // Do not allow selecting unsupported run-scope evaluators
+    }
     if (selectedEvaluators.includes(evalId)) {
       setSelectedEvaluators(selectedEvaluators.filter((e) => e !== evalId));
     } else {
@@ -317,26 +323,44 @@ export const CreateLaunch: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {evaluators?.map((ev) => {
+              const isItemScope = ev.scope === "item";
               const isSelected = selectedEvaluators.includes(ev.id);
               return (
                 <div
                   key={ev.id}
-                  onClick={() => toggleEvaluator(ev.id)}
-                  className={`p-3 rounded-lg border text-xs cursor-pointer transition-colors flex items-start gap-3 ${
-                    isSelected
-                      ? "bg-indigo-50/50 border-indigo-300 text-slate-900"
-                      : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                  onClick={() => isItemScope && toggleEvaluator(ev.id)}
+                  className={`p-3 rounded-lg border text-xs transition-colors flex items-start gap-3 ${
+                    !isItemScope
+                      ? "bg-slate-100/70 border-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                      : isSelected
+                      ? "bg-indigo-50/50 border-indigo-300 text-slate-900 cursor-pointer"
+                      : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100 cursor-pointer"
                   }`}
                 >
                   <div className="mt-0.5 text-indigo-600 shrink-0">
-                    {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                    {!isItemScope ? (
+                      <Square className="w-4 h-4 text-slate-300" />
+                    ) : isSelected ? (
+                      <CheckSquare className="w-4 h-4" />
+                    ) : (
+                      <Square className="w-4 h-4" />
+                    )}
                   </div>
                   <div>
                     <div className="font-semibold text-slate-900 flex items-center gap-2">
-                      <span>{ev.id}</span>
-                      <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-200 text-slate-700 uppercase font-mono">
+                      <span className={!isItemScope ? "text-slate-500" : ""}>{ev.id}</span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded text-[10px] uppercase font-mono ${
+                          isItemScope ? "bg-slate-200 text-slate-700" : "bg-amber-100 text-amber-700"
+                        }`}
+                      >
                         {ev.scope}
                       </span>
+                      {!isItemScope && (
+                        <span className="text-[10px] text-amber-600 font-normal">
+                          (聚合指标，暂不支持在单次 Launch 中直接运行)
+                        </span>
+                      )}
                     </div>
                     <p className="text-[11px] text-slate-500 mt-0.5">{ev.description || "确定性规则评测器"}</p>
                   </div>

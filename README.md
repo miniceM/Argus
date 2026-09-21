@@ -174,7 +174,7 @@ Argus 正在按企业级平台路线持续演进：
 | 阶段 | 主题 | 状态 |
 |---|---|---|
 | S1 | Agent Registry 与版本化评测领域模型 | ✅ 已完成 |
-| S1.5 | 官方 Langfuse + 独立 i18n Patch Layer | 🚧 规划 / 推进中 |
+| S1.5 | 官方 Langfuse + 独立 i18n Patch Layer | ✅ 已完成 |
 | S2 | 异步 Orchestrator、Queue / Worker、可靠执行状态机 | 🚧 Roadmap |
 | S3 | 版本化评测、Baseline Comparison、Run-level Score | 🚧 Roadmap |
 | S4 | Standard Agent Trajectory、Trace Assembler、深度轨迹评测 | 🚧 Roadmap |
@@ -319,6 +319,8 @@ make clean
 
 > `.env.poc`、Demo Agent v1/v2 和示例 Dataset 只用于本地开发与 E2E。生产部署必须替换演示凭据，并按企业安全要求接入 Secret Manager、网络隔离、身份认证和审计能力。
 
+Langfuse Web 使用独立的 `zh-CN` Patch Layer 镜像。补丁只覆盖界面渲染、导航和语言切换，不改变 Dataset、Trace、Observation、Experiment、Score 或业务 API 契约。构建与部署说明见 [`deploy/langfuse/README.md`](./deploy/langfuse/README.md)。
+
 ---
 
 ## 8. 核心 API
@@ -400,6 +402,8 @@ Langfuse Cloud E2E
 - `Docker / Compose Validation`
 - `Langfuse Cloud E2E`
 
+`.github/workflows/langfuse-i18n.yml` 只在 `deploy/langfuse/**` 或该工作流自身发生变化时执行；也可以通过 `workflow_dispatch` 手动执行。Pull Request 会验证补丁、资源、类型检查、UI 测试并构建镜像，但不会推送 GHCR。合并到 `main` 后，工作流会将成品推送到 `ghcr.io/minicem/argus-langfuse-i18n`，并生成不可变的 `4.38.0-i18n-<git-sha>` 标签。
+
 Cloud E2E 建议使用独立 Langfuse CI Project，并通过 GitHub Environment 管理：
 
 - `LANGFUSE_BASE_URL`
@@ -413,6 +417,15 @@ LANGFUSE_E2E_ENABLED=true
 ```
 
 外部 fork PR 默认不应获得 Langfuse Secret。
+
+远程自托管验收固定使用完整 GHCR digest 和构建标识，避免只校验 URL 或漂移的 tag：
+
+```text
+LANGFUSE_I18N_IMAGE_DIGEST=ghcr.io/minicem/argus-langfuse-i18n@sha256:<registry-digest>
+LANGFUSE_I18N_BUILD_ID=argus-i18n-<git-sha>
+```
+
+验收脚本会读取 registry OCI config、检查运行中服务的 `/api/public/argus-image-identity`，并确认两者与预期 build ID 一致。私有 GHCR package 还需提供具备 `read:packages` 权限的 `LANGFUSE_GHCR_USERNAME` 和 `LANGFUSE_GHCR_TOKEN`；公开 package 可匿名查询。
 
 ---
 

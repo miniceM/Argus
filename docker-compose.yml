@@ -2,7 +2,7 @@ name: enterprise-agent-eval-poc
 
 services:
   langfuse-worker:
-    image: docker.langfuse.com/langfuse/langfuse-worker:4
+    image: docker.langfuse.com/langfuse/langfuse-worker:4.38.0@sha256:8631cf429efc4a2981d4e6ced4c005b9f6f620a4e34625baf60152301ec6d006
     restart: unless-stopped
     depends_on: &langfuse-depends-on
       postgres: {condition: service_healthy}
@@ -58,7 +58,15 @@ services:
       start_period: 30s
 
   langfuse-web:
-    image: docker.langfuse.com/langfuse/langfuse:4
+    image: ${LANGFUSE_WEB_IMAGE:-argus/langfuse-i18n:4.38.0}
+    build:
+      context: ./deploy/langfuse
+      dockerfile: Dockerfile
+      args:
+        LANGFUSE_REPOSITORY: https://github.com/langfuse/langfuse.git
+        LANGFUSE_TAG: v4.38.0
+        LANGFUSE_COMMIT: 4ecaabed8d9c39d0d3ba483f02ba1cca020388a9
+        NEXT_PUBLIC_BUILD_ID: argus-i18n-4ecaabed8d9c
     restart: unless-stopped
     depends_on: *langfuse-depends-on
     ports: ["3000:3000"]
@@ -76,6 +84,7 @@ services:
       LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-admin@example.com}
       LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME:-PoC Admin}
       LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-Poc-Admin-2026!}
+      LANGFUSE_UI_DEFAULT_LOCALE: ${LANGFUSE_UI_DEFAULT_LOCALE:-zh-CN}
     healthcheck:
       test: ["CMD-SHELL", "node -e \"const h=process.env.HOSTNAME||'127.0.0.1';require('http').get('http://'+h+':3000/api/public/health',r=>process.exit(r.statusCode<400?0:1)).on('error',()=>process.exit(1))\""]
       interval: 10s

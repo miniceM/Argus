@@ -1,0 +1,92 @@
+{
+  "common": {
+    "language": "语言",
+    "english": "English",
+    "simplifiedChinese": "简体中文",
+    "switchLanguage": "切换语言",
+    "save": "保存",
+    "cancel": "取消",
+    "create": "创建",
+    "delete": "删除",
+    "edit": "编辑",
+    "close": "关闭",
+    "search": "搜索",
+    "loading": "加载中",
+    "returnHome": "返回首页"
+  },
+  "navigation": {
+    "goTo": "前往...",
+    "organizations": "组织",
+    "organization": "组织",
+    "projects": "项目",
+    "home": "首页",
+    "dashboards": "仪表板",
+    "tracing": "链路追踪",
+    "traces": "Trace",
+    "observations": "Observation",
+    "sessions": "会话",
+    "users": "用户",
+    "alerts": "告警",
+    "prompts": "Prompt",
+    "playground": "调试台",
+    "scores": "评分",
+    "evaluators": "评估器",
+    "humanAnnotation": "人工标注",
+    "datasets": "数据集",
+    "experiments": "实验",
+    "settings": "设置",
+    "update": "更新",
+    "cloudStatus": "云服务状态",
+    "v4Preview": "V4 预览",
+    "upgradePlan": "升级方案",
+    "bookCall": "预约沟通",
+    "support": "支持"
+  },
+  "routeGroups": {
+    "observability": "可观测性",
+    "promptManagement": "Prompt 管理",
+    "evaluation": "评测"
+  },
+  "pages": {
+    "project": {"title": "项目"},
+    "dataset": {"title": "数据集", "singular": "数据集"},
+    "experiment": {"title": "实验", "singular": "实验"},
+    "trace": {"title": "链路追踪", "singular": "Trace"},
+    "observation": {"title": "Observation", "singular": "Observation"},
+    "session": {"title": "会话", "singular": "会话"},
+    "score": {"title": "评分", "singular": "评分"},
+    "prompt": {"title": "Prompt", "singular": "Prompt"},
+    "settings": {"title": "设置"},
+    "users": {"title": "用户", "singular": "用户"},
+    "organization": {"title": "组织"}
+  },
+  "tables": {
+    "name": "名称",
+    "createdAt": "创建时间",
+    "updatedAt": "更新时间",
+    "status": "状态",
+    "input": "输入",
+    "output": "输出",
+    "metadata": "元数据",
+    "latency": "延迟",
+    "cost": "成本",
+    "usage": "用量",
+    "actions": "操作"
+  },
+  "states": {
+    "empty": "暂无数据",
+    "error": "出现错误",
+    "retry": "重试",
+    "noResults": "未找到结果",
+    "errorId": "错误 ID"
+  },
+  "validation": {
+    "required": "此项为必填项",
+    "invalid": "输入值无效"
+  },
+  "dialogs": {
+    "confirm": "确认",
+    "discardChanges": "放弃未保存的更改？",
+    "destructiveWarning": "此操作无法撤销。"
+  }
+}

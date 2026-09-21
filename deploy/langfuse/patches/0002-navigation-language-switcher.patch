@@ -1,0 +1,319 @@
+diff --git a/web/src/components/layouts/routes.tsx b/web/src/components/layouts/routes.tsx
+index 7d44592..360f742 100644
+--- a/web/src/components/layouts/routes.tsx
++++ b/web/src/components/layouts/routes.tsx
+@@ -35,6 +35,7 @@ import { useCommandMenu } from "@/src/features/command-k-menu/CommandMenuProvide
+ import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
+ import { CloudStatusMenu } from "@/src/features/cloud-status-notification/components/CloudStatusMenu";
+ import { type ProductModule } from "@/src/ee/features/ui-customization/productModuleSchema";
++import { useTranslations } from "next-intl";
+ 
+ export enum RouteSection {
+   Main = "main",
+@@ -279,6 +280,7 @@ export const ROUTES: Route[] = [
+ function CommandMenuTrigger() {
+   const { setOpen } = useCommandMenu();
+   const capture = usePostHogClientCapture();
++  const t = useTranslations("navigation");
+ 
+   return (
+     <SidebarMenuButton
+@@ -291,7 +293,7 @@ function CommandMenuTrigger() {
+       className="whitespace-nowrap"
+     >
+       <Search className="h-4 w-4" />
+-      Go to...
++      {t("goTo")}
+       <span className="ml-auto hidden md:inline-flex">
+         <KeyboardShortcut keys={["Mod", "K"]} />
+       </span>
+diff --git a/web/src/components/nav/AppSidebar/AppSidebar.tsx b/web/src/components/nav/AppSidebar/AppSidebar.tsx
+index 866f379..ef8b8dc 100644
+--- a/web/src/components/nav/AppSidebar/AppSidebar.tsx
++++ b/web/src/components/nav/AppSidebar/AppSidebar.tsx
+@@ -68,6 +68,7 @@ import {
+   APP_SHELL_CHROME_ROW_TEST_ID,
+ } from "@/src/components/layouts/app-shell-chrome";
+ import { cn } from "@/src/utils/tailwind";
++import { LanguageSwitcher } from "@/src/features/i18n/LanguageSwitcher";
+ 
+ const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
+ 
+@@ -249,6 +250,7 @@ export function AppSidebar({
+         <NavMain items={secondaryNavItems} />
+       </SidebarContent>
+       <SidebarFooter>
++        <LanguageSwitcher />
+         <NavUser user={user} items={userMenuItems} isMobile={isMobile} />
+       </SidebarFooter>
+       <SidebarRail />
+diff --git a/web/src/components/nav/nav-main.tsx b/web/src/components/nav/nav-main.tsx
+index 9e3f7e1..c6758f0 100644
+--- a/web/src/components/nav/nav-main.tsx
++++ b/web/src/components/nav/nav-main.tsx
+@@ -12,6 +12,13 @@ import {
+ import Link from "next/link";
+ import { type ReactNode } from "react";
+ import { type RouteGroup } from "@/src/components/layouts/routes";
++import { useTranslations } from "next-intl";
++import {
++  isKnownRouteGroup,
++  isKnownUiLabel,
++  KNOWN_UI_LABEL_KEYS,
++  ROUTE_GROUP_KEYS,
++} from "@/src/features/i18n/knownUiLabels";
+ 
+ export type NavMainItem = {
+   title: string;
+@@ -30,10 +37,15 @@ export type NavMainItem = {
+ };
+ 
+ function NavItemContent({ item }: { item: NavMainItem }) {
++  const t = useTranslations("navigation");
++  const title = isKnownUiLabel(item.title)
++    ? t(KNOWN_UI_LABEL_KEYS[item.title])
++    : item.title;
++
+   return (
+     <>
+       {item.icon && <item.icon />}
+-      <span>{item.title}</span>
++      <span>{title}</span>
+       {item.label &&
+         (typeof item.label === "string" ? (
+           <span className="-my-0.5 self-center rounded-sm border px-1 py-0.5 text-xs leading-none break-keep whitespace-nowrap">
+@@ -55,6 +67,11 @@ export function NavMain({
+     ungrouped: NavMainItem[];
+   };
+ }) {
++  const navigation = useTranslations("navigation");
++  const routeGroups = useTranslations("routeGroups");
++  const localizeTitle = (title: string) =>
++    isKnownUiLabel(title) ? navigation(KNOWN_UI_LABEL_KEYS[title]) : title;
++
+   return (
+     <>
+       <SidebarGroup>
+@@ -65,7 +82,7 @@ export function NavMain({
+                 {item.menuNode || (
+                   <SidebarMenuButton
+                     asChild
+-                    tooltip={item.title}
++                    tooltip={localizeTitle(item.title)}
+                     isActive={item.isActive}
+                   >
+                     <Link
+@@ -84,7 +101,11 @@ export function NavMain({
+       {items.grouped &&
+         Object.entries(items.grouped).map(([group, items]) => (
+           <SidebarGroup key={group}>
+-            <SidebarGroupLabel>{group}</SidebarGroupLabel>
++            <SidebarGroupLabel>
++              {isKnownRouteGroup(group)
++                ? routeGroups(ROUTE_GROUP_KEYS[group])
++                : group}
++            </SidebarGroupLabel>
+             <SidebarGroupContent>
+               <SidebarMenu>
+                 {items.map((item) => (
+@@ -92,7 +113,7 @@ export function NavMain({
+                     {item.menuNode || (
+                       <SidebarMenuButton
+                         asChild
+-                        tooltip={item.title}
++                        tooltip={localizeTitle(item.title)}
+                         isActive={item.isActive}
+                       >
+                         <Link
+diff --git a/web/src/features/i18n/LanguageSwitcher.clienttest.tsx b/web/src/features/i18n/LanguageSwitcher.clienttest.tsx
+new file mode 100644
+index 0000000..3d3a004
+--- /dev/null
++++ b/web/src/features/i18n/LanguageSwitcher.clienttest.tsx
+@@ -0,0 +1,33 @@
++import { fireEvent, render, screen } from "@testing-library/react";
++import { NextIntlClientProvider } from "next-intl";
++import { beforeEach, describe, expect, it, vi } from "vitest";
++import en from "../../../messages/en.json";
++import { LanguageSwitcher } from "./LanguageSwitcher";
++
++const reload = vi.fn();
++
++vi.mock("next/router", () => ({
++  useRouter: () => ({ reload }),
++}));
++
++describe("LanguageSwitcher", () => {
++  beforeEach(() => {
++    reload.mockClear();
++    document.cookie = "langfuse-locale=; Path=/; Max-Age=0";
++  });
++
++  it("stores the explicit preference and reloads the current route", () => {
++    render(
++      <NextIntlClientProvider locale="en" messages={en} timeZone="UTC">
++        <LanguageSwitcher />
++      </NextIntlClientProvider>,
++    );
++
++    fireEvent.change(screen.getByRole("combobox", { name: "Language" }), {
++      target: { value: "zh-CN" },
++    });
++
++    expect(document.cookie).toContain("langfuse-locale=zh-CN");
++    expect(reload).toHaveBeenCalledOnce();
++  });
++});
+diff --git a/web/src/features/i18n/LanguageSwitcher.tsx b/web/src/features/i18n/LanguageSwitcher.tsx
+new file mode 100644
+index 0000000..2759e4a
+--- /dev/null
++++ b/web/src/features/i18n/LanguageSwitcher.tsx
+@@ -0,0 +1,47 @@
++"use client";
++
++import { Languages } from "lucide-react";
++import { useLocale, useTranslations } from "next-intl";
++import { useRouter } from "next/router";
++import { useState } from "react";
++import {
++  isSupportedLocale,
++  LOCALE_COOKIE_NAME,
++  type AppLocale,
++} from "./config";
++
++const COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
++
++export function LanguageSwitcher() {
++  const router = useRouter();
++  const currentLocale = useLocale();
++  const t = useTranslations("common");
++  const [isSwitching, setIsSwitching] = useState(false);
++
++  const switchLocale = (locale: AppLocale) => {
++    if (locale === currentLocale) return;
++    setIsSwitching(true);
++    document.cookie = `${LOCALE_COOKIE_NAME}=${encodeURIComponent(locale)}; Path=/; Max-Age=${COOKIE_MAX_AGE_SECONDS}; SameSite=Lax`;
++    router.reload();
++  };
++
++  return (
++    <label className="flex min-w-0 items-center gap-2 px-2 py-1 text-sm">
++      <Languages aria-hidden className="h-4 w-4 shrink-0" />
++      <span className="sr-only">{t("switchLanguage")}</span>
++      <select
++        aria-label={t("language")}
++        className="bg-background min-w-0 flex-1 rounded-md border px-2 py-1"
++        disabled={isSwitching}
++        value={isSupportedLocale(currentLocale) ? currentLocale : "en"}
++        onChange={(event) => {
++          const locale = event.target.value;
++          if (isSupportedLocale(locale)) switchLocale(locale);
++        }}
++      >
++        <option value="zh-CN">{t("simplifiedChinese")}</option>
++        <option value="en">{t("english")}</option>
++      </select>
++    </label>
++  );
++}
+diff --git a/web/src/features/i18n/knownUiLabels.ts b/web/src/features/i18n/knownUiLabels.ts
+new file mode 100644
+index 0000000..dc95d3d
+--- /dev/null
++++ b/web/src/features/i18n/knownUiLabels.ts
+@@ -0,0 +1,94 @@
++export const KNOWN_UI_LABEL_KEYS = {
++  "Go to...": "goTo",
++  Organizations: "organizations",
++  Organization: "organization",
++  Projects: "projects",
++  Home: "home",
++  Dashboards: "dashboards",
++  Tracing: "tracing",
++  Traces: "traces",
++  Observations: "observations",
++  Sessions: "sessions",
++  Users: "users",
++  Alerts: "alerts",
++  Prompts: "prompts",
++  Playground: "playground",
++  Scores: "scores",
++  Evaluators: "evaluators",
++  "Human Annotation": "humanAnnotation",
++  Datasets: "datasets",
++  Experiments: "experiments",
++  Settings: "settings",
++  Update: "update",
++  "Cloud Status": "cloudStatus",
++  "V4 Preview": "v4Preview",
++  "Upgrade Plan": "upgradePlan",
++  "Book a call": "bookCall",
++  Support: "support",
++} as const;
++
++export const ROUTE_GROUP_KEYS = {
++  Observability: "observability",
++  "Prompt Management": "promptManagement",
++  Evaluation: "evaluation",
++} as const;
++
++export const TABLE_LABEL_KEYS = {
++  Name: "name",
++  "Created at": "createdAt",
++  "Updated at": "updatedAt",
++  Status: "status",
++  Input: "input",
++  Output: "output",
++  Metadata: "metadata",
++  Latency: "latency",
++  Cost: "cost",
++  Usage: "usage",
++  Actions: "actions",
++} as const;
++
++export const COMMON_LABEL_KEYS = {
++  Save: "save",
++  Cancel: "cancel",
++  Create: "create",
++  Delete: "delete",
++  Edit: "edit",
++  Close: "close",
++  Search: "search",
++  Loading: "loading",
++} as const;
++
++export const STATE_LABEL_KEYS = {
++  "No data": "empty",
++  "No data available": "empty",
++  "No results.": "noResults",
++  "No results found": "noResults",
++  "Something went wrong": "error",
++  "Try again": "retry",
++} as const;
++
++export type KnownUiLabel = keyof typeof KNOWN_UI_LABEL_KEYS;
++export type KnownRouteGroup = keyof typeof ROUTE_GROUP_KEYS;
++export type KnownTableLabel = keyof typeof TABLE_LABEL_KEYS;
++export type KnownCommonLabel = keyof typeof COMMON_LABEL_KEYS;
++export type KnownStateLabel = keyof typeof STATE_LABEL_KEYS;
++
++export function isKnownUiLabel(value: string): value is KnownUiLabel {
++  return value in KNOWN_UI_LABEL_KEYS;
++}
++
++export function isKnownRouteGroup(value: string): value is KnownRouteGroup {
++  return value in ROUTE_GROUP_KEYS;
++}
++
++export function isKnownTableLabel(value: string): value is KnownTableLabel {
++  return value in TABLE_LABEL_KEYS;
++}
++
++export function isKnownCommonLabel(value: string): value is KnownCommonLabel {
++  return value in COMMON_LABEL_KEYS;
++}
++
++export function isKnownStateLabel(value: string): value is KnownStateLabel {
++  return value in STATE_LABEL_KEYS;
++}

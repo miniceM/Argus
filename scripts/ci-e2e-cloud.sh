@@ -7,7 +7,8 @@ cd "$ROOT"
 ARTIFACT_DIR="${ARTIFACT_DIR:-$ROOT/artifacts/e2e}"
 mkdir -p "$ARTIFACT_DIR"
 
-COMPOSE=(docker compose --env-file .env.cloud -f docker-compose.cloud.yml)
+COMPOSE_ENV_FILE="${ARGUS_CLOUD_ENV_FILE:-.env.cloud}"
+COMPOSE=(docker compose --env-file "$COMPOSE_ENV_FILE" -f docker-compose.cloud.yml)
 STATUS=0
 
 cleanup() {

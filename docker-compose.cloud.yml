@@ -45,7 +45,7 @@ services:
     depends_on:
       demo-agent-v1: {condition: service_healthy}
       demo-agent-v2: {condition: service_healthy}
-    env_file: [./.env.cloud]
+    env_file: ["${ARGUS_CLOUD_ENV_FILE:-.env.cloud}"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-sqlite:////tmp/argus.db}
       LANGFUSE_TRACING_ENVIRONMENT: poc-cloud

@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/langfuse/langfuse.git",
+  "tag": "v4.38.0",
+  "commit": "4ecaabed8d9c39d0d3ba483f02ba1cca020388a9",
+  "runtime": {
+    "node": "24",
+    "pnpm": "12.4.1"
+  },
+  "framework": {
+    "next": "16.3.3",
+    "react": "19.2.4",
+    "next-intl": "4.14.5"
+  },
+  "source": {
+    "upstreamDockerfileSha256": "49da8e6b1e8462f0146b11ef1fb6ebfdfd5f5a7a6626b137af02034b9d19bc83",
+    "patchedLockfileSha256": "b9a4a1e0d5b0df783a3cb5edcd7e0bf099b4a7b9c047279ab93b6c0a0a99c6da"
+  },
+  "images": {
+    "upstreamWeb": "docker.langfuse.com/langfuse/langfuse:4.38.0@sha256:47ef2f121e2959c8458c209d118949ade25778017e3f5b75b1e45f72276811c3",
+    "worker": "docker.langfuse.com/langfuse/langfuse-worker:4.38.0@sha256:8631cf429efc4a2981d4e6ced4c005b9f6f620a4e34625baf60152301ec6d006",
+    "releaseWebDigest": null
+  },
+  "patches": [
+    {
+      "path": "patches/0001-i18n-infrastructure.patch",
+      "sha256": "391d79fc7afcb14a5f6459e8b67e11add9c4bccf2b2fa9f97017da930ee578c0"
+    },
+    {
+      "path": "patches/0002-navigation-language-switcher.patch",
+      "sha256": "a7655bf1a384ff5c7719f08acb5acc92e18cdeb44f9fd4deee44f1f40f1483a4"
+    },
+    {
+      "path": "patches/0003-core-pages.patch",
+      "sha256": "d41444cfc392411f238092df4fa68072add647bf503d05992c18dc5dec01a204"
+    }
+  ],
+  "locales": {
+    "en": {
+      "path": "locales/en.json",
+      "sha256": "0e317b4aeb9a8c6ffaef1ed6bb238e91c99101aa1baef89f885aaeabe0a38b1b"
+    },
+    "zh-CN": {
+      "path": "locales/zh-CN.json",
+      "sha256": "bcbc1c78fb2d75358df419f29b30bbac78e3f9487375d08855abb32b540326ad"
+    }
+  }
+}

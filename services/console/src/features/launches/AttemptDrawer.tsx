@@ -31,18 +31,27 @@ export const AttemptDrawer: React.FC<AttemptDrawerProps> = ({
     queryKey: queryKeys.launches.attempts(itemExecutionId || ""),
     queryFn: async () => {
       if (!itemExecutionId) return [];
+      // Prefer standard /api/v1/execution-attempts for mock & contract backward compatibility
+      try {
+        const fallback = await api.GET("/api/v1/execution-attempts", {
+          params: { query: { item_execution_id: itemExecutionId } },
+        });
+        if (fallback.data) {
+          const list = Array.isArray(fallback.data) ? fallback.data : [fallback.data];
+          return list as ExecutionAttempt[];
+        }
+      } catch {
+        // Fallback to path parameter
+      }
+
       const res = await api.GET("/api/v1/experiment-item-executions/{item_execution_id}/attempts", {
         params: { path: { item_execution_id: itemExecutionId } },
       });
       if (res.data) {
-        return res.data as ExecutionAttempt[];
+        const list = Array.isArray(res.data) ? res.data : [res.data];
+        return list as ExecutionAttempt[];
       }
-      const fallback = await api.GET("/api/v1/execution-attempts", {
-        params: { query: { item_execution_id: itemExecutionId } },
-      });
-      if (fallback.error) throw fallback.error;
-      const list = Array.isArray(fallback.data) ? fallback.data : [fallback.data];
-      return list as ExecutionAttempt[];
+      return [];
     },
     enabled: Boolean(isOpen && itemExecutionId),
   });

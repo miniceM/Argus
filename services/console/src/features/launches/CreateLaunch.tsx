@@ -109,11 +109,11 @@ export const CreateLaunch: React.FC = () => {
 
       const finalDatasetVersion =
         datasetVersionMode === "latest"
-          ? "latest"
-          : customDatasetVersion.trim();
+          ? undefined
+          : customDatasetVersion.trim() || undefined;
 
-      if (!finalDatasetVersion) {
-        throw new Error("请输入合法的评测集版本号（如 2026-09-20T08:35:12Z 或 latest）");
+      if (datasetVersionMode === "custom" && !customDatasetVersion.trim()) {
+        throw new Error("请输入自定义评测集版本号（如 ISO-8601 UTC 时间戳）");
       }
 
       if (selectedEvaluators.length === 0) {
@@ -126,8 +126,8 @@ export const CreateLaunch: React.FC = () => {
           agent_version: selectedAgentVersion,
           dataset_name: datasetName.trim(),
           dataset_version: finalDatasetVersion,
-          evaluator_names: selectedEvaluators,
-          concurrency,
+          evaluator_ids: selectedEvaluators,
+          max_concurrency: concurrency,
         },
       });
 

@@ -361,7 +361,12 @@ class LaunchExecutionService:
                     sync_status = "FAILED"
                     sync_error = str(exc)
 
-                agg_status, agg_quality = aggregate_launch_status(item_results_map)
+                if sync_status == "FAILED" or (items and len(item_results_map) < len(items)):
+                    agg_status = "FAILED"
+                    agg_quality = "fail"
+                else:
+                    agg_status, agg_quality = aggregate_launch_status(item_results_map)
+
             else:
                 # Local execution without Langfuse experiment
                 semaphore = asyncio.Semaphore(spec.max_concurrency)

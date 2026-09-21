@@ -15,9 +15,9 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
   const [filterQuality, setFilterQuality] = useState<string>("ALL");
 
   const filteredItems = items.filter((item) => {
-    if (filterQuality === "PASS") return item.quality_conclusion === "PASS";
-    if (filterQuality === "FAIL") return item.quality_conclusion === "FAIL";
-    if (filterQuality === "EXEC_FAIL") return item.execution_status === "FAILED";
+    if (filterQuality === "PASS") return item.quality_conclusion?.toLowerCase() === "pass";
+    if (filterQuality === "FAIL") return item.quality_conclusion?.toLowerCase() === "fail";
+    if (filterQuality === "EXEC_FAIL") return item.execution_status?.toLowerCase() === "failed";
     return true;
   });
 
@@ -55,7 +55,7 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
                 : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
             }`}
           >
-            质量通过 ({items.filter((i) => i.quality_conclusion === "PASS").length})
+            质量通过 ({items.filter((i) => i.quality_conclusion?.toLowerCase() === "pass").length})
           </button>
           <button
             onClick={() => setFilterQuality("FAIL")}
@@ -65,7 +65,7 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
                 : "bg-rose-50 text-rose-700 hover:bg-rose-100"
             }`}
           >
-            未通过 ({items.filter((i) => i.quality_conclusion === "FAIL").length})
+            未通过 ({items.filter((i) => i.quality_conclusion?.toLowerCase() === "fail").length})
           </button>
         </div>
       </div>

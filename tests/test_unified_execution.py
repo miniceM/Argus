@@ -84,3 +84,32 @@ def test_unified_execution_with_langfuse(client):
         assert item["execution_status"] == "succeeded"
         assert item["attempt_count"] == 1
         assert item["final_attempt_http_status"] == 200
+
+
+def test_unified_execution_langfuse_run_experiment_failure_marks_launch_failed(client):
+    r_create = client.post(
+        "/api/v1/experiment-launches",
+        json={
+            "agent_id": "banking-agent",
+            "agent_version": "v1",
+            "dataset_name": "banking-agent-regression",
+            "name": "Langfuse Error Test",
+        },
+    )
+    assert r_create.status_code == 201
+    launch_id = r_create.json()["id"]
+
+    mock_dataset = MagicMock()
+    mock_dataset.run_experiment.side_effect = RuntimeError("Langfuse experiment failed to start")
+    mock_lf = MagicMock()
+    mock_lf.get_dataset.return_value = mock_dataset
+
+    with patch("app.execution.get_langfuse_client_safe", return_value=mock_lf):
+        r_run = client.post("/api/v1/experiment-launches/run", json={"launch_id": launch_id})
+        assert r_run.status_code == 200
+        run_data = r_run.json()
+        assert run_data["status"] == "FAILED"
+        assert run_data["quality_conclusion"] == "fail"
+        assert run_data["langfuse_sync_status"] == "FAILED"
+        assert "failed to start" in run_data["langfuse_sync_error"]
+

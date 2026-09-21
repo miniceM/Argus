@@ -114,9 +114,9 @@ export const LaunchesList: React.FC = () => {
           className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-700"
         >
           <option value="">全部质量结论 (Quality)</option>
-          <option value="PASS">PASS (通过)</option>
-          <option value="FAIL">FAIL (未通过)</option>
-          <option value="UNKNOWN">UNKNOWN (未知/未测)</option>
+          <option value="pass">PASS (通过)</option>
+          <option value="fail">FAIL (未通过)</option>
+          <option value="unknown">UNKNOWN (未知/未测)</option>
         </select>
 
         {(filterAgent || filterStatus || filterQuality) && (

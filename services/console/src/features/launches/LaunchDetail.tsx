@@ -28,12 +28,19 @@ type LaunchResponse = import("../../api/schema").components["schemas"]["Experime
 type ItemExecution = import("../../api/schema").components["schemas"]["ExperimentItemExecutionResponse"];
 
 interface ManifestData {
+  schema_version?: string;
   manifest_version?: string;
   dataset?: {
+    source?: string;
+    dataset_name?: string;
+    dataset_id?: string;
+    dataset_version?: string;
+    snapshot_digest?: string;
     name?: string;
     version?: string;
   };
   agent?: {
+    agent_id?: string;
     id?: string;
     version?: string;
     endpoint?: string;
@@ -50,13 +57,23 @@ interface ManifestData {
     request_mapping?: unknown;
   };
   evaluators?: Array<{
-    name: string;
+    id?: string;
+    name?: string;
     version?: string;
     type?: string;
+    scope?: string;
+    threshold?: number;
   }>;
+  execution_policy?: {
+    timeout_seconds?: number;
+    max_retries?: number;
+    rate_limit_per_minute?: number | null;
+    max_concurrency?: number;
+  };
   runner?: {
     runner_version?: string;
     concurrency?: number;
+    mapping_engine_version?: string;
   };
   created_at?: string;
 }
@@ -152,13 +169,13 @@ export const LaunchDetail: React.FC = () => {
 
   const manifest = (launch.manifest || {}) as ManifestData;
   const manifestAgent = manifest.agent || {};
-  const manifestPolicy = manifestAgent.execution_policy || {};
+  const manifestPolicy = manifest.execution_policy || manifestAgent.execution_policy || {};
   const manifestEvaluators = manifest.evaluators || [];
   const manifestRunner = manifest.runner || {};
 
   // Metrics calculation from items
   const totalItems = items ? items.length : 0;
-  const passedItems = items ? items.filter((i) => i.quality_conclusion === "PASS").length : 0;
+  const passedItems = items ? items.filter((i) => i.quality_conclusion?.toLowerCase() === "pass").length : 0;
 
   // Duration calculation
   let durationText = "-";
@@ -350,12 +367,12 @@ export const LaunchDetail: React.FC = () => {
             <div className="space-y-1 text-slate-600">
               <div>
                 <span className="text-slate-400">Name:</span>{" "}
-                <span className="font-semibold">{manifest.dataset?.name || launch.dataset_name}</span>
+                <span className="font-semibold">{manifest.dataset?.dataset_name || manifest.dataset?.name || launch.dataset_name}</span>
               </div>
               <div>
                 <span className="text-slate-400">Version:</span>{" "}
-                <span className="font-mono text-[11px] block truncate" title={manifest.dataset?.version || launch.dataset_version || ""}>
-                  {manifest.dataset?.version || launch.dataset_version}
+                <span className="font-mono text-[11px] block truncate" title={manifest.dataset?.dataset_version || manifest.dataset?.version || launch.dataset_version || ""}>
+                  {manifest.dataset?.dataset_version || manifest.dataset?.version || launch.dataset_version || "-"}
                 </span>
               </div>
             </div>
@@ -368,14 +385,17 @@ export const LaunchDetail: React.FC = () => {
               <span>3. 评测门禁指标 ({manifestEvaluators.length})</span>
             </div>
             <div className="flex flex-wrap gap-1">
-              {manifestEvaluators.map((ev) => (
-                <span
-                  key={ev.name}
-                  className="px-2 py-0.5 rounded text-[11px] font-mono bg-white border border-slate-200 text-slate-700"
-                >
-                  {ev.name}
-                </span>
-              ))}
+              {manifestEvaluators.map((ev) => {
+                const evalId = ev.id || ev.name;
+                return (
+                  <span
+                    key={evalId}
+                    className="px-2 py-0.5 rounded text-[11px] font-mono bg-white border border-slate-200 text-slate-700"
+                  >
+                    {evalId}
+                  </span>
+                );
+              })}
             </div>
           </div>
 
@@ -392,7 +412,7 @@ export const LaunchDetail: React.FC = () => {
               </div>
               <div>
                 <span className="text-slate-400">Concurrency:</span>{" "}
-                <span className="font-semibold">{manifestRunner.concurrency ?? 1}</span>
+                <span className="font-semibold">{manifestPolicy.max_concurrency ?? manifestRunner.concurrency ?? 1}</span>
               </div>
               <div>
                 <span className="text-slate-400">Timeout:</span>{" "}

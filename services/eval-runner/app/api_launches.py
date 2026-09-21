@@ -15,8 +15,7 @@ from .db_models import (
     ExperimentLaunchRecord,
 )
 from .evaluators import default_evaluator_registry, evaluate_item_quality
-from .executor import RemoteAgentExecutor, aggregate_launch_status
-from .manifest import acquire_launch_execution
+from .executor import RemoteAgentExecutor
 from .models import (
     ExecutionAttemptResponse,
     ExperimentItemExecutionResponse,

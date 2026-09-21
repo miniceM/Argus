@@ -229,7 +229,7 @@ class ExperimentLaunchResponse(BaseModel):
     completed_at: datetime | None = None
 
     @model_validator(mode="after")
-    def populate_links(self) -> Self:
+    def populate_links(self) -> ExperimentLaunchResponse:
         if self.links is None:
             self.links = {
                 "langfuse_experiment": self.langfuse_experiment_url,

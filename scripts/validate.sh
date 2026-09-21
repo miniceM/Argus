@@ -22,8 +22,9 @@ assert len({x['id'] for x in seed['items']}) == 6
 print('configuration parse: OK')
 PY
 
-echo "[2/7] Compile Python sources"
+echo "[2/7] Compile Python sources and check code quality"
 "$PYTHON_BIN" -m compileall -q services tests
+"$PYTHON_BIN" -m ruff check services tests
 
 echo "[3/7] Verify zero evaluation-SDK dependency in Demo Agent"
 if grep -RinE '^[[:space:]]*(from|import)[[:space:]]+langfuse|Evaluation\(|run_experiment' services/demo-agent --include='*.py' || grep -in 'langfuse' services/demo-agent/requirements.txt; then

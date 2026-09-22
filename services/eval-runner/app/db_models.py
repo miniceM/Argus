@@ -104,8 +104,11 @@ class ExperimentLaunchRecord(Base):
     langfuse_sync_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     agent_version_rel: Mapped[AgentVersionRecord] = relationship("AgentVersionRecord", back_populates="launches")
     item_executions: Mapped[list[ExperimentItemExecutionRecord]] = relationship(
@@ -134,7 +137,16 @@ class ExperimentItemExecutionRecord(Base):
         ForeignKey("execution_attempts.id", ondelete="SET NULL", use_alter=True, name="fk_item_executions_final_attempt"),
         nullable=True,
     )
+    active_attempt_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     scores: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    available_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lease_owner: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    lease_token: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dispatch_generation: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -164,9 +176,48 @@ class ExecutionAttemptRecord(Base):
     request_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     response_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     trace_context_received: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    worker_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    request_phase: Mapped[str] = mapped_column(String(64), default="PREPARED", nullable=False)
+    dispatch_generation: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    lease_token: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     item_execution: Mapped[ExperimentItemExecutionRecord] = relationship(
-        "ExperimentItemExecutionRecord", back_populates="attempts", foreign_keys=[item_execution_id]
+        "ExperimentItemExecutionRecord",
+        back_populates="attempts",
+        foreign_keys=[item_execution_id],
     )
+
+
+class LangfuseSyncTaskRecord(Base):
+    __tablename__ = "langfuse_sync_tasks"
+    __table_args__ = (
+        UniqueConstraint("item_id", "dispatch_generation", "task_type", name="uq_sync_item_gen_type"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    launch_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("experiment_launches.id", ondelete="CASCADE"), nullable=False
+    )
+    item_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("experiment_item_executions.id", ondelete="CASCADE"), nullable=False
+    )
+    dataset_item_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    dataset_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    dispatch_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    task_type: Mapped[str] = mapped_column(String(32), default="FULL_EVAL_SYNC", nullable=False)
+    trace_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    observation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    dataset_run_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    scores_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="PENDING", nullable=False)
+    owner_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    claim_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    next_retry_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+

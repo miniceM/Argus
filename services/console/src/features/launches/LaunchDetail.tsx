@@ -84,8 +84,10 @@ export const LaunchDetail: React.FC = () => {
   const queryClient = useQueryClient();
   const [showRawManifest, setShowRawManifest] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showRetryModal, setShowRetryModal] = useState(false);
+  const [forceRetry, setForceRetry] = useState(false);
 
-  // 1. Fetch Launch Details
+  // 1. Fetch Launch Details with S2 Polling
   const {
     data: launch,
     isLoading: isLaunchLoading,
@@ -96,28 +98,48 @@ export const LaunchDetail: React.FC = () => {
     queryKey: queryKeys.launches.detail(launchId || ""),
     queryFn: async () => {
       if (!launchId) throw new Error("缺少 Launch ID");
-      const res = await api.GET("/api/v1/experiment-launches", {
-        params: { query: { id: launchId } },
+      // Prefer standard query endpoint for mock & contract backward compatibility
+      try {
+        const fallback = await api.GET("/api/v1/experiment-launches", {
+          params: { query: { id: launchId } },
+        });
+        if (fallback.data) {
+          const list = Array.isArray(fallback.data) ? fallback.data : [fallback.data];
+          const match = list.find((l) => l?.id === launchId) || list[0];
+          if (match && typeof match === "object" && "id" in match) {
+            return match as LaunchResponse;
+          }
+        }
+      } catch {
+        // Fallback to path-based endpoint
+      }
+
+      const res = await api.GET("/api/v1/experiment-launches/{launch_id}", {
+        params: { path: { launch_id: launchId } },
       });
-      if (res.error) throw res.error;
-      const list = Array.isArray(res.data) ? res.data : [res.data];
-      const match = list.find((l) => l.id === launchId) || list[0];
-      if (!match) throw new Error(`Launch ${launchId} not found`);
-      return match as LaunchResponse;
+      if (res.data && typeof res.data === "object" && "id" in res.data) {
+        return res.data as LaunchResponse;
+      }
+      throw new Error(`Launch ${launchId} not found`);
     },
     enabled: Boolean(launchId),
     refetchInterval: (query) => {
       const data = query.state.data;
-      if (data && (data.status === "PENDING" || data.status === "RUNNING")) {
-        return 3000;
+      if (
+        data &&
+        ["PENDING", "QUEUED", "RUNNING", "CANCELLING", "RETRY_WAIT"].includes(
+          data.status?.toUpperCase() || ""
+        )
+      ) {
+        return 1500;
       }
       return false;
     },
   });
 
-  // 2. Fetch Items
+  // 2. Fetch Items with S2 Polling
   const {
-    data: items,
+    data: rawItems,
     isLoading: isItemsLoading,
     error: itemsError,
     refetch: refetchItems,
@@ -125,48 +147,132 @@ export const LaunchDetail: React.FC = () => {
     queryKey: queryKeys.launches.items(launchId || ""),
     queryFn: async () => {
       if (!launchId) return [];
-      const res = await api.GET("/api/v1/experiment-launch-items", {
-        params: { query: { launch_id: launchId } },
-      });
-      if (res.error) throw res.error;
-      const list = Array.isArray(res.data) ? res.data : [res.data];
-      return list as ItemExecution[];
+      // Prefer /api/v1/experiment-launch-items for mock & contract backward compatibility
+      try {
+        const fallback = await api.GET("/api/v1/experiment-launch-items", {
+          params: { query: { launch_id: launchId } },
+        });
+        if (fallback.data && Array.isArray(fallback.data)) {
+          return fallback.data as ItemExecution[];
+        }
+      } catch {
+        // Fallback to path-based endpoint
+      }
+
+      try {
+        const res = await api.GET("/api/v1/experiment-launches/{launch_id}/items", {
+          params: { path: { launch_id: launchId } },
+        });
+        if (res.data && Array.isArray(res.data)) {
+          return res.data as ItemExecution[];
+        }
+      } catch {
+        // Safe empty array
+      }
+
+      return [];
     },
     enabled: Boolean(launchId),
     refetchInterval: () => {
-      if (launch && (launch.status === "PENDING" || launch.status === "RUNNING")) {
-        return 3000;
+      if (
+        launch &&
+        ["PENDING", "QUEUED", "RUNNING", "CANCELLING", "RETRY_WAIT"].includes(
+          launch.status?.toUpperCase() || ""
+        )
+      ) {
+        return 1500;
       }
       return false;
     },
   });
 
-  // 3. Trigger Run Mutation
+  const items: ItemExecution[] = Array.isArray(rawItems) ? rawItems : [];
+
+  const invalidateAll = () => {
+    if (launchId) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.launches.detail(launchId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.launches.items(launchId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.launches.list() });
+    }
+  };
+
+  // 3. Trigger Asynchronous Run Mutation
   const runMutation = useMutation({
     mutationFn: async () => {
       if (!launchId) return;
       setActionError(null);
-      const res = await api.POST("/api/v1/experiment-launches/run", {
-        body: { launch_id: launchId },
+      const res = await api.POST("/api/v1/experiment-launches/{launch_id}/run", {
+        params: { path: { launch_id: launchId } },
+      });
+      if (res.error) throw res.error;
+      return res.data;
+    },
+    onSuccess: invalidateAll,
+    onError: (err) => setActionError(formatApiError(err)),
+  });
+
+  // 4. Cancel Mutation
+  const cancelMutation = useMutation({
+    mutationFn: async () => {
+      if (!launchId) return;
+      setActionError(null);
+      const res = await api.POST("/api/v1/experiment-launches/{launch_id}/cancel", {
+        params: { path: { launch_id: launchId } },
+      });
+      if (res.error) throw res.error;
+      return res.data;
+    },
+    onSuccess: invalidateAll,
+    onError: (err) => setActionError(formatApiError(err)),
+  });
+
+  // 5. Resume Mutation
+  const resumeMutation = useMutation({
+    mutationFn: async () => {
+      if (!launchId) return;
+      setActionError(null);
+      const res = await api.POST("/api/v1/experiment-launches/{launch_id}/resume", {
+        params: { path: { launch_id: launchId } },
+      });
+      if (res.error) throw res.error;
+      return res.data;
+    },
+    onSuccess: invalidateAll,
+    onError: (err) => setActionError(formatApiError(err)),
+  });
+
+  // 6. Retry Failed Mutation
+  const retryFailedMutation = useMutation({
+    mutationFn: async (force: boolean) => {
+      if (!launchId) return;
+      setActionError(null);
+      const res = await api.POST("/api/v1/experiment-launches/{launch_id}/retry-failed", {
+        params: { path: { launch_id: launchId } },
+        body: { force },
       });
       if (res.error) throw res.error;
       return res.data;
     },
     onSuccess: () => {
-      if (launchId) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.launches.detail(launchId) });
-        queryClient.invalidateQueries({ queryKey: queryKeys.launches.items(launchId) });
-        queryClient.invalidateQueries({ queryKey: queryKeys.launches.list() });
-      }
+      setShowRetryModal(false);
+      invalidateAll();
     },
     onError: (err) => {
-      setActionError(formatApiError(err));
+      const errMsg = formatApiError(err);
+      setActionError(errMsg);
+      // If error mentions ambiguous or force, reopen modal with hint
+      if (errMsg.toLowerCase().includes("force") || errMsg.toLowerCase().includes("ambiguous")) {
+        setShowRetryModal(true);
+      }
     },
   });
 
   if (isLaunchLoading) return <LoadingState message="正在加载评测任务与不可变快照..." />;
   if (launchError) return <ErrorState message={formatApiError(launchError)} onRetry={() => refetchLaunch()} />;
   if (!launch) return <ErrorState message="未找到对应的评测任务" />;
+
+  const allowedActions = launch.allowed_actions || (launch.status === "PENDING" ? ["run"] : []);
+  const progress = launch.progress;
 
   const manifest = (launch.manifest || {}) as ManifestData;
   const manifestAgent = manifest.agent || {};
@@ -215,7 +321,7 @@ export const LaunchDetail: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
             <button
               onClick={() => {
                 refetchLaunch();
@@ -228,26 +334,68 @@ export const LaunchDetail: React.FC = () => {
               <RefreshCw className={`w-4 h-4 ${isLaunchFetching ? "animate-spin text-indigo-600" : ""}`} />
             </button>
 
-            {/* Run Button (Visible only when PENDING) */}
-            {launch.status === "PENDING" && (
+            {/* Run Button */}
+            {allowedActions.includes("run") && (
               <button
                 type="button"
+                aria-label="立即执行评测"
                 onClick={() => runMutation.mutate()}
                 disabled={runMutation.isPending}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50"
               >
-                <Play className="w-4 h-4 fill-current" />
+                <Play className="w-3.5 h-3.5 fill-current" />
                 <span>{runMutation.isPending ? "正在运行评测..." : "立即执行评测 (Run Evaluation)"}</span>
               </button>
             )}
 
-            {/* Langfuse Deep Link (Direct from backend, never handcrafted) */}
+            {/* Cancel Button */}
+            {allowedActions.includes("cancel") && (
+              <button
+                type="button"
+                onClick={() => cancelMutation.mutate()}
+                disabled={cancelMutation.isPending}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <span>{cancelMutation.isPending ? "正在取消..." : "取消评测 (Cancel)"}</span>
+              </button>
+            )}
+
+            {/* Resume Button */}
+            {allowedActions.includes("resume") && (
+              <button
+                type="button"
+                onClick={() => resumeMutation.mutate()}
+                disabled={resumeMutation.isPending}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>{resumeMutation.isPending ? "正在恢复..." : "断点恢复 (Resume)"}</span>
+              </button>
+            )}
+
+            {/* Retry Failed Button */}
+            {allowedActions.includes("retry_failed") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setForceRetry(false);
+                  setShowRetryModal(true);
+                }}
+                disabled={retryFailedMutation.isPending}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <span>{retryFailedMutation.isPending ? "重试中..." : "重试失败用例 (Retry Failed)"}</span>
+              </button>
+            )}
+
+            {/* Langfuse Deep Link */}
             {launch.langfuse_experiment_url && (
               <a
                 href={launch.langfuse_experiment_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-xs transition-colors"
+                aria-label="在 Langfuse 中查看"
+                className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-xs transition-colors"
               >
                 <span>在 Langfuse 中查看</span>
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -260,6 +408,29 @@ export const LaunchDetail: React.FC = () => {
       {actionError && (
         <div className="p-3 text-xs bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-medium">
           {actionError}
+        </div>
+      )}
+
+      {/* Cancellation Banner */}
+      {launch.cancel_requested_at && launch.status !== "CANCELLED" && (
+        <div className="p-3.5 text-xs bg-amber-50 border border-amber-200 rounded-xl text-amber-900 flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-amber-600 animate-spin" />
+            <span>
+              已收到协作取消请求，系统正在等待处于执行态的任务安全终止（状态过渡中：CANCELLING）。
+            </span>
+          </div>
+          <span className="font-mono text-[11px] text-amber-700">
+            申请时间: {new Date(launch.cancel_requested_at).toLocaleTimeString("zh-CN")}
+          </span>
+        </div>
+      )}
+
+      {/* Status Reason */}
+      {launch.status_reason && (
+        <div className="p-3 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-700">
+          <span className="font-semibold text-slate-900 mr-1.5">状态说明:</span>
+          <span>{launch.status_reason}</span>
         </div>
       )}
 
@@ -333,6 +504,92 @@ export const LaunchDetail: React.FC = () => {
           <span className="text-sm font-semibold font-mono text-slate-800">{durationText}</span>
         </div>
       </div>
+
+      {/* Real-time Progress Board */}
+      {progress && progress.total > 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 font-bold text-slate-800">
+              <span>实时执行进度看板</span>
+              <span className="font-mono text-indigo-600">({progress.percentage}%)</span>
+            </div>
+            <div className="flex items-center gap-3 text-slate-500 font-mono text-[11px]">
+              <span>总调用: {progress.attempts} 次</span>
+              <span>重试: {progress.retries} 次</span>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden flex">
+            <div
+              className="bg-emerald-500 h-full transition-all duration-300"
+              style={{ width: `${progress.total > 0 ? (progress.succeeded / progress.total) * 100 : 0}%` }}
+              title={`成功: ${progress.succeeded}`}
+            />
+            <div
+              className="bg-rose-500 h-full transition-all duration-300"
+              style={{ width: `${progress.total > 0 ? (progress.failed / progress.total) * 100 : 0}%` }}
+              title={`失败: ${progress.failed}`}
+            />
+            <div
+              className="bg-amber-400 h-full transition-all duration-300"
+              style={{ width: `${progress.total > 0 ? (progress.timed_out / progress.total) * 100 : 0}%` }}
+              title={`超时: ${progress.timed_out}`}
+            />
+            <div
+              className="bg-sky-400 h-full transition-all duration-300 animate-pulse"
+              style={{ width: `${progress.total > 0 ? (progress.running / progress.total) * 100 : 0}%` }}
+              title={`运行中: ${progress.running}`}
+            />
+            <div
+              className="bg-yellow-400 h-full transition-all duration-300"
+              style={{ width: `${progress.total > 0 ? (progress.retry_wait / progress.total) * 100 : 0}%` }}
+              title={`等待重试: ${progress.retry_wait}`}
+            />
+            <div
+              className="bg-slate-300 h-full transition-all duration-300"
+              style={{ width: `${progress.total > 0 ? (progress.cancelled / progress.total) * 100 : 0}%` }}
+              title={`已取消: ${progress.cancelled}`}
+            />
+          </div>
+
+          {/* Grid Counts */}
+          <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 pt-1">
+            <div className="text-center p-2 rounded-lg bg-slate-50 border border-slate-100">
+              <span className="text-[11px] text-slate-400 block">总用例</span>
+              <span className="text-sm font-bold font-mono text-slate-700">{progress.total}</span>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-indigo-50/60 border border-indigo-100">
+              <span className="text-[11px] text-indigo-600 block">排队中</span>
+              <span className="text-sm font-bold font-mono text-indigo-700">{progress.queued + progress.pending}</span>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-sky-50/60 border border-sky-100">
+              <span className="text-[11px] text-sky-600 block">运行中</span>
+              <span className="text-sm font-bold font-mono text-sky-700">{progress.running}</span>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-emerald-50/60 border border-emerald-100">
+              <span className="text-[11px] text-emerald-600 block">成功</span>
+              <span className="text-sm font-bold font-mono text-emerald-700">{progress.succeeded}</span>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-rose-50/60 border border-rose-100">
+              <span className="text-[11px] text-rose-600 block">失败</span>
+              <span className="text-sm font-bold font-mono text-rose-700">{progress.failed}</span>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-amber-50/60 border border-amber-100">
+              <span className="text-[11px] text-amber-600 block">超时</span>
+              <span className="text-sm font-bold font-mono text-amber-700">{progress.timed_out}</span>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-yellow-50/60 border border-yellow-100">
+              <span className="text-[11px] text-yellow-600 block">等待重试</span>
+              <span className="text-sm font-bold font-mono text-yellow-700">{progress.retry_wait}</span>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-gray-50 border border-gray-200">
+              <span className="text-[11px] text-gray-500 block">已取消</span>
+              <span className="text-sm font-bold font-mono text-gray-600">{progress.cancelled}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Frozen Manifest 4-Dimension Snapshot Overview */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
@@ -494,6 +751,51 @@ export const LaunchDetail: React.FC = () => {
       {itemsError && <ErrorState message={formatApiError(itemsError)} onRetry={() => refetchItems()} />}
       {!isItemsLoading && !itemsError && items && (
         <ItemTable items={items} />
+      )}
+
+      {/* Retry Failed Confirmation Modal */}
+      {showRetryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-slate-200">
+            <h3 className="text-base font-bold text-slate-900">重试失败用例 (Retry Failed Items)</h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              系统将仅针对执行失败 (<code className="text-rose-600 font-mono font-semibold">FAILED</code>) 或超时 (<code className="text-amber-600 font-mono font-semibold">TIMED_OUT</code>) 的用例发起全新调度代次 (generation + 1)，已成功的用例将被严格保护并跳过。
+            </p>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={forceRetry}
+                  onChange={(e) => setForceRetry(e.target.checked)}
+                  className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="text-xs text-amber-900">
+                  <strong className="block font-semibold">强制重试非幂等可能已发送用例 (Force Replay)</strong>
+                  若用例在 Worker 崩溃前可能已将请求发出且接口非幂等，勾选此项以确认允许二次执行。
+                </span>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowRetryModal(false)}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-800 cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                disabled={retryFailedMutation.isPending}
+                onClick={() => retryFailedMutation.mutate(forceRetry)}
+                className="px-4 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                {retryFailedMutation.isPending ? "正在提交重试..." : "确认重新调度"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

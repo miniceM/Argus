@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
 
@@ -20,15 +22,16 @@ from .db import DatabaseManager, MigrationRunner
 from .db_models import ExperimentLaunchRecord
 from .evaluators import default_evaluator_registry
 from .executor import RemoteAgentExecutor
+from .langfuse_sync import LangfuseOutboxSyncer
+from .limiter import DistributedAgentLimiter, MemoryAgentLimiter, RedisDistributedLimiter
 from .manifest import LaunchService, acquire_launch_execution
+from .metrics import metrics_router
 from .models import BootstrapResult, ExperimentRequest, ExperimentResult
+from .orchestrator import LaunchOrchestrator
+from .queue import MemoryQueueAdapter, QueueAdapter, RedisStreamQueueAdapter
+from .reconciler import ExecutionReconciler
 from .registry import AgentRegistry, map_request
-
-app = FastAPI(
-    title="Enterprise Remote Agent Eval Runner",
-    version=settings.runner_version,
-    description="Enterprise Agent Evaluation Control Plane with Persistent Registry, Version Snapshots, and Zero-SDK Agents.",
-)
+from .worker import ExecutionWorker
 
 # 1. Initialize Database Manager & Migrations
 db_manager = DatabaseManager.from_env()
@@ -45,21 +48,159 @@ if settings.argus_auto_import_yaml:
     if yaml_path.exists():
         registry.import_yaml(yaml_path)
 
+def init_queue_and_limiter(
+    redis_url: str | None,
+    db_mode: str,
+    db_url: str,
+) -> tuple[QueueAdapter, DistributedAgentLimiter]:
+    """Initialize queue adapter and limiter.
 
-# 3. Initialize Launch Service
+    - If redis_url is provided, uses Redis Streams queue adapter and distributed limiter.
+    - If in test mode or running on SQLite, falls back to in-memory queue and limiter.
+    - Otherwise (production PostgreSQL without Redis), fails closed to prevent uncoordinated multi-instance execution.
+    """
+    if redis_url:
+        import redis
+        redis_client = redis.Redis.from_url(redis_url)
+        return RedisStreamQueueAdapter(redis_client), RedisDistributedLimiter(redis_client)
+
+    if db_mode == "test" or db_url.startswith("sqlite"):
+        return MemoryQueueAdapter(), MemoryAgentLimiter()
+
+    raise RuntimeError("ARGUS_REDIS_URL must be configured in production mode")
+
+
+# 3. Initialize Queue & Limiter
+queue_adapter, limiter = init_queue_and_limiter(
+    redis_url=settings.argus_redis_url,
+    db_mode=settings.argus_db_mode,
+    db_url=db_manager.db_url,
+)
+
+def is_langfuse_configured() -> bool:
+    import os
+
+    return bool(os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"))
+
+
+def _client():
+    """Production provider: returns Langfuse client if configured with public/secret keys, else None."""
+    if not is_langfuse_configured():
+        return None
+    return get_client()
+
+
+# 4. Initialize Orchestrator, Worker, Reconciler, OutboxSyncer
+orchestrator = LaunchOrchestrator(db_manager, queue_adapter, limiter)
+worker = ExecutionWorker(db_manager, queue_adapter, limiter)
+reconciler = ExecutionReconciler(db_manager, queue_adapter, limiter)
+outbox_syncer = LangfuseOutboxSyncer(db_manager, langfuse_client=_client)
+
+# 5. Initialize Launch Service
 launch_service = LaunchService(db_manager, registry, runner_version=settings.runner_version)
 
-# 4. Mount Enterprise REST Routers (Zero URL Path Variables)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    worker_task = None
+    reconciler_task = None
+    syncer_task = None
+    stop_event = asyncio.Event()
+
+    async def _worker_loop():
+        semaphore = asyncio.Semaphore(settings.worker_concurrency)
+        running_tasks = set()
+
+        async def _process_item(m_id: str, i_id: str, g: int):
+            async with semaphore:
+                try:
+                    await worker.execute_item_message(m_id, i_id, g)
+                except Exception:
+                    pass
+
+        while not stop_event.is_set():
+            try:
+                available_slots = settings.worker_concurrency - len(running_tasks)
+                if available_slots <= 0:
+                    await asyncio.sleep(0.05)
+                    continue
+
+                fetch_count = min(available_slots, 10)
+                msgs = await asyncio.to_thread(worker.poll_queue, count=fetch_count, block_ms=1000)
+                if not msgs:
+                    await asyncio.sleep(0.05)
+                    continue
+
+                for msg_id, item_id, gen in msgs:
+                    task = asyncio.create_task(_process_item(msg_id, item_id, gen))
+                    running_tasks.add(task)
+                    task.add_done_callback(running_tasks.discard)
+
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                await asyncio.sleep(1)
+
+        if running_tasks:
+            await asyncio.gather(*running_tasks, return_exceptions=True)
+
+    async def _reconciler_loop():
+        while not stop_event.is_set():
+            try:
+                # Offload DB-intensive reconciliation cycle including backlog recovery off the event loop
+                await asyncio.to_thread(reconciler.run_reconcile_cycle)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                pass
+            await asyncio.sleep(1)
+
+    async def _syncer_loop():
+        while not stop_event.is_set():
+            try:
+                processed = await asyncio.to_thread(outbox_syncer.process_batch, batch_size=1)
+                if processed == 0:
+                    await asyncio.sleep(2.0)
+                else:
+                    await asyncio.sleep(0.1)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                await asyncio.sleep(2.0)
+
+    if settings.argus_worker_enabled and settings.argus_db_mode != "test":
+        worker_task = asyncio.create_task(_worker_loop())
+    if settings.argus_reconciler_enabled and settings.argus_db_mode != "test":
+        reconciler_task = asyncio.create_task(_reconciler_loop())
+    if settings.argus_db_mode != "test":
+        syncer_task = asyncio.create_task(_syncer_loop())
+
+    yield
+
+    stop_event.set()
+    if worker_task:
+        worker_task.cancel()
+    if reconciler_task:
+        reconciler_task.cancel()
+    if syncer_task:
+        syncer_task.cancel()
+
+
+app = FastAPI(
+    title="Enterprise Remote Agent Eval Runner",
+    version=settings.runner_version,
+    description="Enterprise Agent Evaluation Control Plane with Persistent Registry, Version Snapshots, and Zero-SDK Agents.",
+    lifespan=lifespan,
+)
+
+# Mount Routers
 app.include_router(registry_router)
 app.include_router(launches_router)
 app.include_router(evaluators_router)
 app.include_router(system_router)
+app.include_router(metrics_router)
 
 
-def _client():
-    # Current Langfuse Python SDK v4 reads LANGFUSE_PUBLIC_KEY,
-    # LANGFUSE_SECRET_KEY and LANGFUSE_BASE_URL from the environment.
-    return get_client()
 
 
 def _wait_for_langfuse() -> None:

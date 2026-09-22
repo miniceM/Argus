@@ -119,8 +119,8 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
       });
     });
 
-    // Launch run endpoint
-    await page.route("**/api/v1/experiment-launches/run**", async (route) => {
+    // Launch run endpoint (Resource-based POST /api/v1/experiment-launches/{id}/run)
+    await page.route(/.*\/api\/v1\/experiment-launches\/.*run.*/, async (route) => {
       // Simulate execution completion
       currentLaunchStatus = "SUCCEEDED";
       currentQualityConclusion = "FAIL"; // Intentionally FAIL to test dual-status decoupling!

@@ -20,17 +20,33 @@ from .models import (
     ExecutionAttemptResponse,
     ExperimentItemExecutionResponse,
     ExperimentLaunchCreateRequest,
+    ExperimentLaunchProgressResponse,
     ExperimentLaunchResponse,
+    ExperimentLaunchRunActionResponse,
     ExperimentLaunchRunRequest,
+    RetryFailedRequest,
 )
+from .orchestrator import LaunchOrchestrator
 from .registry import AgentRegistry, AgentVersionSpec, map_request
+from .state_machine import DomainConflictError
 
 router = APIRouter(prefix="/api/v1", tags=["Experiment Launches"])
 
 
 def get_services():
-    from .main import db_manager, launch_service, registry
-    return db_manager, registry, launch_service
+    from .main import db_manager, launch_service, orchestrator, registry
+    return db_manager, registry, launch_service, orchestrator
+
+
+def _enrich_launch(launch: ExperimentLaunchRecord, orchestrator: LaunchOrchestrator) -> ExperimentLaunchResponse:
+    res = ExperimentLaunchResponse.model_validate(launch)
+    try:
+        progress_data = orchestrator.get_launch_progress(launch.id)
+        res.progress = ExperimentLaunchProgressResponse.model_validate(progress_data)
+        res.allowed_actions = progress_data.get("allowed_actions", [])
+    except Exception:
+        pass
+    return res
 
 
 @router.post(
@@ -44,7 +60,7 @@ def create_experiment_launch(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     services=Depends(get_services),
 ) -> ExperimentLaunchResponse:
-    _, _, launch_svc = services
+    _, _, launch_svc, orchestrator = services
     effective_key = idempotency_key or payload.idempotency_key
     try:
         launch = launch_svc.create_launch(
@@ -57,7 +73,7 @@ def create_experiment_launch(
             max_concurrency=payload.max_concurrency,
             evaluator_ids=payload.evaluator_ids,
         )
-        return ExperimentLaunchResponse.model_validate(launch)
+        return _enrich_launch(launch, orchestrator)
     except ValueError as exc:
         msg = str(exc)
         if "conflict" in msg.lower():
@@ -66,6 +82,119 @@ def create_experiment_launch(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg) from exc
         else:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from exc
+
+
+@router.post(
+    "/experiment-launches/{launch_id}/run",
+    response_model=ExperimentLaunchRunActionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger asynchronous execution of a PENDING Experiment Launch",
+)
+def run_launch_async(
+    launch_id: str,
+    services=Depends(get_services),
+) -> ExperimentLaunchRunActionResponse:
+    _, _, _, orchestrator = services
+    try:
+        launch = orchestrator.start_launch(launch_id)
+        return ExperimentLaunchRunActionResponse(
+            launch_id=launch.id,
+            status=launch.status,
+            message="Launch queued for asynchronous execution",
+        )
+    except DomainConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        msg = str(exc)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg) from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg) from exc
+
+
+@router.post(
+    "/experiment-launches/{launch_id}/cancel",
+    response_model=ExperimentLaunchResponse,
+    summary="Collaboratively cancel a running or queued Experiment Launch",
+)
+def cancel_launch(
+    launch_id: str,
+    services=Depends(get_services),
+) -> ExperimentLaunchResponse:
+    _, _, _, orchestrator = services
+    try:
+        launch = orchestrator.cancel_launch(launch_id)
+        return _enrich_launch(launch, orchestrator)
+    except DomainConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        msg = str(exc)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from exc
+
+
+@router.post(
+    "/experiment-launches/{launch_id}/resume",
+    response_model=ExperimentLaunchResponse,
+    summary="Resume cancelled or failed items in an Experiment Launch",
+)
+def resume_launch(
+    launch_id: str,
+    services=Depends(get_services),
+) -> ExperimentLaunchResponse:
+    _, _, _, orchestrator = services
+    try:
+        launch = orchestrator.resume_launch(launch_id)
+        return _enrich_launch(launch, orchestrator)
+    except DomainConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        msg = str(exc)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from exc
+
+
+@router.post(
+    "/experiment-launches/{launch_id}/retry-failed",
+    response_model=ExperimentLaunchResponse,
+    summary="Retry failed and timed out items in an Experiment Launch",
+)
+def retry_failed_launch(
+    launch_id: str,
+    payload: RetryFailedRequest | None = None,
+    services=Depends(get_services),
+) -> ExperimentLaunchResponse:
+    actual_payload = payload or RetryFailedRequest(force=False)
+    _, _, _, orchestrator = services
+    try:
+        launch = orchestrator.retry_failed_items(launch_id, force=actual_payload.force)
+        return _enrich_launch(launch, orchestrator)
+    except DomainConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        msg = str(exc)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg) from exc
+        if "ambiguous_outcome" in msg.lower() or "unsafe" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from exc
+
+
+@router.get(
+    "/experiment-launches/{launch_id}",
+    response_model=ExperimentLaunchResponse,
+    summary="Query Experiment Launch detail by Launch ID",
+)
+def get_launch_detail(
+    launch_id: str,
+    services=Depends(get_services),
+) -> ExperimentLaunchResponse:
+    _, _, launch_svc, orchestrator = services
+    launch = launch_svc.get_launch(launch_id)
+    if not launch:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Launch '{launch_id}' not found")
+    return _enrich_launch(launch, orchestrator)
 
 
 @router.get(
@@ -82,12 +211,12 @@ def get_or_list_launches(
     offset: int = Query(default=0, ge=0, description="Optional offset"),
     services=Depends(get_services),
 ) -> Any:
-    _, _, launch_svc = services
+    _, _, launch_svc, orchestrator = services
     if id:
         launch = launch_svc.get_launch(id)
         if not launch:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Launch '{id}' not found")
-        return ExperimentLaunchResponse.model_validate(launch)
+        return _enrich_launch(launch, orchestrator)
     else:
         launches = launch_svc.list_launches(
             agent_id=agent_id,
@@ -96,25 +225,27 @@ def get_or_list_launches(
             limit=limit,
             offset=offset,
         )
-        return [ExperimentLaunchResponse.model_validate(item) for item in launches]
+        return [_enrich_launch(item, orchestrator) for item in launches]
 
 
-@router.get(
-    "/experiment-launch-items",
-    response_model=list[ExperimentItemExecutionResponse],
-    summary="List item executions for a Launch (?launch_id=...)",
-)
-def list_launch_items(
-    launch_id: str = Query(..., description="Launch ID (required)"),
-    services=Depends(get_services),
+def _query_launch_items(
+    db_mgr: DatabaseManager,
+    launch_id: str,
+    status: str | None = None,
+    limit: int | None = None,
+    offset: int = 0,
 ) -> list[ExperimentItemExecutionResponse]:
-    db_mgr, _, _ = services
     with db_mgr.get_session() as session:
-        stmt = (
-            select(ExperimentItemExecutionRecord)
-            .where(ExperimentItemExecutionRecord.launch_id == launch_id)
-            .order_by(ExperimentItemExecutionRecord.started_at)
+        stmt = select(ExperimentItemExecutionRecord).where(
+            ExperimentItemExecutionRecord.launch_id == launch_id
         )
+        if status:
+            stmt = stmt.where(func.lower(ExperimentItemExecutionRecord.execution_status) == status.lower())
+
+        stmt = stmt.order_by(ExperimentItemExecutionRecord.created_at, ExperimentItemExecutionRecord.id)
+        if limit is not None:
+            stmt = stmt.limit(limit).offset(offset)
+
         items = session.scalars(stmt).all()
         if not items:
             return []
@@ -152,6 +283,65 @@ def list_launch_items(
         return responses
 
 
+def _query_execution_attempts(
+    db_mgr: DatabaseManager,
+    item_execution_id: str,
+) -> list[ExecutionAttemptResponse]:
+    with db_mgr.get_session() as session:
+        stmt = (
+            select(ExecutionAttemptRecord)
+            .where(ExecutionAttemptRecord.item_execution_id == item_execution_id)
+            .order_by(ExecutionAttemptRecord.attempt_no)
+        )
+        attempts = session.scalars(stmt).all()
+        return [ExecutionAttemptResponse.model_validate(a) for a in attempts]
+
+
+@router.get(
+    "/experiment-launches/{launch_id}/items",
+    response_model=list[ExperimentItemExecutionResponse],
+    summary="List item executions for a Launch with optional status filter and pagination",
+)
+def list_launch_items_by_launch_id(
+    launch_id: str,
+    status: str | None = Query(default=None, description="Optional execution status filter (e.g. cancelled, failed)"),
+    limit: int | None = Query(default=None, ge=1, le=500, description="Optional limit"),
+    offset: int = Query(default=0, ge=0, description="Optional offset"),
+    services=Depends(get_services),
+) -> list[ExperimentItemExecutionResponse]:
+    db_mgr, _, _, _ = services
+    return _query_launch_items(db_mgr, launch_id, status=status, limit=limit, offset=offset)
+
+
+@router.get(
+    "/experiment-launch-items",
+    response_model=list[ExperimentItemExecutionResponse],
+    summary="List item executions for a Launch (?launch_id=...)",
+)
+def list_launch_items(
+    launch_id: str = Query(..., description="Launch ID (required)"),
+    status: str | None = Query(default=None, description="Optional execution status filter"),
+    limit: int | None = Query(default=None, ge=1, le=500, description="Optional limit"),
+    offset: int = Query(default=0, ge=0, description="Optional offset"),
+    services=Depends(get_services),
+) -> list[ExperimentItemExecutionResponse]:
+    db_mgr, _, _, _ = services
+    return _query_launch_items(db_mgr, launch_id, status=status, limit=limit, offset=offset)
+
+
+@router.get(
+    "/experiment-item-executions/{item_execution_id}/attempts",
+    response_model=list[ExecutionAttemptResponse],
+    summary="List execution attempts for an item execution",
+)
+def list_item_attempts_by_item_id(
+    item_execution_id: str,
+    services=Depends(get_services),
+) -> list[ExecutionAttemptResponse]:
+    db_mgr, _, _, _ = services
+    return _query_execution_attempts(db_mgr, item_execution_id)
+
+
 @router.get(
     "/execution-attempts",
     response_model=list[ExecutionAttemptResponse],
@@ -161,15 +351,8 @@ def list_execution_attempts(
     item_execution_id: str = Query(..., description="Item Execution ID (required)"),
     services=Depends(get_services),
 ) -> list[ExecutionAttemptResponse]:
-    db_mgr, _, _ = services
-    with db_mgr.get_session() as session:
-        stmt = (
-            select(ExecutionAttemptRecord)
-            .where(ExecutionAttemptRecord.item_execution_id == item_execution_id)
-            .order_by(ExecutionAttemptRecord.attempt_no)
-        )
-        attempts = session.scalars(stmt).all()
-        return [ExecutionAttemptResponse.model_validate(a) for a in attempts]
+    db_mgr, _, _, _ = services
+    return _query_execution_attempts(db_mgr, item_execution_id)
 
 
 async def _execute_single_item(
@@ -187,18 +370,29 @@ async def _execute_single_item(
     item_exec_id = str(uuid.uuid4())
     started_at = datetime.utcnow()
 
-    # Pre-create ExperimentItemExecution record
+    # Pre-create or reuse ExperimentItemExecution record
     with db_mgr.get_session() as session:
-        item_rec = ExperimentItemExecutionRecord(
-            id=item_exec_id,
-            launch_id=launch_id,
-            dataset_item_id=item_id,
-            execution_status="running",
-            eval_status="pending",
-            quality_conclusion="unknown",
-            started_at=started_at,
-        )
-        session.add(item_rec)
+        existing = session.scalars(
+            select(ExperimentItemExecutionRecord).where(
+                ExperimentItemExecutionRecord.launch_id == launch_id,
+                ExperimentItemExecutionRecord.dataset_item_id == item_id,
+            )
+        ).first()
+        if existing:
+            item_exec_id = existing.id
+            existing.execution_status = "running"
+            existing.started_at = started_at
+        else:
+            item_rec = ExperimentItemExecutionRecord(
+                id=item_exec_id,
+                launch_id=launch_id,
+                dataset_item_id=item_id,
+                execution_status="running",
+                eval_status="pending",
+                quality_conclusion="unknown",
+                started_at=started_at,
+            )
+            session.add(item_rec)
 
     last_attempt_id: str | None = None
 
@@ -354,6 +548,6 @@ async def run_experiment_launch(
     payload: ExperimentLaunchRunRequest,
     services=Depends(get_services),
 ) -> ExperimentLaunchResponse:
-    db_mgr, reg, _ = services
+    db_mgr, reg, _, orchestrator = services
     launch_rec = await run_launch_synchronously(db_mgr, reg, payload.launch_id)
-    return ExperimentLaunchResponse.model_validate(launch_rec)
+    return _enrich_launch(launch_rec, orchestrator)

@@ -203,6 +203,24 @@ class SystemInfoResponse(BaseModel):
     environment: str
 
 
+class ExperimentLaunchProgressResponse(BaseModel):
+    total: int = 0
+    pending: int = 0
+    queued: int = 0
+    running: int = 0
+    retry_wait: int = 0
+    succeeded: int = 0
+    failed: int = 0
+    timed_out: int = 0
+    cancelled: int = 0
+    completed: int = 0
+    percentage: float = 0.0
+    attempts: int = 0
+    retries: int = 0
+    allowed_actions: list[str] = Field(default_factory=list)
+    action_reasons: dict[str, str] = Field(default_factory=dict)
+
+
 class ExperimentLaunchResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -223,6 +241,10 @@ class ExperimentLaunchResponse(BaseModel):
     langfuse_sync_status: str
     langfuse_sync_error: str | None = None
     links: dict[str, str | None] | None = None
+    progress: ExperimentLaunchProgressResponse | None = None
+    cancel_requested_at: datetime | None = None
+    status_reason: str | None = None
+    allowed_actions: list[str] = Field(default_factory=list)
     created_by: str | None = None
     created_at: datetime
     started_at: datetime | None = None
@@ -239,7 +261,17 @@ class ExperimentLaunchResponse(BaseModel):
 
 
 class ExperimentLaunchRunRequest(BaseModel):
-    launch_id: str = Field(..., description="ID of the launch to execute synchronously")
+    launch_id: str = Field(..., description="ID of the launch to execute")
+
+
+class ExperimentLaunchRunActionResponse(BaseModel):
+    launch_id: str
+    status: str
+    message: str = "Launch queued for asynchronous execution"
+
+
+class RetryFailedRequest(BaseModel):
+    force: bool = Field(default=False, description="Force retry even if ambiguous non-idempotent outcomes exist")
 
 
 class ExecutionAttemptResponse(BaseModel):
@@ -252,8 +284,10 @@ class ExecutionAttemptResponse(BaseModel):
     http_status: int | None = None
     error_type: str | None = None
     error_message: str | None = None
-    latency_ms: int
+    latency_ms: int = 0
     trace_context_received: bool
+    worker_id: str | None = None
+    request_phase: str = "PREPARED"
     started_at: datetime
     completed_at: datetime | None = None
 
@@ -276,5 +310,9 @@ class ExperimentItemExecutionResponse(BaseModel):
     attempt_count: int = 0
     final_attempt_http_status: int | None = None
     final_attempt_latency_ms: int | None = None
+    queued_at: datetime | None = None
+    available_at: datetime | None = None
+    lease_owner: str | None = None
+    dispatch_generation: int = 1
     started_at: datetime | None = None
     completed_at: datetime | None = None

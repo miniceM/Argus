@@ -9,7 +9,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, or_, select, text, update
 
 from .dataset import parse_dataset_version
 from .db import DatabaseManager
@@ -155,6 +155,33 @@ def _get_db_now(session, is_pg: bool) -> datetime:
     return ts
 
 
+def _invoke_with_timeout(fn: Callable[..., Any], *args: Any, timeout: float, **kwargs: Any) -> Any:
+    """Executes a blocking remote callable with an unyielding hard deadline,
+    preventing blocked network calls from hanging processing threads indefinitely.
+    """
+    if timeout <= 0:
+        raise TimeoutError("Timeout budget exhausted before invocation")
+    res_box: list[Any] = []
+    err_box: list[BaseException] = []
+    finished = threading.Event()
+
+    def _worker():
+        try:
+            res_box.append(fn(*args, **kwargs))
+        except BaseException as exc:
+            err_box.append(exc)
+        finally:
+            finished.set()
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+    if not finished.wait(timeout=timeout):
+        raise TimeoutError(f"Remote invocation timed out after {timeout:.3f}s")
+    if err_box:
+        raise err_box[0]
+    return res_box[0]
+
+
 class LangfuseOutboxSyncer:
     """Consumes and finalizes Langfuse outbox tasks asynchronously with robust CAS,
     per-claim tokens, heartbeats, and atomic state transitions.
@@ -238,7 +265,6 @@ class LangfuseOutboxSyncer:
         with self.db_mgr.get_session() as session:
             db_now = _get_db_now(session, is_pg)
             now_expr = func.clock_timestamp() if is_pg else db_now
-            lease_expires = db_now + timedelta(seconds=self.lease_duration_seconds)
 
             # 1. Sweep expired PROCESSING tasks that already reached max_attempts to FAILED using atomic conditional UPDATE
             over_limit_update = (
@@ -281,12 +307,14 @@ class LangfuseOutboxSyncer:
 
             for task in tasks:
                 new_token = uuid.uuid4().hex
-                task.status = "PROCESSING"
-                task.owner_id = self.syncer_id
-                task.claim_token = new_token
-                task.lease_expires_at = lease_expires
-                task.attempts += 1  # Incremented only upon claim!
-                task.updated_at = db_now
+                if is_pg:
+                    lease_exp_expr = func.clock_timestamp() + text(f"interval '{self.lease_duration_seconds} seconds'")
+                    updated_expr = func.clock_timestamp()
+                else:
+                    lease_exp_expr = func.strftime(
+                        "%Y-%m-%d %H:%M:%f", "now", f"+{self.lease_duration_seconds} seconds"
+                    )
+                    updated_expr = func.strftime("%Y-%m-%d %H:%M:%f", "now")
 
                 payload = {
                     "task_id": task.id,
@@ -299,9 +327,22 @@ class LangfuseOutboxSyncer:
                     "trace_id": task.trace_id,
                     "observation_id": task.observation_id,
                     "scores_payload": dict(task.scores_payload or {}),
-                    "attempts": task.attempts,
+                    "attempts": task.attempts + 1,
                 }
                 claimed.append((task.id, new_token, payload))
+
+                session.execute(
+                    update(LangfuseSyncTaskRecord)
+                    .where(LangfuseSyncTaskRecord.id == task.id)
+                    .values(
+                        status="PROCESSING",
+                        owner_id=self.syncer_id,
+                        claim_token=new_token,
+                        lease_expires_at=lease_exp_expr,
+                        attempts=LangfuseSyncTaskRecord.attempts + 1,
+                        updated_at=updated_expr,
+                    )
+                )
 
             session.commit()
 
@@ -461,6 +502,10 @@ class LangfuseOutboxSyncer:
             hb_thread = threading.Thread(target=_heartbeat_worker, daemon=True)
             hb_thread.start()
 
+            def _remaining_timeout() -> float:
+                rem = self.task_timeout_seconds - (time.monotonic() - task_start_time)
+                return max(0.001, rem)
+
             try:
                 # 1. Dataset Run Item linking (Skip for local seed datasets)
                 if dataset_source == "seed":
@@ -486,13 +531,17 @@ class LangfuseOutboxSyncer:
                         "observation_id": payload.get("observation_id"),
                         "dataset_version": version_val,
                     }
-                    res = lf.api.dataset_run_items.create(**kwargs)
+                    res = _invoke_with_timeout(
+                        lf.api.dataset_run_items.create,
+                        timeout=_remaining_timeout(),
+                        **kwargs,
+                    )
                     run_id = getattr(res, "dataset_run_id", None)
                     if run_id:
                         logger.debug("Linked DatasetRunItem with remote dataset_run_id=%s", run_id)
 
                 if _is_timeout_or_lost():
-                    logger.warning("Syncer %s lost lease or timed out during linking call, aborting scores", self.syncer_id, task_id)
+                    logger.warning("Syncer %s lost lease or timed out on task %s during linking call, aborting scores", self.syncer_id, task_id)
                     return False
                 if not self.renew_task_lease(task_id, claim_token, extension_seconds=self.lease_duration_seconds):
                     logger.warning("Syncer %s failed to renew lease on task %s after linking, aborting scores", self.syncer_id, task_id)
@@ -502,10 +551,12 @@ class LangfuseOutboxSyncer:
                 clean_scores = {k: v for k, v in scores.items() if not k.startswith("_")}
                 for ev_id, score_val in clean_scores.items():
                     if _is_timeout_or_lost():
-                        logger.warning("Syncer %s lost lease or timed out before score upload, aborting", self.syncer_id, task_id)
+                        logger.warning("Syncer %s lost lease or timed out on task %s before score upload, aborting", self.syncer_id, task_id)
                         return False
                     stable_score_id = f"score:{payload['item_id']}:gen{payload['dispatch_generation']}:{ev_id}"
-                    lf.api.scores.create(
+                    _invoke_with_timeout(
+                        lf.api.scores.create,
+                        timeout=_remaining_timeout(),
                         id=stable_score_id,
                         name=ev_id,
                         value=float(score_val),
@@ -513,15 +564,19 @@ class LangfuseOutboxSyncer:
                         observation_id=payload.get("observation_id"),
                     )
                     if _is_timeout_or_lost():
-                        logger.warning("Syncer %s lost lease or timed out during score upload, aborting", self.syncer_id, task_id)
+                        logger.warning("Syncer %s lost lease or timed out on task %s during score upload, aborting", self.syncer_id, task_id)
                         return False
 
+            except TimeoutError as exc:
+                lease_lost.set()
+                error_msg = f"Task execution deadline exceeded: {exc}"
+                logger.warning("Syncer %s task %s timed out during remote call: %s", self.syncer_id, task_id, exc)
             except Exception as exc:
                 error_msg = str(exc)
                 logger.exception("Failed to sync Langfuse task %s: %s", task_id, error_msg)
             finally:
                 stop_hb.set()
-                hb_thread.join(timeout=2.0)
+                hb_thread.join(timeout=0.5)
 
             if _is_timeout_or_lost():
                 logger.warning(

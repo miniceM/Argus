@@ -13,6 +13,7 @@ from app.db_models import ExperimentLaunchRecord as Launch  # noqa: E402
 from app.db_models import LangfuseSyncTaskRecord as Task  # noqa: E402
 from app.langfuse_sync import LangfuseOutboxSyncer, aggregate_launch_sync_status  # noqa: E402
 from app.main import _client  # noqa: E402
+from sqlalchemy import event  # noqa: E402
 from test_pr17_review_regressions import create_launch_helper  # noqa: E402
 
 
@@ -655,3 +656,57 @@ def test_live_lease_not_stolen_by_fast_claim_clock(setup_runtime):
     with patch("app.langfuse_sync.datetime", FastClock):
         claimed = LangfuseOutboxSyncer(db, None).claim_tasks()
     assert claimed == []
+
+
+# 21. 新租约在实际取得任务行锁后重新读取数据库时间生成（避免死信清理/锁等待导致刚领取即过期）
+def test_claim_lease_starts_after_cleanup_wait(setup_runtime):
+    db, lid = prepare(setup_runtime)
+
+    def delay(conn, cursor, statement, params, context, executemany):
+        if statement.startswith("UPDATE langfuse_sync_tasks"):
+            import time
+
+            time.sleep(0.2)
+
+    event.listen(db.engine, "before_cursor_execute", delay)
+    sync = LangfuseOutboxSyncer(db, None, lease_duration_seconds=0.1)
+    try:
+        tasks = sync.claim_tasks()
+    finally:
+        event.remove(db.engine, "before_cursor_execute", delay)
+    tid, token, payload = tasks[0]
+    assert sync.renew_task_lease(tid, token, 0.1), "Freshly claimed task already expired"
+
+
+# 22. 任务总时限在调用超时后立即释放消费处理线程（不无限等待阻塞调用）
+def test_task_timeout_releases_processing_thread(setup_runtime):
+    import threading
+
+    db, lid = prepare(setup_runtime, source="langfuse")
+    entered = threading.Event()
+    release = threading.Event()
+    done = threading.Event()
+    lf = MagicMock()
+
+    def call(**kwargs):
+        entered.set()
+        release.wait(2)
+        return MagicMock(dataset_run_id="run")
+
+    lf.api.dataset_run_items.create.side_effect = call
+    sync = LangfuseOutboxSyncer(db, lf, task_timeout_seconds=0.05, heartbeat_interval_seconds=0.01)
+
+    def run():
+        try:
+            sync.process_batch()
+        finally:
+            done.set()
+
+    t = threading.Thread(target=run)
+    t.start()
+    try:
+        assert entered.wait(1)
+        assert done.wait(0.25), "Processing thread still blocked after deadline"
+    finally:
+        release.set()
+        t.join(2)

@@ -77,7 +77,16 @@ queue_adapter, limiter = init_queue_and_limiter(
     db_url=db_manager.db_url,
 )
 
+def is_langfuse_configured() -> bool:
+    import os
+
+    return bool(os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"))
+
+
 def _client():
+    """Production provider: returns Langfuse client if configured with public/secret keys, else None."""
+    if not is_langfuse_configured():
+        return None
     return get_client()
 
 
@@ -192,10 +201,6 @@ app.include_router(system_router)
 app.include_router(metrics_router)
 
 
-def _client():
-    # Current Langfuse Python SDK v4 reads LANGFUSE_PUBLIC_KEY,
-    # LANGFUSE_SECRET_KEY and LANGFUSE_BASE_URL from the environment.
-    return get_client()
 
 
 def _wait_for_langfuse() -> None:

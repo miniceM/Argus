@@ -1,4 +1,5 @@
 import asyncio
+import os
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -11,6 +12,7 @@ from app.db_models import ExperimentItemExecutionRecord as Item  # noqa: E402
 from app.db_models import ExperimentLaunchRecord as Launch  # noqa: E402
 from app.db_models import LangfuseSyncTaskRecord as Task  # noqa: E402
 from app.langfuse_sync import LangfuseOutboxSyncer, aggregate_launch_sync_status  # noqa: E402
+from app.main import _client  # noqa: E402
 from test_pr17_review_regressions import create_launch_helper  # noqa: E402
 
 
@@ -366,3 +368,250 @@ def test_parent_observation_scope_covers_evaluator(setup_runtime):
                 assert mock_parent_obs.is_active is False
 
     asyncio.run(_test())
+
+
+# 12. 死信清理与并发成功写回交错：原子条件更新绝不将已 SYNCED 任务覆盖为 FAILED
+def test_dead_letter_sweep_does_not_override_concurrent_synced(setup_runtime):
+    db, lid = prepare(setup_runtime, source="langfuse")
+    task_id = "audit"
+    now = datetime.now(UTC)
+
+    # Put task in PROCESSING at max_attempts with expired lease
+    with db.get_session() as s:
+        t = s.get(Task, task_id)
+        t.status = "PROCESSING"
+        t.attempts = 3
+        t.lease_expires_at = now - timedelta(seconds=10)
+        t.claim_token = "token-1"
+        s.commit()
+
+    # Simulate another worker successfully finalizing task to SYNCED
+    with db.get_session() as s:
+        t = s.get(Task, task_id)
+        t.status = "SYNCED"
+        t.claim_token = None
+        t.lease_expires_at = None
+        t.last_error = None
+        s.commit()
+
+    # Now syncer runs claim_tasks which performs dead-letter sweep
+    syncer = LangfuseOutboxSyncer(db, None, max_attempts=3)
+    syncer.claim_tasks(batch_size=1)
+
+    # Task MUST remain SYNCED and not overwritten to FAILED
+    with db.get_session() as s:
+        t = s.get(Task, task_id)
+        assert t.status == "SYNCED"
+
+
+# 13. 生产提供器无凭据真实调用与 disabled 客户端识别
+def test_unconfigured_production_provider_and_disabled_client(setup_runtime):
+    db, lid = prepare(setup_runtime)
+
+    # Case A: Ensure environment has no keys, main._client() explicitly returns None
+    with patch.dict(os.environ, {}, clear=True):
+        client = _client()
+        assert client is None
+        syncer = LangfuseOutboxSyncer(db, _client)
+        st, c, reason = syncer.resolve_client_status()
+        assert st == "UNCONFIGURED"
+
+        # Case B: Real disabled SDK instance returned from get_client() without credentials
+        from langfuse import get_client
+        disabled_c = get_client()
+        syncer_disabled = LangfuseOutboxSyncer(db, disabled_c)
+        st2, _, _ = syncer_disabled.resolve_client_status()
+        assert st2 == "UNCONFIGURED"
+
+        # Case C: Arbitrary object missing .api is INCOMPATIBLE, not UNCONFIGURED
+        class BadObject:
+            pass
+
+        syncer_bad = LangfuseOutboxSyncer(db, BadObject())
+        st3, _, _ = syncer_bad.resolve_client_status()
+        assert st3 == "INCOMPATIBLE"
+
+
+# 14. 部分 Item 执行后取消场景的 NOT_APPLICABLE 收敛
+def test_partially_cancelled_unconfigured_converges_to_not_applicable(setup_runtime):
+    db_mgr, q, lim, orch, w, rec = setup_runtime
+    lid, msgs = create_launch_helper(setup_runtime, count=2)
+    # Item 0 was executed -> generate SKIPPED task
+    # Item 1 was cancelled before invocation -> NO trace_id, NO task
+    with db_mgr.get_session() as s:
+        launch = s.get(Launch, lid)
+        launch.status = "CANCELLED"
+        item0 = s.get(Item, msgs[0][1])
+        item0.execution_status = "cancelled"
+        item0.trace_id = "trace-0"
+
+        item1 = s.get(Item, msgs[1][1])
+        item1.execution_status = "cancelled"
+        item1.trace_id = None
+
+        s.add(
+            Task(
+                id="task-0",
+                launch_id=lid,
+                item_id=item0.id,
+                dataset_item_id="0",
+                dispatch_generation=item0.dispatch_generation,
+                task_type="FULL_EVAL_SYNC",
+                trace_id="trace-0",
+                dataset_run_name="run",
+                dataset_version="v1",
+                scores_payload={},
+                status="SKIPPED",
+            )
+        )
+        s.commit()
+
+    # Must converge to NOT_APPLICABLE because all items needing sync are SKIPPED
+    res = aggregate_launch_sync_status(db_mgr, lid)
+    assert res == "NOT_APPLICABLE"
+
+
+# 15. 有效项缺少任务反例保持 SYNCING
+def test_required_item_missing_task_keeps_syncing(setup_runtime):
+    db_mgr, q, lim, orch, w, rec = setup_runtime
+    lid, msgs = create_launch_helper(setup_runtime, count=2)
+    with db_mgr.get_session() as s:
+        launch = s.get(Launch, lid)
+        launch.status = "COMPLETED"
+        item0 = s.get(Item, msgs[0][1])
+        item0.execution_status = "succeeded"
+        item0.trace_id = "trace-0"
+
+        item1 = s.get(Item, msgs[1][1])
+        item1.execution_status = "succeeded"
+        item1.trace_id = "trace-1"
+
+        # Only item 0 has task
+        s.add(
+            Task(
+                id="task-0",
+                launch_id=lid,
+                item_id=item0.id,
+                dataset_item_id="0",
+                dispatch_generation=item0.dispatch_generation,
+                task_type="FULL_EVAL_SYNC",
+                trace_id="trace-0",
+                dataset_run_name="run",
+                dataset_version="v1",
+                scores_payload={},
+                status="SKIPPED",
+            )
+        )
+        s.commit()
+
+    # Item 1 is missing its task -> MUST stay SYNCING
+    res = aggregate_launch_sync_status(db_mgr, lid)
+    assert res == "SYNCING"
+
+
+# 16. 单次慢请求在调用期间后台心跳自动续租成功
+def test_slow_request_heartbeat_renewal_succeeds(setup_runtime):
+    db, lid = prepare(setup_runtime, source="langfuse")
+    mock_lf = MagicMock()
+    mock_lf.api.dataset_run_items.create.return_value = MagicMock(dataset_run_id="run-999")
+
+    def _slow_create(**kwargs):
+        # Simulate slow network call exceeding initial lease
+        import time
+        time.sleep(0.6)
+        return MagicMock(dataset_run_id="run-999")
+
+    mock_lf.api.dataset_run_items.create.side_effect = _slow_create
+
+    syncer = LangfuseOutboxSyncer(
+        db,
+        mock_lf,
+        lease_duration_seconds=0.5,
+        heartbeat_interval_seconds=0.1,
+        task_timeout_seconds=5.0,
+    )
+    claimed = syncer.claim_tasks(batch_size=1)
+    assert len(claimed) == 1
+    task_id, claim_token, payload = claimed[0]
+
+    # Process single task with slow request
+    res = syncer.process_single_task(task_id, claim_token, payload)
+    assert res is True
+
+    with db.get_session() as s:
+        t = s.get(Task, task_id)
+        assert t.status == "SYNCED"
+
+
+# 17. 心跳续租抛异常后停止后续 Score 调用
+def test_heartbeat_exception_aborts_subsequent_score_calls(setup_runtime):
+    db, lid = prepare(setup_runtime, source="langfuse")
+    mock_lf = MagicMock()
+
+    scores_called = False
+
+    def _slow_link(**kwargs):
+        import time
+        time.sleep(0.4)
+        return MagicMock(dataset_run_id="run-1")
+
+    def _score_create(**kwargs):
+        nonlocal scores_called
+        scores_called = True
+        return MagicMock()
+
+    mock_lf.api.dataset_run_items.create.side_effect = _slow_link
+    mock_lf.api.scores.create.side_effect = _score_create
+
+    syncer = LangfuseOutboxSyncer(
+        db,
+        mock_lf,
+        lease_duration_seconds=1.0,
+        heartbeat_interval_seconds=0.1,
+        task_timeout_seconds=5.0,
+    )
+    claimed = syncer.claim_tasks(batch_size=1)
+    task_id, claim_token, payload = claimed[0]
+
+    # Mock renew_task_lease to raise DB exception during heartbeat
+    orig_renew = syncer.renew_task_lease
+    first_call = True
+
+    def _flaky_renew(*args, **kwargs):
+        nonlocal first_call
+        if first_call:
+            first_call = False
+            return orig_renew(*args, **kwargs)
+        raise RuntimeError("Database connection lost during heartbeat renewal")
+
+    syncer.renew_task_lease = _flaky_renew
+
+    res = syncer.process_single_task(task_id, claim_token, payload)
+    assert res is False
+    assert scores_called is False
+
+
+# 18. 网络调用超过任务总时限后不再无限续租
+def test_network_call_exceeding_max_task_duration_stops_renewal(setup_runtime):
+    db, lid = prepare(setup_runtime, source="langfuse")
+    mock_lf = MagicMock()
+
+    def _hanging_call(**kwargs):
+        import time
+        time.sleep(0.6)
+        return MagicMock(dataset_run_id="run-1")
+
+    mock_lf.api.dataset_run_items.create.side_effect = _hanging_call
+
+    syncer = LangfuseOutboxSyncer(
+        db,
+        mock_lf,
+        lease_duration_seconds=0.5,
+        heartbeat_interval_seconds=0.1,
+        task_timeout_seconds=0.3,
+    )
+    claimed = syncer.claim_tasks(batch_size=1)
+    task_id, claim_token, payload = claimed[0]
+
+    res = syncer.process_single_task(task_id, claim_token, payload)
+    assert res is False

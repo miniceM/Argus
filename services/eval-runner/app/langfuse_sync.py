@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import logging
 import random
+import threading
+import time
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 
 from .dataset import parse_dataset_version
 from .db import DatabaseManager
@@ -58,11 +60,21 @@ def aggregate_launch_sync_status(db_mgr: DatabaseManager, launch_id: str) -> str
             for it in items
         }
 
-        # Items that require sync: has trace_id OR already has a task materialized
-        items_needing_sync = [
-            it for it in items
-            if it.trace_id or current_tasks_map[it.id] is not None
-        ]
+        # Items that require sync:
+        # An item is exempt from outbox sync ONLY if:
+        # 1. It has no task materialized, AND
+        # 2. It has no trace_id (never invoked agent), AND
+        # 3. Its execution terminated without success (failed or cancelled), AND
+        # 4. The launch itself is not COMPLETED (a COMPLETED launch expects all items to have executed)
+        def _is_exempt(it) -> bool:
+            return (
+                current_tasks_map[it.id] is None
+                and not it.trace_id
+                and it.execution_status in ("failed", "cancelled")
+                and launch.status != "COMPLETED"
+            )
+
+        items_needing_sync = [it for it in items if not _is_exempt(it)]
 
         # Any required item missing its task -> keep SYNCING
         if any(current_tasks_map[it.id] is None for it in items_needing_sync):
@@ -111,8 +123,8 @@ def aggregate_launch_sync_status(db_mgr: DatabaseManager, launch_id: str) -> str
             session.commit()
             return "SYNCED"
 
-        # - Unconfigured check: to converge to NOT_APPLICABLE, all items in the launch must have a task materialized AND all be SKIPPED
-        if len(valid_tasks) == len(items) and all(s == "SKIPPED" for s in task_statuses):
+        # - Unconfigured check: to converge to NOT_APPLICABLE, all items needing sync must have a task materialized AND all be SKIPPED
+        if items_needing_sync and len(valid_tasks) == len(items_needing_sync) and all(s == "SKIPPED" for s in task_statuses):
             launch.langfuse_sync_status = "NOT_APPLICABLE"
             launch.langfuse_sync_error = None
             session.commit()
@@ -142,14 +154,20 @@ class LangfuseOutboxSyncer:
         db_mgr: DatabaseManager,
         langfuse_client: Any | Callable[[], Any] | None = None,
         syncer_id: str | None = None,
-        lease_duration_seconds: int = 45,
+        lease_duration_seconds: float = 45.0,
         max_attempts: int = 5,
+        heartbeat_interval_seconds: float | None = None,
+        task_timeout_seconds: float = 30.0,
     ):
         self.db_mgr = db_mgr
         self._lf_provider = langfuse_client
         self.syncer_id = syncer_id or f"syncer-{uuid.uuid4().hex[:8]}"
-        self.lease_duration_seconds = lease_duration_seconds
+        self.lease_duration_seconds = float(lease_duration_seconds)
         self.max_attempts = max_attempts
+        self.heartbeat_interval_seconds = (
+            float(heartbeat_interval_seconds) if heartbeat_interval_seconds is not None else None
+        )
+        self.task_timeout_seconds = float(task_timeout_seconds)
 
     def resolve_client_status(self) -> tuple[str, Any | None, str | None]:
         """Resolves client into:
@@ -177,10 +195,18 @@ class LangfuseOutboxSyncer:
         else:
             client = provider
 
-        if not hasattr(client, "api"):
-            return ("INCOMPATIBLE", None, f"Incompatible Langfuse client {type(client)}: missing 'api' attribute")
+        if hasattr(client, "api"):
+            return ("READY", client, None)
 
-        return ("READY", client, None)
+        # Check if client is an officially disabled Langfuse client (missing public/secret keys)
+        if (
+            type(client).__name__ == "Langfuse"
+            and type(client).__module__.startswith("langfuse")
+            and (getattr(client, "_resources", None) is None or getattr(client, "_tracing_enabled", None) is False)
+        ):
+            return ("UNCONFIGURED", None, "Langfuse SDK client disabled: missing credentials")
+
+        return ("INCOMPATIBLE", None, f"Incompatible Langfuse client {type(client)}: missing 'api' attribute")
 
     @property
     def lf(self) -> Any | None:
@@ -193,23 +219,30 @@ class LangfuseOutboxSyncer:
 
     def claim_tasks(self, batch_size: int = 1) -> list[tuple[str, str, dict[str, Any]]]:
         """Claims tasks in a short transaction using single claim tokens and crash recovery."""
+        is_pg = self.db_mgr.engine.dialect.name == "postgresql"
         now = datetime.now(UTC)
+        now_expr = func.clock_timestamp() if is_pg else now
         lease_expires = now + timedelta(seconds=self.lease_duration_seconds)
         claimed: list[tuple[str, str, dict[str, Any]]] = []
 
         with self.db_mgr.get_session() as session:
-            # 1. Sweep expired PROCESSING tasks that already reached max_attempts to FAILED under row lock
-            over_limit_stmt = select(LangfuseSyncTaskRecord).where(
-                LangfuseSyncTaskRecord.status == "PROCESSING",
-                LangfuseSyncTaskRecord.lease_expires_at <= now,
-                LangfuseSyncTaskRecord.attempts >= self.max_attempts,
+            # 1. Sweep expired PROCESSING tasks that already reached max_attempts to FAILED using atomic conditional UPDATE
+            over_limit_update = (
+                update(LangfuseSyncTaskRecord)
+                .where(
+                    LangfuseSyncTaskRecord.status == "PROCESSING",
+                    LangfuseSyncTaskRecord.lease_expires_at <= now_expr,
+                    LangfuseSyncTaskRecord.attempts >= self.max_attempts,
+                )
+                .values(
+                    status="FAILED",
+                    claim_token=None,
+                    lease_expires_at=None,
+                    last_error=f"Lease expired after reaching max {self.max_attempts} attempts",
+                    updated_at=now_expr,
+                )
             )
-            for dead_task in session.scalars(over_limit_stmt).all():
-                dead_task.status = "FAILED"
-                dead_task.claim_token = None
-                dead_task.lease_expires_at = None
-                dead_task.last_error = f"Lease expired after {dead_task.attempts} attempts"
-                dead_task.updated_at = now
+            session.execute(over_limit_update)
 
             # 2. Select eligible tasks strictly under max_attempts
             stmt = (
@@ -260,7 +293,7 @@ class LangfuseOutboxSyncer:
 
         return claimed
 
-    def renew_task_lease(self, task_id: str, claim_token: str, extension_seconds: int = 45) -> bool:
+    def renew_task_lease(self, task_id: str, claim_token: str, extension_seconds: float = 45.0) -> bool:
         """Renews active lease for an in-flight sync task under row lock and instantaneous clock check."""
         is_pg = self.db_mgr.engine.dialect.name == "postgresql"
         with self.db_mgr.get_session() as session:
@@ -346,12 +379,59 @@ class LangfuseOutboxSyncer:
 
         error_msg: str | None = None
         run_id: str | None = None
+        lease_lost = threading.Event()
 
         if client_st != "READY" or lf is None:
             error_msg = err_detail or "Langfuse client unavailable"
         else:
+            # 1. Pre-flight lease check before making remote calls
+            if not self.renew_task_lease(task_id, claim_token, extension_seconds=self.lease_duration_seconds):
+                logger.warning("Syncer %s pre-flight lease check failed for task %s", self.syncer_id, task_id)
+                return False
+
             scores = payload.get("scores_payload", {})
             dataset_source = scores.get("_dataset_source")
+
+            stop_hb = threading.Event()
+            hb_interval = self.heartbeat_interval_seconds or max(0.1, min(5.0, self.lease_duration_seconds / 3.0))
+            task_start_time = time.monotonic()
+
+            def _heartbeat_worker():
+                while not stop_hb.is_set():
+                    if stop_hb.wait(timeout=hb_interval):
+                        break
+                    # Total duration check
+                    if (time.monotonic() - task_start_time) >= self.task_timeout_seconds:
+                        logger.warning(
+                            "Syncer %s task %s exceeded max task timeout %ss",
+                            self.syncer_id,
+                            task_id,
+                            self.task_timeout_seconds,
+                        )
+                        lease_lost.set()
+                        break
+                    try:
+                        ok = self.renew_task_lease(task_id, claim_token, extension_seconds=self.lease_duration_seconds)
+                        if not ok:
+                            logger.warning(
+                                "Syncer %s heartbeat lease renewal rejected for task %s",
+                                self.syncer_id,
+                                task_id,
+                            )
+                            lease_lost.set()
+                            break
+                    except Exception as exc:
+                        logger.exception(
+                            "Syncer %s heartbeat encountered error on task %s: %s",
+                            self.syncer_id,
+                            task_id,
+                            exc,
+                        )
+                        lease_lost.set()
+                        break
+
+            hb_thread = threading.Thread(target=_heartbeat_worker, daemon=True)
+            hb_thread.start()
 
             try:
                 # 1. Dataset Run Item linking (Skip for local seed datasets)
@@ -383,15 +463,19 @@ class LangfuseOutboxSyncer:
                     if run_id:
                         logger.debug("Linked DatasetRunItem with remote dataset_run_id=%s", run_id)
 
-                # In-task lease renewal check immediately after linking call
-                renew_ok = self.renew_task_lease(task_id, claim_token, extension_seconds=self.lease_duration_seconds)
-                if not renew_ok:
+                if lease_lost.is_set():
                     logger.warning("Syncer %s lost lease on task %s during linking call, aborting scores", self.syncer_id, task_id)
+                    return False
+                if not self.renew_task_lease(task_id, claim_token, extension_seconds=self.lease_duration_seconds):
+                    logger.warning("Syncer %s failed to renew lease on task %s after linking, aborting scores", self.syncer_id, task_id)
                     return False
 
                 # 2. Score creations with stable versioned ID
                 clean_scores = {k: v for k, v in scores.items() if not k.startswith("_")}
                 for ev_id, score_val in clean_scores.items():
+                    if lease_lost.is_set():
+                        logger.warning("Syncer %s lost lease on task %s before score upload, aborting", self.syncer_id, task_id)
+                        return False
                     stable_score_id = f"score:{payload['item_id']}:gen{payload['dispatch_generation']}:{ev_id}"
                     lf.api.scores.create(
                         id=stable_score_id,
@@ -400,14 +484,24 @@ class LangfuseOutboxSyncer:
                         trace_id=payload["trace_id"],
                         observation_id=payload.get("observation_id"),
                     )
-                    renew_ok = self.renew_task_lease(task_id, claim_token, extension_seconds=self.lease_duration_seconds)
-                    if not renew_ok:
+                    if lease_lost.is_set():
                         logger.warning("Syncer %s lost lease on task %s during score upload, aborting", self.syncer_id, task_id)
                         return False
 
             except Exception as exc:
                 error_msg = str(exc)
                 logger.exception("Failed to sync Langfuse task %s: %s", task_id, error_msg)
+            finally:
+                stop_hb.set()
+                hb_thread.join(timeout=2.0)
+
+            if lease_lost.is_set():
+                logger.warning(
+                    "Syncer %s lease lost during execution for task %s, aborting write-back",
+                    self.syncer_id,
+                    task_id,
+                )
+                return False
 
         # 3. Post-lock instantaneous clock CAS write-back
         is_pg = self.db_mgr.engine.dialect.name == "postgresql"

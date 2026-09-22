@@ -606,7 +606,7 @@ class ExecutionWorker:
             # Start background heartbeat to renew lease AND concurrency permit during invocation
             stop_hb = asyncio.Event()
             lease_lost = asyncio.Event()
-            hb_interval = getattr(self, "heartbeat_interval", 5.0)
+            hb_interval = getattr(self, "heartbeat_interval_seconds", getattr(self, "heartbeat_interval", 5.0))
             hb_extension = max(30, int(spec.timeout_seconds) + 15)
             holding_permit = True
 
@@ -616,7 +616,9 @@ class ExecutionWorker:
                         await asyncio.sleep(hb_interval)
                         if stop_hb.is_set():
                             break
-                        renew_ok = self.renew_lease(item_id, token, extension_seconds=hb_extension)
+                        renew_ok = await asyncio.to_thread(
+                            self.renew_lease, item_id, token, extension_seconds=hb_extension
+                        )
                         if not renew_ok:
                             lease_lost.set()
                             break
@@ -629,161 +631,104 @@ class ExecutionWorker:
 
             hb_task = asyncio.create_task(_heartbeat_loop())
 
+            from contextlib import nullcontext
+            parent_scope = parent_ctx if parent_ctx is not None else nullcontext()
+
             try:
-                try:
-                    if parent_ctx:
-                        with parent_ctx:
-                            inv_res = await _do_invocation_and_eval()
-                    else:
+                with parent_scope:
+                    try:
                         inv_res = await _do_invocation_and_eval()
-                finally:
-                    # Always release distributed agent concurrency permit immediately after HTTP finishes
-                    holding_permit = False
-                    self.limiter.release_concurrency_permit(spec.id, permit_id)
-
-                if lease_lost.is_set():
-                    return False
-
-                is_non_idem_read_timeout = (
-                    not spec.is_idempotent and inv_res.error_category == "READ_TIMEOUT"
-                )
-
-                # Determine final phase: only RESPONSE_RECEIVED if we got a response
-                final_phase = "RESPONSE_RECEIVED" if inv_res.status_code is not None else "MAY_HAVE_BEEN_SENT"
-                att_status = "COMPLETED" if inv_res.status_code == 200 else "FAILED"
-                att_err_type = "AMBIGUOUS_OUTCOME" if is_non_idem_read_timeout else inv_res.error_category
-                att_err_msg = (
-                    f"AMBIGUOUS_OUTCOME: {inv_res.error_message}"
-                    if is_non_idem_read_timeout
-                    else inv_res.error_message
-                )
-
-                att_updates = {
-                    "status": att_status,
-                    "http_status": inv_res.status_code,
-                    "error_type": att_err_type,
-                    "error_message": att_err_msg,
-                    "latency_ms": inv_res.duration_ms,
-                    "trace_context_received": inv_res.trace_context_received,
-                    "request_phase": final_phase,
-                }
-
-                # Check if Launch was cancelled while we were invoking
-                with self.db_mgr.get_session() as session:
-                    launch_curr = session.get(ExperimentLaunchRecord, launch_id)
-                    launch_cancelled = bool(
-                        launch_curr and (launch_curr.cancel_requested_at or launch_curr.status in ("CANCELLING", "CANCELLED"))
-                    )
-
-                dataset_meta = manifest.get("dataset", {})
-                dataset_version = dataset_meta.get("dataset_version") or dataset_meta.get("version")
-                dataset_source = dataset_meta.get("source")
-                dataset_run_name = manifest.get("name") or f"argus-{launch_id[:12]}"
-
-                if inv_res.status_code == 200 and inv_res.body is not None:
-                    # Successful execution -> evaluate quality (ASYNC offloaded via asyncio.to_thread)
-                    item_eval_specs = [
-                        ev for ev in manifest.get("evaluators", [])
-                        if ev.get("scope", "item") == "item"
-                    ]
-
-                    def _do_evaluation():
-                        scores: dict[str, float] = {}
-                        eval_st = "succeeded" if item_eval_specs else "skipped"
-                        qual_conc = "unknown"
-                        eval_err = None
-                        try:
-                            for ev in item_eval_specs:
-                                ev_fn = default_evaluator_registry.get_evaluator_fn(ev["id"], ev.get("version"))
-                                ev_res = ev_fn(output=inv_res.body, expected_output=expected_output)
-                                scores[ev["id"]] = float(getattr(ev_res, "value", 0.0))
-                            if item_eval_specs:
-                                qual_conc = evaluate_item_quality(
-                                    scores, item_eval_specs, manifest.get("quality_policy")
-                                )
-                        except Exception as exc:
-                            eval_st = "failed"
-                            eval_err = str(exc)
-                        return scores, eval_st, qual_conc, eval_err
-
-                    scores_dict, eval_status, quality_conclusion, eval_error = await asyncio.to_thread(_do_evaluation)
+                    finally:
+                        # Always release distributed agent concurrency permit immediately after HTTP finishes
+                        holding_permit = False
+                        self.limiter.release_concurrency_permit(spec.id, permit_id)
 
                     if lease_lost.is_set():
-                        # Lost lease ownership during evaluation -> discard results
                         return False
 
-                    self.finalize_execution_and_attempt(
-                        item_id=item_id,
-                        generation=generation,
-                        lease_token=token,
-                        target_item_status="SUCCEEDED",
-                        target_eval_status=eval_status,
-                        target_quality_conclusion=quality_conclusion,
-                        current_attempt_id=current_attempt_id,
-                        attempt_updates=att_updates,
-                        scores=scores_dict,
-                        eval_error=eval_error,
-                        trace_id=trace_id,
-                        observation_id=obs_id,
-                        launch_id=launch_id,
-                        dataset_item_id=claim_info["dataset_item_id"],
-                        dataset_version=dataset_version,
-                        dataset_run_name=dataset_run_name,
-                        dataset_source=dataset_source,
+                    is_non_idem_read_timeout = (
+                        not spec.is_idempotent and inv_res.error_category == "READ_TIMEOUT"
                     )
-                else:
-                    # Failed attempt
-                    if launch_cancelled:
-                        self.finalize_execution_and_attempt(
-                            item_id=item_id,
-                            generation=generation,
-                            lease_token=token,
-                            target_item_status="CANCELLED",
-                            target_eval_status="skipped",
-                            target_quality_conclusion="unknown",
-                            current_attempt_id=current_attempt_id,
-                            attempt_updates=att_updates,
-                            execution_error=inv_res.error_message,
-                            trace_id=trace_id,
-                            observation_id=obs_id,
-                            launch_id=launch_id,
-                            dataset_item_id=claim_info["dataset_item_id"],
-                            dataset_version=dataset_version,
-                            dataset_run_name=dataset_run_name,
-                            dataset_source=dataset_source,
+
+                    # Determine final phase: only RESPONSE_RECEIVED if we got a response
+                    final_phase = "RESPONSE_RECEIVED" if inv_res.status_code is not None else "MAY_HAVE_BEEN_SENT"
+                    att_status = "COMPLETED" if inv_res.status_code == 200 else "FAILED"
+                    att_err_type = "AMBIGUOUS_OUTCOME" if is_non_idem_read_timeout else inv_res.error_category
+                    att_err_msg = (
+                        f"AMBIGUOUS_OUTCOME: {inv_res.error_message}"
+                        if is_non_idem_read_timeout
+                        else inv_res.error_message
+                    )
+
+                    att_updates = {
+                        "status": att_status,
+                        "http_status": inv_res.status_code,
+                        "error_type": att_err_type,
+                        "error_message": att_err_msg,
+                        "latency_ms": inv_res.duration_ms,
+                        "trace_context_received": inv_res.trace_context_received,
+                        "request_phase": final_phase,
+                    }
+
+                    # Check if Launch was cancelled while we were invoking
+                    with self.db_mgr.get_session() as session:
+                        launch_curr = session.get(ExperimentLaunchRecord, launch_id)
+                        launch_cancelled = bool(
+                            launch_curr and (launch_curr.cancel_requested_at or launch_curr.status in ("CANCELLING", "CANCELLED"))
                         )
-                    elif is_non_idem_read_timeout:
+
+                    dataset_meta = manifest.get("dataset", {})
+                    dataset_version = dataset_meta.get("dataset_version") or dataset_meta.get("version")
+                    dataset_source = dataset_meta.get("source")
+                    dataset_run_name = manifest.get("name") or f"argus-{launch_id[:12]}"
+
+                    if inv_res.status_code == 200 and inv_res.body is not None:
+                        # Intercept lease lost before evaluation
+                        if lease_lost.is_set():
+                            return False
+
+                        # Successful execution -> evaluate quality (ASYNC offloaded via asyncio.to_thread)
+                        item_eval_specs = [
+                            ev for ev in manifest.get("evaluators", [])
+                            if ev.get("scope", "item") == "item"
+                        ]
+
+                        def _do_evaluation():
+                            scores: dict[str, float] = {}
+                            eval_st = "succeeded" if item_eval_specs else "skipped"
+                            qual_conc = "unknown"
+                            eval_err = None
+                            try:
+                                for ev in item_eval_specs:
+                                    ev_fn = default_evaluator_registry.get_evaluator_fn(ev["id"], ev.get("version"))
+                                    ev_res = ev_fn(output=inv_res.body, expected_output=expected_output)
+                                    scores[ev["id"]] = float(getattr(ev_res, "value", 0.0))
+                                if item_eval_specs:
+                                    qual_conc = evaluate_item_quality(
+                                        scores, item_eval_specs, manifest.get("quality_policy")
+                                    )
+                            except Exception as exc:
+                                eval_st = "failed"
+                                eval_err = str(exc)
+                            return scores, eval_st, qual_conc, eval_err
+
+                        scores_dict, eval_status, quality_conclusion, eval_error = await asyncio.to_thread(_do_evaluation)
+
+                        if lease_lost.is_set():
+                            # Lost lease ownership during evaluation -> discard results
+                            return False
+
                         self.finalize_execution_and_attempt(
                             item_id=item_id,
                             generation=generation,
                             lease_token=token,
-                            target_item_status="FAILED",
-                            target_eval_status="skipped",
-                            target_quality_conclusion="fail",
+                            target_item_status="SUCCEEDED",
+                            target_eval_status=eval_status,
+                            target_quality_conclusion=quality_conclusion,
                             current_attempt_id=current_attempt_id,
                             attempt_updates=att_updates,
-                            execution_error=f"AMBIGUOUS_OUTCOME: {inv_res.error_message}",
-                            trace_id=trace_id,
-                            observation_id=obs_id,
-                            launch_id=launch_id,
-                            dataset_item_id=claim_info["dataset_item_id"],
-                            dataset_version=dataset_version,
-                            dataset_run_name=dataset_run_name,
-                            dataset_source=dataset_source,
-                        )
-                    elif inv_res.is_retryable and attempt_no <= spec.max_retries:
-                        delay_sec = inv_res.retry_after_seconds or min(2 ** (attempt_no - 1), 30)
-                        self.finalize_execution_and_attempt(
-                            item_id=item_id,
-                            generation=generation,
-                            lease_token=token,
-                            target_item_status="RETRY_WAIT",
-                            target_eval_status="pending",
-                            target_quality_conclusion="unknown",
-                            current_attempt_id=current_attempt_id,
-                            attempt_updates=att_updates,
-                            execution_error=inv_res.error_message,
-                            retry_available_at=datetime.now(UTC) + timedelta(seconds=delay_sec),
+                            scores=scores_dict,
+                            eval_error=eval_error,
                             trace_id=trace_id,
                             observation_id=obs_id,
                             launch_id=launch_id,
@@ -793,25 +738,90 @@ class ExecutionWorker:
                             dataset_source=dataset_source,
                         )
                     else:
-                        terminal_status = "TIMED_OUT" if inv_res.error_category == "READ_TIMEOUT" else "FAILED"
-                        self.finalize_execution_and_attempt(
-                            item_id=item_id,
-                            generation=generation,
-                            lease_token=token,
-                            target_item_status=terminal_status,
-                            target_eval_status="skipped",
-                            target_quality_conclusion="fail",
-                            current_attempt_id=current_attempt_id,
-                            attempt_updates=att_updates,
-                            execution_error=inv_res.error_message,
-                            trace_id=trace_id,
-                            observation_id=obs_id,
-                            launch_id=launch_id,
-                            dataset_item_id=claim_info["dataset_item_id"],
-                            dataset_version=dataset_version,
-                            dataset_run_name=dataset_run_name,
-                            dataset_source=dataset_source,
-                        )
+                        # Intercept lease lost before failure finalization
+                        if lease_lost.is_set():
+                            return False
+
+                        # Failed attempt
+                        if launch_cancelled:
+                            self.finalize_execution_and_attempt(
+                                item_id=item_id,
+                                generation=generation,
+                                lease_token=token,
+                                target_item_status="CANCELLED",
+                                target_eval_status="skipped",
+                                target_quality_conclusion="unknown",
+                                current_attempt_id=current_attempt_id,
+                                attempt_updates=att_updates,
+                                execution_error=inv_res.error_message,
+                                trace_id=trace_id,
+                                observation_id=obs_id,
+                                launch_id=launch_id,
+                                dataset_item_id=claim_info["dataset_item_id"],
+                                dataset_version=dataset_version,
+                                dataset_run_name=dataset_run_name,
+                                dataset_source=dataset_source,
+                            )
+                        elif is_non_idem_read_timeout:
+                            self.finalize_execution_and_attempt(
+                                item_id=item_id,
+                                generation=generation,
+                                lease_token=token,
+                                target_item_status="FAILED",
+                                target_eval_status="skipped",
+                                target_quality_conclusion="fail",
+                                current_attempt_id=current_attempt_id,
+                                attempt_updates=att_updates,
+                                execution_error=f"AMBIGUOUS_OUTCOME: {inv_res.error_message}",
+                                trace_id=trace_id,
+                                observation_id=obs_id,
+                                launch_id=launch_id,
+                                dataset_item_id=claim_info["dataset_item_id"],
+                                dataset_version=dataset_version,
+                                dataset_run_name=dataset_run_name,
+                                dataset_source=dataset_source,
+                            )
+                        elif inv_res.is_retryable and attempt_no <= spec.max_retries:
+                            delay_sec = inv_res.retry_after_seconds or min(2 ** (attempt_no - 1), 30)
+                            self.finalize_execution_and_attempt(
+                                item_id=item_id,
+                                generation=generation,
+                                lease_token=token,
+                                target_item_status="RETRY_WAIT",
+                                target_eval_status="pending",
+                                target_quality_conclusion="unknown",
+                                current_attempt_id=current_attempt_id,
+                                attempt_updates=att_updates,
+                                execution_error=inv_res.error_message,
+                                retry_available_at=datetime.now(UTC) + timedelta(seconds=delay_sec),
+                                trace_id=trace_id,
+                                observation_id=obs_id,
+                                launch_id=launch_id,
+                                dataset_item_id=claim_info["dataset_item_id"],
+                                dataset_version=dataset_version,
+                                dataset_run_name=dataset_run_name,
+                                dataset_source=dataset_source,
+                            )
+                        else:
+                            terminal_status = "TIMED_OUT" if inv_res.error_category == "READ_TIMEOUT" else "FAILED"
+                            self.finalize_execution_and_attempt(
+                                item_id=item_id,
+                                generation=generation,
+                                lease_token=token,
+                                target_item_status=terminal_status,
+                                target_eval_status="skipped",
+                                target_quality_conclusion="fail",
+                                current_attempt_id=current_attempt_id,
+                                attempt_updates=att_updates,
+                                execution_error=inv_res.error_message,
+                                trace_id=trace_id,
+                                observation_id=obs_id,
+                                launch_id=launch_id,
+                                dataset_item_id=claim_info["dataset_item_id"],
+                                dataset_version=dataset_version,
+                                dataset_run_name=dataset_run_name,
+                                dataset_source=dataset_source,
+                            )
             finally:
                 stop_hb.set()
                 hb_task.cancel()

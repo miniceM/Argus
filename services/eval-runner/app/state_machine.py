@@ -38,6 +38,13 @@ LAUNCH_TRANSITIONS: dict[str, set[str]] = {
     "COMPLETED": {"QUEUED"},  # via Retry Failed if partial failed items exist
 }
 
+TERMINAL_LAUNCH_STATUSES: tuple[str, ...] = (
+    "COMPLETED",
+    "FAILED",
+    "CANCELLED",
+    "PARTIAL_FAILED",
+)
+
 # Valid transitions for ItemExecution
 ITEM_TRANSITIONS: dict[str, set[str]] = {
     "PENDING": {"QUEUED", "CANCELLED", "FAILED"},

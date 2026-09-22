@@ -14,7 +14,7 @@ from .langfuse_sync import aggregate_launch_sync_status
 from .limiter import DistributedAgentLimiter
 from .metrics import runtime_metrics
 from .queue import QueueAdapter
-from .state_machine import aggregate_launch_status_from_items
+from .state_machine import TERMINAL_LAUNCH_STATUSES, aggregate_launch_status_from_items
 
 
 class ExecutionReconciler:
@@ -320,7 +320,7 @@ class ExecutionReconciler:
         with self.db_mgr.get_session() as session:
             candidate_launches = session.scalars(
                 select(ExperimentLaunchRecord.id).where(
-                    ExperimentLaunchRecord.status.in_(["COMPLETED", "FAILED", "CANCELLED"]),
+                    ExperimentLaunchRecord.status.in_(TERMINAL_LAUNCH_STATUSES),
                     ExperimentLaunchRecord.langfuse_sync_status.in_(["PENDING", "SYNCING"]),
                 )
             ).all()

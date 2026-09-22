@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -11,7 +12,7 @@ sys.path[:0] = [str(ROOT / "tests"), str(ROOT / "services" / "eval-runner")]
 from app.db_models import ExperimentItemExecutionRecord as Item  # noqa: E402
 from app.db_models import ExperimentLaunchRecord as Launch  # noqa: E402
 from app.db_models import LangfuseSyncTaskRecord as Task  # noqa: E402
-from app.langfuse_sync import LangfuseOutboxSyncer, aggregate_launch_sync_status  # noqa: E402
+from app.langfuse_sync import LangfuseOutboxSyncer, _invoke_with_timeout, aggregate_launch_sync_status  # noqa: E402
 from app.main import _client  # noqa: E402
 from sqlalchemy import event  # noqa: E402
 from test_pr17_review_regressions import create_launch_helper  # noqa: E402
@@ -710,3 +711,34 @@ def test_task_timeout_releases_processing_thread(setup_runtime):
     finally:
         release.set()
         t.join(2)
+
+
+# 23. 超时机制不无限累积未结束的后台存活调用
+def test_timeouts_do_not_accumulate_live_remote_calls():
+    release = threading.Event()
+    lock = threading.Lock()
+    active = []
+    threads = []
+
+    def blocked():
+        with lock:
+            active.append(threading.current_thread())
+            threads.append(threading.current_thread())
+        release.wait(2)
+        with lock:
+            active.remove(threading.current_thread())
+
+    try:
+        for _ in range(3):
+            try:
+                _invoke_with_timeout(blocked, timeout=0.02)
+            except TimeoutError:
+                pass
+        with lock:
+            remaining = len(active)
+        assert remaining == 0, f"{remaining} timed-out remote calls still running"
+    finally:
+        release.set()
+        for t in threads:
+            t.join(1)
+

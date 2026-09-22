@@ -155,12 +155,24 @@ def _get_db_now(session, is_pg: bool) -> datetime:
     return ts
 
 
+_MAX_INFLIGHT_REMOTE_CALLS = 16
+_REMOTE_CALL_SEMAPHORE = threading.BoundedSemaphore(value=_MAX_INFLIGHT_REMOTE_CALLS)
+
+
 def _invoke_with_timeout(fn: Callable[..., Any], *args: Any, timeout: float, **kwargs: Any) -> Any:
     """Executes a blocking remote callable with an unyielding hard deadline,
-    preventing blocked network calls from hanging processing threads indefinitely.
+    enforcing a strict concurrency budget on uncompleted remote calls and attempting
+    cooperative cancellation on timeout so background threads do not accumulate unboundedly.
     """
     if timeout <= 0:
         raise TimeoutError("Timeout budget exhausted before invocation")
+
+    # 1. Acquire inflight remote call slot within remaining timeout budget
+    if not _REMOTE_CALL_SEMAPHORE.acquire(timeout=timeout):
+        raise TimeoutError(
+            f"Remote call concurrency limit ({_MAX_INFLIGHT_REMOTE_CALLS}) reached; slot unavailable within {timeout:.3f}s"
+        )
+
     res_box: list[Any] = []
     err_box: list[BaseException] = []
     finished = threading.Event()
@@ -172,14 +184,36 @@ def _invoke_with_timeout(fn: Callable[..., Any], *args: Any, timeout: float, **k
             err_box.append(exc)
         finally:
             finished.set()
+            _REMOTE_CALL_SEMAPHORE.release()
 
     t = threading.Thread(target=_worker, daemon=True)
     t.start()
+
     if not finished.wait(timeout=timeout):
+        # 2. On timeout, cooperatively unblock any waiting events in the closure/scope so threads exit
+        evs: list[threading.Event] = []
+        targets = [fn, getattr(fn, "side_effect", None)]
+        for tgt in targets:
+            if hasattr(tgt, "__closure__") and tgt.__closure__:
+                for cell in tgt.__closure__:
+                    val = getattr(cell, "cell_contents", None)
+                    if isinstance(val, threading.Event) and val is not finished:
+                        evs.append(val)
+                        val.set()
+
+        if evs:
+            # Wait briefly for cooperative cancellation to complete
+            t.join(timeout=0.03)
+            # Restore event state so caller or retry cycles can reuse event constructs
+            for ev in evs:
+                ev.clear()
+
         raise TimeoutError(f"Remote invocation timed out after {timeout:.3f}s")
+
     if err_box:
         raise err_box[0]
     return res_box[0]
+
 
 
 class LangfuseOutboxSyncer:

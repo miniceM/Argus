@@ -122,6 +122,11 @@ def calculate_launch_progress(
     }
 
 
+class DomainConflictError(ValueError):
+    """Domain-level state conflict error, representing invalid operations on current resource state."""
+    pass
+
+
 def determine_allowed_actions(
     launch_status: str,
     cancel_requested_at: Any,
@@ -129,7 +134,8 @@ def determine_allowed_actions(
 ) -> dict[str, Any]:
     st = launch_status.upper()
     c = {k.lower(): v for k, v in counts.items()}
-    active_count = c.get("queued", 0) + c.get("running", 0) + c.get("retry_wait", 0)
+    # Active in-flight items that are actually executing or awaiting retry delay
+    in_flight_count = c.get("running", 0) + c.get("retry_wait", 0)
     failed_count = c.get("failed", 0) + c.get("timed_out", 0)
     cancelled_count = c.get("cancelled", 0)
 
@@ -153,23 +159,23 @@ def determine_allowed_actions(
         else:
             reasons["cancel"] = f"当前状态 '{st}' 不支持取消"
 
-    # 2. Resume: allowed in CANCELLED or PARTIAL_FAILED when no active items and cancelled_count > 0
-    if st in ("CANCELLED", "PARTIAL_FAILED") and cancelled_count > 0 and active_count == 0:
+    # 2. Resume: allowed in CANCELLED or PARTIAL_FAILED when no in-flight items and cancelled_count > 0
+    if cancelled_count > 0 and in_flight_count == 0:
         allowed.append("resume")
     else:
-        if active_count > 0:
-            reasons["resume"] = "任务尚有未完成用例在运行中"
-        elif st not in ("CANCELLED", "PARTIAL_FAILED"):
-            reasons["resume"] = f"当前状态 '{st}' 无法恢复执行 (仅限 CANCELLED 或 PARTIAL_FAILED)"
+        if in_flight_count > 0:
+            reasons["resume"] = "任务尚有未完成用例处于排队、准备或运行中"
         elif cancelled_count == 0:
             reasons["resume"] = "没有被取消的用例可供恢复"
+        else:
+            reasons["resume"] = f"当前状态 '{st}' 无法恢复执行"
 
-    # 3. Retry Failed: allowed in terminal states when no active items and failed_count > 0
-    if st in ("PARTIAL_FAILED", "FAILED", "CANCELLED", "COMPLETED") and failed_count > 0 and active_count == 0:
+    # 3. Retry Failed: allowed when no in-flight items and failed_count > 0
+    if failed_count > 0 and in_flight_count == 0:
         allowed.append("retry_failed")
     else:
-        if active_count > 0:
-            reasons["retry_failed"] = "任务尚有未完成用例在运行中"
+        if in_flight_count > 0:
+            reasons["retry_failed"] = "任务尚有未完成用例处于排队、准备或运行中"
         elif failed_count == 0:
             reasons["retry_failed"] = "当前评测没有失败或超时的用例"
         else:
@@ -179,6 +185,21 @@ def determine_allowed_actions(
         "allowed": allowed,
         "reasons": reasons,
     }
+
+
+def validate_launch_action_allowed(
+    launch_status: str,
+    cancel_requested_at: Any,
+    counts: dict[str, int],
+    action: str,
+) -> None:
+    """Validates whether a specific action (run, cancel, resume, retry_failed) is permitted.
+    Raises DomainConflictError if the action violates lifecycle contracts or has active items.
+    """
+    actions_info = determine_allowed_actions(launch_status, cancel_requested_at, counts)
+    if action not in actions_info["allowed"]:
+        reason = actions_info["reasons"].get(action, f"Action '{action}' is not permitted in current state '{launch_status}'")
+        raise DomainConflictError(reason)
 
 
 def aggregate_quality_conclusion(

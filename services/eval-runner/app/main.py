@@ -77,11 +77,15 @@ queue_adapter, limiter = init_queue_and_limiter(
     db_url=db_manager.db_url,
 )
 
+def _client():
+    return get_client()
+
+
 # 4. Initialize Orchestrator, Worker, Reconciler, OutboxSyncer
 orchestrator = LaunchOrchestrator(db_manager, queue_adapter, limiter)
 worker = ExecutionWorker(db_manager, queue_adapter, limiter)
 reconciler = ExecutionReconciler(db_manager, queue_adapter, limiter)
-outbox_syncer = LangfuseOutboxSyncer(db_manager)
+outbox_syncer = LangfuseOutboxSyncer(db_manager, langfuse_client=_client)
 
 # 5. Initialize Launch Service
 launch_service = LaunchService(db_manager, registry, runner_version=settings.runner_version)
@@ -145,7 +149,7 @@ async def lifespan(app: FastAPI):
     async def _syncer_loop():
         while not stop_event.is_set():
             try:
-                processed = await asyncio.to_thread(outbox_syncer.process_batch, limit=20)
+                processed = await asyncio.to_thread(outbox_syncer.process_batch, batch_size=1)
                 if processed == 0:
                     await asyncio.sleep(2.0)
                 else:

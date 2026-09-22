@@ -10,6 +10,7 @@ from .db_models import (
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
 )
+from .langfuse_sync import aggregate_launch_sync_status
 from .limiter import DistributedAgentLimiter
 from .metrics import runtime_metrics
 from .queue import QueueAdapter
@@ -312,11 +313,32 @@ class ExecutionReconciler:
         self.reconcile_expired_leases()
         self.reconcile_backlog()
         self.reconcile_launch_states()
+        self.reconcile_sync_statuses()
+
+    def reconcile_sync_statuses(self) -> int:
+        """Compensates sync status aggregation for terminal launches still in SYNCING/PENDING."""
+        with self.db_mgr.get_session() as session:
+            candidate_launches = session.scalars(
+                select(ExperimentLaunchRecord.id).where(
+                    ExperimentLaunchRecord.status.in_(["COMPLETED", "FAILED", "CANCELLED"]),
+                    ExperimentLaunchRecord.langfuse_sync_status.in_(["PENDING", "SYNCING"]),
+                )
+            ).all()
+
+        updated = 0
+        for lid in candidate_launches:
+            try:
+                aggregate_launch_sync_status(self.db_mgr, lid)
+                updated += 1
+            except Exception:
+                pass
+        return updated
 
     def reconcile_launch_states(self) -> int:
         """Checks RUNNING or CANCELLING launches; transitions to terminal status when all items finish."""
         now = datetime.now(UTC)
         updated_count = 0
+        finalized_launch_ids = []
 
         with self.db_mgr.get_session() as session:
             active_launches = session.scalars(
@@ -397,7 +419,14 @@ class ExecutionReconciler:
                     launch.completed_at = now
                     launch.updated_at = now
                     updated_count += 1
+                    finalized_launch_ids.append(launch.id)
 
             session.commit()
+
+        for lid in finalized_launch_ids:
+            try:
+                aggregate_launch_sync_status(self.db_mgr, lid)
+            except Exception:
+                pass
 
         return updated_count

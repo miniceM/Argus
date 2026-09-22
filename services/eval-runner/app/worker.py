@@ -52,25 +52,36 @@ class ExecutionWorker:
         return self.queue.read_group(self.worker_id, count=count, block_ms=block_ms)
 
     def renew_lease(self, item_id: str, lease_token: str, extension_seconds: int = 30) -> bool:
-        """Renews active lease timestamp for in-flight items. Fails if lease already expired."""
-        now = datetime.now(UTC)
+        """Renews active lease timestamp for in-flight items under row lock and post-lock clock check."""
+        is_pg = self.db_mgr.engine.dialect.name == "postgresql"
         with self.db_mgr.get_session() as session:
-            stmt = (
-                update(ExperimentItemExecutionRecord)
-                .where(
-                    ExperimentItemExecutionRecord.id == item_id,
-                    ExperimentItemExecutionRecord.lease_token == lease_token,
-                    ExperimentItemExecutionRecord.execution_status == "running",
-                    ExperimentItemExecutionRecord.lease_expires_at > now,
-                )
-                .values(
-                    lease_expires_at=now + timedelta(seconds=extension_seconds),
-                    updated_at=now,
-                )
-            )
-            res = session.execute(stmt)
+            stmt = select(ExperimentItemExecutionRecord).where(ExperimentItemExecutionRecord.id == item_id)
+            if is_pg:
+                stmt = stmt.with_for_update()
+            item = session.scalars(stmt).first()
+            if not item:
+                return False
+
+            current_ts = session.scalar(select(func.clock_timestamp())) if is_pg else datetime.now(UTC)
+            if current_ts.tzinfo is None:
+                current_ts = current_ts.replace(tzinfo=UTC)
+            lease_exp = item.lease_expires_at
+            if lease_exp and lease_exp.tzinfo is None:
+                lease_exp = lease_exp.replace(tzinfo=UTC)
+
+            if (
+                item.lease_token != lease_token
+                or item.execution_status != "running"
+                or lease_exp is None
+                or lease_exp <= current_ts
+            ):
+                session.rollback()
+                return False
+
+            item.lease_expires_at = current_ts + timedelta(seconds=extension_seconds)
+            item.updated_at = current_ts
             session.commit()
-            return res.rowcount == 1
+            return True
 
     def claim_item(
         self,
@@ -122,54 +133,65 @@ class ExecutionWorker:
         item_id: str,
         lease_token: str,
         generation: int = 1,
+        launch_id: str | None = None,
     ) -> int | None:
         """Authorizes attempt creation serialized with launch cancellation and strict ownership verification.
         Global lock ordering: Launch -> Item. Locks are released immediately after Attempt creation.
         """
-        now = datetime.now(UTC)
         is_pg = self.db_mgr.engine.dialect.name == "postgresql"
 
         with self.db_mgr.get_session() as session:
-            # First find item to know launch_id
-            item_pre = session.get(ExperimentItemExecutionRecord, item_id)
-            if not item_pre:
-                return None
+            effective_launch_id = launch_id
+            if not effective_launch_id:
+                item_pre = session.get(ExperimentItemExecutionRecord, item_id)
+                if not item_pre:
+                    return None
+                effective_launch_id = item_pre.launch_id
 
             # 1. Lock Launch
-            launch_stmt = select(ExperimentLaunchRecord).where(ExperimentLaunchRecord.id == item_pre.launch_id)
+            launch_stmt = select(ExperimentLaunchRecord).where(ExperimentLaunchRecord.id == effective_launch_id)
             if is_pg:
                 launch_stmt = launch_stmt.with_for_update()
             launch = session.scalars(launch_stmt).first()
             if not launch:
                 return None
 
-            # 2. Lock Item and verify strict lease ownership in both cancelled and uncancelled branches
-            item_stmt = (
-                select(ExperimentItemExecutionRecord)
-                .where(
-                    ExperimentItemExecutionRecord.id == item_id,
-                    ExperimentItemExecutionRecord.dispatch_generation == generation,
-                    ExperimentItemExecutionRecord.lease_token == lease_token,
-                    ExperimentItemExecutionRecord.execution_status == "running",
-                    ExperimentItemExecutionRecord.lease_expires_at > (func.clock_timestamp() if is_pg else now),
-                )
-            )
+            # 2. Lock Item
+            item_stmt = select(ExperimentItemExecutionRecord).where(ExperimentItemExecutionRecord.id == item_id)
             if is_pg:
                 item_stmt = item_stmt.with_for_update()
             item = session.scalars(item_stmt).first()
             if not item:
+                session.rollback()
+                return None
+
+            # 3. Post-lock instantaneous clock check
+            current_ts = session.scalar(select(func.clock_timestamp())) if is_pg else datetime.now(UTC)
+            if current_ts.tzinfo is None:
+                current_ts = current_ts.replace(tzinfo=UTC)
+            lease_exp = item.lease_expires_at
+            if lease_exp and lease_exp.tzinfo is None:
+                lease_exp = lease_exp.replace(tzinfo=UTC)
+
+            if (
+                item.dispatch_generation != generation
+                or item.lease_token != lease_token
+                or item.execution_status != "running"
+                or lease_exp is None
+                or lease_exp <= current_ts
+            ):
                 # Lost ownership or expired! Exit safely without modifying anything.
                 session.rollback()
                 return None
 
-            # Check collaborative cancellation
+            # Check collaborative cancellation: worker holds valid lease, now cooperatively cancels item
             if launch.cancel_requested_at or launch.status in ("CANCELLING", "CANCELLED"):
                 item.execution_status = "cancelled"
                 item.active_attempt_id = None
                 item.lease_owner = None
                 item.lease_token = None
                 item.lease_expires_at = None
-                item.updated_at = now
+                item.updated_at = current_ts
                 session.commit()
                 return None
 
@@ -191,11 +213,11 @@ class ExecutionWorker:
                 request_phase="PREPARED",
                 dispatch_generation=generation,
                 lease_token=lease_token,
-                started_at=now,
+                started_at=current_ts,
             )
             session.add(att_rec)
             item.active_attempt_id = att_id
-            item.updated_at = now
+            item.updated_at = current_ts
             # Commit immediately to release row locks before invoking HTTP
             session.commit()
             return next_attempt_no
@@ -220,70 +242,72 @@ class ExecutionWorker:
         dataset_item_id: str | None = None,
         dataset_version: str | None = None,
         dataset_run_name: str | None = None,
+        dataset_source: str | None = None,
     ) -> bool:
         """Atomic finalization for all outcome branches.
         Requires active_attempt_id CAS matching and Attempt status RUNNING.
         Rolls back entirely if either row count != 1.
         """
-        now = datetime.now(UTC)
         is_pg = self.db_mgr.engine.dialect.name == "postgresql"
-        clock_expr = func.clock_timestamp() if is_pg else now
 
         with self.db_mgr.get_session() as session:
             # Phase 1: Lock row
-            lock_stmt = select(ExperimentItemExecutionRecord.id).where(ExperimentItemExecutionRecord.id == item_id)
+            lock_stmt = select(ExperimentItemExecutionRecord).where(ExperimentItemExecutionRecord.id == item_id)
             if is_pg:
                 lock_stmt = lock_stmt.with_for_update()
-            if not session.scalars(lock_stmt).first():
+            item = session.scalars(lock_stmt).first()
+            if not item:
                 return False
 
-            # Phase 2: CAS update item
-            item_where = [
-                ExperimentItemExecutionRecord.id == item_id,
-                ExperimentItemExecutionRecord.dispatch_generation == generation,
-                ExperimentItemExecutionRecord.lease_token == lease_token,
-                ExperimentItemExecutionRecord.execution_status == "running",
-                ExperimentItemExecutionRecord.lease_expires_at > clock_expr,
-            ]
-            if current_attempt_id is not None:
-                item_where.append(ExperimentItemExecutionRecord.active_attempt_id == current_attempt_id)
-            else:
-                item_where.append(ExperimentItemExecutionRecord.active_attempt_id.is_(None))
+            # Post-lock instantaneous clock check
+            current_ts = session.scalar(select(func.clock_timestamp())) if is_pg else datetime.now(UTC)
+            if current_ts.tzinfo is None:
+                current_ts = current_ts.replace(tzinfo=UTC)
+            lease_exp = item.lease_expires_at
+            if lease_exp and lease_exp.tzinfo is None:
+                lease_exp = lease_exp.replace(tzinfo=UTC)
 
-            is_retry_wait = target_item_status.lower() == "retry_wait"
-            item_values: dict[str, Any] = {
-                "execution_status": target_item_status.lower(),
-                "eval_status": target_eval_status.lower(),
-                "quality_conclusion": target_quality_conclusion.lower(),
-                "final_attempt_id": current_attempt_id,
-                "active_attempt_id": None,
-                "scores": scores,
-                "execution_error": execution_error,
-                "eval_error": eval_error,
-                "available_at": retry_available_at,
-                "trace_id": trace_id,
-                "observation_id": observation_id,
-                "lease_owner": None,
-                "lease_token": None,
-                "lease_expires_at": None,
-                "completed_at": None if is_retry_wait else now,
-                "updated_at": now,
-            }
-
-            stmt_item = (
-                update(ExperimentItemExecutionRecord)
-                .where(*item_where)
-                .values(**item_values)
-            )
-            res_item = session.execute(stmt_item)
-            if res_item.rowcount != 1:
+            if (
+                item.dispatch_generation != generation
+                or item.lease_token != lease_token
+                or item.execution_status != "running"
+                or lease_exp is None
+                or lease_exp <= current_ts
+            ):
                 session.rollback()
                 return False
+
+            if current_attempt_id is not None:
+                if item.active_attempt_id != current_attempt_id:
+                    session.rollback()
+                    return False
+            else:
+                if item.active_attempt_id is not None:
+                    session.rollback()
+                    return False
+
+            is_retry_wait = target_item_status.lower() == "retry_wait"
+            item.execution_status = target_item_status.lower()
+            item.eval_status = target_eval_status.lower()
+            item.quality_conclusion = target_quality_conclusion.lower()
+            item.final_attempt_id = current_attempt_id
+            item.active_attempt_id = None
+            item.scores = scores
+            item.execution_error = execution_error
+            item.eval_error = eval_error
+            item.available_at = retry_available_at
+            item.trace_id = trace_id
+            item.observation_id = observation_id
+            item.lease_owner = None
+            item.lease_token = None
+            item.lease_expires_at = None
+            item.completed_at = None if is_retry_wait else current_ts
+            item.updated_at = current_ts
 
             # Phase 3: CAS update attempt
             if current_attempt_id is not None and attempt_updates is not None:
                 att_values = dict(attempt_updates)
-                att_values.setdefault("completed_at", now)
+                att_values.setdefault("completed_at", current_ts)
                 stmt_att = (
                     update(ExecutionAttemptRecord)
                     .where(
@@ -309,6 +333,9 @@ class ExecutionWorker:
                 and trace_id
             ):
                 task_id = str(uuid.uuid4())
+                payload_scores = dict(scores or {})
+                if dataset_source:
+                    payload_scores["_dataset_source"] = dataset_source
                 outbox_task = LangfuseSyncTaskRecord(
                     id=task_id,
                     launch_id=launch_id,
@@ -320,10 +347,12 @@ class ExecutionWorker:
                     trace_id=trace_id,
                     observation_id=observation_id,
                     dataset_run_name=dataset_run_name,
-                    scores_payload=scores or {},
+                    scores_payload=payload_scores,
                     status="PENDING",
                     attempts=0,
-                    next_retry_at=now,
+                    next_retry_at=current_ts,
+                    created_at=current_ts,
+                    updated_at=current_ts,
                 )
                 session.add(outbox_task)
 
@@ -471,129 +500,136 @@ class ExecutionWorker:
                 self.queue.ack(message_id)
                 return False
 
-            try:
-                # 3. Both permits acquired: now authorize attempt
-                attempt_no = self.authorize_attempt(item_id, token, generation)
-                if attempt_no is None:
-                    # Cancelled before attempt could be authorized or lost lease
-                    self.queue.ack(message_id)
-                    return False
+            # 3. Both permits acquired: now authorize attempt
+            attempt_no = self.authorize_attempt(item_id, token, generation)
+            if attempt_no is None:
+                # Cancelled before attempt could be authorized or lost lease
+                self.limiter.release_concurrency_permit(spec.id, permit_id)
+                self.queue.ack(message_id)
+                return False
 
-                with self.db_mgr.get_session() as session:
-                    att_rec = session.scalars(
-                        select(ExecutionAttemptRecord).where(
-                            ExecutionAttemptRecord.item_execution_id == item_id,
-                            ExecutionAttemptRecord.attempt_no == attempt_no,
-                        )
-                    ).first()
-                    current_attempt_id = att_rec.id if att_rec else None
-
-                executor = RemoteAgentExecutor(spec)
-                mapped_payload = map_request(dataset_input, spec.request_mapping)
-                headers = {
-                    "Content-Type": "application/json",
-                    "X-Eval-Launch-Id": launch_id,
-                    "X-Eval-Dataset-Item-Id": claim_info["dataset_item_id"],
-                    "X-Eval-Agent-Version": spec.version,
-                    "Idempotency-Key": f"argus:{item_id}",
-                }
-
-                lf = get_langfuse_client_safe()
-                trace_id: str | None = None
-                obs_id: str | None = None
-
-                # Double-layered observation or OpenTelemetry
-                if lf and hasattr(lf, "start_as_current_observation"):
-                    parent_ctx = lf.start_as_current_observation(
-                        as_type="chain",
-                        name=f"eval_item_execution:{claim_info['dataset_item_id']}",
-                        input=dataset_input,
-                        metadata={"launch_id": launch_id, "item_id": item_id, "generation": generation},
+            with self.db_mgr.get_session() as session:
+                att_rec = session.scalars(
+                    select(ExecutionAttemptRecord).where(
+                        ExecutionAttemptRecord.item_execution_id == item_id,
+                        ExecutionAttemptRecord.attempt_no == attempt_no,
                     )
-                else:
-                    parent_ctx = None
+                ).first()
+                current_attempt_id = att_rec.id if att_rec else None
 
-                # Generate W3C traceparent fallback if not set
-                default_tid = uuid.uuid4().hex
-                default_sid = uuid.uuid4().hex[:16]
+            executor = RemoteAgentExecutor(spec)
+            mapped_payload = map_request(dataset_input, spec.request_mapping)
+            headers = {
+                "Content-Type": "application/json",
+                "X-Eval-Launch-Id": launch_id,
+                "X-Eval-Dataset-Item-Id": claim_info["dataset_item_id"],
+                "X-Eval-Agent-Version": spec.version,
+                "Idempotency-Key": f"argus:{item_id}",
+            }
 
-                async def _do_invocation_and_eval():
-                    nonlocal trace_id, obs_id
-                    if lf and hasattr(lf, "start_as_current_observation"):
-                        with lf.start_as_current_observation(
-                            as_type="tool",
-                            name="remote-agent-http",
-                            input={"agent": f"{spec.agent_id}:{spec.version}", "request": mapped_payload},
-                            metadata={"endpoint": spec.endpoint},
-                        ) as http_obs:
-                            try:
-                                inject(headers)
-                            except Exception:
-                                pass
-                            if "traceparent" not in headers:
-                                headers["traceparent"] = f"00-{default_tid}-{default_sid}-01"
-                            trace_id = lf.get_current_trace_id()
-                            obs_id = lf.get_current_observation_id()
-                            res = await executor.invoke_once(mapped_payload, headers)
-                            http_obs.update(
-                                output=res.body,
-                                metadata={
-                                    "http_status": res.status_code,
-                                    "duration_ms": res.duration_ms,
-                                    "trace_context_received": res.trace_context_received,
-                                },
-                            )
-                            return res
-                    else:
+            lf = get_langfuse_client_safe()
+            trace_id: str | None = None
+            obs_id: str | None = None
+
+            # Double-layered observation or OpenTelemetry
+            if lf and hasattr(lf, "start_as_current_observation"):
+                parent_ctx = lf.start_as_current_observation(
+                    as_type="chain",
+                    name=f"eval_item_execution:{claim_info['dataset_item_id']}",
+                    input=dataset_input,
+                    metadata={"launch_id": launch_id, "item_id": item_id, "generation": generation},
+                )
+            else:
+                parent_ctx = None
+
+            # Generate W3C traceparent fallback if not set
+            default_tid = uuid.uuid4().hex
+            default_sid = uuid.uuid4().hex[:16]
+
+            async def _do_invocation_and_eval():
+                nonlocal trace_id, obs_id
+                if lf and hasattr(lf, "start_as_current_observation"):
+                    with lf.start_as_current_observation(
+                        as_type="tool",
+                        name="remote-agent-http",
+                        input={"agent": f"{spec.agent_id}:{spec.version}", "request": mapped_payload},
+                        metadata={"endpoint": spec.endpoint},
+                    ) as http_obs:
                         try:
-                            from opentelemetry import trace
-                            tracer = trace.get_tracer("argus-eval-runner")
-                            with tracer.start_as_current_span(
-                                f"eval_item_execution:{claim_info['dataset_item_id']}",
-                                attributes={
-                                    "launch_id": launch_id,
-                                    "item_id": item_id,
-                                    "agent_id": spec.agent_id,
-                                    "agent_version": spec.version,
-                                },
-                            ):
-                                inject(headers)
+                            inject(headers)
                         except Exception:
                             pass
-
                         if "traceparent" not in headers:
                             headers["traceparent"] = f"00-{default_tid}-{default_sid}-01"
-                        trace_id = headers["traceparent"].split("-")[1]
-                        return await executor.invoke_once(mapped_payload, headers)
+                        trace_id = lf.get_current_trace_id()
+                        obs_id = lf.get_current_observation_id()
+                        res = await executor.invoke_once(mapped_payload, headers)
+                        http_obs.update(
+                            output=res.body,
+                            metadata={
+                                "http_status": res.status_code,
+                                "duration_ms": res.duration_ms,
+                                "trace_context_received": res.trace_context_received,
+                            },
+                        )
+                        return res
+                else:
+                    try:
+                        from opentelemetry import trace
+                        tracer = trace.get_tracer("argus-eval-runner")
+                        with tracer.start_as_current_span(
+                            f"eval_item_execution:{claim_info['dataset_item_id']}",
+                            attributes={
+                                "launch_id": launch_id,
+                                "item_id": item_id,
+                                "agent_id": spec.agent_id,
+                                "agent_version": spec.version,
+                            },
+                        ):
+                            inject(headers)
+                    except Exception:
+                        pass
 
-                # Mark attempt phase as MAY_HAVE_BEEN_SENT before network call
-                if current_attempt_id:
-                    with self.db_mgr.get_session() as session:
-                        att = session.get(ExecutionAttemptRecord, current_attempt_id)
-                        if att:
-                            att.request_phase = "MAY_HAVE_BEEN_SENT"
-                            session.commit()
+                    if "traceparent" not in headers:
+                        headers["traceparent"] = f"00-{default_tid}-{default_sid}-01"
+                    trace_id = headers["traceparent"].split("-")[1]
+                    return await executor.invoke_once(mapped_payload, headers)
 
-                # Start background heartbeat to renew lease AND concurrency permit during invocation
-                stop_hb = asyncio.Event()
-                hb_interval = getattr(self, "heartbeat_interval", 5.0)
-                hb_extension = max(30, int(spec.timeout_seconds) + 15)
+            # Mark attempt phase as MAY_HAVE_BEEN_SENT before network call
+            if current_attempt_id:
+                with self.db_mgr.get_session() as session:
+                    att = session.get(ExecutionAttemptRecord, current_attempt_id)
+                    if att:
+                        att.request_phase = "MAY_HAVE_BEEN_SENT"
+                        session.commit()
 
-                async def _heartbeat_loop():
-                    while not stop_hb.is_set():
-                        try:
-                            await asyncio.sleep(hb_interval)
-                            if stop_hb.is_set():
-                                break
-                            self.renew_lease(item_id, token, extension_seconds=hb_extension)
-                            self.limiter.renew_concurrency_permit(spec.id, permit_id, extra_sec=hb_extension)
-                        except asyncio.CancelledError:
+            # Start background heartbeat to renew lease AND concurrency permit during invocation
+            stop_hb = asyncio.Event()
+            lease_lost = asyncio.Event()
+            hb_interval = getattr(self, "heartbeat_interval", 5.0)
+            hb_extension = max(30, int(spec.timeout_seconds) + 15)
+            holding_permit = True
+
+            async def _heartbeat_loop():
+                while not stop_hb.is_set():
+                    try:
+                        await asyncio.sleep(hb_interval)
+                        if stop_hb.is_set():
                             break
-                        except Exception:
-                            pass
+                        renew_ok = self.renew_lease(item_id, token, extension_seconds=hb_extension)
+                        if not renew_ok:
+                            lease_lost.set()
+                            break
+                        if holding_permit:
+                            self.limiter.renew_concurrency_permit(spec.id, permit_id, extra_sec=hb_extension)
+                    except asyncio.CancelledError:
+                        break
+                    except Exception:
+                        pass
 
-                hb_task = asyncio.create_task(_heartbeat_loop())
+            hb_task = asyncio.create_task(_heartbeat_loop())
 
+            try:
                 try:
                     if parent_ctx:
                         with parent_ctx:
@@ -601,12 +637,12 @@ class ExecutionWorker:
                     else:
                         inv_res = await _do_invocation_and_eval()
                 finally:
-                    stop_hb.set()
-                    hb_task.cancel()
-                    try:
-                        await hb_task
-                    except asyncio.CancelledError:
-                        pass
+                    # Always release distributed agent concurrency permit immediately after HTTP finishes
+                    holding_permit = False
+                    self.limiter.release_concurrency_permit(spec.id, permit_id)
+
+                if lease_lost.is_set():
+                    return False
 
                 is_non_idem_read_timeout = (
                     not spec.is_idempotent and inv_res.error_category == "READ_TIMEOUT"
@@ -632,135 +668,159 @@ class ExecutionWorker:
                     "request_phase": final_phase,
                 }
 
-            finally:
-                # Always release distributed concurrency permit
-                self.limiter.release_concurrency_permit(spec.id, permit_id)
+                # Check if Launch was cancelled while we were invoking
+                with self.db_mgr.get_session() as session:
+                    launch_curr = session.get(ExperimentLaunchRecord, launch_id)
+                    launch_cancelled = bool(
+                        launch_curr and (launch_curr.cancel_requested_at or launch_curr.status in ("CANCELLING", "CANCELLED"))
+                    )
 
-            # Check if Launch was cancelled while we were invoking
-            with self.db_mgr.get_session() as session:
-                launch_curr = session.get(ExperimentLaunchRecord, launch_id)
-                launch_cancelled = bool(
-                    launch_curr and (launch_curr.cancel_requested_at or launch_curr.status in ("CANCELLING", "CANCELLED"))
-                )
+                dataset_meta = manifest.get("dataset", {})
+                dataset_version = dataset_meta.get("dataset_version") or dataset_meta.get("version")
+                dataset_source = dataset_meta.get("source")
+                dataset_run_name = manifest.get("name") or f"argus-{launch_id[:12]}"
 
-            dataset_version = manifest.get("dataset", {}).get("version")
-            dataset_run_name = manifest.get("name") or f"argus-{launch_id[:12]}"
+                if inv_res.status_code == 200 and inv_res.body is not None:
+                    # Successful execution -> evaluate quality (ASYNC offloaded via asyncio.to_thread)
+                    item_eval_specs = [
+                        ev for ev in manifest.get("evaluators", [])
+                        if ev.get("scope", "item") == "item"
+                    ]
 
-            if inv_res.status_code == 200 and inv_res.body is not None:
-                # Successful execution -> evaluate quality
-                scores_dict: dict[str, float] = {}
-                item_eval_specs = [
-                    ev for ev in manifest.get("evaluators", [])
-                    if ev.get("scope", "item") == "item"
-                ]
-                eval_status = "succeeded" if item_eval_specs else "skipped"
-                quality_conclusion = "unknown"
-                eval_error = None
+                    def _do_evaluation():
+                        scores: dict[str, float] = {}
+                        eval_st = "succeeded" if item_eval_specs else "skipped"
+                        qual_conc = "unknown"
+                        eval_err = None
+                        try:
+                            for ev in item_eval_specs:
+                                ev_fn = default_evaluator_registry.get_evaluator_fn(ev["id"], ev.get("version"))
+                                ev_res = ev_fn(output=inv_res.body, expected_output=expected_output)
+                                scores[ev["id"]] = float(getattr(ev_res, "value", 0.0))
+                            if item_eval_specs:
+                                qual_conc = evaluate_item_quality(
+                                    scores, item_eval_specs, manifest.get("quality_policy")
+                                )
+                        except Exception as exc:
+                            eval_st = "failed"
+                            eval_err = str(exc)
+                        return scores, eval_st, qual_conc, eval_err
 
-                try:
-                    for ev in item_eval_specs:
-                        ev_fn = default_evaluator_registry.get_evaluator_fn(ev["id"], ev.get("version"))
-                        ev_res = ev_fn(output=inv_res.body, expected_output=expected_output)
-                        scores_dict[ev["id"]] = float(getattr(ev_res, "value", 0.0))
-                    if item_eval_specs:
-                        quality_conclusion = evaluate_item_quality(
-                            scores_dict, item_eval_specs, manifest.get("quality_policy")
-                        )
-                except Exception as exc:
-                    eval_status = "failed"
-                    eval_error = str(exc)
+                    scores_dict, eval_status, quality_conclusion, eval_error = await asyncio.to_thread(_do_evaluation)
 
-                self.finalize_execution_and_attempt(
-                    item_id=item_id,
-                    generation=generation,
-                    lease_token=token,
-                    target_item_status="SUCCEEDED",
-                    target_eval_status=eval_status,
-                    target_quality_conclusion=quality_conclusion,
-                    current_attempt_id=current_attempt_id,
-                    attempt_updates=att_updates,
-                    scores=scores_dict,
-                    eval_error=eval_error,
-                    trace_id=trace_id,
-                    observation_id=obs_id,
-                    launch_id=launch_id,
-                    dataset_item_id=claim_info["dataset_item_id"],
-                    dataset_version=dataset_version,
-                    dataset_run_name=dataset_run_name,
-                )
-            else:
-                # Failed attempt
-                if launch_cancelled:
+                    if lease_lost.is_set():
+                        # Lost lease ownership during evaluation -> discard results
+                        return False
+
                     self.finalize_execution_and_attempt(
                         item_id=item_id,
                         generation=generation,
                         lease_token=token,
-                        target_item_status="CANCELLED",
-                        target_eval_status="skipped",
-                        target_quality_conclusion="unknown",
+                        target_item_status="SUCCEEDED",
+                        target_eval_status=eval_status,
+                        target_quality_conclusion=quality_conclusion,
                         current_attempt_id=current_attempt_id,
                         attempt_updates=att_updates,
-                        execution_error=inv_res.error_message,
+                        scores=scores_dict,
+                        eval_error=eval_error,
                         trace_id=trace_id,
                         observation_id=obs_id,
                         launch_id=launch_id,
                         dataset_item_id=claim_info["dataset_item_id"],
                         dataset_version=dataset_version,
                         dataset_run_name=dataset_run_name,
-                    )
-                elif is_non_idem_read_timeout:
-                    self.finalize_execution_and_attempt(
-                        item_id=item_id,
-                        generation=generation,
-                        lease_token=token,
-                        target_item_status="FAILED",
-                        target_eval_status="skipped",
-                        target_quality_conclusion="fail",
-                        current_attempt_id=current_attempt_id,
-                        attempt_updates=att_updates,
-                        execution_error=f"AMBIGUOUS_OUTCOME: {inv_res.error_message}",
-                        trace_id=trace_id,
-                        observation_id=obs_id,
-                        launch_id=launch_id,
-                        dataset_item_id=claim_info["dataset_item_id"],
-                        dataset_version=dataset_version,
-                        dataset_run_name=dataset_run_name,
-                    )
-                elif inv_res.is_retryable and attempt_no <= spec.max_retries:
-                    delay_sec = inv_res.retry_after_seconds or min(2 ** (attempt_no - 1), 30)
-                    self.finalize_execution_and_attempt(
-                        item_id=item_id,
-                        generation=generation,
-                        lease_token=token,
-                        target_item_status="RETRY_WAIT",
-                        target_eval_status="pending",
-                        target_quality_conclusion="unknown",
-                        current_attempt_id=current_attempt_id,
-                        attempt_updates=att_updates,
-                        execution_error=inv_res.error_message,
-                        retry_available_at=datetime.now(UTC) + timedelta(seconds=delay_sec),
-                        trace_id=trace_id,
-                        observation_id=obs_id,
+                        dataset_source=dataset_source,
                     )
                 else:
-                    terminal_status = "TIMED_OUT" if inv_res.error_category == "READ_TIMEOUT" else "FAILED"
-                    self.finalize_execution_and_attempt(
-                        item_id=item_id,
-                        generation=generation,
-                        lease_token=token,
-                        target_item_status=terminal_status,
-                        target_eval_status="skipped",
-                        target_quality_conclusion="fail",
-                        current_attempt_id=current_attempt_id,
-                        attempt_updates=att_updates,
-                        execution_error=inv_res.error_message,
-                        trace_id=trace_id,
-                        observation_id=obs_id,
-                        launch_id=launch_id,
-                        dataset_item_id=claim_info["dataset_item_id"],
-                        dataset_version=dataset_version,
-                        dataset_run_name=dataset_run_name,
-                    )
+                    # Failed attempt
+                    if launch_cancelled:
+                        self.finalize_execution_and_attempt(
+                            item_id=item_id,
+                            generation=generation,
+                            lease_token=token,
+                            target_item_status="CANCELLED",
+                            target_eval_status="skipped",
+                            target_quality_conclusion="unknown",
+                            current_attempt_id=current_attempt_id,
+                            attempt_updates=att_updates,
+                            execution_error=inv_res.error_message,
+                            trace_id=trace_id,
+                            observation_id=obs_id,
+                            launch_id=launch_id,
+                            dataset_item_id=claim_info["dataset_item_id"],
+                            dataset_version=dataset_version,
+                            dataset_run_name=dataset_run_name,
+                            dataset_source=dataset_source,
+                        )
+                    elif is_non_idem_read_timeout:
+                        self.finalize_execution_and_attempt(
+                            item_id=item_id,
+                            generation=generation,
+                            lease_token=token,
+                            target_item_status="FAILED",
+                            target_eval_status="skipped",
+                            target_quality_conclusion="fail",
+                            current_attempt_id=current_attempt_id,
+                            attempt_updates=att_updates,
+                            execution_error=f"AMBIGUOUS_OUTCOME: {inv_res.error_message}",
+                            trace_id=trace_id,
+                            observation_id=obs_id,
+                            launch_id=launch_id,
+                            dataset_item_id=claim_info["dataset_item_id"],
+                            dataset_version=dataset_version,
+                            dataset_run_name=dataset_run_name,
+                            dataset_source=dataset_source,
+                        )
+                    elif inv_res.is_retryable and attempt_no <= spec.max_retries:
+                        delay_sec = inv_res.retry_after_seconds or min(2 ** (attempt_no - 1), 30)
+                        self.finalize_execution_and_attempt(
+                            item_id=item_id,
+                            generation=generation,
+                            lease_token=token,
+                            target_item_status="RETRY_WAIT",
+                            target_eval_status="pending",
+                            target_quality_conclusion="unknown",
+                            current_attempt_id=current_attempt_id,
+                            attempt_updates=att_updates,
+                            execution_error=inv_res.error_message,
+                            retry_available_at=datetime.now(UTC) + timedelta(seconds=delay_sec),
+                            trace_id=trace_id,
+                            observation_id=obs_id,
+                            launch_id=launch_id,
+                            dataset_item_id=claim_info["dataset_item_id"],
+                            dataset_version=dataset_version,
+                            dataset_run_name=dataset_run_name,
+                            dataset_source=dataset_source,
+                        )
+                    else:
+                        terminal_status = "TIMED_OUT" if inv_res.error_category == "READ_TIMEOUT" else "FAILED"
+                        self.finalize_execution_and_attempt(
+                            item_id=item_id,
+                            generation=generation,
+                            lease_token=token,
+                            target_item_status=terminal_status,
+                            target_eval_status="skipped",
+                            target_quality_conclusion="fail",
+                            current_attempt_id=current_attempt_id,
+                            attempt_updates=att_updates,
+                            execution_error=inv_res.error_message,
+                            trace_id=trace_id,
+                            observation_id=obs_id,
+                            launch_id=launch_id,
+                            dataset_item_id=claim_info["dataset_item_id"],
+                            dataset_version=dataset_version,
+                            dataset_run_name=dataset_run_name,
+                            dataset_source=dataset_source,
+                        )
+            finally:
+                stop_hb.set()
+                hb_task.cancel()
+                try:
+                    await hb_task
+                except asyncio.CancelledError:
+                    pass
+                if holding_permit:
+                    self.limiter.release_concurrency_permit(spec.id, permit_id)
 
             self.queue.ack(message_id)
             return True

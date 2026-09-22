@@ -15,9 +15,11 @@ from .db_models import (
 from .limiter import DistributedAgentLimiter
 from .queue import QueueAdapter
 from .state_machine import (
+    DomainConflictError,
     calculate_launch_progress,
     determine_allowed_actions,
     transition_launch_status,
+    validate_launch_action_allowed,
 )
 
 
@@ -211,24 +213,23 @@ class LaunchOrchestrator:
             ).all()
 
             if ambiguous_attempts and not force:
-                raise ValueError(
+                raise DomainConflictError(
                     f"Found {len(ambiguous_attempts)} failed attempts with AMBIGUOUS_OUTCOME for non-idempotent agent. "
                     "Automatic replay is unsafe. Please specify force=True to confirm re-execution."
                 )
 
-            # Must be in terminal CANCELLED, PARTIAL_FAILED or FAILED state
-            if launch.status not in ("CANCELLED", "PARTIAL_FAILED", "FAILED"):
-                raise ValueError(f"Cannot resume launch in status '{launch.status}'. Must be CANCELLED, PARTIAL_FAILED or FAILED.")
-
-            # Guard: no running items allowed
-            running_count = session.scalar(
-                select(func.count(ExperimentItemExecutionRecord.id)).where(
-                    ExperimentItemExecutionRecord.launch_id == launch_id,
-                    ExperimentItemExecutionRecord.execution_status == "running",
+            # Query item counts to enforce single common lifecycle guard
+            counts_res = session.execute(
+                select(
+                    ExperimentItemExecutionRecord.execution_status,
+                    func.count(ExperimentItemExecutionRecord.id),
                 )
-            ) or 0
-            if running_count > 0:
-                raise ValueError("Cannot resume launch while items are still running")
+                .where(ExperimentItemExecutionRecord.launch_id == launch_id)
+                .group_by(ExperimentItemExecutionRecord.execution_status)
+            ).all()
+            counts = {row[0].lower(): row[1] for row in counts_res}
+
+            validate_launch_action_allowed(launch.status, launch.cancel_requested_at, counts, "resume")
 
             # 2. Lock target cancelled items
             item_stmt = (
@@ -243,11 +244,13 @@ class LaunchOrchestrator:
             resumable_items = session.scalars(item_stmt).all()
 
             if not resumable_items:
-                raise ValueError("No cancelled items found to resume")
+                raise DomainConflictError("No cancelled items found to resume")
 
             # Reset launch and transition to QUEUED
             launch.cancel_requested_at = None
             launch.status = "QUEUED"
+            launch.langfuse_sync_status = "PENDING"
+            launch.langfuse_sync_error = None
             launch.completed_at = None
             launch.updated_at = now
 
@@ -293,6 +296,17 @@ class LaunchOrchestrator:
             if not launch:
                 raise ValueError(f"Launch '{launch_id}' not found")
 
+            # Query item counts to enforce single common lifecycle guard
+            counts_res = session.execute(
+                select(
+                    ExperimentItemExecutionRecord.execution_status,
+                    func.count(ExperimentItemExecutionRecord.id),
+                )
+                .where(ExperimentItemExecutionRecord.launch_id == launch_id)
+                .group_by(ExperimentItemExecutionRecord.execution_status)
+            ).all()
+            counts = {row[0].lower(): row[1] for row in counts_res}
+
             # 2. Lock target failed/timed_out items
             item_stmt = (
                 select(ExperimentItemExecutionRecord)
@@ -306,9 +320,9 @@ class LaunchOrchestrator:
             failed_items = session.scalars(item_stmt).all()
 
             if not failed_items:
-                raise ValueError("No failed or timed out items found to retry")
+                raise DomainConflictError("No failed or timed out items found to retry")
 
-            # 3. Non-idempotent crash protection: ALWAYS checked first before running guard
+            # 3. Non-idempotent crash protection: check failed items FIRST
             item_ids = [it.id for it in failed_items]
             ambiguous_attempts = session.scalars(
                 select(ExecutionAttemptRecord).where(
@@ -318,25 +332,19 @@ class LaunchOrchestrator:
             ).all()
 
             if ambiguous_attempts and not force:
-                raise ValueError(
+                raise DomainConflictError(
                     f"Found {len(ambiguous_attempts)} failed attempts with AMBIGUOUS_OUTCOME for non-idempotent agent. "
                     "Automatic replay is unsafe. Please specify force=True to confirm re-execution."
                 )
 
-            # 4. Guard: no active running items allowed
-            running_count = session.scalar(
-                select(func.count(ExperimentItemExecutionRecord.id)).where(
-                    ExperimentItemExecutionRecord.launch_id == launch_id,
-                    ExperimentItemExecutionRecord.execution_status == "running",
-                )
-            ) or 0
-            if running_count > 0:
-                raise ValueError("Cannot retry failed items while launch still has active running items")
-
+            # Enforce common lifecycle contract
+            validate_launch_action_allowed(launch.status, launch.cancel_requested_at, counts, "retry_failed")
 
             # Reset launch and transition to QUEUED
             launch.cancel_requested_at = None
             launch.status = "QUEUED"
+            launch.langfuse_sync_status = "PENDING"
+            launch.langfuse_sync_error = None
             launch.completed_at = None
             launch.updated_at = now
 

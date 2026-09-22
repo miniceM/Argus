@@ -28,6 +28,7 @@ from .models import (
 )
 from .orchestrator import LaunchOrchestrator
 from .registry import AgentRegistry, AgentVersionSpec, map_request
+from .state_machine import DomainConflictError
 
 router = APIRouter(prefix="/api/v1", tags=["Experiment Launches"])
 
@@ -101,6 +102,8 @@ def run_launch_async(
             status=launch.status,
             message="Launch queued for asynchronous execution",
         )
+    except DomainConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         msg = str(exc)
         if "not found" in msg.lower():
@@ -121,6 +124,8 @@ def cancel_launch(
     try:
         launch = orchestrator.cancel_launch(launch_id)
         return _enrich_launch(launch, orchestrator)
+    except DomainConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         msg = str(exc)
         if "not found" in msg.lower():
@@ -141,6 +146,8 @@ def resume_launch(
     try:
         launch = orchestrator.resume_launch(launch_id)
         return _enrich_launch(launch, orchestrator)
+    except DomainConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         msg = str(exc)
         if "not found" in msg.lower():
@@ -163,6 +170,8 @@ def retry_failed_launch(
     try:
         launch = orchestrator.retry_failed_items(launch_id, force=actual_payload.force)
         return _enrich_launch(launch, orchestrator)
+    except DomainConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         msg = str(exc)
         if "not found" in msg.lower():

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { FieldHelp } from "../FieldHelp";
 
@@ -9,6 +9,16 @@ describe("FieldHelp Component", () => {
     rules: "必填，同一 Agent 下版本号不可重复。",
     example: "1.0.0 或 v2",
   };
+
+  const originalInnerWidth = window.innerWidth;
+
+  beforeEach(() => {
+    window.innerWidth = 1024;
+  });
+
+  afterEach(() => {
+    window.innerWidth = originalInnerWidth;
+  });
 
   it("renders trigger button and initially hides help card", () => {
     render(<FieldHelp {...defaultProps} />);
@@ -67,5 +77,23 @@ describe("FieldHelp Component", () => {
     const outside = screen.getByTestId("outside-element");
     fireEvent.mouseDown(outside);
     expect(screen.queryByText("定义该 Agent 规格快照的唯一版本标识。")).not.toBeInTheDocument();
+  });
+
+  it("renders mobile-friendly sheet via portal on viewports below sm breakpoint", () => {
+    // Simulate mobile viewport (< 640px)
+    window.innerWidth = 375;
+    render(<FieldHelp {...defaultProps} placement="bottom-right" />);
+
+    const trigger = screen.getByRole("button", { name: "查看「版本号 (Tag)」说明" });
+    fireEvent.click(trigger);
+
+    // Dialog should be present and have aria-modal on mobile
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+
+    // Content is readable and rendered into document.body portal
+    expect(document.body.contains(dialog)).toBe(true);
+    expect(screen.getByText("定义该 Agent 规格快照的唯一版本标识。")).toBeInTheDocument();
   });
 });

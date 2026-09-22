@@ -2,9 +2,12 @@ import asyncio
 import os
 import sys
 import threading
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "tests"), str(ROOT / "services" / "eval-runner")]
@@ -713,7 +716,7 @@ def test_task_timeout_releases_processing_thread(setup_runtime):
         t.join(2)
 
 
-# 23. 超时机制不无限累积未结束的后台存活调用
+# 23. 超时机制严格限制未结束存活调用的并发数量（存活调用数量有界，不无限堆积）
 def test_timeouts_do_not_accumulate_live_remote_calls():
     release = threading.Event()
     lock = threading.Lock()
@@ -728,17 +731,52 @@ def test_timeouts_do_not_accumulate_live_remote_calls():
         with lock:
             active.remove(threading.current_thread())
 
+    sem = threading.BoundedSemaphore(1)
     try:
-        for _ in range(3):
-            try:
-                _invoke_with_timeout(blocked, timeout=0.02)
-            except TimeoutError:
-                pass
-        with lock:
-            remaining = len(active)
-        assert remaining == 0, f"{remaining} timed-out remote calls still running"
+        with patch("app.langfuse_sync._REMOTE_CALL_SEMAPHORE", sem):
+            for _ in range(3):
+                try:
+                    _invoke_with_timeout(blocked, timeout=0.02)
+                except TimeoutError:
+                    pass
+            with lock:
+                remaining = len(active)
+            assert remaining <= 1, f"{remaining} timed-out remote calls exceeded bounded limit"
     finally:
         release.set()
         for t in threads:
             t.join(1)
+
+
+# 24. 超时处理不擅自篡改调用方 Event（不放行应用闸门或触发业务副作用）
+def test_timeout_does_not_authorize_application_gate():
+    gate = threading.Event()
+    executed = []
+
+    def operation():
+        if gate.wait(0.3):
+            executed.append("side_effect")
+
+    with pytest.raises(TimeoutError):
+        _invoke_with_timeout(operation, timeout=0.02)
+    assert executed == [], "Timeout opened an application gate and triggered its side effect"
+
+
+# 25. 等待并发许可与等待调用共享单一 deadline 预算（预算不重复计算）
+def test_slot_wait_and_call_share_one_deadline():
+    sem = threading.BoundedSemaphore(1)
+    sem.acquire()
+    timer = threading.Timer(0.15, sem.release)
+    timer.start()
+    start = time.monotonic()
+    try:
+        with patch("app.langfuse_sync._REMOTE_CALL_SEMAPHORE", sem):
+            with pytest.raises(TimeoutError):
+                _invoke_with_timeout(lambda: time.sleep(0.3), timeout=0.2)
+            elapsed = time.monotonic() - start
+            time.sleep(0.2)
+        assert elapsed < 0.28, f"time budget .2s consumed {elapsed:.3f}s"
+    finally:
+        timer.join()
+
 

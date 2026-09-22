@@ -161,17 +161,28 @@ _REMOTE_CALL_SEMAPHORE = threading.BoundedSemaphore(value=_MAX_INFLIGHT_REMOTE_C
 
 def _invoke_with_timeout(fn: Callable[..., Any], *args: Any, timeout: float, **kwargs: Any) -> Any:
     """Executes a blocking remote callable with an unyielding hard deadline,
-    enforcing a strict concurrency budget on uncompleted remote calls and attempting
-    cooperative cancellation on timeout so background threads do not accumulate unboundedly.
+    enforcing a strict concurrency budget on uncompleted remote calls and sharing
+    a single deadline budget across slot acquisition and execution.
     """
     if timeout <= 0:
         raise TimeoutError("Timeout budget exhausted before invocation")
 
-    # 1. Acquire inflight remote call slot within remaining timeout budget
-    if not _REMOTE_CALL_SEMAPHORE.acquire(timeout=timeout):
+    start_time = time.monotonic()
+    deadline = start_time + timeout
+
+    sem = _REMOTE_CALL_SEMAPHORE
+    # 1. Acquire inflight remote call slot within single shared deadline budget
+    rem_to_acquire = deadline - time.monotonic()
+    if rem_to_acquire <= 0 or not sem.acquire(timeout=rem_to_acquire):
         raise TimeoutError(
             f"Remote call concurrency limit ({_MAX_INFLIGHT_REMOTE_CALLS}) reached; slot unavailable within {timeout:.3f}s"
         )
+
+    # 2. Check remaining time budget after acquiring slot
+    rem_to_call = deadline - time.monotonic()
+    if rem_to_call <= 0:
+        sem.release()
+        raise TimeoutError("Timeout budget exhausted while acquiring concurrency slot")
 
     res_box: list[Any] = []
     err_box: list[BaseException] = []
@@ -184,30 +195,13 @@ def _invoke_with_timeout(fn: Callable[..., Any], *args: Any, timeout: float, **k
             err_box.append(exc)
         finally:
             finished.set()
-            _REMOTE_CALL_SEMAPHORE.release()
+            sem.release()
 
     t = threading.Thread(target=_worker, daemon=True)
     t.start()
 
-    if not finished.wait(timeout=timeout):
-        # 2. On timeout, cooperatively unblock any waiting events in the closure/scope so threads exit
-        evs: list[threading.Event] = []
-        targets = [fn, getattr(fn, "side_effect", None)]
-        for tgt in targets:
-            if hasattr(tgt, "__closure__") and tgt.__closure__:
-                for cell in tgt.__closure__:
-                    val = getattr(cell, "cell_contents", None)
-                    if isinstance(val, threading.Event) and val is not finished:
-                        evs.append(val)
-                        val.set()
-
-        if evs:
-            # Wait briefly for cooperative cancellation to complete
-            t.join(timeout=0.03)
-            # Restore event state so caller or retry cycles can reuse event constructs
-            for ev in evs:
-                ev.clear()
-
+    # 3. Wait for execution strictly within remaining deadline budget
+    if not finished.wait(timeout=rem_to_call):
         raise TimeoutError(f"Remote invocation timed out after {timeout:.3f}s")
 
     if err_box:

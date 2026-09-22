@@ -4,6 +4,8 @@ import { X, Plus, Layers } from "lucide-react";
 import { api } from "../../api/client";
 import { queryKeys } from "../../api/query-keys";
 import { formatApiError } from "../../api/errors";
+import { FieldHelp } from "../../components/FieldHelp";
+import { AGENT_VERSION_FIELD_HELPS } from "./helpDocs";
 
 interface CreateVersionDialogProps {
   agentId: string;
@@ -117,9 +119,12 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                版本号 (Tag) <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center gap-1.5 mb-1">
+                <label className="text-xs font-semibold text-slate-700">
+                  版本号 (Tag) <span className="text-rose-500">*</span>
+                </label>
+                <FieldHelp {...AGENT_VERSION_FIELD_HELPS.version} />
+              </div>
               <input
                 type="text"
                 required
@@ -132,7 +137,10 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">运行环境</label>
+              <div className="flex items-center gap-1.5 mb-1">
+                <label className="text-xs font-semibold text-slate-700">运行环境</label>
+                <FieldHelp {...AGENT_VERSION_FIELD_HELPS.environment} placement="bottom-right" />
+              </div>
               <input
                 type="text"
                 placeholder="e.g. production / staging"
@@ -144,9 +152,12 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              远程调用端点 (HTTP POST) <span className="text-rose-500">*</span>
-            </label>
+            <div className="flex items-center gap-1.5 mb-1">
+              <label className="text-xs font-semibold text-slate-700">
+                远程调用端点 (HTTP POST) <span className="text-rose-500">*</span>
+              </label>
+              <FieldHelp {...AGENT_VERSION_FIELD_HELPS.endpoint} />
+            </div>
             <input
               type="url"
               required
@@ -209,7 +220,10 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">凭据引用 (SecretRef)</label>
+              <div className="flex items-center gap-1.5 mb-1">
+                <label className="text-xs font-semibold text-slate-700">凭据引用 (SecretRef)</label>
+                <FieldHelp {...AGENT_VERSION_FIELD_HELPS.credentialRef} />
+              </div>
               <input
                 type="text"
                 placeholder="env://API_TOKEN 或 vault://path"
@@ -221,7 +235,10 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">产物标识 (ArtifactRef)</label>
+              <div className="flex items-center gap-1.5 mb-1">
+                <label className="text-xs font-semibold text-slate-700">产物标识 (ArtifactRef)</label>
+                <FieldHelp {...AGENT_VERSION_FIELD_HELPS.artifactRef} placement="bottom-right" />
+              </div>
               <input
                 type="text"
                 placeholder="git commit SHA 或 docker image digest"
@@ -233,8 +250,9 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-1.5 mb-1">
               <label className="text-xs font-semibold text-slate-700">请求映射关系 (Request Mapping JSON)</label>
+              <FieldHelp {...AGENT_VERSION_FIELD_HELPS.requestMapping} placement="top-left" />
             </div>
             <textarea
               rows={3}

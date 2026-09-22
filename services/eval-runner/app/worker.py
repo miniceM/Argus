@@ -7,18 +7,27 @@ from typing import Any
 
 from sqlalchemy import func, select, update
 
-from .db import DatabaseManager
-from .db_models import (
+from app.db_models import (  # noqa: E402
     ExecutionAttemptRecord,
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
+    LangfuseSyncTaskRecord,
 )
+from app.execution import get_langfuse_client_safe  # noqa: E402
+
+from .db import DatabaseManager
 from .evaluators import default_evaluator_registry, evaluate_item_quality
 from .executor import RemoteAgentExecutor
 from .limiter import DistributedAgentLimiter
 from .metrics import runtime_metrics
 from .queue import QueueAdapter
 from .registry import AgentVersionSpec, map_request
+
+try:
+    from opentelemetry.propagate import inject
+except Exception:
+    def inject(carrier: Any) -> None:
+        pass
 
 
 class ExecutionWorker:
@@ -112,18 +121,51 @@ class ExecutionWorker:
         self,
         item_id: str,
         lease_token: str,
+        generation: int = 1,
     ) -> int | None:
-        """Authorizes attempt creation serialized with launch cancellation."""
+        """Authorizes attempt creation serialized with launch cancellation and strict ownership verification.
+        Global lock ordering: Launch -> Item. Locks are released immediately after Attempt creation.
+        """
         now = datetime.now(UTC)
+        is_pg = self.db_mgr.engine.dialect.name == "postgresql"
+
         with self.db_mgr.get_session() as session:
-            item = session.get(ExperimentItemExecutionRecord, item_id)
-            if not item or item.lease_token != lease_token:
+            # First find item to know launch_id
+            item_pre = session.get(ExperimentItemExecutionRecord, item_id)
+            if not item_pre:
                 return None
 
-            launch = session.get(ExperimentLaunchRecord, item.launch_id)
-            if not launch or launch.cancel_requested_at or launch.status in ("CANCELLING", "CANCELLED"):
-                # Collaborative cancellation: reject new attempt
+            # 1. Lock Launch
+            launch_stmt = select(ExperimentLaunchRecord).where(ExperimentLaunchRecord.id == item_pre.launch_id)
+            if is_pg:
+                launch_stmt = launch_stmt.with_for_update()
+            launch = session.scalars(launch_stmt).first()
+            if not launch:
+                return None
+
+            # 2. Lock Item and verify strict lease ownership in both cancelled and uncancelled branches
+            item_stmt = (
+                select(ExperimentItemExecutionRecord)
+                .where(
+                    ExperimentItemExecutionRecord.id == item_id,
+                    ExperimentItemExecutionRecord.dispatch_generation == generation,
+                    ExperimentItemExecutionRecord.lease_token == lease_token,
+                    ExperimentItemExecutionRecord.execution_status == "running",
+                    ExperimentItemExecutionRecord.lease_expires_at > (func.clock_timestamp() if is_pg else now),
+                )
+            )
+            if is_pg:
+                item_stmt = item_stmt.with_for_update()
+            item = session.scalars(item_stmt).first()
+            if not item:
+                # Lost ownership or expired! Exit safely without modifying anything.
+                session.rollback()
+                return None
+
+            # Check collaborative cancellation
+            if launch.cancel_requested_at or launch.status in ("CANCELLING", "CANCELLED"):
                 item.execution_status = "cancelled"
+                item.active_attempt_id = None
                 item.lease_owner = None
                 item.lease_token = None
                 item.lease_expires_at = None
@@ -138,19 +180,158 @@ class ExecutionWorker:
                 )
             ) or 0
             next_attempt_no = existing_count + 1
+            att_id = str(uuid.uuid4())
 
             att_rec = ExecutionAttemptRecord(
-                id=str(uuid.uuid4()),
+                id=att_id,
                 item_execution_id=item_id,
                 attempt_no=next_attempt_no,
                 status="RUNNING",
                 worker_id=self.worker_id,
                 request_phase="PREPARED",
+                dispatch_generation=generation,
+                lease_token=lease_token,
                 started_at=now,
             )
             session.add(att_rec)
+            item.active_attempt_id = att_id
+            item.updated_at = now
+            # Commit immediately to release row locks before invoking HTTP
             session.commit()
             return next_attempt_no
+
+    def finalize_execution_and_attempt(
+        self,
+        item_id: str,
+        generation: int,
+        lease_token: str,
+        target_item_status: str,  # 'succeeded', 'failed', 'timed_out', 'cancelled', 'retry_wait'
+        target_eval_status: str,
+        target_quality_conclusion: str,
+        current_attempt_id: str | None = None,
+        attempt_updates: dict[str, Any] | None = None,
+        scores: dict[str, Any] | None = None,
+        execution_error: str | None = None,
+        eval_error: str | None = None,
+        retry_available_at: datetime | None = None,
+        trace_id: str | None = None,
+        observation_id: str | None = None,
+        launch_id: str | None = None,
+        dataset_item_id: str | None = None,
+        dataset_version: str | None = None,
+        dataset_run_name: str | None = None,
+    ) -> bool:
+        """Atomic finalization for all outcome branches.
+        Requires active_attempt_id CAS matching and Attempt status RUNNING.
+        Rolls back entirely if either row count != 1.
+        """
+        now = datetime.now(UTC)
+        is_pg = self.db_mgr.engine.dialect.name == "postgresql"
+        clock_expr = func.clock_timestamp() if is_pg else now
+
+        with self.db_mgr.get_session() as session:
+            # Phase 1: Lock row
+            lock_stmt = select(ExperimentItemExecutionRecord.id).where(ExperimentItemExecutionRecord.id == item_id)
+            if is_pg:
+                lock_stmt = lock_stmt.with_for_update()
+            if not session.scalars(lock_stmt).first():
+                return False
+
+            # Phase 2: CAS update item
+            item_where = [
+                ExperimentItemExecutionRecord.id == item_id,
+                ExperimentItemExecutionRecord.dispatch_generation == generation,
+                ExperimentItemExecutionRecord.lease_token == lease_token,
+                ExperimentItemExecutionRecord.execution_status == "running",
+                ExperimentItemExecutionRecord.lease_expires_at > clock_expr,
+            ]
+            if current_attempt_id is not None:
+                item_where.append(ExperimentItemExecutionRecord.active_attempt_id == current_attempt_id)
+            else:
+                item_where.append(ExperimentItemExecutionRecord.active_attempt_id.is_(None))
+
+            is_retry_wait = target_item_status.lower() == "retry_wait"
+            item_values: dict[str, Any] = {
+                "execution_status": target_item_status.lower(),
+                "eval_status": target_eval_status.lower(),
+                "quality_conclusion": target_quality_conclusion.lower(),
+                "final_attempt_id": current_attempt_id,
+                "active_attempt_id": None,
+                "scores": scores,
+                "execution_error": execution_error,
+                "eval_error": eval_error,
+                "available_at": retry_available_at,
+                "trace_id": trace_id,
+                "observation_id": observation_id,
+                "lease_owner": None,
+                "lease_token": None,
+                "lease_expires_at": None,
+                "completed_at": None if is_retry_wait else now,
+                "updated_at": now,
+            }
+
+            stmt_item = (
+                update(ExperimentItemExecutionRecord)
+                .where(*item_where)
+                .values(**item_values)
+            )
+            res_item = session.execute(stmt_item)
+            if res_item.rowcount != 1:
+                session.rollback()
+                return False
+
+            # Phase 3: CAS update attempt
+            if current_attempt_id is not None and attempt_updates is not None:
+                att_values = dict(attempt_updates)
+                att_values.setdefault("completed_at", now)
+                stmt_att = (
+                    update(ExecutionAttemptRecord)
+                    .where(
+                        ExecutionAttemptRecord.id == current_attempt_id,
+                        ExecutionAttemptRecord.item_execution_id == item_id,
+                        ExecutionAttemptRecord.dispatch_generation == generation,
+                        ExecutionAttemptRecord.lease_token == lease_token,
+                        ExecutionAttemptRecord.status == "RUNNING",
+                    )
+                    .values(**att_values)
+                )
+                res_att = session.execute(stmt_att)
+                if res_att.rowcount != 1:
+                    session.rollback()
+                    return False
+
+            # Phase 4: Atomic insertion of Langfuse Outbox task if applicable
+            if (
+                not is_retry_wait
+                and launch_id
+                and dataset_item_id
+                and dataset_run_name
+                and trace_id
+            ):
+                task_id = str(uuid.uuid4())
+                outbox_task = LangfuseSyncTaskRecord(
+                    id=task_id,
+                    launch_id=launch_id,
+                    item_id=item_id,
+                    dataset_item_id=dataset_item_id,
+                    dataset_version=dataset_version,
+                    dispatch_generation=generation,
+                    task_type="FULL_EVAL_SYNC",
+                    trace_id=trace_id,
+                    observation_id=observation_id,
+                    dataset_run_name=dataset_run_name,
+                    scores_payload=scores or {},
+                    status="PENDING",
+                    attempts=0,
+                    next_retry_at=now,
+                )
+                session.add(outbox_task)
+
+            session.commit()
+            runtime_metrics.record_item_status(target_item_status)
+            if attempt_updates and "status" in attempt_updates:
+                runtime_metrics.record_attempt(attempt_updates["status"])
+            return True
 
     def finalize_item(
         self,
@@ -165,37 +346,20 @@ class ExecutionWorker:
         execution_error: str | None = None,
         eval_error: str | None = None,
     ) -> bool:
-        """Finalizes item in DB using strict lease fencing. Time is checked against DB timestamp."""
-        now = datetime.now(UTC)
-        with self.db_mgr.get_session() as session:
-            stmt = (
-                update(ExperimentItemExecutionRecord)
-                .where(
-                    ExperimentItemExecutionRecord.id == item_id,
-                    ExperimentItemExecutionRecord.dispatch_generation == generation,
-                    ExperimentItemExecutionRecord.lease_token == lease_token,
-                    ExperimentItemExecutionRecord.execution_status == "running",
-                    ExperimentItemExecutionRecord.lease_expires_at > now,
-                )
-                .values(
-                    execution_status=status.lower(),
-                    eval_status=eval_status.lower(),
-                    quality_conclusion=quality_conclusion.lower(),
-                    final_attempt_id=final_attempt_id,
-                    scores=scores,
-                    execution_error=execution_error,
-                    eval_error=eval_error,
-                    completed_at=now,
-                    updated_at=now,
-                )
-            )
-            res = session.execute(stmt)
-            if res.rowcount == 1:
-                session.commit()
-                runtime_metrics.record_item_status(status)
-                return True
-            session.rollback()
-            return False
+        """Backward-compatible finalize wrapper."""
+        return self.finalize_execution_and_attempt(
+            item_id=item_id,
+            generation=generation,
+            lease_token=lease_token,
+            target_item_status=status,
+            target_eval_status=eval_status,
+            target_quality_conclusion=quality_conclusion,
+            current_attempt_id=final_attempt_id,
+            scores=scores,
+            execution_error=execution_error,
+            eval_error=eval_error,
+        )
+
 
     async def execute_item_message(
         self,
@@ -309,9 +473,9 @@ class ExecutionWorker:
 
             try:
                 # 3. Both permits acquired: now authorize attempt
-                attempt_no = self.authorize_attempt(item_id, token)
+                attempt_no = self.authorize_attempt(item_id, token, generation)
                 if attempt_no is None:
-                    # Cancelled before attempt could be authorized
+                    # Cancelled before attempt could be authorized or lost lease
                     self.queue.ack(message_id)
                     return False
 
@@ -333,31 +497,76 @@ class ExecutionWorker:
                     "X-Eval-Agent-Version": spec.version,
                     "Idempotency-Key": f"argus:{item_id}",
                 }
-                try:
-                    from opentelemetry import trace
-                    from opentelemetry.propagate import inject
 
-                    tracer = trace.get_tracer("argus-eval-runner")
-                    with tracer.start_as_current_span(
-                        f"eval_item_execution:{claim_info['dataset_item_id']}",
-                        attributes={
-                            "launch_id": launch_id,
-                            "item_id": item_id,
-                            "agent_id": spec.agent_id,
-                            "agent_version": spec.version,
-                        },
-                    ):
-                        inject(headers)
-                except Exception:
-                    pass
+                lf = get_langfuse_client_safe()
+                trace_id: str | None = None
+                obs_id: str | None = None
 
-                # Fallback to standard W3C traceparent if not injected
-                if "traceparent" not in headers:
-                    trace_id = uuid.uuid4().hex
-                    span_id = uuid.uuid4().hex[:16]
-                    headers["traceparent"] = f"00-{trace_id}-{span_id}-01"
+                # Double-layered observation or OpenTelemetry
+                if lf and hasattr(lf, "start_as_current_observation"):
+                    parent_ctx = lf.start_as_current_observation(
+                        as_type="chain",
+                        name=f"eval_item_execution:{claim_info['dataset_item_id']}",
+                        input=dataset_input,
+                        metadata={"launch_id": launch_id, "item_id": item_id, "generation": generation},
+                    )
+                else:
+                    parent_ctx = None
 
-                # Mark attempt phase as MAY_HAVE_BEEN_SENT
+                # Generate W3C traceparent fallback if not set
+                default_tid = uuid.uuid4().hex
+                default_sid = uuid.uuid4().hex[:16]
+
+                async def _do_invocation_and_eval():
+                    nonlocal trace_id, obs_id
+                    if lf and hasattr(lf, "start_as_current_observation"):
+                        with lf.start_as_current_observation(
+                            as_type="tool",
+                            name="remote-agent-http",
+                            input={"agent": f"{spec.agent_id}:{spec.version}", "request": mapped_payload},
+                            metadata={"endpoint": spec.endpoint},
+                        ) as http_obs:
+                            try:
+                                inject(headers)
+                            except Exception:
+                                pass
+                            if "traceparent" not in headers:
+                                headers["traceparent"] = f"00-{default_tid}-{default_sid}-01"
+                            trace_id = lf.get_current_trace_id()
+                            obs_id = lf.get_current_observation_id()
+                            res = await executor.invoke_once(mapped_payload, headers)
+                            http_obs.update(
+                                output=res.body,
+                                metadata={
+                                    "http_status": res.status_code,
+                                    "duration_ms": res.duration_ms,
+                                    "trace_context_received": res.trace_context_received,
+                                },
+                            )
+                            return res
+                    else:
+                        try:
+                            from opentelemetry import trace
+                            tracer = trace.get_tracer("argus-eval-runner")
+                            with tracer.start_as_current_span(
+                                f"eval_item_execution:{claim_info['dataset_item_id']}",
+                                attributes={
+                                    "launch_id": launch_id,
+                                    "item_id": item_id,
+                                    "agent_id": spec.agent_id,
+                                    "agent_version": spec.version,
+                                },
+                            ):
+                                inject(headers)
+                        except Exception:
+                            pass
+
+                        if "traceparent" not in headers:
+                            headers["traceparent"] = f"00-{default_tid}-{default_sid}-01"
+                        trace_id = headers["traceparent"].split("-")[1]
+                        return await executor.invoke_once(mapped_payload, headers)
+
+                # Mark attempt phase as MAY_HAVE_BEEN_SENT before network call
                 if current_attempt_id:
                     with self.db_mgr.get_session() as session:
                         att = session.get(ExecutionAttemptRecord, current_attempt_id)
@@ -386,8 +595,11 @@ class ExecutionWorker:
                 hb_task = asyncio.create_task(_heartbeat_loop())
 
                 try:
-                    # Invoke remote agent once
-                    inv_res = await executor.invoke_once(mapped_payload, headers)
+                    if parent_ctx:
+                        with parent_ctx:
+                            inv_res = await _do_invocation_and_eval()
+                    else:
+                        inv_res = await _do_invocation_and_eval()
                 finally:
                     stop_hb.set()
                     hb_task.cancel()
@@ -400,36 +612,39 @@ class ExecutionWorker:
                     not spec.is_idempotent and inv_res.error_category == "READ_TIMEOUT"
                 )
 
-                # Update attempt record with outcome
-                if current_attempt_id:
-                    with self.db_mgr.get_session() as session:
-                        att = session.get(ExecutionAttemptRecord, current_attempt_id)
-                        if att:
-                            att.status = "COMPLETED" if inv_res.status_code == 200 else "FAILED"
-                            att.http_status = inv_res.status_code
-                            att.error_type = (
-                                "AMBIGUOUS_OUTCOME" if is_non_idem_read_timeout else inv_res.error_category
-                            )
-                            att.error_message = (
-                                f"AMBIGUOUS_OUTCOME: {inv_res.error_message}"
-                                if is_non_idem_read_timeout
-                                else inv_res.error_message
-                            )
-                            att.latency_ms = inv_res.duration_ms
-                            att.trace_context_received = inv_res.trace_context_received
-                            att.request_phase = "RESPONSE_RECEIVED"
-                            att.completed_at = datetime.now(UTC)
-                            session.commit()
-                            runtime_metrics.record_attempt(att.status)
+                # Determine final phase: only RESPONSE_RECEIVED if we got a response
+                final_phase = "RESPONSE_RECEIVED" if inv_res.status_code is not None else "MAY_HAVE_BEEN_SENT"
+                att_status = "COMPLETED" if inv_res.status_code == 200 else "FAILED"
+                att_err_type = "AMBIGUOUS_OUTCOME" if is_non_idem_read_timeout else inv_res.error_category
+                att_err_msg = (
+                    f"AMBIGUOUS_OUTCOME: {inv_res.error_message}"
+                    if is_non_idem_read_timeout
+                    else inv_res.error_message
+                )
+
+                att_updates = {
+                    "status": att_status,
+                    "http_status": inv_res.status_code,
+                    "error_type": att_err_type,
+                    "error_message": att_err_msg,
+                    "latency_ms": inv_res.duration_ms,
+                    "trace_context_received": inv_res.trace_context_received,
+                    "request_phase": final_phase,
+                }
 
             finally:
-                # Always release distributed permit
+                # Always release distributed concurrency permit
                 self.limiter.release_concurrency_permit(spec.id, permit_id)
 
             # Check if Launch was cancelled while we were invoking
             with self.db_mgr.get_session() as session:
                 launch_curr = session.get(ExperimentLaunchRecord, launch_id)
-                launch_cancelled = bool(launch_curr and (launch_curr.cancel_requested_at or launch_curr.status in ("CANCELLING", "CANCELLED")))
+                launch_cancelled = bool(
+                    launch_curr and (launch_curr.cancel_requested_at or launch_curr.status in ("CANCELLING", "CANCELLED"))
+                )
+
+            dataset_version = manifest.get("dataset", {}).get("version")
+            dataset_run_name = manifest.get("name") or f"argus-{launch_id[:12]}"
 
             if inv_res.status_code == 200 and inv_res.body is not None:
                 # Successful execution -> evaluate quality
@@ -455,79 +670,98 @@ class ExecutionWorker:
                     eval_status = "failed"
                     eval_error = str(exc)
 
-                self.finalize_item(
+                self.finalize_execution_and_attempt(
                     item_id=item_id,
                     generation=generation,
                     lease_token=token,
-                    status="SUCCEEDED",
-                    eval_status=eval_status,
-                    quality_conclusion=quality_conclusion,
-                    final_attempt_id=current_attempt_id,
+                    target_item_status="SUCCEEDED",
+                    target_eval_status=eval_status,
+                    target_quality_conclusion=quality_conclusion,
+                    current_attempt_id=current_attempt_id,
+                    attempt_updates=att_updates,
                     scores=scores_dict,
                     eval_error=eval_error,
+                    trace_id=trace_id,
+                    observation_id=obs_id,
+                    launch_id=launch_id,
+                    dataset_item_id=claim_info["dataset_item_id"],
+                    dataset_version=dataset_version,
+                    dataset_run_name=dataset_run_name,
                 )
             else:
                 # Failed attempt
-                # If launch is cancelled, transition straight to CANCELLED (no retries!)
                 if launch_cancelled:
-                    self.finalize_item(
+                    self.finalize_execution_and_attempt(
                         item_id=item_id,
                         generation=generation,
                         lease_token=token,
-                        status="CANCELLED",
-                        eval_status="skipped",
-                        quality_conclusion="unknown",
-                        final_attempt_id=current_attempt_id,
+                        target_item_status="CANCELLED",
+                        target_eval_status="skipped",
+                        target_quality_conclusion="unknown",
+                        current_attempt_id=current_attempt_id,
+                        attempt_updates=att_updates,
                         execution_error=inv_res.error_message,
+                        trace_id=trace_id,
+                        observation_id=obs_id,
+                        launch_id=launch_id,
+                        dataset_item_id=claim_info["dataset_item_id"],
+                        dataset_version=dataset_version,
+                        dataset_run_name=dataset_run_name,
                     )
                 elif is_non_idem_read_timeout:
-                    # Non-idempotent read timeout: prohibited from auto-retry, must be explicitly forced
-                    self.finalize_item(
+                    self.finalize_execution_and_attempt(
                         item_id=item_id,
                         generation=generation,
                         lease_token=token,
-                        status="FAILED",
-                        eval_status="skipped",
-                        quality_conclusion="fail",
-                        final_attempt_id=current_attempt_id,
+                        target_item_status="FAILED",
+                        target_eval_status="skipped",
+                        target_quality_conclusion="fail",
+                        current_attempt_id=current_attempt_id,
+                        attempt_updates=att_updates,
                         execution_error=f"AMBIGUOUS_OUTCOME: {inv_res.error_message}",
+                        trace_id=trace_id,
+                        observation_id=obs_id,
+                        launch_id=launch_id,
+                        dataset_item_id=claim_info["dataset_item_id"],
+                        dataset_version=dataset_version,
+                        dataset_run_name=dataset_run_name,
                     )
                 elif inv_res.is_retryable and attempt_no <= spec.max_retries:
-                    # Retryable error with remaining budget -> enter RETRY_WAIT
                     delay_sec = inv_res.retry_after_seconds or min(2 ** (attempt_no - 1), 30)
-                    with self.db_mgr.get_session() as session:
-                        stmt = (
-                            update(ExperimentItemExecutionRecord)
-                            .where(
-                                ExperimentItemExecutionRecord.id == item_id,
-                                ExperimentItemExecutionRecord.lease_token == token,
-                                ExperimentItemExecutionRecord.execution_status == "running",
-                            )
-                            .values(
-                                execution_status="retry_wait",
-                                available_at=datetime.now(UTC) + timedelta(seconds=delay_sec),
-                                lease_owner=None,
-                                lease_token=None,
-                                lease_expires_at=None,
-                                execution_error=inv_res.error_message,
-                                updated_at=datetime.now(UTC),
-                            )
-                        )
-                        session.execute(stmt)
-                        session.commit()
-                else:
-                    # Non-retryable error or budget exhausted
-                    terminal_status = "TIMED_OUT" if inv_res.error_category == "READ_TIMEOUT" else "FAILED"
-                    self.finalize_item(
+                    self.finalize_execution_and_attempt(
                         item_id=item_id,
                         generation=generation,
                         lease_token=token,
-                        status=terminal_status,
-                        eval_status="skipped",
-                        quality_conclusion="fail",
-                        final_attempt_id=current_attempt_id,
+                        target_item_status="RETRY_WAIT",
+                        target_eval_status="pending",
+                        target_quality_conclusion="unknown",
+                        current_attempt_id=current_attempt_id,
+                        attempt_updates=att_updates,
                         execution_error=inv_res.error_message,
+                        retry_available_at=datetime.now(UTC) + timedelta(seconds=delay_sec),
+                        trace_id=trace_id,
+                        observation_id=obs_id,
+                    )
+                else:
+                    terminal_status = "TIMED_OUT" if inv_res.error_category == "READ_TIMEOUT" else "FAILED"
+                    self.finalize_execution_and_attempt(
+                        item_id=item_id,
+                        generation=generation,
+                        lease_token=token,
+                        target_item_status=terminal_status,
+                        target_eval_status="skipped",
+                        target_quality_conclusion="fail",
+                        current_attempt_id=current_attempt_id,
+                        attempt_updates=att_updates,
+                        execution_error=inv_res.error_message,
+                        trace_id=trace_id,
+                        observation_id=obs_id,
+                        launch_id=launch_id,
+                        dataset_item_id=claim_info["dataset_item_id"],
+                        dataset_version=dataset_version,
+                        dataset_run_name=dataset_run_name,
                     )
 
             self.queue.ack(message_id)
             return True
+

@@ -29,29 +29,47 @@ class ExecutionReconciler:
         self.queue = queue
         self.limiter = limiter
 
+    def reconcile_all_active_launches(self) -> int:
+        """Alias for reconcile_launch_states."""
+        return self.reconcile_launch_states()
+
     def reconcile_retry_waits(self) -> int:
         """Transitions RETRY_WAIT items whose available_at <= now() back to QUEUED and reenqueues."""
         now = datetime.now(UTC)
         reenqueued = []
 
         with self.db_mgr.get_session() as session:
+            is_pg = session.bind.dialect.name == "postgresql"
+            now_sql = func.clock_timestamp() if is_pg else func.now()
+
             items = session.scalars(
                 select(ExperimentItemExecutionRecord).where(
                     ExperimentItemExecutionRecord.execution_status == "retry_wait",
-                    ExperimentItemExecutionRecord.available_at <= now,
+                    ExperimentItemExecutionRecord.available_at <= now_sql,
                 )
             ).all()
 
             for it in items:
-                it.execution_status = "queued"
-                it.queued_at = now
-                it.available_at = None
-                it.lease_owner = None
-                it.lease_token = None
-                it.lease_expires_at = None
-                it.updated_at = now
-                reenqueued.append((it.id, it.dispatch_generation))
-                runtime_metrics.record_retry()
+                res = session.execute(
+                    update(ExperimentItemExecutionRecord)
+                    .where(
+                        ExperimentItemExecutionRecord.id == it.id,
+                        ExperimentItemExecutionRecord.execution_status == "retry_wait",
+                        ExperimentItemExecutionRecord.dispatch_generation == it.dispatch_generation,
+                    )
+                    .values(
+                        execution_status="queued",
+                        queued_at=now,
+                        available_at=None,
+                        lease_owner=None,
+                        lease_token=None,
+                        lease_expires_at=None,
+                        updated_at=now,
+                    )
+                )
+                if res.rowcount == 1:
+                    reenqueued.append((it.id, it.dispatch_generation))
+                    runtime_metrics.record_retry()
 
             session.commit()
 
@@ -67,48 +85,93 @@ class ExecutionReconciler:
         reenqueue_items = []
 
         with self.db_mgr.get_session() as session:
+            is_pg = session.bind.dialect.name == "postgresql"
+            now_sql = func.clock_timestamp() if is_pg else func.now()
+
             expired_items = session.scalars(
                 select(ExperimentItemExecutionRecord).where(
                     ExperimentItemExecutionRecord.execution_status == "running",
-                    ExperimentItemExecutionRecord.lease_expires_at < now,
+                    ExperimentItemExecutionRecord.lease_expires_at <= now_sql,
                 )
             ).all()
 
             for it in expired_items:
-                recovered_count += 1
-                runtime_metrics.record_lease_expiry()
                 launch = session.get(ExperimentLaunchRecord, it.launch_id)
                 manifest = launch.manifest if launch else {}
                 agent_dict = manifest.get("agent", {})
                 is_idempotent = bool(agent_dict.get("is_idempotent", False))
                 max_retries = manifest.get("execution_policy", {}).get("max_retries", 2)
 
-                # Find latest attempt
-                latest_att = session.scalars(
-                    select(ExecutionAttemptRecord)
-                    .where(ExecutionAttemptRecord.item_execution_id == it.id)
-                    .order_by(ExecutionAttemptRecord.attempt_no.desc())
-                ).first()
+                # Locate active attempt
+                active_att = None
+                if it.active_attempt_id:
+                    active_att = session.get(ExecutionAttemptRecord, it.active_attempt_id)
+                if not active_att:
+                    active_att = session.scalars(
+                        select(ExecutionAttemptRecord)
+                        .where(ExecutionAttemptRecord.item_execution_id == it.id)
+                        .order_by(ExecutionAttemptRecord.attempt_no.desc())
+                    ).first()
 
                 # Non-idempotent crash window: request may have been sent before worker crashed
-                if latest_att and latest_att.request_phase in ("MAY_HAVE_BEEN_SENT", "RESPONSE_RECEIVED") and not is_idempotent:
-                    latest_att.status = "FAILED"
-                    latest_att.error_type = "AMBIGUOUS_OUTCOME"
-                    latest_att.error_message = (
-                        "Worker lease expired after request was dispatched. Non-idempotent agent outcome is ambiguous. Automatic retry prohibited."
-                    )
-                    latest_att.completed_at = now
+                has_ambiguous_risk = (
+                    active_att
+                    and active_att.request_phase in ("MAY_HAVE_BEEN_SENT", "RESPONSE_RECEIVED")
+                    and not is_idempotent
+                )
 
-                    it.execution_status = "failed"
-                    it.eval_status = "skipped"
-                    it.quality_conclusion = "fail"
-                    it.final_attempt_id = latest_att.id
-                    it.execution_error = latest_att.error_message
-                    it.lease_owner = None
-                    it.lease_token = None
-                    it.lease_expires_at = None
-                    it.completed_at = now
-                    it.updated_at = now
+                if has_ambiguous_risk:
+                    # CAS update on item with lease expiration check
+                    item_update = (
+                        update(ExperimentItemExecutionRecord)
+                        .where(
+                            ExperimentItemExecutionRecord.id == it.id,
+                            ExperimentItemExecutionRecord.dispatch_generation == it.dispatch_generation,
+                            ExperimentItemExecutionRecord.lease_token == it.lease_token,
+                            ExperimentItemExecutionRecord.execution_status == "running",
+                            ExperimentItemExecutionRecord.lease_expires_at <= now_sql,
+                        )
+                        .values(
+                            execution_status="failed",
+                            eval_status="skipped",
+                            quality_conclusion="fail",
+                            final_attempt_id=active_att.id if active_att else None,
+                            execution_error=(
+                                "Worker lease expired after request was dispatched. Non-idempotent agent outcome is ambiguous. Automatic retry prohibited."
+                            ),
+                            lease_owner=None,
+                            lease_token=None,
+                            lease_expires_at=None,
+                            completed_at=now,
+                            updated_at=now,
+                        )
+                    )
+                    res = session.execute(item_update)
+                    if res.rowcount != 1:
+                        # Worker renewed lease or completed, skip!
+                        continue
+
+                    if active_att:
+                        att_update = (
+                            update(ExecutionAttemptRecord)
+                            .where(
+                                ExecutionAttemptRecord.id == active_att.id,
+                                ExecutionAttemptRecord.item_execution_id == it.id,
+                                ExecutionAttemptRecord.status == "RUNNING",
+                            )
+                            .values(
+                                status="FAILED",
+                                error_type="AMBIGUOUS_OUTCOME",
+                                error_message=(
+                                    "Worker lease expired after request was dispatched. Non-idempotent agent outcome is ambiguous. Automatic retry prohibited."
+                                ),
+                                completed_at=now,
+                            )
+                        )
+                        session.execute(att_update)
+
+                    recovered_count += 1
+                    runtime_metrics.record_lease_expiry()
                 else:
                     # Retryable or idempotent
                     attempt_count = session.scalar(
@@ -118,23 +181,95 @@ class ExecutionReconciler:
                     ) or 0
 
                     if attempt_count <= max_retries:
-                        it.execution_status = "queued"
-                        it.queued_at = now
-                        it.available_at = None
-                        it.lease_owner = None
-                        it.lease_token = None
-                        it.lease_expires_at = None
-                        it.updated_at = now
-                        reenqueue_items.append((it.id, it.dispatch_generation))
+                        new_gen = it.dispatch_generation + 1
+                        item_update = (
+                            update(ExperimentItemExecutionRecord)
+                            .where(
+                                ExperimentItemExecutionRecord.id == it.id,
+                                ExperimentItemExecutionRecord.dispatch_generation == it.dispatch_generation,
+                                ExperimentItemExecutionRecord.lease_token == it.lease_token,
+                                ExperimentItemExecutionRecord.execution_status == "running",
+                                ExperimentItemExecutionRecord.lease_expires_at <= now_sql,
+                            )
+                            .values(
+                                execution_status="queued",
+                                dispatch_generation=new_gen,
+                                queued_at=now,
+                                available_at=None,
+                                lease_owner=None,
+                                lease_token=None,
+                                lease_expires_at=None,
+                                updated_at=now,
+                            )
+                        )
+                        res = session.execute(item_update)
+                        if res.rowcount != 1:
+                            continue
+
+                        if active_att:
+                            att_update = (
+                                update(ExecutionAttemptRecord)
+                                .where(
+                                    ExecutionAttemptRecord.id == active_att.id,
+                                    ExecutionAttemptRecord.item_execution_id == it.id,
+                                    ExecutionAttemptRecord.status == "RUNNING",
+                                )
+                                .values(
+                                    status="FAILED",
+                                    error_type="LEASE_EXPIRED",
+                                    error_message="Worker lease expired. Re-enqueued for retry.",
+                                    completed_at=now,
+                                )
+                            )
+                            session.execute(att_update)
+
+                        recovered_count += 1
+                        runtime_metrics.record_lease_expiry()
+                        reenqueue_items.append((it.id, new_gen))
                     else:
-                        it.execution_status = "timed_out"
-                        it.eval_status = "skipped"
-                        it.quality_conclusion = "fail"
-                        it.lease_owner = None
-                        it.lease_token = None
-                        it.lease_expires_at = None
-                        it.completed_at = now
-                        it.updated_at = now
+                        item_update = (
+                            update(ExperimentItemExecutionRecord)
+                            .where(
+                                ExperimentItemExecutionRecord.id == it.id,
+                                ExperimentItemExecutionRecord.dispatch_generation == it.dispatch_generation,
+                                ExperimentItemExecutionRecord.lease_token == it.lease_token,
+                                ExperimentItemExecutionRecord.execution_status == "running",
+                                ExperimentItemExecutionRecord.lease_expires_at <= now_sql,
+                            )
+                            .values(
+                                execution_status="timed_out",
+                                eval_status="skipped",
+                                quality_conclusion="fail",
+                                lease_owner=None,
+                                lease_token=None,
+                                lease_expires_at=None,
+                                completed_at=now,
+                                updated_at=now,
+                            )
+                        )
+                        res = session.execute(item_update)
+                        if res.rowcount != 1:
+                            continue
+
+                        if active_att:
+                            att_update = (
+                                update(ExecutionAttemptRecord)
+                                .where(
+                                    ExecutionAttemptRecord.id == active_att.id,
+                                    ExecutionAttemptRecord.item_execution_id == it.id,
+                                    ExecutionAttemptRecord.status == "RUNNING",
+                                )
+                                .values(
+                                    status="FAILED",
+                                    error_type="LEASE_EXPIRED",
+                                    error_message="Worker lease expired and retry budget exhausted.",
+                                    completed_at=now,
+                                )
+                            )
+                            session.execute(att_update)
+
+                        recovered_count += 1
+                        runtime_metrics.record_lease_expiry()
 
             session.commit()
 

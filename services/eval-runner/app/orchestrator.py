@@ -126,10 +126,16 @@ class LaunchOrchestrator:
         return launch
 
     def cancel_launch(self, launch_id: str) -> ExperimentLaunchRecord:
-        """Requests collaborative cancellation for a launch."""
+        """Requests collaborative cancellation for a launch using strict Launch -> Item lock order."""
         now = datetime.now(UTC)
+        is_pg = self.db_mgr.engine.dialect.name == "postgresql"
+
         with self.db_mgr.get_session() as session:
-            launch = session.get(ExperimentLaunchRecord, launch_id)
+            # 1. Lock Launch
+            launch_stmt = select(ExperimentLaunchRecord).where(ExperimentLaunchRecord.id == launch_id)
+            if is_pg:
+                launch_stmt = launch_stmt.with_for_update()
+            launch = session.scalars(launch_stmt).first()
             if not launch:
                 raise ValueError(f"Launch '{launch_id}' not found")
 
@@ -139,16 +145,24 @@ class LaunchOrchestrator:
             launch.cancel_requested_at = now
             launch.updated_at = now
 
-            # Immediately cancel items that are pending, queued, or retry_wait
-            cancelable_items = session.scalars(
-                select(ExperimentItemExecutionRecord).where(
+            # 2. Lock Items and immediately cancel items that are pending, queued, or retry_wait
+            item_stmt = (
+                select(ExperimentItemExecutionRecord)
+                .where(
                     ExperimentItemExecutionRecord.launch_id == launch_id,
                     ExperimentItemExecutionRecord.execution_status.in_(["pending", "queued", "retry_wait"]),
                 )
-            ).all()
+            )
+            if is_pg:
+                item_stmt = item_stmt.with_for_update()
+            cancelable_items = session.scalars(item_stmt).all()
 
             for it in cancelable_items:
                 it.execution_status = "cancelled"
+                it.active_attempt_id = None
+                it.lease_owner = None
+                it.lease_token = None
+                it.lease_expires_at = None
                 it.updated_at = now
 
             # Check if any items are currently running
@@ -170,33 +184,28 @@ class LaunchOrchestrator:
             return launch
 
     def resume_launch(self, launch_id: str, force: bool = False) -> ExperimentLaunchRecord:
-        """Resumes cancelled or interrupted launch by advancing generation for non-succeeded items."""
+        """Resumes cancelled launch by advancing generation exclusively for cancelled items.
+        Requires no active items. Clears cancel flag and transitions launch to QUEUED.
+        """
         now = datetime.now(UTC)
+        is_pg = self.db_mgr.engine.dialect.name == "postgresql"
         dispatch_items = []
+
         with self.db_mgr.get_session() as session:
-            launch = session.get(ExperimentLaunchRecord, launch_id)
+            # 1. Lock Launch
+            launch_stmt = select(ExperimentLaunchRecord).where(ExperimentLaunchRecord.id == launch_id)
+            if is_pg:
+                launch_stmt = launch_stmt.with_for_update()
+            launch = session.scalars(launch_stmt).first()
             if not launch:
                 raise ValueError(f"Launch '{launch_id}' not found")
 
-            if launch.status not in ("CANCELLED", "CANCELLING", "FAILED"):
-                raise ValueError(f"Cannot resume launch in status '{launch.status}'. Must be CANCELLED or FAILED.")
-
-            # Target only cancelled, pending, or failed items (NEVER succeeded!)
-            resumable_items = session.scalars(
-                select(ExperimentItemExecutionRecord).where(
-                    ExperimentItemExecutionRecord.launch_id == launch_id,
-                    ExperimentItemExecutionRecord.execution_status.in_(["cancelled", "pending", "failed", "timed_out"]),
-                )
-            ).all()
-
-            if not resumable_items:
-                raise ValueError("No eligible items to resume (all items already succeeded or no cancelled items)")
-
-            # Check non-idempotent ambiguous outcome protection across all target items
-            item_ids = [it.id for it in resumable_items]
+            # Check non-idempotent ambiguous outcome protection across all attempts of this launch
             ambiguous_attempts = session.scalars(
-                select(ExecutionAttemptRecord).where(
-                    ExecutionAttemptRecord.item_execution_id.in_(item_ids),
+                select(ExecutionAttemptRecord)
+                .join(ExperimentItemExecutionRecord, ExecutionAttemptRecord.item_execution_id == ExperimentItemExecutionRecord.id)
+                .where(
+                    ExperimentItemExecutionRecord.launch_id == launch_id,
                     ExecutionAttemptRecord.error_type == "AMBIGUOUS_OUTCOME",
                 )
             ).all()
@@ -207,18 +216,53 @@ class LaunchOrchestrator:
                     "Automatic replay is unsafe. Please specify force=True to confirm re-execution."
                 )
 
+            # Must be in terminal CANCELLED, PARTIAL_FAILED or FAILED state
+            if launch.status not in ("CANCELLED", "PARTIAL_FAILED", "FAILED"):
+                raise ValueError(f"Cannot resume launch in status '{launch.status}'. Must be CANCELLED, PARTIAL_FAILED or FAILED.")
+
+            # Guard: no running items allowed
+            running_count = session.scalar(
+                select(func.count(ExperimentItemExecutionRecord.id)).where(
+                    ExperimentItemExecutionRecord.launch_id == launch_id,
+                    ExperimentItemExecutionRecord.execution_status == "running",
+                )
+            ) or 0
+            if running_count > 0:
+                raise ValueError("Cannot resume launch while items are still running")
+
+            # 2. Lock target cancelled items
+            item_stmt = (
+                select(ExperimentItemExecutionRecord)
+                .where(
+                    ExperimentItemExecutionRecord.launch_id == launch_id,
+                    ExperimentItemExecutionRecord.execution_status == "cancelled",
+                )
+            )
+            if is_pg:
+                item_stmt = item_stmt.with_for_update()
+            resumable_items = session.scalars(item_stmt).all()
+
+            if not resumable_items:
+                raise ValueError("No cancelled items found to resume")
+
+            # Reset launch and transition to QUEUED
             launch.cancel_requested_at = None
             launch.status = "QUEUED"
+            launch.completed_at = None
             launch.updated_at = now
 
             for it in resumable_items:
                 it.dispatch_generation += 1
                 it.execution_status = "queued"
+                it.eval_status = "pending"
+                it.quality_conclusion = "unknown"
                 it.queued_at = now
                 it.available_at = None
                 it.lease_owner = None
                 it.lease_token = None
                 it.lease_expires_at = None
+                it.active_attempt_id = None
+                it.completed_at = None
                 it.execution_error = None
                 it.eval_error = None
                 it.updated_at = now
@@ -233,25 +277,38 @@ class LaunchOrchestrator:
         return launch
 
     def retry_failed_items(self, launch_id: str, force: bool = False) -> ExperimentLaunchRecord:
-        """Retries only FAILED and TIMED_OUT items, preserving SUCCEEDED items."""
+        """Retries only FAILED and TIMED_OUT items, preserving SUCCEEDED and CANCELLED items.
+        Requires no active items. Clears cancel flag and transitions launch to QUEUED.
+        """
         now = datetime.now(UTC)
+        is_pg = self.db_mgr.engine.dialect.name == "postgresql"
         dispatch_items = []
+
         with self.db_mgr.get_session() as session:
-            launch = session.get(ExperimentLaunchRecord, launch_id)
+            # 1. Lock Launch
+            launch_stmt = select(ExperimentLaunchRecord).where(ExperimentLaunchRecord.id == launch_id)
+            if is_pg:
+                launch_stmt = launch_stmt.with_for_update()
+            launch = session.scalars(launch_stmt).first()
             if not launch:
                 raise ValueError(f"Launch '{launch_id}' not found")
 
-            failed_items = session.scalars(
-                select(ExperimentItemExecutionRecord).where(
+            # 2. Lock target failed/timed_out items
+            item_stmt = (
+                select(ExperimentItemExecutionRecord)
+                .where(
                     ExperimentItemExecutionRecord.launch_id == launch_id,
                     ExperimentItemExecutionRecord.execution_status.in_(["failed", "timed_out"]),
                 )
-            ).all()
+            )
+            if is_pg:
+                item_stmt = item_stmt.with_for_update()
+            failed_items = session.scalars(item_stmt).all()
 
             if not failed_items:
                 raise ValueError("No failed or timed out items found to retry")
 
-            # Check non-idempotent ambiguous outcome protection
+            # 3. Non-idempotent crash protection: ALWAYS checked first before running guard
             item_ids = [it.id for it in failed_items]
             ambiguous_attempts = session.scalars(
                 select(ExecutionAttemptRecord).where(
@@ -266,17 +323,35 @@ class LaunchOrchestrator:
                     "Automatic replay is unsafe. Please specify force=True to confirm re-execution."
                 )
 
+            # 4. Guard: no active running items allowed
+            running_count = session.scalar(
+                select(func.count(ExperimentItemExecutionRecord.id)).where(
+                    ExperimentItemExecutionRecord.launch_id == launch_id,
+                    ExperimentItemExecutionRecord.execution_status == "running",
+                )
+            ) or 0
+            if running_count > 0:
+                raise ValueError("Cannot retry failed items while launch still has active running items")
+
+
+            # Reset launch and transition to QUEUED
+            launch.cancel_requested_at = None
             launch.status = "QUEUED"
+            launch.completed_at = None
             launch.updated_at = now
 
             for it in failed_items:
                 it.dispatch_generation += 1
                 it.execution_status = "queued"
+                it.eval_status = "pending"
+                it.quality_conclusion = "unknown"
                 it.queued_at = now
                 it.available_at = None
                 it.lease_owner = None
                 it.lease_token = None
                 it.lease_expires_at = None
+                it.active_attempt_id = None
+                it.completed_at = None
                 it.execution_error = None
                 it.eval_error = None
                 it.updated_at = now

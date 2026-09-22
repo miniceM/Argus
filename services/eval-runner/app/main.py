@@ -22,6 +22,7 @@ from .db import DatabaseManager, MigrationRunner
 from .db_models import ExperimentLaunchRecord
 from .evaluators import default_evaluator_registry
 from .executor import RemoteAgentExecutor
+from .langfuse_sync import LangfuseOutboxSyncer
 from .limiter import DistributedAgentLimiter, MemoryAgentLimiter, RedisDistributedLimiter
 from .manifest import LaunchService, acquire_launch_execution
 from .metrics import metrics_router
@@ -76,10 +77,11 @@ queue_adapter, limiter = init_queue_and_limiter(
     db_url=db_manager.db_url,
 )
 
-# 4. Initialize Orchestrator, Worker, Reconciler
+# 4. Initialize Orchestrator, Worker, Reconciler, OutboxSyncer
 orchestrator = LaunchOrchestrator(db_manager, queue_adapter, limiter)
 worker = ExecutionWorker(db_manager, queue_adapter, limiter)
 reconciler = ExecutionReconciler(db_manager, queue_adapter, limiter)
+outbox_syncer = LangfuseOutboxSyncer(db_manager)
 
 # 5. Initialize Launch Service
 launch_service = LaunchService(db_manager, registry, runner_version=settings.runner_version)
@@ -89,6 +91,7 @@ launch_service = LaunchService(db_manager, registry, runner_version=settings.run
 async def lifespan(app: FastAPI):
     worker_task = None
     reconciler_task = None
+    syncer_task = None
     stop_event = asyncio.Event()
 
     async def _worker_loop():
@@ -139,10 +142,25 @@ async def lifespan(app: FastAPI):
                 pass
             await asyncio.sleep(1)
 
+    async def _syncer_loop():
+        while not stop_event.is_set():
+            try:
+                processed = await asyncio.to_thread(outbox_syncer.process_batch, limit=20)
+                if processed == 0:
+                    await asyncio.sleep(2.0)
+                else:
+                    await asyncio.sleep(0.1)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                await asyncio.sleep(2.0)
+
     if settings.argus_worker_enabled and settings.argus_db_mode != "test":
         worker_task = asyncio.create_task(_worker_loop())
     if settings.argus_reconciler_enabled and settings.argus_db_mode != "test":
         reconciler_task = asyncio.create_task(_reconciler_loop())
+    if settings.argus_db_mode != "test":
+        syncer_task = asyncio.create_task(_syncer_loop())
 
     yield
 
@@ -151,6 +169,8 @@ async def lifespan(app: FastAPI):
         worker_task.cancel()
     if reconciler_task:
         reconciler_task.cancel()
+    if syncer_task:
+        syncer_task.cancel()
 
 
 app = FastAPI(

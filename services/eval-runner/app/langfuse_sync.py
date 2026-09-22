@@ -142,48 +142,59 @@ def aggregate_launch_sync_status(db_mgr: DatabaseManager, launch_id: str) -> str
         return "SYNCING"
 
 
+def _get_db_now(session, is_pg: bool) -> datetime:
+    """Retrieves current database timestamp to prevent client clock skew and pre-transaction expiry reuse."""
+    if is_pg:
+        ts = session.scalar(select(func.clock_timestamp()))
+    else:
+        raw = session.scalar(select(func.strftime("%Y-%m-%d %H:%M:%f", "now")))
+        import datetime as _dt_module
+        ts = _dt_module.datetime.fromisoformat(raw)
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=UTC)
+    return ts
+
+
 class LangfuseOutboxSyncer:
-    """Outbox syncer for Langfuse: reliably claims pending or crashed tasks,
-    makes remote HTTP calls with explicit dataset_version & stable score IDs,
-    supports in-task lease renewal for slow multi-metric jobs,
-    and strongly confirms results using post-lock instantaneous clock CAS before transitioning to SYNCED.
+    """Consumes and finalizes Langfuse outbox tasks asynchronously with robust CAS,
+    per-claim tokens, heartbeats, and atomic state transitions.
     """
 
     def __init__(
         self,
         db_mgr: DatabaseManager,
         langfuse_client: Any | Callable[[], Any] | None = None,
-        syncer_id: str | None = None,
-        lease_duration_seconds: float = 45.0,
+        lease_duration_seconds: float = 30.0,
         max_attempts: int = 5,
+        syncer_id: str | None = None,
         heartbeat_interval_seconds: float | None = None,
-        task_timeout_seconds: float = 30.0,
+        task_timeout_seconds: float = 300.0,
     ):
         self.db_mgr = db_mgr
         self._lf_provider = langfuse_client
-        self.syncer_id = syncer_id or f"syncer-{uuid.uuid4().hex[:8]}"
         self.lease_duration_seconds = float(lease_duration_seconds)
-        self.max_attempts = max_attempts
+        self.max_attempts = int(max_attempts)
+        self.syncer_id = syncer_id or f"syncer-{uuid.uuid4().hex[:8]}"
         self.heartbeat_interval_seconds = (
             float(heartbeat_interval_seconds) if heartbeat_interval_seconds is not None else None
         )
         self.task_timeout_seconds = float(task_timeout_seconds)
 
     def resolve_client_status(self) -> tuple[str, Any | None, str | None]:
-        """Resolves client into:
-        - ('UNCONFIGURED', None, reason): explicitly unconfigured, should transition to SKIPPED
-        - ('READY', client, None): valid client with .api
-        - ('ERROR', None, error_msg): initialization temporary failure, should retry
-        - ('INCOMPATIBLE', None, error_msg): incompatible client, error
+        """Resolves the current status of the Langfuse client provider.
+        Returns:
+            ("READY", client, None)
+            ("UNCONFIGURED", None, reason)
+            ("ERROR", None, reason)
+            ("INCOMPATIBLE", None, reason)
         """
         provider = self._lf_provider
         if provider is None:
-            return ("UNCONFIGURED", None, "Langfuse client provider is not configured")
+            return ("UNCONFIGURED", None, "Langfuse client is not configured")
 
         if hasattr(provider, "api"):
-            return ("READY", provider, None)
-
-        if callable(provider):
+            client = provider
+        elif callable(provider):
             try:
                 client = provider()
             except Exception as exc:
@@ -218,14 +229,17 @@ class LangfuseOutboxSyncer:
         self._lf_provider = client
 
     def claim_tasks(self, batch_size: int = 1) -> list[tuple[str, str, dict[str, Any]]]:
-        """Claims tasks in a short transaction using single claim tokens and crash recovery."""
+        """Claims tasks in a short transaction using single claim tokens and crash recovery,
+        strictly evaluated against database time.
+        """
         is_pg = self.db_mgr.engine.dialect.name == "postgresql"
-        now = datetime.now(UTC)
-        now_expr = func.clock_timestamp() if is_pg else now
-        lease_expires = now + timedelta(seconds=self.lease_duration_seconds)
         claimed: list[tuple[str, str, dict[str, Any]]] = []
 
         with self.db_mgr.get_session() as session:
+            db_now = _get_db_now(session, is_pg)
+            now_expr = func.clock_timestamp() if is_pg else db_now
+            lease_expires = db_now + timedelta(seconds=self.lease_duration_seconds)
+
             # 1. Sweep expired PROCESSING tasks that already reached max_attempts to FAILED using atomic conditional UPDATE
             over_limit_update = (
                 update(LangfuseSyncTaskRecord)
@@ -244,16 +258,16 @@ class LangfuseOutboxSyncer:
             )
             session.execute(over_limit_update)
 
-            # 2. Select eligible tasks strictly under max_attempts
+            # 2. Select eligible tasks strictly under max_attempts evaluated against database time
             stmt = (
                 select(LangfuseSyncTaskRecord)
                 .where(
                     or_(
                         (LangfuseSyncTaskRecord.status == "PENDING")
-                        & (LangfuseSyncTaskRecord.next_retry_at <= now)
+                        & (LangfuseSyncTaskRecord.next_retry_at <= now_expr)
                         & (LangfuseSyncTaskRecord.attempts < self.max_attempts),
                         (LangfuseSyncTaskRecord.status == "PROCESSING")
-                        & (LangfuseSyncTaskRecord.lease_expires_at <= now)
+                        & (LangfuseSyncTaskRecord.lease_expires_at <= now_expr)
                         & (LangfuseSyncTaskRecord.attempts < self.max_attempts),
                     )
                 )
@@ -272,7 +286,7 @@ class LangfuseOutboxSyncer:
                 task.claim_token = new_token
                 task.lease_expires_at = lease_expires
                 task.attempts += 1  # Incremented only upon claim!
-                task.updated_at = now
+                task.updated_at = db_now
 
                 payload = {
                     "task_id": task.id,
@@ -304,9 +318,7 @@ class LangfuseOutboxSyncer:
             if not task:
                 return False
 
-            current_ts = session.scalar(select(func.clock_timestamp())) if is_pg else datetime.now(UTC)
-            if current_ts.tzinfo is None:
-                current_ts = current_ts.replace(tzinfo=UTC)
+            current_ts = _get_db_now(session, is_pg)
             lease_exp = task.lease_expires_at
             if lease_exp and lease_exp.tzinfo is None:
                 lease_exp = lease_exp.replace(tzinfo=UTC)
@@ -336,9 +348,7 @@ class LangfuseOutboxSyncer:
             if not task:
                 return False
 
-            current_ts = session.scalar(select(func.clock_timestamp())) if is_pg else datetime.now(UTC)
-            if current_ts.tzinfo is None:
-                current_ts = current_ts.replace(tzinfo=UTC)
+            current_ts = _get_db_now(session, is_pg)
             lease_exp = task.lease_expires_at
             if lease_exp and lease_exp.tzinfo is None:
                 lease_exp = lease_exp.replace(tzinfo=UTC)
@@ -384,17 +394,35 @@ class LangfuseOutboxSyncer:
         if client_st != "READY" or lf is None:
             error_msg = err_detail or "Langfuse client unavailable"
         else:
-            # 1. Pre-flight lease check before making remote calls
-            if not self.renew_task_lease(task_id, claim_token, extension_seconds=self.lease_duration_seconds):
-                logger.warning("Syncer %s pre-flight lease check failed for task %s", self.syncer_id, task_id)
-                return False
-
             scores = payload.get("scores_payload", {})
             dataset_source = scores.get("_dataset_source")
 
             stop_hb = threading.Event()
+            lease_lost = threading.Event()
             hb_interval = self.heartbeat_interval_seconds or max(0.1, min(5.0, self.lease_duration_seconds / 3.0))
             task_start_time = time.monotonic()
+
+            def _is_timeout_or_lost() -> bool:
+                if lease_lost.is_set():
+                    return True
+                if (time.monotonic() - task_start_time) >= self.task_timeout_seconds:
+                    logger.warning(
+                        "Syncer %s task %s exceeded deadline (%.3fs >= %.3fs)",
+                        self.syncer_id,
+                        task_id,
+                        time.monotonic() - task_start_time,
+                        self.task_timeout_seconds,
+                    )
+                    lease_lost.set()
+                    return True
+                return False
+
+            # 1. Pre-flight lease and deadline check before making remote calls
+            if _is_timeout_or_lost():
+                return False
+            if not self.renew_task_lease(task_id, claim_token, extension_seconds=self.lease_duration_seconds):
+                logger.warning("Syncer %s pre-flight lease check failed for task %s", self.syncer_id, task_id)
+                return False
 
             def _heartbeat_worker():
                 while not stop_hb.is_set():
@@ -463,8 +491,8 @@ class LangfuseOutboxSyncer:
                     if run_id:
                         logger.debug("Linked DatasetRunItem with remote dataset_run_id=%s", run_id)
 
-                if lease_lost.is_set():
-                    logger.warning("Syncer %s lost lease on task %s during linking call, aborting scores", self.syncer_id, task_id)
+                if _is_timeout_or_lost():
+                    logger.warning("Syncer %s lost lease or timed out during linking call, aborting scores", self.syncer_id, task_id)
                     return False
                 if not self.renew_task_lease(task_id, claim_token, extension_seconds=self.lease_duration_seconds):
                     logger.warning("Syncer %s failed to renew lease on task %s after linking, aborting scores", self.syncer_id, task_id)
@@ -473,8 +501,8 @@ class LangfuseOutboxSyncer:
                 # 2. Score creations with stable versioned ID
                 clean_scores = {k: v for k, v in scores.items() if not k.startswith("_")}
                 for ev_id, score_val in clean_scores.items():
-                    if lease_lost.is_set():
-                        logger.warning("Syncer %s lost lease on task %s before score upload, aborting", self.syncer_id, task_id)
+                    if _is_timeout_or_lost():
+                        logger.warning("Syncer %s lost lease or timed out before score upload, aborting", self.syncer_id, task_id)
                         return False
                     stable_score_id = f"score:{payload['item_id']}:gen{payload['dispatch_generation']}:{ev_id}"
                     lf.api.scores.create(
@@ -484,8 +512,8 @@ class LangfuseOutboxSyncer:
                         trace_id=payload["trace_id"],
                         observation_id=payload.get("observation_id"),
                     )
-                    if lease_lost.is_set():
-                        logger.warning("Syncer %s lost lease on task %s during score upload, aborting", self.syncer_id, task_id)
+                    if _is_timeout_or_lost():
+                        logger.warning("Syncer %s lost lease or timed out during score upload, aborting", self.syncer_id, task_id)
                         return False
 
             except Exception as exc:
@@ -495,9 +523,9 @@ class LangfuseOutboxSyncer:
                 stop_hb.set()
                 hb_thread.join(timeout=2.0)
 
-            if lease_lost.is_set():
+            if _is_timeout_or_lost():
                 logger.warning(
-                    "Syncer %s lease lost during execution for task %s, aborting write-back",
+                    "Syncer %s lease lost or timed out during execution for task %s, aborting write-back",
                     self.syncer_id,
                     task_id,
                 )
@@ -515,9 +543,7 @@ class LangfuseOutboxSyncer:
             if not task:
                 return False
 
-            current_ts = session.scalar(select(func.clock_timestamp())) if is_pg else datetime.now(UTC)
-            if current_ts.tzinfo is None:
-                current_ts = current_ts.replace(tzinfo=UTC)
+            current_ts = _get_db_now(session, is_pg)
             lease_exp = task.lease_expires_at
             if lease_exp and lease_exp.tzinfo is None:
                 lease_exp = lease_exp.replace(tzinfo=UTC)

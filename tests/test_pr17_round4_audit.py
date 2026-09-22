@@ -615,3 +615,43 @@ def test_network_call_exceeding_max_task_duration_stops_renewal(setup_runtime):
 
     res = syncer.process_single_task(task_id, claim_token, payload)
     assert res is False
+
+
+# 19. 任务截止时间在成功前严格检查（时限小于调用耗时但心跳未触发时立即判定失败且不调用后续 Score）
+def test_task_deadline_checked_before_success(setup_runtime):
+    db, lid = prepare(setup_runtime, source="langfuse")
+    lf = MagicMock()
+
+    def slow(**kwargs):
+        import time
+
+        time.sleep(0.15)
+        return MagicMock(dataset_run_id="run")
+
+    lf.api.dataset_run_items.create.side_effect = slow
+    sync = LangfuseOutboxSyncer(
+        db, lf, lease_duration_seconds=2, heartbeat_interval_seconds=0.5, task_timeout_seconds=0.05
+    )
+    assert sync.process_batch() == 0
+    lf.api.scores.create.assert_not_called()
+
+
+# 20. 客户端时钟超前时不抢占数据库时间下尚未过期的有效租约
+def test_live_lease_not_stolen_by_fast_claim_clock(setup_runtime):
+    db, lid = prepare(setup_runtime)
+    with db.get_session() as s:
+        t = s.get(Task, "audit")
+        t.status = "PROCESSING"
+        t.claim_token = "live-owner"
+        t.attempts = 1
+        t.lease_expires_at = datetime.now(UTC) + timedelta(seconds=30)
+        s.commit()
+
+    class FastClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime.now(tz) + timedelta(seconds=60)
+
+    with patch("app.langfuse_sync.datetime", FastClock):
+        claimed = LangfuseOutboxSyncer(db, None).claim_tasks()
+    assert claimed == []

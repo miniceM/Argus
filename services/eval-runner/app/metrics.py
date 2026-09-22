@@ -25,6 +25,12 @@ class RuntimeMetrics:
     def record_attempt(self, outcome: str) -> None:
         self.attempts_total[outcome] = self.attempts_total.get(outcome, 0) + 1
 
+    def record_retry(self) -> None:
+        self.retries_total += 1
+
+    def record_lease_expiry(self) -> None:
+        self.lease_expiries_total += 1
+
     def to_prometheus_format(self) -> str:
         lines = [
             "# HELP argus_queue_depth Current item executions in queue",

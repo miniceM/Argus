@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from .db import DatabaseManager
 from .db_models import (
@@ -11,6 +11,7 @@ from .db_models import (
     ExperimentLaunchRecord,
 )
 from .limiter import DistributedAgentLimiter
+from .metrics import runtime_metrics
 from .queue import QueueAdapter
 from .state_machine import aggregate_launch_status_from_items
 
@@ -50,6 +51,7 @@ class ExecutionReconciler:
                 it.lease_expires_at = None
                 it.updated_at = now
                 reenqueued.append((it.id, it.dispatch_generation))
+                runtime_metrics.record_retry()
 
             session.commit()
 
@@ -74,6 +76,7 @@ class ExecutionReconciler:
 
             for it in expired_items:
                 recovered_count += 1
+                runtime_metrics.record_lease_expiry()
                 launch = session.get(ExperimentLaunchRecord, it.launch_id)
                 manifest = launch.manifest if launch else {}
                 agent_dict = manifest.get("agent", {})
@@ -188,6 +191,8 @@ class ExecutionReconciler:
             ).all()
 
             for launch in active_launches:
+                is_cancelling = bool(launch.cancel_requested_at or launch.status == "CANCELLING")
+
                 counts_res = session.execute(
                     select(
                         ExperimentItemExecutionRecord.execution_status,
@@ -198,19 +203,62 @@ class ExecutionReconciler:
                 ).all()
 
                 counts = {row[0].lower(): row[1] for row in counts_res}
-                active_items = counts.get("pending", 0) + counts.get("queued", 0) + counts.get("running", 0) + counts.get("retry_wait", 0)
 
-                if active_items == 0 and sum(counts.values()) > 0:
-                    term_status, term_quality = aggregate_launch_status_from_items(counts)
+                # If cancelling and in-flight invocations are quiescent, cancel remaining queued/pending items
+                if is_cancelling and counts.get("running", 0) == 0 and counts.get("retry_wait", 0) == 0:
+                    cancelled_updated = session.execute(
+                        update(ExperimentItemExecutionRecord)
+                        .where(
+                            ExperimentItemExecutionRecord.launch_id == launch.id,
+                            ExperimentItemExecutionRecord.execution_status.in_(["pending", "queued"]),
+                        )
+                        .values(
+                            execution_status="cancelled",
+                            lease_owner=None,
+                            lease_token=None,
+                            lease_expires_at=None,
+                            updated_at=now,
+                        )
+                    )
+                    if cancelled_updated.rowcount > 0:
+                        # Refresh counts
+                        counts_res = session.execute(
+                            select(
+                                ExperimentItemExecutionRecord.execution_status,
+                                func.count(ExperimentItemExecutionRecord.id),
+                            )
+                            .where(ExperimentItemExecutionRecord.launch_id == launch.id)
+                            .group_by(ExperimentItemExecutionRecord.execution_status)
+                        ).all()
+                        counts = {row[0].lower(): row[1] for row in counts_res}
+
+                active_items = (
+                    counts.get("pending", 0)
+                    + counts.get("queued", 0)
+                    + counts.get("running", 0)
+                    + counts.get("retry_wait", 0)
+                )
+
+                quality_res = session.execute(
+                    select(
+                        ExperimentItemExecutionRecord.quality_conclusion,
+                        func.count(ExperimentItemExecutionRecord.id),
+                    )
+                    .where(ExperimentItemExecutionRecord.launch_id == launch.id)
+                    .group_by(ExperimentItemExecutionRecord.quality_conclusion)
+                ).all()
+                quality_counts = {
+                    str(row[0]).lower(): row[1] for row in quality_res if row[0] is not None
+                }
+
+                if (active_items == 0 and sum(counts.values()) > 0) or (
+                    is_cancelling and counts.get("running", 0) == 0 and counts.get("retry_wait", 0) == 0
+                ):
+                    term_status, term_quality = aggregate_launch_status_from_items(
+                        counts, quality_counts, is_cancelling=is_cancelling
+                    )
                     launch.status = term_status
                     launch.quality_conclusion = term_quality
-                    launch.completed_at = now
-                    launch.updated_at = now
-                    updated_count += 1
-                elif launch.cancel_requested_at and counts.get("running", 0) == 0 and counts.get("retry_wait", 0) == 0:
-                    # Quiescence reached for cancelling launch
-                    term_status, term_quality = aggregate_launch_status_from_items(counts)
-                    launch.status = "CANCELLED" if term_status != "COMPLETED" else "COMPLETED"
                     launch.completed_at = now
                     launch.updated_at = now
                     updated_count += 1

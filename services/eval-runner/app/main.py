@@ -92,20 +92,41 @@ async def lifespan(app: FastAPI):
     stop_event = asyncio.Event()
 
     async def _worker_loop():
+        semaphore = asyncio.Semaphore(settings.worker_concurrency)
+        running_tasks = set()
+
+        async def _process_item(m_id: str, i_id: str, g: int):
+            async with semaphore:
+                try:
+                    await worker.execute_item_message(m_id, i_id, g)
+                except Exception:
+                    pass
+
         while not stop_event.is_set():
             try:
-                # Offload blocking queue read off the event loop thread
-                msgs = await asyncio.to_thread(worker.poll_queue, count=5, block_ms=1000)
-                if not msgs:
-                    # Yield event loop when queue is idle
+                available_slots = settings.worker_concurrency - len(running_tasks)
+                if available_slots <= 0:
                     await asyncio.sleep(0.05)
                     continue
+
+                fetch_count = min(available_slots, 10)
+                msgs = await asyncio.to_thread(worker.poll_queue, count=fetch_count, block_ms=1000)
+                if not msgs:
+                    await asyncio.sleep(0.05)
+                    continue
+
                 for msg_id, item_id, gen in msgs:
-                    await worker.execute_item_message(msg_id, item_id, gen)
+                    task = asyncio.create_task(_process_item(msg_id, item_id, gen))
+                    running_tasks.add(task)
+                    task.add_done_callback(running_tasks.discard)
+
             except asyncio.CancelledError:
                 break
             except Exception:
                 await asyncio.sleep(1)
+
+        if running_tasks:
+            await asyncio.gather(*running_tasks, return_exceptions=True)
 
     async def _reconciler_loop():
         while not stop_event.is_set():

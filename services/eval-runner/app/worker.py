@@ -16,6 +16,7 @@ from .db_models import (
 from .evaluators import default_evaluator_registry, evaluate_item_quality
 from .executor import RemoteAgentExecutor
 from .limiter import DistributedAgentLimiter
+from .metrics import runtime_metrics
 from .queue import QueueAdapter
 from .registry import AgentVersionSpec, map_request
 
@@ -42,7 +43,7 @@ class ExecutionWorker:
         return self.queue.read_group(self.worker_id, count=count, block_ms=block_ms)
 
     def renew_lease(self, item_id: str, lease_token: str, extension_seconds: int = 30) -> bool:
-        """Renews active lease timestamp for in-flight items."""
+        """Renews active lease timestamp for in-flight items. Fails if lease already expired."""
         now = datetime.now(UTC)
         with self.db_mgr.get_session() as session:
             stmt = (
@@ -51,6 +52,7 @@ class ExecutionWorker:
                     ExperimentItemExecutionRecord.id == item_id,
                     ExperimentItemExecutionRecord.lease_token == lease_token,
                     ExperimentItemExecutionRecord.execution_status == "running",
+                    ExperimentItemExecutionRecord.lease_expires_at > now,
                 )
                 .values(
                     lease_expires_at=now + timedelta(seconds=extension_seconds),
@@ -190,6 +192,7 @@ class ExecutionWorker:
             res = session.execute(stmt)
             if res.rowcount == 1:
                 session.commit()
+                runtime_metrics.record_item_status(status)
                 return True
             session.rollback()
             return False
@@ -211,13 +214,7 @@ class ExecutionWorker:
             token = claim_info["lease_token"]
             launch_id = claim_info["launch_id"]
 
-            attempt_no = self.authorize_attempt(item_id, token)
-            if attempt_no is None:
-                # Cancelled before attempt could be authorized
-                self.queue.ack(message_id)
-                return False
-
-            # Retrieve launch manifest and item input
+            # Retrieve launch manifest and item input before authorizing attempt
             with self.db_mgr.get_session() as session:
                 item_rec = session.get(ExperimentItemExecutionRecord, item_id)
                 launch_rec = session.get(ExperimentLaunchRecord, launch_id)
@@ -231,14 +228,12 @@ class ExecutionWorker:
                 dataset_input = matched.get("input", {})
                 expected_output = matched.get("expected_output", {})
 
-                # Find the running attempt record ID
-                att_rec = session.scalars(
-                    select(ExecutionAttemptRecord).where(
-                        ExecutionAttemptRecord.item_execution_id == item_id,
-                        ExecutionAttemptRecord.attempt_no == attempt_no,
-                    )
-                ).first()
-                current_attempt_id = att_rec.id if att_rec else None
+                # If launch is still QUEUED, transition to RUNNING atomically
+                if launch_rec.status == "QUEUED":
+                    launch_rec.status = "RUNNING"
+                    launch_rec.started_at = datetime.now(UTC)
+                    launch_rec.updated_at = datetime.now(UTC)
+                    session.commit()
 
             spec = AgentVersionSpec(
                 agent_id=agent_dict["agent_id"],
@@ -259,11 +254,11 @@ class ExecutionWorker:
             initial_lease_sec = max(30, int(spec.timeout_seconds * 1.5) + 15)
             self.renew_lease(item_id, token, extension_seconds=initial_lease_sec)
 
-            # Acquire distributed rate permit
+            # 1. Acquire distributed rate permit (do NOT authorize attempt if rate limited)
             if spec.rate_limit_per_minute and spec.rate_limit_per_minute > 0:
                 rate_ok = self.limiter.acquire_rate_permit(spec.id, spec.rate_limit_per_minute)
                 if not rate_ok:
-                    # Rate limited -> delay to RETRY_WAIT and release lease
+                    # Rate limited -> delay to RETRY_WAIT and release lease (No attempt consumed!)
                     with self.db_mgr.get_session() as session:
                         stmt = (
                             update(ExperimentItemExecutionRecord)
@@ -285,10 +280,12 @@ class ExecutionWorker:
                     self.queue.ack(message_id)
                     return False
 
-            # Acquire distributed concurrency permit
-            permit_id = self.limiter.acquire_concurrency_permit(spec.id, spec.max_concurrency, owner_id=self.worker_id)
+            # 2. Acquire distributed concurrency permit covering full execution timeout
+            permit_id = self.limiter.acquire_concurrency_permit(
+                spec.id, spec.max_concurrency, timeout_sec=float(initial_lease_sec), owner_id=self.worker_id
+            )
             if not permit_id:
-                # Could not acquire permit -> delay to RETRY_WAIT and release lease
+                # Could not acquire concurrency permit -> delay to RETRY_WAIT and release lease (No attempt consumed!)
                 with self.db_mgr.get_session() as session:
                     stmt = (
                         update(ExperimentItemExecutionRecord)
@@ -310,84 +307,124 @@ class ExecutionWorker:
                 self.queue.ack(message_id)
                 return False
 
-            executor = RemoteAgentExecutor(spec)
-            mapped_payload = map_request(dataset_input, spec.request_mapping)
-            headers = {
-                "Content-Type": "application/json",
-                "X-Eval-Launch-Id": launch_id,
-                "X-Eval-Dataset-Item-Id": claim_info["dataset_item_id"],
-                "X-Eval-Agent-Version": spec.version,
-                "Idempotency-Key": f"argus:{item_id}",
-            }
             try:
-                from opentelemetry.propagate import inject
-                inject(headers)
-            except Exception:
-                pass
+                # 3. Both permits acquired: now authorize attempt
+                attempt_no = self.authorize_attempt(item_id, token)
+                if attempt_no is None:
+                    # Cancelled before attempt could be authorized
+                    self.queue.ack(message_id)
+                    return False
 
-            # Mark attempt phase as MAY_HAVE_BEEN_SENT
-            if current_attempt_id:
                 with self.db_mgr.get_session() as session:
-                    att = session.get(ExecutionAttemptRecord, current_attempt_id)
-                    if att:
-                        att.request_phase = "MAY_HAVE_BEEN_SENT"
-                        session.commit()
+                    att_rec = session.scalars(
+                        select(ExecutionAttemptRecord).where(
+                            ExecutionAttemptRecord.item_execution_id == item_id,
+                            ExecutionAttemptRecord.attempt_no == attempt_no,
+                        )
+                    ).first()
+                    current_attempt_id = att_rec.id if att_rec else None
 
-            # Start background heartbeat to renew lease during invocation
-            stop_hb = asyncio.Event()
-            hb_interval = getattr(self, "heartbeat_interval", 5.0)
-            hb_extension = max(30, int(spec.timeout_seconds) + 15)
-
-            async def _heartbeat_loop():
-                while not stop_hb.is_set():
-                    try:
-                        await asyncio.sleep(hb_interval)
-                        if stop_hb.is_set():
-                            break
-                        self.renew_lease(item_id, token, extension_seconds=hb_extension)
-                    except asyncio.CancelledError:
-                        break
-                    except Exception:
-                        pass
-
-            hb_task = asyncio.create_task(_heartbeat_loop())
-
-            try:
-                # Invoke remote agent once
-                inv_res = await executor.invoke_once(mapped_payload, headers)
-            finally:
-                stop_hb.set()
-                hb_task.cancel()
+                executor = RemoteAgentExecutor(spec)
+                mapped_payload = map_request(dataset_input, spec.request_mapping)
+                headers = {
+                    "Content-Type": "application/json",
+                    "X-Eval-Launch-Id": launch_id,
+                    "X-Eval-Dataset-Item-Id": claim_info["dataset_item_id"],
+                    "X-Eval-Agent-Version": spec.version,
+                    "Idempotency-Key": f"argus:{item_id}",
+                }
                 try:
-                    await hb_task
-                except asyncio.CancelledError:
+                    from opentelemetry import trace
+                    from opentelemetry.propagate import inject
+
+                    tracer = trace.get_tracer("argus-eval-runner")
+                    with tracer.start_as_current_span(
+                        f"eval_item_execution:{claim_info['dataset_item_id']}",
+                        attributes={
+                            "launch_id": launch_id,
+                            "item_id": item_id,
+                            "agent_id": spec.agent_id,
+                            "agent_version": spec.version,
+                        },
+                    ):
+                        inject(headers)
+                except Exception:
                     pass
 
-            is_non_idem_read_timeout = (
-                not spec.is_idempotent and inv_res.error_category == "READ_TIMEOUT"
-            )
+                # Fallback to standard W3C traceparent if not injected
+                if "traceparent" not in headers:
+                    trace_id = uuid.uuid4().hex
+                    span_id = uuid.uuid4().hex[:16]
+                    headers["traceparent"] = f"00-{trace_id}-{span_id}-01"
 
-            # Update attempt record with outcome
-            if current_attempt_id:
-                with self.db_mgr.get_session() as session:
-                    att = session.get(ExecutionAttemptRecord, current_attempt_id)
-                    if att:
-                        att.status = "COMPLETED" if inv_res.status_code == 200 else "FAILED"
-                        att.http_status = inv_res.status_code
-                        att.error_type = "AMBIGUOUS_OUTCOME" if is_non_idem_read_timeout else inv_res.error_category
-                        att.error_message = (
-                            f"AMBIGUOUS_OUTCOME: {inv_res.error_message}"
-                            if is_non_idem_read_timeout
-                            else inv_res.error_message
-                        )
-                        att.latency_ms = inv_res.duration_ms
-                        att.trace_context_received = inv_res.trace_context_received
-                        att.request_phase = "RESPONSE_RECEIVED"
-                        att.completed_at = datetime.now(UTC)
-                        session.commit()
+                # Mark attempt phase as MAY_HAVE_BEEN_SENT
+                if current_attempt_id:
+                    with self.db_mgr.get_session() as session:
+                        att = session.get(ExecutionAttemptRecord, current_attempt_id)
+                        if att:
+                            att.request_phase = "MAY_HAVE_BEEN_SENT"
+                            session.commit()
 
-            # Release distributed permit
-            self.limiter.release_concurrency_permit(spec.id, permit_id)
+                # Start background heartbeat to renew lease AND concurrency permit during invocation
+                stop_hb = asyncio.Event()
+                hb_interval = getattr(self, "heartbeat_interval", 5.0)
+                hb_extension = max(30, int(spec.timeout_seconds) + 15)
+
+                async def _heartbeat_loop():
+                    while not stop_hb.is_set():
+                        try:
+                            await asyncio.sleep(hb_interval)
+                            if stop_hb.is_set():
+                                break
+                            self.renew_lease(item_id, token, extension_seconds=hb_extension)
+                            self.limiter.renew_concurrency_permit(spec.id, permit_id, extra_sec=hb_extension)
+                        except asyncio.CancelledError:
+                            break
+                        except Exception:
+                            pass
+
+                hb_task = asyncio.create_task(_heartbeat_loop())
+
+                try:
+                    # Invoke remote agent once
+                    inv_res = await executor.invoke_once(mapped_payload, headers)
+                finally:
+                    stop_hb.set()
+                    hb_task.cancel()
+                    try:
+                        await hb_task
+                    except asyncio.CancelledError:
+                        pass
+
+                is_non_idem_read_timeout = (
+                    not spec.is_idempotent and inv_res.error_category == "READ_TIMEOUT"
+                )
+
+                # Update attempt record with outcome
+                if current_attempt_id:
+                    with self.db_mgr.get_session() as session:
+                        att = session.get(ExecutionAttemptRecord, current_attempt_id)
+                        if att:
+                            att.status = "COMPLETED" if inv_res.status_code == 200 else "FAILED"
+                            att.http_status = inv_res.status_code
+                            att.error_type = (
+                                "AMBIGUOUS_OUTCOME" if is_non_idem_read_timeout else inv_res.error_category
+                            )
+                            att.error_message = (
+                                f"AMBIGUOUS_OUTCOME: {inv_res.error_message}"
+                                if is_non_idem_read_timeout
+                                else inv_res.error_message
+                            )
+                            att.latency_ms = inv_res.duration_ms
+                            att.trace_context_received = inv_res.trace_context_received
+                            att.request_phase = "RESPONSE_RECEIVED"
+                            att.completed_at = datetime.now(UTC)
+                            session.commit()
+                            runtime_metrics.record_attempt(att.status)
+
+            finally:
+                # Always release distributed permit
+                self.limiter.release_concurrency_permit(spec.id, permit_id)
 
             # Check if Launch was cancelled while we were invoking
             with self.db_mgr.get_session() as session:

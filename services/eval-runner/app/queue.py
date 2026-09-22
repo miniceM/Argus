@@ -130,23 +130,60 @@ class RedisStreamQueueAdapter(QueueAdapter):
     def read_group(
         self, consumer_name: str, count: int = 10, block_ms: int = 1000
     ) -> list[tuple[str, str, int]]:
-        try:
-            # Read new messages with ">"
-            streams = {self.stream_key: ">"}
-            raw_entries = self.client.xreadgroup(
-                self.group_name,
-                consumer_name,
-                streams,
-                count=count,
-                block=block_ms,
-            )
-            if not raw_entries:
-                return self.claim_pending_entries(consumer_name, min_idle_ms=30000, count=count)
+        for attempt in range(2):
+            try:
+                # Read new messages with ">"
+                streams = {self.stream_key: ">"}
+                raw_entries = self.client.xreadgroup(
+                    self.group_name,
+                    consumer_name,
+                    streams,
+                    count=count,
+                    block=block_ms,
+                )
+                if not raw_entries:
+                    return self.claim_pending_entries(consumer_name, min_idle_ms=30000, count=count)
 
-            results = []
-            for _stream_name, messages in raw_entries:
+                results = []
+                for _stream_name, messages in raw_entries:
+                    for msg_id, data in messages:
+                        # Parse bytes to str if needed
+                        fields = {
+                            (k.decode() if isinstance(k, bytes) else k): (
+                                v.decode() if isinstance(v, bytes) else v
+                            )
+                            for k, v in data.items()
+                        }
+                        item_id = fields.get("item_execution_id", "")
+                        gen = int(fields.get("dispatch_generation", 1))
+                        m_id = msg_id.decode() if isinstance(msg_id, bytes) else str(msg_id)
+                        results.append((m_id, item_id, gen))
+                return results
+            except Exception as exc:
+                if "NOGROUP" in str(exc) and attempt == 0:
+                    self._ensure_group()
+                    continue
+                raise
+
+    def claim_pending_entries(
+        self, consumer_name: str, min_idle_ms: int = 30000, count: int = 10
+    ) -> list[tuple[str, str, int]]:
+        """Claims abandoned pending messages from crashed workers using XAUTOCLAIM."""
+        for attempt in range(2):
+            try:
+                res = self.client.xautoclaim(
+                    self.stream_key,
+                    self.group_name,
+                    consumer_name,
+                    min_idle_time=min_idle_ms,
+                    start_id="0-0",
+                    count=count,
+                )
+                if not res or len(res) < 2:
+                    return []
+                messages = res[1]
+                results = []
                 for msg_id, data in messages:
-                    # Parse bytes to str if needed
                     fields = {
                         (k.decode() if isinstance(k, bytes) else k): (
                             v.decode() if isinstance(v, bytes) else v
@@ -157,41 +194,13 @@ class RedisStreamQueueAdapter(QueueAdapter):
                     gen = int(fields.get("dispatch_generation", 1))
                     m_id = msg_id.decode() if isinstance(msg_id, bytes) else str(msg_id)
                     results.append((m_id, item_id, gen))
-            return results
-        except Exception:
-            raise
-
-    def claim_pending_entries(
-        self, consumer_name: str, min_idle_ms: int = 30000, count: int = 10
-    ) -> list[tuple[str, str, int]]:
-        """Claims abandoned pending messages from crashed workers using XAUTOCLAIM."""
-        try:
-            res = self.client.xautoclaim(
-                self.stream_key,
-                self.group_name,
-                consumer_name,
-                min_idle_time=min_idle_ms,
-                start_id="0-0",
-                count=count,
-            )
-            if not res or len(res) < 2:
-                return []
-            messages = res[1]
-            results = []
-            for msg_id, data in messages:
-                fields = {
-                    (k.decode() if isinstance(k, bytes) else k): (
-                        v.decode() if isinstance(v, bytes) else v
-                    )
-                    for k, v in data.items()
-                }
-                item_id = fields.get("item_execution_id", "")
-                gen = int(fields.get("dispatch_generation", 1))
-                m_id = msg_id.decode() if isinstance(msg_id, bytes) else str(msg_id)
-                results.append((m_id, item_id, gen))
-            return results
-        except Exception:
-            return []
+                return results
+            except Exception as exc:
+                if "NOGROUP" in str(exc) and attempt == 0:
+                    self._ensure_group()
+                    continue
+                raise
+        return []
 
     def ack(self, message_id: str) -> None:
         self.client.xack(self.stream_key, self.group_name, message_id)

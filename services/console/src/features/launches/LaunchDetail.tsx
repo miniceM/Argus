@@ -196,21 +196,11 @@ export const LaunchDetail: React.FC = () => {
     }
   };
 
-  // 3. Trigger Run Mutation
+  // 3. Trigger Asynchronous Run Mutation
   const runMutation = useMutation({
     mutationFn: async () => {
       if (!launchId) return;
       setActionError(null);
-      // Prefer /run endpoint for mock & contract compatibility
-      try {
-        const legacyRes = await api.POST("/api/v1/experiment-launches/run", {
-          body: { launch_id: launchId },
-        });
-        if (!legacyRes.error && legacyRes.data) return legacyRes.data;
-      } catch {
-        // Fallback to path parameter
-      }
-
       const res = await api.POST("/api/v1/experiment-launches/{launch_id}/run", {
         params: { path: { launch_id: launchId } },
       });

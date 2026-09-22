@@ -179,8 +179,12 @@ def determine_allowed_actions(
     }
 
 
-def aggregate_launch_status_from_items(counts: dict[str, int]) -> tuple[str, str]:
-    """Calculate terminal status and quality conclusion based on item execution counts."""
+def aggregate_launch_status_from_items(
+    counts: dict[str, int],
+    quality_counts: dict[str, int] | None = None,
+    is_cancelling: bool = False,
+) -> tuple[str, str]:
+    """Calculate terminal status and quality conclusion based on item execution counts and quality outcomes."""
     c = {k.lower(): v for k, v in counts.items()}
     total = sum(c.values())
     succeeded = c.get("succeeded", 0)
@@ -190,15 +194,35 @@ def aggregate_launch_status_from_items(counts: dict[str, int]) -> tuple[str, str
 
     terminal_fails = failed + timed_out
 
-    if succeeded == total and total > 0:
-        return "COMPLETED", "pass"
+    # 1. Execution status aggregation
+    if is_cancelling or cancelled > 0:
+        if succeeded == total and total > 0:
+            term_status = "COMPLETED"
+        elif cancelled == total and total > 0:
+            term_status = "CANCELLED"
+        elif terminal_fails > 0:
+            term_status = "PARTIAL_FAILED"
+        else:
+            term_status = "CANCELLED" if is_cancelling else "PARTIAL_FAILED"
+    elif succeeded == total and total > 0:
+        term_status = "COMPLETED"
     elif succeeded > 0 and terminal_fails > 0:
-        return "PARTIAL_FAILED", "fail"
+        term_status = "PARTIAL_FAILED"
     elif terminal_fails == total and total > 0:
-        return "FAILED", "fail"
-    elif cancelled == total and total > 0:
-        return "CANCELLED", "unknown"
-    elif cancelled > 0 and succeeded > 0:
-        return "PARTIAL_FAILED", "unknown"
+        term_status = "FAILED"
     else:
-        return "FAILED", "fail"
+        term_status = "FAILED"
+
+    # 2. Quality conclusion aggregation (Strict separation from execution status)
+    qc = {k.lower(): v for k, v in (quality_counts or {}).items()}
+    if qc.get("fail", 0) > 0 or terminal_fails > 0:
+        term_quality = "fail"
+    elif qc.get("pass", 0) > 0 and qc.get("fail", 0) == 0:
+        term_quality = "pass"
+    elif term_status == "COMPLETED":
+        # Completed with all succeeded and no fails
+        term_quality = "fail" if qc.get("fail", 0) > 0 else "pass"
+    else:
+        term_quality = "unknown"
+
+    return term_status, term_quality

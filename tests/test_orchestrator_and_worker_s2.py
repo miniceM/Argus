@@ -10,59 +10,11 @@ from sqlalchemy import select
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "services" / "eval-runner"))
 
-from app.db import DatabaseManager  # noqa: E402
 from app.db_models import (  # noqa: E402
-    AgentVersionRecord,
     ExecutionAttemptRecord,
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
 )
-from app.limiter import MemoryAgentLimiter  # noqa: E402
-from app.orchestrator import LaunchOrchestrator  # noqa: E402
-from app.queue import MemoryQueueAdapter  # noqa: E402
-from app.reconciler import ExecutionReconciler  # noqa: E402
-from app.worker import ExecutionWorker  # noqa: E402
-
-
-@pytest.fixture
-def setup_runtime(tmp_path):
-    db_file = tmp_path / "runtime_test.db"
-    db_url = f"sqlite:///{db_file}"
-    db_mgr = DatabaseManager(db_url)
-    from app.db import MigrationRunner
-    MigrationRunner(db_mgr.engine, ROOT / "migrations").apply_all()
-
-    queue = MemoryQueueAdapter()
-    limiter = MemoryAgentLimiter()
-
-    # Seed an agent and agent version in DB
-    from app.db_models import AgentRecord
-    with db_mgr.get_session() as session:
-        a_rec = AgentRecord(id="test-agent", name="Test Agent")
-        session.add(a_rec)
-        session.flush()
-
-        v_rec = AgentVersionRecord(
-            id="test-agent-v1",
-            agent_id="test-agent",
-            version="v1",
-            endpoint="http://localhost:8080/invoke",
-            method="POST",
-            timeout_seconds=5,
-            max_retries=2,
-            max_concurrency=5,
-            rate_limit_per_minute=60,
-            request_mapping={"input": "text"},
-            is_idempotent=False,
-            spec_digest="sha256:abc",
-        )
-        session.add(v_rec)
-
-    orchestrator = LaunchOrchestrator(db_mgr, queue, limiter)
-    worker = ExecutionWorker(db_mgr, queue, limiter, worker_id="worker-test-1")
-    reconciler = ExecutionReconciler(db_mgr, queue, limiter)
-
-    return db_mgr, queue, limiter, orchestrator, worker, reconciler
 
 
 def test_materialization_and_two_step_start(setup_runtime):

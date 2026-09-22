@@ -169,7 +169,7 @@ class LaunchOrchestrator:
             session.refresh(launch)
             return launch
 
-    def resume_launch(self, launch_id: str) -> ExperimentLaunchRecord:
+    def resume_launch(self, launch_id: str, force: bool = False) -> ExperimentLaunchRecord:
         """Resumes cancelled or interrupted launch by advancing generation for non-succeeded items."""
         now = datetime.now(UTC)
         dispatch_items = []
@@ -192,6 +192,21 @@ class LaunchOrchestrator:
             if not resumable_items:
                 raise ValueError("No eligible items to resume (all items already succeeded or no cancelled items)")
 
+            # Check non-idempotent ambiguous outcome protection across all target items
+            item_ids = [it.id for it in resumable_items]
+            ambiguous_attempts = session.scalars(
+                select(ExecutionAttemptRecord).where(
+                    ExecutionAttemptRecord.item_execution_id.in_(item_ids),
+                    ExecutionAttemptRecord.error_type == "AMBIGUOUS_OUTCOME",
+                )
+            ).all()
+
+            if ambiguous_attempts and not force:
+                raise ValueError(
+                    f"Found {len(ambiguous_attempts)} failed attempts with AMBIGUOUS_OUTCOME for non-idempotent agent. "
+                    "Automatic replay is unsafe. Please specify force=True to confirm re-execution."
+                )
+
             launch.cancel_requested_at = None
             launch.status = "QUEUED"
             launch.updated_at = now
@@ -204,6 +219,8 @@ class LaunchOrchestrator:
                 it.lease_owner = None
                 it.lease_token = None
                 it.lease_expires_at = None
+                it.execution_error = None
+                it.eval_error = None
                 it.updated_at = now
                 dispatch_items.append((it.id, it.dispatch_generation))
 

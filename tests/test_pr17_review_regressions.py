@@ -567,8 +567,8 @@ def test_clock_timestamp_lock_wait_expiration_fails_on_postgres():
         )
         conn.execute(
             text(
-                "INSERT INTO experiment_launches (id, agent_id, agent_version, dataset_name, dataset_version, status, manifest) "
-                "VALUES ('l-pg', 'ag-pg', 'v1', 'ds', 'v1', 'RUNNING', '{}');"
+                "INSERT INTO experiment_launches (id, name, agent_id, agent_version, agent_version_id, dataset_name, dataset_version, status, manifest) "
+                "VALUES ('l-pg', 'L PG', 'ag-pg', 'v1', 'ag-v1', 'ds', 'v1', 'RUNNING', '{}');"
             )
         )
         # Item with lease expiring in 1.5 seconds

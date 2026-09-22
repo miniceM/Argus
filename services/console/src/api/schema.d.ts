@@ -75,6 +75,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/experiment-launches/{launch_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Trigger asynchronous execution of a PENDING Experiment Launch */
+        post: operations["run_launch_async_api_v1_experiment_launches__launch_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/experiment-launches/{launch_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Collaboratively cancel a running or queued Experiment Launch */
+        post: operations["cancel_launch_api_v1_experiment_launches__launch_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/experiment-launches/{launch_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume cancelled or failed items in an Experiment Launch */
+        post: operations["resume_launch_api_v1_experiment_launches__launch_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/experiment-launches/{launch_id}/retry-failed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry failed and timed out items in an Experiment Launch */
+        post: operations["retry_failed_launch_api_v1_experiment_launches__launch_id__retry_failed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/experiment-launches/{launch_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Query Experiment Launch detail by Launch ID */
+        get: operations["get_launch_detail_api_v1_experiment_launches__launch_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/experiment-launches/{launch_id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List item executions for a Launch with optional status filter and pagination */
+        get: operations["list_launch_items_by_launch_id_api_v1_experiment_launches__launch_id__items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/experiment-launch-items": {
         parameters: {
             query?: never;
@@ -84,6 +186,23 @@ export interface paths {
         };
         /** List item executions for a Launch (?launch_id=...) */
         get: operations["list_launch_items_api_v1_experiment_launch_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/experiment-item-executions/{item_execution_id}/attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List execution attempts for an item execution */
+        get: operations["list_item_attempts_by_item_id_api_v1_experiment_item_executions__item_execution_id__attempts_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -152,6 +271,23 @@ export interface paths {
         };
         /** Get Argus Control Plane runtime build and environment information */
         get: operations["get_system_info_api_v1_system_info_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Prometheus Metrics */
+        get: operations["get_metrics_metrics_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -512,10 +648,20 @@ export interface components {
             error_type?: string | null;
             /** Error Message */
             error_message?: string | null;
-            /** Latency Ms */
+            /**
+             * Latency Ms
+             * @default 0
+             */
             latency_ms: number;
             /** Trace Context Received */
             trace_context_received: boolean;
+            /** Worker Id */
+            worker_id?: string | null;
+            /**
+             * Request Phase
+             * @default PREPARED
+             */
+            request_phase: string;
             /**
              * Started At
              * Format: date-time
@@ -561,6 +707,17 @@ export interface components {
             final_attempt_http_status?: number | null;
             /** Final Attempt Latency Ms */
             final_attempt_latency_ms?: number | null;
+            /** Queued At */
+            queued_at?: string | null;
+            /** Available At */
+            available_at?: string | null;
+            /** Lease Owner */
+            lease_owner?: string | null;
+            /**
+             * Dispatch Generation
+             * @default 1
+             */
+            dispatch_generation: number;
             /** Started At */
             started_at?: string | null;
             /** Completed At */
@@ -596,6 +753,80 @@ export interface components {
              * @description Optional idempotency key (can also be passed via Idempotency-Key header)
              */
             idempotency_key?: string | null;
+        };
+        /** ExperimentLaunchProgressResponse */
+        ExperimentLaunchProgressResponse: {
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Pending
+             * @default 0
+             */
+            pending: number;
+            /**
+             * Queued
+             * @default 0
+             */
+            queued: number;
+            /**
+             * Running
+             * @default 0
+             */
+            running: number;
+            /**
+             * Retry Wait
+             * @default 0
+             */
+            retry_wait: number;
+            /**
+             * Succeeded
+             * @default 0
+             */
+            succeeded: number;
+            /**
+             * Failed
+             * @default 0
+             */
+            failed: number;
+            /**
+             * Timed Out
+             * @default 0
+             */
+            timed_out: number;
+            /**
+             * Cancelled
+             * @default 0
+             */
+            cancelled: number;
+            /**
+             * Completed
+             * @default 0
+             */
+            completed: number;
+            /**
+             * Percentage
+             * @default 0
+             */
+            percentage: number;
+            /**
+             * Attempts
+             * @default 0
+             */
+            attempts: number;
+            /**
+             * Retries
+             * @default 0
+             */
+            retries: number;
+            /** Allowed Actions */
+            allowed_actions?: string[];
+            /** Action Reasons */
+            action_reasons?: {
+                [key: string]: string;
+            };
         };
         /** ExperimentLaunchResponse */
         ExperimentLaunchResponse: {
@@ -637,6 +868,13 @@ export interface components {
             links?: {
                 [key: string]: string | null;
             } | null;
+            progress?: components["schemas"]["ExperimentLaunchProgressResponse"] | null;
+            /** Cancel Requested At */
+            cancel_requested_at?: string | null;
+            /** Status Reason */
+            status_reason?: string | null;
+            /** Allowed Actions */
+            allowed_actions?: string[];
             /** Created By */
             created_by?: string | null;
             /**
@@ -649,11 +887,23 @@ export interface components {
             /** Completed At */
             completed_at?: string | null;
         };
+        /** ExperimentLaunchRunActionResponse */
+        ExperimentLaunchRunActionResponse: {
+            /** Launch Id */
+            launch_id: string;
+            /** Status */
+            status: string;
+            /**
+             * Message
+             * @default Launch queued for asynchronous execution
+             */
+            message: string;
+        };
         /** ExperimentLaunchRunRequest */
         ExperimentLaunchRunRequest: {
             /**
              * Launch Id
-             * @description ID of the launch to execute synchronously
+             * @description ID of the launch to execute
              */
             launch_id: string;
         };
@@ -700,6 +950,15 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** RetryFailedRequest */
+        RetryFailedRequest: {
+            /**
+             * Force
+             * @description Force retry even if ambiguous non-idempotent outcomes exist
+             * @default false
+             */
+            force: boolean;
         };
         /** SystemInfoResponse */
         SystemInfoResponse: {
@@ -979,11 +1238,214 @@ export interface operations {
             };
         };
     };
+    run_launch_async_api_v1_experiment_launches__launch_id__run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentLaunchRunActionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_launch_api_v1_experiment_launches__launch_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentLaunchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_launch_api_v1_experiment_launches__launch_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentLaunchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_failed_launch_api_v1_experiment_launches__launch_id__retry_failed_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RetryFailedRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentLaunchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_launch_detail_api_v1_experiment_launches__launch_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentLaunchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_launch_items_by_launch_id_api_v1_experiment_launches__launch_id__items_get: {
+        parameters: {
+            query?: {
+                /** @description Optional execution status filter (e.g. cancelled, failed) */
+                status?: string | null;
+                /** @description Optional limit */
+                limit?: number | null;
+                /** @description Optional offset */
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExperimentItemExecutionResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_launch_items_api_v1_experiment_launch_items_get: {
         parameters: {
             query: {
                 /** @description Launch ID (required) */
                 launch_id: string;
+                /** @description Optional execution status filter */
+                status?: string | null;
+                /** @description Optional limit */
+                limit?: number | null;
+                /** @description Optional offset */
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -998,6 +1460,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExperimentItemExecutionResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_item_attempts_by_item_id_api_v1_experiment_item_executions__item_execution_id__attempts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_execution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionAttemptResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -1112,6 +1605,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SystemInfoResponse"];
+                };
+            };
+        };
+    };
+    get_metrics_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

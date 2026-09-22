@@ -187,6 +187,26 @@ class LaunchService:
         with self.db_manager.get_session() as session:
             try:
                 session.add(launch)
+                session.flush()
+
+                # Materialize all dataset items as PENDING
+                from .db_models import ExperimentItemExecutionRecord
+                items_seed = manifest.get("dataset", {}).get("items", [])
+                for item in items_seed:
+                    item_id = str(item.get("id", uuid.uuid4()))
+                    item_rec = ExperimentItemExecutionRecord(
+                        id=str(uuid.uuid4()),
+                        launch_id=launch.id,
+                        dataset_item_id=item_id,
+                        execution_status="pending",
+                        eval_status="pending",
+                        quality_conclusion="unknown",
+                        dispatch_generation=1,
+                        created_at=datetime.utcnow(),
+                        updated_at=datetime.utcnow(),
+                    )
+                    session.add(item_rec)
+
                 session.commit()
                 session.refresh(launch)
                 return launch

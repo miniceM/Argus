@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import email.utils
 import time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -23,6 +25,35 @@ class ErrorClassification(StrEnum):
     INVALID_RESPONSE = "INVALID_RESPONSE"
     SSL_ERROR = "SSL_ERROR"
     UNKNOWN_ERROR = "UNKNOWN_ERROR"
+
+
+@dataclass
+class SingleInvocationResult:
+    status_code: int | None
+    body: dict[str, Any] | None
+    raw_response: str | None
+    headers: dict[str, str]
+    duration_ms: int
+    trace_context_received: bool
+    error_category: str | None
+    error_message: str | None
+    is_retryable: bool
+    may_have_side_effects: bool
+    retry_after_seconds: int | None = None
+
+
+def parse_retry_after(header_val: str | None) -> int | None:
+    if not header_val:
+        return None
+    cleaned = header_val.strip()
+    if cleaned.isdigit():
+        return int(cleaned)
+    try:
+        dt = email.utils.parsedate_to_datetime(cleaned)
+        diff = (dt - datetime.now(UTC)).total_seconds()
+        return max(0, int(diff))
+    except Exception:
+        return None
 
 
 @dataclass
@@ -54,17 +85,166 @@ class SlidingWindowRateLimiter:
 
 
 class RemoteAgentExecutor:
-    """Remote Agent invocation executor with HTTP error classification, idempotency protection, and rate limiting.
+    """Remote Agent invocation executor with HTTP error classification, idempotency protection, and rate limiting."""
 
-    Rate limiting:
-        The SlidingWindowRateLimiter is shared across all concurrent executions within this executor (Launch scope)
-        to protect the agent endpoint from rate spikes. Cross-launch global rate limiting will be implemented
-        via distributed token bucket in future releases.
-    """
-
-    def __init__(self, spec: AgentVersionSpec):
+    def __init__(self, spec: AgentVersionSpec, client: httpx.AsyncClient | None = None):
         self.spec = spec
         self._limiter = SlidingWindowRateLimiter(spec.rate_limit_per_minute)
+        self._client = client or httpx.AsyncClient(
+            timeout=httpx.Timeout(
+                spec.timeout_seconds,
+                connect=min(5.0, spec.timeout_seconds),
+                read=spec.timeout_seconds,
+                write=spec.timeout_seconds,
+            )
+        )
+
+    async def invoke_once(
+        self,
+        payload: dict[str, Any],
+        headers: dict[str, str],
+        *,
+        client: httpx.AsyncClient | None = None,
+    ) -> SingleInvocationResult:
+        """Perform a single HTTP invocation to the remote agent without internal retry sleeps."""
+        if self.spec.method != "POST":
+            raise ValueError(f"Executor currently supports POST only, got: {self.spec.method}")
+
+        call_headers = dict(headers)
+        if self.spec.credential_ref:
+            token = resolve_credential(self.spec.credential_ref)
+            if token:
+                call_headers["Authorization"] = f"Bearer {token}"
+
+        active_client = client or self._client
+        start_time = time.monotonic()
+
+        try:
+            resp = await active_client.post(self.spec.endpoint, json=payload, headers=call_headers)
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            trace_received = resp.headers.get("x-demo-traceparent-received", "").lower() == "true"
+            resp_headers = dict(resp.headers)
+
+            if resp.status_code == 429:
+                retry_after_val = parse_retry_after(resp.headers.get("retry-after"))
+                return SingleInvocationResult(
+                    status_code=429,
+                    body=None,
+                    raw_response=resp.text,
+                    headers=resp_headers,
+                    duration_ms=duration_ms,
+                    trace_context_received=trace_received,
+                    error_category=ErrorClassification.HTTP_429,
+                    error_message=f"Rate limit exceeded (429), Retry-After: {retry_after_val}",
+                    is_retryable=True,
+                    may_have_side_effects=False,
+                    retry_after_seconds=retry_after_val,
+                )
+
+            if resp.status_code >= 500:
+                return SingleInvocationResult(
+                    status_code=resp.status_code,
+                    body=None,
+                    raw_response=resp.text,
+                    headers=resp_headers,
+                    duration_ms=duration_ms,
+                    trace_context_received=trace_received,
+                    error_category=ErrorClassification.HTTP_5XX,
+                    error_message=f"Server error {resp.status_code}",
+                    is_retryable=True,
+                    may_have_side_effects=False,
+                )
+
+            if 400 <= resp.status_code < 500:
+                return SingleInvocationResult(
+                    status_code=resp.status_code,
+                    body=None,
+                    raw_response=resp.text,
+                    headers=resp_headers,
+                    duration_ms=duration_ms,
+                    trace_context_received=trace_received,
+                    error_category=ErrorClassification.HTTP_4XX,
+                    error_message=f"Client error {resp.status_code}",
+                    is_retryable=False,
+                    may_have_side_effects=False,
+                )
+
+            try:
+                body = resp.json()
+                if not isinstance(body, dict):
+                    raise ValueError("Remote agent response must be a JSON object")
+            except Exception as exc:
+                return SingleInvocationResult(
+                    status_code=resp.status_code,
+                    body=None,
+                    raw_response=resp.text,
+                    headers=resp_headers,
+                    duration_ms=duration_ms,
+                    trace_context_received=trace_received,
+                    error_category=ErrorClassification.INVALID_RESPONSE,
+                    error_message=f"Invalid JSON response: {exc}",
+                    is_retryable=False,
+                    may_have_side_effects=True,
+                )
+
+            return SingleInvocationResult(
+                status_code=resp.status_code,
+                body=body,
+                raw_response=resp.text,
+                headers=resp_headers,
+                duration_ms=duration_ms,
+                trace_context_received=trace_received,
+                error_category=None,
+                error_message=None,
+                is_retryable=False,
+                may_have_side_effects=True,
+            )
+
+        except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            return SingleInvocationResult(
+                status_code=None,
+                body=None,
+                raw_response=None,
+                headers={},
+                duration_ms=duration_ms,
+                trace_context_received=False,
+                error_category=ErrorClassification.CONNECT_ERROR,
+                error_message=str(exc),
+                is_retryable=True,
+                may_have_side_effects=False,
+            )
+
+        except httpx.ReadTimeout as exc:
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            is_retryable = bool(self.spec.is_idempotent)
+            return SingleInvocationResult(
+                status_code=None,
+                body=None,
+                raw_response=None,
+                headers={},
+                duration_ms=duration_ms,
+                trace_context_received=False,
+                error_category=ErrorClassification.READ_TIMEOUT,
+                error_message=str(exc),
+                is_retryable=is_retryable,
+                may_have_side_effects=True,
+            )
+
+        except Exception as exc:
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            return SingleInvocationResult(
+                status_code=None,
+                body=None,
+                raw_response=None,
+                headers={},
+                duration_ms=duration_ms,
+                trace_context_received=False,
+                error_category=ErrorClassification.UNKNOWN_ERROR,
+                error_message=str(exc),
+                is_retryable=False,
+                may_have_side_effects=True,
+            )
 
     async def invoke(
         self,

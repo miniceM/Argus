@@ -466,6 +466,330 @@
         }
       }
     },
+    "/api/v1/experiment-launches/{launch_id}/run": {
+      "post": {
+        "tags": [
+          "Experiment Launches"
+        ],
+        "summary": "Trigger asynchronous execution of a PENDING Experiment Launch",
+        "operationId": "run_launch_async_api_v1_experiment_launches__launch_id__run_post",
+        "parameters": [
+          {
+            "name": "launch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Launch Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentLaunchRunActionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/experiment-launches/{launch_id}/cancel": {
+      "post": {
+        "tags": [
+          "Experiment Launches"
+        ],
+        "summary": "Collaboratively cancel a running or queued Experiment Launch",
+        "operationId": "cancel_launch_api_v1_experiment_launches__launch_id__cancel_post",
+        "parameters": [
+          {
+            "name": "launch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Launch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentLaunchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/experiment-launches/{launch_id}/resume": {
+      "post": {
+        "tags": [
+          "Experiment Launches"
+        ],
+        "summary": "Resume cancelled or failed items in an Experiment Launch",
+        "operationId": "resume_launch_api_v1_experiment_launches__launch_id__resume_post",
+        "parameters": [
+          {
+            "name": "launch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Launch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentLaunchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/experiment-launches/{launch_id}/retry-failed": {
+      "post": {
+        "tags": [
+          "Experiment Launches"
+        ],
+        "summary": "Retry failed and timed out items in an Experiment Launch",
+        "operationId": "retry_failed_launch_api_v1_experiment_launches__launch_id__retry_failed_post",
+        "parameters": [
+          {
+            "name": "launch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Launch Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RetryFailedRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentLaunchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/experiment-launches/{launch_id}": {
+      "get": {
+        "tags": [
+          "Experiment Launches"
+        ],
+        "summary": "Query Experiment Launch detail by Launch ID",
+        "operationId": "get_launch_detail_api_v1_experiment_launches__launch_id__get",
+        "parameters": [
+          {
+            "name": "launch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Launch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentLaunchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/experiment-launches/{launch_id}/items": {
+      "get": {
+        "tags": [
+          "Experiment Launches"
+        ],
+        "summary": "List item executions for a Launch with optional status filter and pagination",
+        "operationId": "list_launch_items_by_launch_id_api_v1_experiment_launches__launch_id__items_get",
+        "parameters": [
+          {
+            "name": "launch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Launch Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional execution status filter (e.g. cancelled, failed)",
+              "title": "Status"
+            },
+            "description": "Optional execution status filter (e.g. cancelled, failed)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 500,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional limit",
+              "title": "Limit"
+            },
+            "description": "Optional limit"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Optional offset",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Optional offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExperimentItemExecutionResponse"
+                  },
+                  "title": "Response List Launch Items By Launch Id Api V1 Experiment Launches  Launch Id  Items Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/experiment-launch-items": {
       "get": {
         "tags": [
@@ -484,6 +808,57 @@
               "title": "Launch Id"
             },
             "description": "Launch ID (required)"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional execution status filter",
+              "title": "Status"
+            },
+            "description": "Optional execution status filter"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 500,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional limit",
+              "title": "Limit"
+            },
+            "description": "Optional limit"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Optional offset",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Optional offset"
           }
         ],
         "responses": {
@@ -497,6 +872,52 @@
                     "$ref": "#/components/schemas/ExperimentItemExecutionResponse"
                   },
                   "title": "Response List Launch Items Api V1 Experiment Launch Items Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/experiment-item-executions/{item_execution_id}/attempts": {
+      "get": {
+        "tags": [
+          "Experiment Launches"
+        ],
+        "summary": "List execution attempts for an item execution",
+        "operationId": "list_item_attempts_by_item_id_api_v1_experiment_item_executions__item_execution_id__attempts_get",
+        "parameters": [
+          {
+            "name": "item_execution_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Execution Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExecutionAttemptResponse"
+                  },
+                  "title": "Response List Item Attempts By Item Id Api V1 Experiment Item Executions  Item Execution Id  Attempts Get"
                 }
               }
             }
@@ -643,6 +1064,25 @@
                 "schema": {
                   "$ref": "#/components/schemas/SystemInfoResponse"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "Metrics"
+        ],
+        "summary": "Prometheus Metrics",
+        "operationId": "get_metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           }
@@ -1382,11 +1822,28 @@
           },
           "latency_ms": {
             "type": "integer",
-            "title": "Latency Ms"
+            "title": "Latency Ms",
+            "default": 0
           },
           "trace_context_received": {
             "type": "boolean",
             "title": "Trace Context Received"
+          },
+          "worker_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Id"
+          },
+          "request_phase": {
+            "type": "string",
+            "title": "Request Phase",
+            "default": "PREPARED"
           },
           "started_at": {
             "type": "string",
@@ -1412,7 +1869,6 @@
           "item_execution_id",
           "attempt_no",
           "status",
-          "latency_ms",
           "trace_context_received",
           "started_at"
         ],
@@ -1538,6 +1994,46 @@
             ],
             "title": "Final Attempt Latency Ms"
           },
+          "queued_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queued At"
+          },
+          "available_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available At"
+          },
+          "lease_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Owner"
+          },
+          "dispatch_generation": {
+            "type": "integer",
+            "title": "Dispatch Generation",
+            "default": 1
+          },
           "started_at": {
             "anyOf": [
               {
@@ -1654,6 +2150,91 @@
           "dataset_name"
         ],
         "title": "ExperimentLaunchCreateRequest"
+      },
+      "ExperimentLaunchProgressResponse": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "pending": {
+            "type": "integer",
+            "title": "Pending",
+            "default": 0
+          },
+          "queued": {
+            "type": "integer",
+            "title": "Queued",
+            "default": 0
+          },
+          "running": {
+            "type": "integer",
+            "title": "Running",
+            "default": 0
+          },
+          "retry_wait": {
+            "type": "integer",
+            "title": "Retry Wait",
+            "default": 0
+          },
+          "succeeded": {
+            "type": "integer",
+            "title": "Succeeded",
+            "default": 0
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed",
+            "default": 0
+          },
+          "timed_out": {
+            "type": "integer",
+            "title": "Timed Out",
+            "default": 0
+          },
+          "cancelled": {
+            "type": "integer",
+            "title": "Cancelled",
+            "default": 0
+          },
+          "completed": {
+            "type": "integer",
+            "title": "Completed",
+            "default": 0
+          },
+          "percentage": {
+            "type": "number",
+            "title": "Percentage",
+            "default": 0.0
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts",
+            "default": 0
+          },
+          "retries": {
+            "type": "integer",
+            "title": "Retries",
+            "default": 0
+          },
+          "allowed_actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Actions"
+          },
+          "action_reasons": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Action Reasons"
+          }
+        },
+        "type": "object",
+        "title": "ExperimentLaunchProgressResponse"
       },
       "ExperimentLaunchResponse": {
         "properties": {
@@ -1785,6 +2366,46 @@
             ],
             "title": "Links"
           },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExperimentLaunchProgressResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cancel_requested_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancel Requested At"
+          },
+          "status_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Reason"
+          },
+          "allowed_actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Actions"
+          },
           "created_by": {
             "anyOf": [
               {
@@ -1842,12 +2463,35 @@
         ],
         "title": "ExperimentLaunchResponse"
       },
+      "ExperimentLaunchRunActionResponse": {
+        "properties": {
+          "launch_id": {
+            "type": "string",
+            "title": "Launch Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "Launch queued for asynchronous execution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "launch_id",
+          "status"
+        ],
+        "title": "ExperimentLaunchRunActionResponse"
+      },
       "ExperimentLaunchRunRequest": {
         "properties": {
           "launch_id": {
             "type": "string",
             "title": "Launch Id",
-            "description": "ID of the launch to execute synchronously"
+            "description": "ID of the launch to execute"
           }
         },
         "type": "object",
@@ -1961,6 +2605,18 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "RetryFailedRequest": {
+        "properties": {
+          "force": {
+            "type": "boolean",
+            "title": "Force",
+            "description": "Force retry even if ambiguous non-idempotent outcomes exist",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "RetryFailedRequest"
       },
       "SystemInfoResponse": {
         "properties": {

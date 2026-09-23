@@ -68,6 +68,14 @@ class AgentResponse(AgentSummaryResponse):
     pass
 
 
+class AgentDeleteResponse(BaseModel):
+    id: str = Field(..., description="ID of deleted Agent")
+    deleted: bool = Field(default=True, description="Whether the Agent was successfully deleted")
+    launches_deleted: int = Field(default=0, description="Number of associated experiment launches cleaned up")
+    message: str = Field(default="Agent deleted successfully")
+
+
+
 
 
 

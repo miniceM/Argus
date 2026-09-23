@@ -1,17 +1,20 @@
 import React, { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, ArrowLeft, Bot, Calendar, ChevronRight, Layers, Plus, User } from "lucide-react";
+import { Archive, ArrowLeft, Bot, Calendar, ChevronRight, Layers, Plus, Trash2, User } from "lucide-react";
 import { api } from "../../api/client";
 import { queryKeys } from "../../api/query-keys";
 import { formatApiError } from "../../api/errors";
 import { CreateVersionDialog } from "./CreateVersionDialog";
+import { DeleteAgentModal } from "./DeleteAgentModal";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 
 export const AgentDetail: React.FC = () => {
   const { agentId } = useParams<{ agentId: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const { data: agent, isLoading: isAgentLoading, error: agentError, refetch: refetchAgent } = useQuery({
@@ -94,13 +97,25 @@ export const AgentDetail: React.FC = () => {
             </div>
           </div>
 
-          <button
-            onClick={() => setIsCreateOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
-          >
-            <Plus className="w-4 h-4" />
-            <span>创建新版本</span>
-          </button>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setIsDeleteOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
+              title="删除该 Agent"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>删除 Agent</span>
+            </button>
+
+            <button
+              onClick={() => setIsCreateOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>创建新版本</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -260,6 +275,18 @@ export const AgentDetail: React.FC = () => {
         agentId={agent.id}
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
+      />
+
+      {/* Delete Agent Modal */}
+      <DeleteAgentModal
+        isOpen={isDeleteOpen}
+        agent={{
+          id: agent.id,
+          name: agent.name,
+          version_count: versions?.length ?? agent.version_count,
+        }}
+        onClose={() => setIsDeleteOpen(false)}
+        onSuccess={() => navigate("/agents")}
       />
     </div>
   );

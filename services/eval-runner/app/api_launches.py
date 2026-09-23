@@ -215,7 +215,7 @@ def get_or_list_launches(
     if id:
         launch = launch_svc.get_launch(id)
         if not launch:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Launch '{id}' not found")
+            raise HTTPException(status_code=404, detail=f"Launch '{id}' not found")
         return _enrich_launch(launch, orchestrator)
     else:
         launches = launch_svc.list_launches(

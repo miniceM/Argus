@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from .models import (
     AgentCreateRequest,
+    AgentDeleteResponse,
     AgentResponse,
     AgentSummaryResponse,
     AgentVersionArchiveRequest,
@@ -61,6 +62,39 @@ def get_or_list_agents(
     else:
         agents = reg.list_agents_summary()
         return [AgentSummaryResponse.model_validate(a) for a in agents]
+
+
+@router.delete(
+    "/agents",
+    response_model=AgentDeleteResponse,
+    summary="Delete an Agent by ID (?id=...) with optional force cleanup of local evaluation records",
+)
+def delete_agent(
+    id: str = Query(..., description="Agent ID to delete (required)"),
+    force: bool = Query(default=False, description="Whether to cascade delete local evaluation records. Langfuse records remain untouched."),
+    reg: AgentRegistry = Depends(get_registry),
+) -> AgentDeleteResponse:
+    try:
+        res = reg.delete_agent(agent_id=id, force=force)
+        return AgentDeleteResponse.model_validate(res)
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.delete(
+    "/agents/{agent_id}",
+    response_model=AgentDeleteResponse,
+    include_in_schema=False,
+)
+def delete_agent_by_path(
+    agent_id: str,
+    force: bool = Query(default=False),
+    reg: AgentRegistry = Depends(get_registry),
+) -> AgentDeleteResponse:
+    return delete_agent(id=agent_id, force=force, reg=reg)
+
 
 
 @router.post(

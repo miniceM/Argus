@@ -55,6 +55,16 @@ test.describe("E2E-01: Agent Registry & Immutable Version UX Flow", () => {
         return;
       }
 
+      if (route.request().method() === "DELETE") {
+        if (queryId) {
+          agentList = agentList.filter((a) => a.id !== queryId);
+          await route.fulfill({ status: 200, json: { id: queryId, deleted: true, launches_deleted: 0 } });
+        } else {
+          await route.fulfill({ status: 400, json: { detail: "Missing id" } });
+        }
+        return;
+      }
+
       if (queryId) {
         const match = agentList.find((a) => a.id === queryId);
         if (match) {
@@ -157,5 +167,23 @@ test.describe("E2E-01: Agent Registry & Immutable Version UX Flow", () => {
     // Click reveal button to see full credential reference
     await page.getByTitle("显示引用名").click();
     await expect(page.getByText("vault:secrets/agents#key")).toBeVisible();
+
+    // 6. Delete Agent with strong name verification
+    await page.goto(`/agents/${dynamicId}`);
+    await page.getByRole("button", { name: "删除 Agent" }).click();
+    await expect(page.getByText("高危：强制删除 Agent")).toBeVisible();
+
+    // Force delete button disabled before exact name
+    const confirmBtn = page.getByRole("button", { name: "确认强制删除" });
+    await expect(confirmBtn).toBeDisabled();
+
+    // Fill exact name
+    await page.fill(`input[placeholder="请输入 ${dynamicName}"]`, dynamicName);
+    await expect(confirmBtn).toBeEnabled();
+    await confirmBtn.click();
+
+    // Navigated back to /agents and agent is removed
+    await page.waitForURL("**/agents");
+    await expect(page.getByText(dynamicId)).not.toBeVisible();
   });
 });

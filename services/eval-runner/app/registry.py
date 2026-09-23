@@ -8,11 +8,17 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 
 from .config import find_path
 from .db import DatabaseManager
-from .db_models import AgentRecord, AgentVersionRecord
+from .db_models import (
+    AgentRecord,
+    AgentVersionRecord,
+    ExperimentItemExecutionRecord,
+    ExperimentLaunchRecord,
+    LangfuseSyncTaskRecord,
+)
 
 
 def compute_spec_digest(spec_dict: dict[str, Any]) -> str:
@@ -204,6 +210,59 @@ class AgentRegistry:
                     }
                 )
             return result
+
+    def delete_agent(self, agent_id: str, force: bool = False) -> dict[str, Any]:
+        with self.db_manager.get_session() as session:
+            agent = session.get(AgentRecord, agent_id)
+            if not agent:
+                raise KeyError(f"Agent '{agent_id}' not found")
+
+            # Check for existing launches
+            launches = session.scalars(
+                select(ExperimentLaunchRecord).where(ExperimentLaunchRecord.agent_id == agent_id)
+            ).all()
+            launch_count = len(launches)
+
+            if launch_count > 0:
+                if not force:
+                    raise ValueError(
+                        f"无法删除 Agent '{agent_id}'：存在 {launch_count} 条关联的评测记录 (Experiment Launches)。"
+                        "为防止误删历史评测数据，如确认清理，请开启强制删除并确认 Agent 全称。"
+                    )
+
+                # Force delete: clean launches and their dependent records in local DB only.
+                # Notice: we DO NOT call Langfuse API/SDK.
+                launch_ids = [launch_rec.id for launch_rec in launches]
+                if launch_ids:
+                    # Clean up sync tasks explicitly for database engines without full ON DELETE CASCADE support (like SQLite in tests)
+                    session.execute(
+                        delete(LangfuseSyncTaskRecord).where(
+                            LangfuseSyncTaskRecord.launch_id.in_(launch_ids)
+                        )
+                    )
+                    # Clear final_attempt_id to avoid circular foreign key dependency during deletion
+                    session.execute(
+                        update(ExperimentItemExecutionRecord)
+                        .where(ExperimentItemExecutionRecord.launch_id.in_(launch_ids))
+                        .values(final_attempt_id=None)
+                    )
+                    for launch in launches:
+                        session.delete(launch)
+                    session.flush()
+
+            session.delete(agent)
+            session.commit()
+
+            return {
+                "id": agent_id,
+                "deleted": True,
+                "launches_deleted": launch_count,
+                "message": (
+                    f"Agent '{agent_id}' 及其 {launch_count} 条关联评测记录已从当前平台成功删除"
+                    if launch_count > 0
+                    else f"Agent '{agent_id}' 已成功删除"
+                ),
+            }
 
     def create_version(
         self,

@@ -105,6 +105,60 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "Agent Registry"
+        ],
+        "summary": "Delete an Agent by ID (?id=...) with optional force cleanup of local evaluation records",
+        "operationId": "delete_agent_api_v1_agents_delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Agent ID to delete (required)",
+              "title": "Id"
+            },
+            "description": "Agent ID to delete (required)"
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Whether to cascade delete local evaluation records. Langfuse records remain untouched.",
+              "default": false,
+              "title": "Force"
+            },
+            "description": "Whether to cascade delete local evaluation records. Langfuse records remain untouched."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentDeleteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/agent-versions": {
@@ -1232,6 +1286,37 @@
           "name"
         ],
         "title": "AgentCreateRequest"
+      },
+      "AgentDeleteResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "ID of deleted Agent"
+          },
+          "deleted": {
+            "type": "boolean",
+            "title": "Deleted",
+            "description": "Whether the Agent was successfully deleted",
+            "default": true
+          },
+          "launches_deleted": {
+            "type": "integer",
+            "title": "Launches Deleted",
+            "description": "Number of associated experiment launches cleaned up",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "Agent deleted successfully"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "AgentDeleteResponse"
       },
       "AgentResponse": {
         "properties": {

@@ -16,7 +16,8 @@ export interface paths {
         put?: never;
         /** Register a new Agent Definition */
         post: operations["create_agent_api_v1_agents_post"];
-        delete?: never;
+        /** Delete an Agent by ID (?id=...) with optional force cleanup of local evaluation records */
+        delete: operations["delete_agent_api_v1_agents_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -395,6 +396,31 @@ export interface components {
              * @description Team or owner identifier
              */
             owner?: string | null;
+        };
+        /** AgentDeleteResponse */
+        AgentDeleteResponse: {
+            /**
+             * Id
+             * @description ID of deleted Agent
+             */
+            id: string;
+            /**
+             * Deleted
+             * @description Whether the Agent was successfully deleted
+             * @default true
+             */
+            deleted: boolean;
+            /**
+             * Launches Deleted
+             * @description Number of associated experiment launches cleaned up
+             * @default 0
+             */
+            launches_deleted: number;
+            /**
+             * Message
+             * @default Agent deleted successfully
+             */
+            message: string;
         };
         /** AgentResponse */
         AgentResponse: {
@@ -1048,6 +1074,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_agent_api_v1_agents_delete: {
+        parameters: {
+            query: {
+                /** @description Agent ID to delete (required) */
+                id: string;
+                /** @description Whether to cascade delete local evaluation records. Langfuse records remain untouched. */
+                force?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentDeleteResponse"];
                 };
             };
             /** @description Validation Error */

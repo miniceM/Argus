@@ -5,15 +5,49 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { queryKeys } from "../api/query-keys";
 
+const isSafeDashboardUrl = (value: unknown): value is string => {
+  if (typeof value !== "string" || !value || /[\u0000-\u0020\u007f\\?#]/.test(value)) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    return (
+      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+      Boolean(parsed.hostname) &&
+      !parsed.username &&
+      !parsed.password
+    );
+  } catch {
+    return false;
+  }
+};
+
 export const AppShell: React.FC = () => {
-  const { data: sysInfo } = useQuery({
+  const { data: sysInfo, isPending, isError } = useQuery({
     queryKey: queryKeys.system.info(),
     queryFn: async () => {
       const res = await api.GET("/api/v1/system/info");
+      if (res.error || !res.data) {
+        throw new Error("Failed to load system information");
+      }
       return res.data;
     },
     staleTime: 60000,
   });
+  const configuredDashboardUrl = sysInfo?.langfuse_dashboard_url;
+  const dashboardUrl = isSafeDashboardUrl(configuredDashboardUrl) ? configuredDashboardUrl : null;
+  const dashboardStatus = dashboardUrl
+    ? null
+    : configuredDashboardUrl != null
+      ? "Langfuse Dashboard 地址无效"
+      : sysInfo
+        ? "未配置 Langfuse Dashboard"
+        : isError
+          ? "无法获取 Langfuse Dashboard 地址"
+          : isPending
+            ? "正在加载 Langfuse Dashboard 地址"
+            : "无法获取 Langfuse Dashboard 地址";
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans text-slate-800">
@@ -63,18 +97,29 @@ export const AppShell: React.FC = () => {
 
         {/* External System Link */}
         <div className="p-4 border-t border-slate-800 bg-slate-950/40">
-          <a
-            href="http://localhost:3000"
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center justify-between px-3 py-2 rounded text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors"
-          >
-            <span className="flex items-center gap-2">
-              <Layers className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Langfuse Dashboard</span>
+          {dashboardUrl ? (
+            <a
+              href={dashboardUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-between px-3 py-2 rounded text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Langfuse Dashboard</span>
+              </span>
+              <ExternalLink className="w-3 h-3 text-slate-500" />
+            </a>
+          ) : (
+            <span
+              aria-disabled="true"
+              aria-live={isPending && !sysInfo ? "polite" : undefined}
+              className="flex items-center gap-2 px-3 py-2 rounded text-xs font-medium text-slate-500 cursor-not-allowed"
+            >
+              <Layers className="w-3.5 h-3.5 text-slate-500" />
+              <span>{dashboardStatus}</span>
             </span>
-            <ExternalLink className="w-3 h-3 text-slate-500" />
-          </a>
+          )}
         </div>
       </aside>
 

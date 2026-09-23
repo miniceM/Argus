@@ -2924,6 +2924,17 @@
           "environment": {
             "type": "string",
             "title": "Environment"
+          },
+          "langfuse_dashboard_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Dashboard Url"
           }
         },
         "type": "object",

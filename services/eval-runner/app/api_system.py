@@ -19,4 +19,5 @@ def get_system_info() -> SystemInfoResponse:
         version=settings.runner_version,
         build_id=settings.build_id,
         environment=settings.environment,
+        langfuse_dashboard_url=settings.argus_langfuse_dashboard_url,
     )

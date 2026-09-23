@@ -1072,6 +1072,8 @@ export interface components {
             build_id: string;
             /** Environment */
             environment: string;
+            /** Langfuse Dashboard Url */
+            langfuse_dashboard_url?: string | null;
         };
         /** ValidationError */
         ValidationError: {

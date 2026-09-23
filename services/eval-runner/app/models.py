@@ -297,6 +297,7 @@ class SystemInfoResponse(BaseModel):
     version: str
     build_id: str
     environment: str
+    langfuse_dashboard_url: str | None = None
 
 
 class ExperimentLaunchProgressResponse(BaseModel):

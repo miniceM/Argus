@@ -28,30 +28,27 @@ export const DeleteAgentModal: React.FC<DeleteAgentModalProps> = ({
   const [confirmName, setConfirmName] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [requiresForce, setRequiresForce] = useState(false);
-
-  const hasActiveLaunches = (agent?.active_launch_count ?? 0) > 0;
-  const hasLaunches = (agent?.launch_count ?? 0) > 0;
+  const [localCounts, setLocalCounts] = useState<{
+    launch_count?: number;
+    active_launch_count?: number;
+  }>({});
 
   useEffect(() => {
     if (isOpen && agent) {
       setConfirmName("");
       setErrorMsg(null);
+      setLocalCounts({
+        launch_count: agent.launch_count,
+        active_launch_count: agent.active_launch_count,
+      });
       // Only require force purge if associated launches exist; version alone does not require force
-      setRequiresForce(hasLaunches);
+      setRequiresForce((agent.launch_count ?? 0) > 0);
     }
-  }, [isOpen, agent, hasLaunches]);
+  }, [isOpen, agent]);
 
-  // Handle ESC key to close modal (disabled while mutation is pending)
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+  const effectiveLaunchCount = localCounts.launch_count ?? agent?.launch_count ?? 0;
+  const effectiveActiveLaunchCount = localCounts.active_launch_count ?? agent?.active_launch_count ?? 0;
+  const hasActiveLaunches = effectiveActiveLaunchCount > 0;
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -101,12 +98,39 @@ export const DeleteAgentModal: React.FC<DeleteAgentModalProps> = ({
       const msg = formatApiError(err);
       setErrorMsg(msg);
 
+      // Invalidate queries so that underlying list/detail is refreshed with latest server data
+      queryClient.invalidateQueries({ queryKey: queryKeys.agents.list() });
+      if (agent) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.id) });
+      }
+
+      // Sync latest launch counts from server domain error response
+      const apiErr = err as { launch_count?: number; active_launch_count?: number } | undefined;
+      if (apiErr && (apiErr.launch_count !== undefined || apiErr.active_launch_count !== undefined)) {
+        setLocalCounts((prev) => ({
+          launch_count: apiErr.launch_count ?? prev.launch_count,
+          active_launch_count: apiErr.active_launch_count ?? prev.active_launch_count,
+        }));
+      }
+
       // Structured error code branching instead of fragile text matching
       if (code === "AGENT_HAS_LAUNCHES") {
         setRequiresForce(true);
       }
     },
   });
+
+  // Handle ESC key to close modal (disabled while mutation is pending)
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !mutation.isPending) {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose, mutation.isPending]);
 
   if (!isOpen || !agent) return null;
 
@@ -176,7 +200,7 @@ export const DeleteAgentModal: React.FC<DeleteAgentModalProps> = ({
                 <span>禁止删除：存在活跃评测任务</span>
               </p>
               <p>
-                该 Agent 当前有 <strong>{agent.active_launch_count}</strong> 个正在执行或排队中的评测任务。为避免未定义副作用，请先取消或等待所有任务完成后再进行删除。
+                该 Agent 当前有 <strong>{effectiveActiveLaunchCount}</strong> 个正在执行或排队中的评测任务。为避免未定义副作用，请先取消或等待所有任务完成后再进行删除。
               </p>
             </div>
           )}
@@ -189,7 +213,7 @@ export const DeleteAgentModal: React.FC<DeleteAgentModalProps> = ({
                   <span>注意：该 Agent 包含关联评测记录</span>
                 </p>
                 <p>
-                  该 Agent 存在 <strong>{agent.launch_count ?? 0}</strong> 条历史评测记录。强制清理将连同本地所有执行历史一并清除，此操作不可撤销。
+                  该 Agent 存在 <strong>{effectiveLaunchCount}</strong> 条历史评测记录。强制清理将连同本地所有执行历史一并清除，此操作不可撤销。
                 </p>
                 <div className="pt-1 text-[11px] text-amber-700 border-t border-amber-200/60">
                   🛡️ <strong>安全保障</strong>：仅清除当前 Argus 本地记录，<strong>Langfuse 中的 Dataset / Trace 记录不会被删除</strong>。

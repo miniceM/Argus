@@ -182,6 +182,31 @@ def test_delete_agent_api_force_and_conflict(client):
     assert client.get(f"/api/v1/experiment-launches?id={launch_id}").status_code == 404
 
 
+def test_purge_api_without_launches_requires_exact_name(client):
+    r_create = client.post(
+        "/api/v1/agents",
+        json={"id": "empty-api-agent", "name": "无任务测试 Agent"},
+    )
+    assert r_create.status_code == 201
+
+    # Purge with wrong name on an agent without launches MUST be rejected with 400
+    r_bad = client.post(
+        "/api/v1/agents/purge",
+        json={"agent_id": "empty-api-agent", "confirm_name": "随便起的名字"},
+    )
+    assert r_bad.status_code == 400
+    assert r_bad.json()["code"] == "AGENT_NAME_MISMATCH"
+
+    # Purge with correct name succeeds
+    r_good = client.post(
+        "/api/v1/agents/purge",
+        json={"agent_id": "empty-api-agent", "confirm_name": "无任务测试 Agent"},
+    )
+    assert r_good.status_code == 200
+    assert r_good.json()["deleted"] is True
+
+
+
 def test_create_launch_rejects_empty_evaluators(client):
     # Empty evaluator_ids list must be rejected with 422 Unprocessable Entity
     r = client.post(

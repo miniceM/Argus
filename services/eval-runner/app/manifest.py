@@ -192,6 +192,16 @@ class LaunchService:
 
         with self.db_manager.get_session() as session:
             try:
+                # Lock agent row to prevent concurrent deletion and ensure active status within transaction
+                from .db_models import AgentRecord
+                agent_rec = session.scalar(
+                    select(AgentRecord).where(AgentRecord.id == agent_id).with_for_update()
+                )
+                if not agent_rec or agent_rec.status != "active":
+                    raise ValueError(
+                        f"Agent '{agent_id}' 处于不可用状态 '{getattr(agent_rec, 'status', 'not_found')}'，不可创建新的评测任务"
+                    )
+
                 session.add(launch)
                 session.flush()
 

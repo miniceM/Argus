@@ -272,6 +272,15 @@ class AgentRegistry:
             if not agent:
                 raise AgentNotFoundError(agent_id)
 
+            # Server-side strong validation of agent full name when force is requested or confirm_name provided
+            if force or confirm_name is not None:
+                if confirm_name != agent.name:
+                    raise AgentNameMismatchError(
+                        agent_id=agent_id,
+                        expected_name=agent.name,
+                        provided_name=confirm_name or "",
+                    )
+
             # Check for existing launches
             launches = session.scalars(
                 select(ExperimentLaunchRecord).where(ExperimentLaunchRecord.agent_id == agent_id)
@@ -289,14 +298,6 @@ class AgentRegistry:
                         active_launch_count=active_count,
                     )
 
-                # Server-side strong validation of agent full name
-                if confirm_name != agent.name:
-                    raise AgentNameMismatchError(
-                        agent_id=agent_id,
-                        expected_name=agent.name,
-                        provided_name=confirm_name or "",
-                    )
-
                 # Check for active (non-terminal) launches
                 if active_launches:
                     active_summary = ", ".join(f"'{launch.id}' ({launch.status})" for launch in active_launches[:3])
@@ -308,10 +309,11 @@ class AgentRegistry:
                         active_launch_count=len(active_launches),
                     )
 
-                # Set status to "deleting" and flush to block concurrent launch creations
-                agent.status = "deleting"
-                session.flush()
+            # Set status to "deleting" and flush to block concurrent launch creations
+            agent.status = "deleting"
+            session.flush()
 
+            if launch_count > 0:
                 # Force delete: clean launches and their dependent records in local DB only.
                 # Notice: we DO NOT call Langfuse API/SDK.
                 launch_ids = [launch_rec.id for launch_rec in launches]

@@ -101,3 +101,15 @@ def test_calculate_launch_progress_and_allowed_actions():
         counts=dict(counts, queued=0, running=0, retry_wait=0),
     )
     assert "retry_failed" in actions_failed["allowed"]
+
+
+def test_allowed_actions_pending_allows_cancel_and_run():
+    counts = {"pending": 5, "queued": 0, "running": 0, "succeeded": 0, "failed": 0, "cancelled": 0}
+    actions = determine_allowed_actions(
+        launch_status="PENDING",
+        cancel_requested_at=None,
+        counts=counts,
+    )
+    assert "run" in actions["allowed"]
+    assert "cancel" in actions["allowed"]
+

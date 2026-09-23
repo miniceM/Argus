@@ -459,3 +459,29 @@ def test_delete_agent_force_rejects_active_launches(tmp_path):
             session.delete(rec)
             session.commit()
 
+
+def test_purge_agent_without_launches_still_requires_exact_name(tmp_path):
+    from app.models import AgentNameMismatchError
+
+    db_file = tmp_path / "purge_no_launches.db"
+    db_mgr = DatabaseManager(f"sqlite:///{db_file}")
+    MigrationRunner(engine=db_mgr.engine, migrations_dir=ROOT / "migrations").apply_all()
+
+    registry = AgentRegistry(db_mgr)
+    registry.create_agent(agent_id="empty-agent", name="Empty Agent")
+
+    # Wrong name should raise AgentNameMismatchError even without launches
+    with pytest.raises(AgentNameMismatchError) as exc_info:
+        registry.purge_agent("empty-agent", confirm_name="Wrong Name")
+
+    assert exc_info.value.code == "AGENT_NAME_MISMATCH"
+    assert registry.get_agent("empty-agent") is not None
+
+    # Correct name should successfully purge the agent
+    res = registry.purge_agent("empty-agent", confirm_name="Empty Agent")
+    assert res["id"] == "empty-agent"
+    assert res["deleted"] is True
+    assert res["launches_deleted"] == 0
+    assert registry.get_agent("empty-agent") is None
+
+

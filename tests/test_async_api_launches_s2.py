@@ -69,7 +69,7 @@ def test_async_launch_api_lifecycle():
     assert data["status"] == "PENDING"
     assert data["progress"]["total"] > 0
     assert data["progress"]["pending"] > 0
-    assert "cancel" not in data["allowed_actions"]
+    assert "cancel" in data["allowed_actions"]
 
     # 2. Trigger asynchronous run -> Returns 202 QUEUED
     run_res = client.post(f"/api/v1/experiment-launches/{launch_id}/run")

@@ -177,4 +177,79 @@ describe("DeleteAgentModal UX and Strong Name Verification Flow", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(handleClose).toHaveBeenCalledTimes(1);
   });
+
+  it("does not close on ESC key when deletion mutation is pending", async () => {
+    let resolveDelete: (val: any) => void;
+    const deletePromise = new Promise((resolve) => {
+      resolveDelete = resolve;
+    });
+    (api.DELETE as any).mockReturnValue(deletePromise);
+
+    const handleClose = vi.fn();
+    renderModal(
+      {
+        id: "pending-agent",
+        name: "Pending Agent",
+        launch_count: 0,
+      },
+      handleClose
+    );
+
+    // Trigger delete
+    const deleteBtn = screen.getByRole("button", { name: "确认删除" });
+    fireEvent.click(deleteBtn);
+
+    // Wait until mutation is pending (button says 正在删除...)
+    await waitFor(() => {
+      expect(screen.getByText("正在删除...")).toBeInTheDocument();
+    });
+
+    // ESC pressed during pending must be ignored
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(handleClose).not.toHaveBeenCalled();
+
+    // Resolve mutation
+    resolveDelete!({ data: { id: "pending-agent", deleted: true } });
+    await waitFor(() => {
+      expect(handleClose).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("updates launch counts and blocks active tasks when 409 error contains counts", async () => {
+    (api.DELETE as any).mockResolvedValueOnce({
+      error: {
+        code: "AGENT_HAS_LAUNCHES",
+        detail: "无法删除 Agent：存在历史任务与活跃任务",
+        launch_count: 5,
+        active_launch_count: 2,
+      },
+    });
+
+    renderModal({
+      id: "stale-agent",
+      name: "Stale Agent",
+      launch_count: 0,
+      active_launch_count: 0,
+    });
+
+    // Initially says no associated launches
+    expect(screen.getByText(/当前无关联评测记录/)).toBeInTheDocument();
+
+    const deleteBtn = screen.getByRole("button", { name: "确认删除" });
+    fireEvent.click(deleteBtn);
+
+    // After 409 with counts, UI must update to show 5 launches and active warning for 2 tasks
+    await waitFor(() => {
+      expect(screen.getByText("高危：强制清理 Agent 及评测记录")).toBeInTheDocument();
+      expect(screen.getByText("注意：该 Agent 包含关联评测记录")).toBeInTheDocument();
+      expect(screen.getByText("5")).toBeInTheDocument();
+      expect(screen.getByText("禁止删除：存在活跃评测任务")).toBeInTheDocument();
+      expect(screen.getByText("2")).toBeInTheDocument();
+    });
+
+    // Submit button should be disabled because active_launch_count is 2
+    const forceBtn = screen.getByRole("button", { name: "确认强制清理" });
+    expect(forceBtn).toBeDisabled();
+  });
 });
+

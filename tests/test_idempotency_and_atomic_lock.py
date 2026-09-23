@@ -218,3 +218,68 @@ def test_idempotent_replay_succeeds_even_when_evaluator_unregistered(tmp_path):
         assert launch2.id == launch1.id
         mock_resolve.assert_not_called()
 
+
+def test_concurrent_delete_agent_and_create_launch(tmp_path):
+    """Verifies concurrency safety between delete_agent and create_launch:
+    either delete succeeds and create is rejected, or create succeeds and delete is rejected.
+    No orphaned launches or corrupt state can occur."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.models import AgentHasActiveLaunchesError
+
+    db_file = tmp_path / "concurrent_del_launch.db"
+    db_mgr = DatabaseManager(f"sqlite:///{db_file}")
+    MigrationRunner(engine=db_mgr.engine, migrations_dir=ROOT / "migrations").apply_all()
+    registry = AgentRegistry(db_mgr)
+    registry.create_agent("target-agent", name="Target Agent")
+    registry.create_version(
+        agent_id="target-agent",
+        version="v1",
+        endpoint="http://localhost:8080/invoke",
+    )
+
+    launch_svc = LaunchService(db_mgr, registry)
+
+    results = {"delete": None, "create": None, "del_err": None, "create_err": None}
+    barrier = threading.Barrier(2)
+
+    def _do_delete():
+        barrier.wait()
+        try:
+            results["delete"] = registry.delete_agent("target-agent", force=True, confirm_name="Target Agent")
+        except Exception as exc:
+            results["del_err"] = exc
+
+    def _do_create():
+        barrier.wait()
+        try:
+            results["create"] = launch_svc.create_launch(
+                agent_id="target-agent",
+                agent_version="v1",
+                dataset_name="banking-agent-regression",
+            )
+        except Exception as exc:
+            results["create_err"] = exc
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f1 = pool.submit(_do_delete)
+        f2 = pool.submit(_do_create)
+        f1.result()
+        f2.result()
+
+    # One must succeed and the other must be cleanly rejected due to row lock and status check:
+    # 1. If delete won: create must have raised ValueError (Agent not found or status not active)
+    # 2. If create won: delete must have raised AgentHasActiveLaunchesError (blocked by active launch)
+    if results["delete"] is not None:
+        assert results["del_err"] is None
+        assert results["create_err"] is not None
+        assert isinstance(results["create_err"], ValueError)
+        assert registry.get_agent("target-agent") is None
+    else:
+        assert results["create"] is not None
+        assert results["del_err"] is not None
+        assert isinstance(results["del_err"], AgentHasActiveLaunchesError)
+        assert registry.get_agent("target-agent") is not None
+
+

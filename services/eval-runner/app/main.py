@@ -303,7 +303,7 @@ def bootstrap() -> BootstrapResult:
 async def run_experiment(request: ExperimentRequest) -> ExperimentResult:
     launch_id = str(uuid.uuid4())
     try:
-        _wait_for_langfuse()
+        await asyncio.to_thread(_wait_for_langfuse)
         lf = _client()
         dataset = lf.get_dataset(request.dataset_name)
         experiment_name = request.experiment_name or f"{request.agent_id}-{request.agent_version}"

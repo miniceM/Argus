@@ -19,7 +19,7 @@ from .db_models import (
     ExperimentLaunchRecord,
 )
 from .evaluators import default_evaluator_registry, evaluate_item_quality
-from .executor import RemoteAgentExecutor
+from .executor import AttemptAuthorizationError, RemoteAgentExecutor
 from .manifest import acquire_launch_execution
 from .registry import AgentRegistry, AgentVersionSpec, map_request
 from .state_machine import aggregate_launch_status_from_items, assert_terminal_launch_invariants
@@ -94,9 +94,16 @@ async def _execute_single_item(
         nonlocal last_attempt_id
         att_id = str(uuid.uuid4())
         with db_mgr.get_session() as session:
-            # CAS check: parent item must still be running
-            it = session.get(ExperimentItemExecutionRecord, item_exec_id)
-            if not it or it.execution_status != "running":
+            # Atomic CAS check with lock: parent item must still be running
+            it = session.execute(
+                select(ExperimentItemExecutionRecord)
+                .where(
+                    ExperimentItemExecutionRecord.id == item_exec_id,
+                    ExperimentItemExecutionRecord.execution_status == "running",
+                )
+                .with_for_update()
+            ).scalar_one_or_none()
+            if not it:
                 return None
             last_attempt_id = att_id
             att_rec = ExecutionAttemptRecord(
@@ -194,6 +201,11 @@ async def _execute_single_item(
                 on_attempt_end=on_attempt_end,
             )
             agent_output = call_res.body
+    except AttemptAuthorizationError as exc:
+        execution_status = "cancelled"
+        execution_error = str(exc)
+        eval_status = "skipped"
+        quality_conclusion = "unknown"
     except Exception as exc:
         execution_status = "failed"
         execution_error = str(exc)
@@ -529,7 +541,11 @@ class LaunchExecutionService:
                     quality_counts[q_key] = quality_counts.get(q_key, 0) + 1
 
                 agg_status, agg_quality = aggregate_launch_status_from_items(counts, quality_counts)
-                assert_terminal_launch_invariants(agg_status, active_item_count=0)
+                active_item_count = sum(
+                    counts.get(s, 0)
+                    for s in ("pending", "queued", "running", "retry_wait")
+                )
+                assert_terminal_launch_invariants(agg_status, active_item_count=active_item_count)
 
                 launch_rec = session.get(ExperimentLaunchRecord, launch_id)
                 assert launch_rec is not None

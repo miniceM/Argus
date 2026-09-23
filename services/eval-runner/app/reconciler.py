@@ -14,7 +14,11 @@ from .langfuse_sync import aggregate_launch_sync_status
 from .limiter import DistributedAgentLimiter
 from .metrics import runtime_metrics
 from .queue import QueueAdapter
-from .state_machine import TERMINAL_LAUNCH_STATUSES, aggregate_launch_status_from_items
+from .state_machine import (
+    TERMINAL_LAUNCH_STATUSES,
+    aggregate_launch_status_from_items,
+    assert_terminal_launch_invariants,
+)
 
 
 class ExecutionReconciler:
@@ -377,16 +381,69 @@ class ExecutionReconciler:
                     t_launch.updated_at = now
                     updated_count += 1
                 else:
-                    # Converge pending/queued legacy orphans safely to failed / unknown
+                    # Converge all active legacy orphans safely to terminal (failed or cancelled)
+                    target_status = (
+                        "cancelled"
+                        if (t_launch.status == "CANCELLED" or t_launch.cancel_requested_at)
+                        else "failed"
+                    )
                     for it in active_items:
-                        if it.execution_status in ("pending", "queued"):
-                            it.execution_status = "failed"
-                            it.eval_status = "skipped"
-                            it.quality_conclusion = "unknown"
-                            it.execution_error = "Reconciled legacy orphan item without execution"
-                            it.completed_at = now
-                            it.updated_at = now
-                            updated_count += 1
+                        it.execution_status = target_status
+                        it.eval_status = "skipped"
+                        it.quality_conclusion = "unknown"
+                        it.execution_error = "Reconciled legacy orphan item without execution"
+                        it.lease_owner = None
+                        it.lease_token = None
+                        it.lease_expires_at = None
+                        it.completed_at = now
+                        it.updated_at = now
+                        session.execute(
+                            update(ExecutionAttemptRecord)
+                            .where(
+                                ExecutionAttemptRecord.item_execution_id == it.id,
+                                ExecutionAttemptRecord.status == "RUNNING",
+                            )
+                            .values(
+                                status="CANCELLED" if target_status == "cancelled" else "FAILED",
+                                error_message="Reconciled orphan attempt",
+                                completed_at=now,
+                            )
+                        )
+                        updated_count += 1
+
+                    session.flush()
+
+                    # Re-aggregate Launch status and quality from all items to maintain Invariants 2 & 3
+                    counts_res = session.execute(
+                        select(
+                            ExperimentItemExecutionRecord.execution_status,
+                            func.count(ExperimentItemExecutionRecord.id),
+                        )
+                        .where(ExperimentItemExecutionRecord.launch_id == t_launch.id)
+                        .group_by(ExperimentItemExecutionRecord.execution_status)
+                    ).all()
+                    counts = {row[0].lower(): row[1] for row in counts_res}
+
+                    quality_res = session.execute(
+                        select(
+                            ExperimentItemExecutionRecord.quality_conclusion,
+                            func.count(ExperimentItemExecutionRecord.id),
+                        )
+                        .where(ExperimentItemExecutionRecord.launch_id == t_launch.id)
+                        .group_by(ExperimentItemExecutionRecord.quality_conclusion)
+                    ).all()
+                    quality_counts = {row[0].lower(): row[1] for row in quality_res}
+
+                    term_status, term_quality = aggregate_launch_status_from_items(counts, quality_counts)
+                    t_launch.status = term_status
+                    t_launch.quality_conclusion = term_quality
+                    t_launch.updated_at = now
+
+                    active_cnt = sum(
+                        counts.get(s, 0)
+                        for s in ("pending", "queued", "running", "retry_wait")
+                    )
+                    assert_terminal_launch_invariants(term_status, active_item_count=active_cnt)
 
             active_launches = session.scalars(
                 select(ExperimentLaunchRecord).where(

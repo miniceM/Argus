@@ -16,6 +16,10 @@ from .registry import AgentVersionSpec
 from .security import resolve_credential
 
 
+class AttemptAuthorizationError(RuntimeError):
+    """Raised when an execution attempt authorization is denied or preempted by the control plane."""
+
+
 class ErrorClassification(StrEnum):
     CONNECT_ERROR = "CONNECT_ERROR"
     READ_TIMEOUT = "READ_TIMEOUT"
@@ -281,6 +285,10 @@ class RemoteAgentExecutor:
                 attempt_id: str | None = None
                 if on_attempt_start:
                     attempt_id = on_attempt_start(total_attempts)
+                    if attempt_id is None:
+                        raise AttemptAuthorizationError(
+                            f"Attempt {total_attempts} authorization denied. Invocation aborted to prevent unrecorded HTTP calls."
+                        )
 
                 await self._limiter.acquire()
                 attempt_started = time.monotonic()

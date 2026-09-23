@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import sys
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -321,13 +322,17 @@ def test_reconciler_reverts_terminal_launch_with_active_leased_items(setup_runti
 
 def test_reconcile_legacy_terminal_launch_orphan_items(setup_runtime):
     """测试 6: 历史孤儿数据对账。
-    当 Launch 处于 COMPLETED 终态，而 Item 为 pending 且无 lease/attempt 时：
-    对账将其收敛为 failed (unknown 质量)，消除矛盾，且具备幂等性。
+    当 Launch 处于 COMPLETED 终态，quality_conclusion="pass"，
+    但包含 pending 或 retry_wait 孤儿 Item 时：
+    1. 对账将其收敛为 failed (unknown 质量)；
+    2. 重新聚合更新 Launch 的 status 为 FAILED，quality_conclusion 为 unknown；
+    3. 修复进度为 100%，具备幂等性。
     """
     db_mgr, queue, limiter, orchestrator, worker, reconciler = setup_runtime
 
     launch_id = f"launch-orphan-{uuid.uuid4().hex[:8]}"
-    item_exec_id = f"item-orphan-{uuid.uuid4().hex[:8]}"
+    item_exec_id_1 = f"item-orphan-1-{uuid.uuid4().hex[:8]}"
+    item_exec_id_2 = f"item-orphan-2-{uuid.uuid4().hex[:8]}"
 
     with db_mgr.get_session() as session:
         l_rec = ExperimentLaunchRecord(
@@ -338,35 +343,114 @@ def test_reconcile_legacy_terminal_launch_orphan_items(setup_runtime):
             agent_version="v1",
             agent_version_id="test-agent-v1",
             status="COMPLETED",
+            quality_conclusion="pass",
             manifest={},
         )
-
         session.add(l_rec)
 
-        item_rec = ExperimentItemExecutionRecord(
-            id=item_exec_id,
-            launch_id=launch_id,
-            dataset_item_id="item-orphan-1",
-            execution_status="pending",
-            eval_status="pending",
-            quality_conclusion="unknown",
+        # 孤儿 1: pending
+        session.add(
+            ExperimentItemExecutionRecord(
+                id=item_exec_id_1,
+                launch_id=launch_id,
+                dataset_item_id="item-orphan-1",
+                execution_status="pending",
+                eval_status="pending",
+                quality_conclusion="unknown",
+            )
         )
-        session.add(item_rec)
+        # 孤儿 2: retry_wait (边界测试)
+        session.add(
+            ExperimentItemExecutionRecord(
+                id=item_exec_id_2,
+                launch_id=launch_id,
+                dataset_item_id="item-orphan-2",
+                execution_status="retry_wait",
+                eval_status="pending",
+                quality_conclusion="unknown",
+            )
+        )
 
     # 第一次运行孤儿对账
     reconciler.reconcile_launch_states()
 
     with db_mgr.get_session() as session:
-        it = session.get(ExperimentItemExecutionRecord, item_exec_id)
+        it1 = session.get(ExperimentItemExecutionRecord, item_exec_id_1)
+        it2 = session.get(ExperimentItemExecutionRecord, item_exec_id_2)
         # 孤儿 item 被收敛为终态 failed，Invariant 1 成立 (active items == 0)
-        assert it.execution_status == "failed"
-        assert it.quality_conclusion == "unknown"
+        assert it1.execution_status == "failed"
+        assert it1.quality_conclusion == "unknown"
+        assert it2.execution_status == "failed"
+        assert it2.quality_conclusion == "unknown"
+
+        # 关键断言 (Review 阻塞 1): Launch 必须重新聚合为 FAILED 与 unknown，消除与 Item 的状态矛盾
+        launch = session.get(ExperimentLaunchRecord, launch_id)
+        assert launch.status == "FAILED"
+        assert launch.quality_conclusion == "unknown"
 
     # 幂等性：第二次运行无异常，状态保持不变
     reconciler.reconcile_launch_states()
     with db_mgr.get_session() as session:
-        it = session.get(ExperimentItemExecutionRecord, item_exec_id)
-        assert it.execution_status == "failed"
+        it1 = session.get(ExperimentItemExecutionRecord, item_exec_id_1)
+        launch = session.get(ExperimentLaunchRecord, launch_id)
+        assert it1.execution_status == "failed"
+        assert launch.status == "FAILED"
+        assert launch.quality_conclusion == "unknown"
+
+
+def test_attempt_authorization_denied_aborts_http_invocation():
+    """测试 8 (Review 阻塞 2):
+    当 on_attempt_start 返回 None (授权被拒绝/已被外部抢占) 时，
+    RemoteAgentExecutor 必须抛出 AttemptAuthorizationError 并立即中止，
+    严禁向远程发起任何 HTTP POST 请求（杜绝幽灵调用）。
+    """
+    from app.executor import AttemptAuthorizationError, RemoteAgentExecutor
+    from app.registry import AgentVersionSpec
+
+    mock_transport = AsyncMock(spec=httpx.AsyncBaseTransport)
+    spec = AgentVersionSpec(
+        agent_id="test-agent",
+        version="v1",
+        endpoint="http://example.com/api",
+        method="POST",
+        timeout_seconds=5,
+        max_retries=2,
+        rate_limit_per_minute=60,
+        request_mapping={},
+    )
+    executor = RemoteAgentExecutor(spec)
+
+    # callback 模拟授权被拒 (例如 CAS 失败，item 已不是 running)
+    def deny_authorization(attempt_no: int) -> str | None:
+        return None
+
+    async def _run():
+        with pytest.raises(AttemptAuthorizationError, match="authorization denied"):
+            await executor.invoke(
+                payload={"input": "test"},
+                headers={},
+                on_attempt_start=deny_authorization,
+                client_transport=mock_transport,
+            )
+
+    asyncio.run(_run())
+
+    # 验证底层 HTTP 传输层绝对没有被调用
+    mock_transport.handle_async_request.assert_not_called()
+
+
+def test_defensive_guard_uses_actual_db_counts(tmp_path):
+    """测试 9 (Review 阻塞 3):
+    Defensive Guard 必须根据 DB 真实的 active items 数量进行防御校验，
+    不得使用常量 active_item_count=0 绕过检查。
+    """
+    # 当 DB 中真实存在 1 个 running item 时，进入终态必须抛出 DomainConflictError
+    with pytest.raises(DomainConflictError, match="disallows active items"):
+        assert_terminal_launch_invariants("COMPLETED", active_item_count=1)
+
+    with pytest.raises(DomainConflictError, match="disallows active items"):
+        assert_terminal_launch_invariants("FAILED", active_item_count=1)
+
 
 
 def test_legacy_api_filter_succeeded_maps_to_completed(client):

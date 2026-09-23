@@ -90,6 +90,122 @@ def test_agent_registry_apis_zero_path_variables(client):
     assert r_arc.status_code == 200
     assert r_arc.json()["is_active"] is False
 
+    # 6. Delete agent (?id=...)
+    r_del = client.delete("/api/v1/agents?id=wealth-agent")
+    assert r_del.status_code == 200
+    del_data = r_del.json()
+    assert del_data["id"] == "wealth-agent"
+    assert del_data["deleted"] is True
+
+    # Confirm 404 after deletion
+    r_check = client.get("/api/v1/agents?id=wealth-agent")
+    assert r_check.status_code == 404
+
+    # Deleting again returns 404
+    r_del_again = client.delete("/api/v1/agents?id=wealth-agent")
+    assert r_del_again.status_code == 404
+
+
+def test_delete_agent_api_force_and_conflict(client):
+    # 1. Create agent and version
+    r_create = client.post(
+        "/api/v1/agents",
+        json={"id": "conflict-agent", "name": "冲突测试 Agent"},
+    )
+    assert r_create.status_code == 201
+
+    r_ver = client.post(
+        "/api/v1/agent-versions",
+        json={
+            "agent_id": "conflict-agent",
+            "version": "1.0.0",
+            "endpoint": "http://localhost:8080/invoke",
+        },
+    )
+    assert r_ver.status_code == 201
+
+    # 2. Create launch for this agent
+    r_launch = client.post(
+        "/api/v1/experiment-launches",
+        json={
+            "agent_id": "conflict-agent",
+            "agent_version": "1.0.0",
+            "dataset_name": "banking-agent-regression",
+            "name": "Launch For Conflict Agent",
+        },
+    )
+    assert r_launch.status_code == 201
+    launch_id = r_launch.json()["id"]
+
+    # 3. Standard delete without force must return 409 Conflict with AGENT_HAS_LAUNCHES
+    r_del_no_force = client.delete("/api/v1/agents?id=conflict-agent")
+    assert r_del_no_force.status_code == 409
+    del_err = r_del_no_force.json()
+    assert del_err["code"] == "AGENT_HAS_LAUNCHES"
+    assert del_err["launch_count"] == 1
+    assert "关联的评测记录" in del_err["detail"]
+
+    # 4. Purge with wrong name must be rejected with 400 Bad Request
+    r_del_bad_name = client.post(
+        "/api/v1/agents/purge",
+        json={"agent_id": "conflict-agent", "confirm_name": "错误名称"},
+    )
+    assert r_del_bad_name.status_code == 400
+    assert r_del_bad_name.json()["code"] == "AGENT_NAME_MISMATCH"
+
+    # 5. Purge with correct name on active launch (status: PENDING) must be rejected with 409 AGENT_HAS_ACTIVE_LAUNCHES
+    r_del_active = client.post(
+        "/api/v1/agents/purge",
+        json={"agent_id": "conflict-agent", "confirm_name": "冲突测试 Agent"},
+    )
+    assert r_del_active.status_code == 409
+    assert r_del_active.json()["code"] == "AGENT_HAS_ACTIVE_LAUNCHES"
+    assert "正在执行或排队中" in r_del_active.json()["detail"]
+
+    # 6. Cancel the active launch so it reaches a terminal status (CANCELLED)
+    r_cancel = client.post(f"/api/v1/experiment-launches/{launch_id}/cancel")
+    assert r_cancel.status_code == 200
+    assert r_cancel.json()["status"] == "CANCELLED"
+
+    # 7. Purge after launches are terminal must succeed and return 200
+    r_del_purge = client.post(
+        "/api/v1/agents/purge",
+        json={"agent_id": "conflict-agent", "confirm_name": "冲突测试 Agent"},
+    )
+    assert r_del_purge.status_code == 200
+    force_data = r_del_purge.json()
+    assert force_data["deleted"] is True
+    assert force_data["launches_deleted"] >= 1
+
+    # Verify agent and launch are gone
+    assert client.get("/api/v1/agents?id=conflict-agent").status_code == 404
+    assert client.get(f"/api/v1/experiment-launches?id={launch_id}").status_code == 404
+
+
+def test_purge_api_without_launches_requires_exact_name(client):
+    r_create = client.post(
+        "/api/v1/agents",
+        json={"id": "empty-api-agent", "name": "无任务测试 Agent"},
+    )
+    assert r_create.status_code == 201
+
+    # Purge with wrong name on an agent without launches MUST be rejected with 400
+    r_bad = client.post(
+        "/api/v1/agents/purge",
+        json={"agent_id": "empty-api-agent", "confirm_name": "随便起的名字"},
+    )
+    assert r_bad.status_code == 400
+    assert r_bad.json()["code"] == "AGENT_NAME_MISMATCH"
+
+    # Purge with correct name succeeds
+    r_good = client.post(
+        "/api/v1/agents/purge",
+        json={"agent_id": "empty-api-agent", "confirm_name": "无任务测试 Agent"},
+    )
+    assert r_good.status_code == 200
+    assert r_good.json()["deleted"] is True
+
+
 
 def test_create_launch_rejects_empty_evaluators(client):
     # Empty evaluator_ids list must be rejected with 422 Unprocessable Entity

@@ -16,6 +16,24 @@ export interface paths {
         put?: never;
         /** Register a new Agent Definition */
         post: operations["create_agent_api_v1_agents_post"];
+        /** Delete an Agent by ID (?id=...) with optional force cleanup of local evaluation records */
+        delete: operations["delete_agent_api_v1_agents_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/purge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Irreversibly purge an Agent and its local evaluation records with exact name confirmation */
+        post: operations["purge_agent_api_v1_agents_purge_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -396,6 +414,44 @@ export interface components {
              */
             owner?: string | null;
         };
+        /** AgentDeleteResponse */
+        AgentDeleteResponse: {
+            /**
+             * Id
+             * @description ID of deleted Agent
+             */
+            id: string;
+            /**
+             * Deleted
+             * @description Whether the Agent was successfully deleted
+             * @default true
+             */
+            deleted: boolean;
+            /**
+             * Launches Deleted
+             * @description Number of associated experiment launches cleaned up
+             * @default 0
+             */
+            launches_deleted: number;
+            /**
+             * Message
+             * @default Agent deleted successfully
+             */
+            message: string;
+        };
+        /** AgentPurgeRequest */
+        AgentPurgeRequest: {
+            /**
+             * Agent Id
+             * @description Agent ID to permanently purge
+             */
+            agent_id: string;
+            /**
+             * Confirm Name
+             * @description Exact agent name to confirm irreversible purge
+             */
+            confirm_name: string;
+        };
         /** AgentResponse */
         AgentResponse: {
             /** Id */
@@ -415,6 +471,16 @@ export interface components {
             version_count: number;
             /** Latest Version */
             latest_version?: string | null;
+            /**
+             * Launch Count
+             * @default 0
+             */
+            launch_count: number;
+            /**
+             * Active Launch Count
+             * @default 0
+             */
+            active_launch_count: number;
             /**
              * Created At
              * Format: date-time
@@ -445,6 +511,16 @@ export interface components {
             version_count: number;
             /** Latest Version */
             latest_version?: string | null;
+            /**
+             * Launch Count
+             * @default 0
+             */
+            launch_count: number;
+            /**
+             * Active Launch Count
+             * @default 0
+             */
+            active_launch_count: number;
             /**
              * Created At
              * Format: date-time
@@ -618,6 +694,29 @@ export interface components {
             dataset_id?: string | null;
             /** Items Upserted */
             items_upserted: number;
+        };
+        /** DomainErrorResponse */
+        DomainErrorResponse: {
+            /**
+             * Code
+             * @description Machine-readable error code
+             */
+            code: string;
+            /**
+             * Detail
+             * @description Human-readable explanation
+             */
+            detail: string;
+            /**
+             * Launch Count
+             * @description Associated launch count if applicable
+             */
+            launch_count?: number | null;
+            /**
+             * Active Launch Count
+             * @description Active launch count if applicable
+             */
+            active_launch_count?: number | null;
         };
         /** EvaluatorResponse */
         EvaluatorResponse: {
@@ -1048,6 +1147,130 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_agent_api_v1_agents_delete: {
+        parameters: {
+            query: {
+                /** @description Agent ID to delete (required) */
+                id: string;
+                /** @description Whether to cascade delete local evaluation records. */
+                force?: boolean;
+            };
+            header?: {
+                /** @description Agent exact name to confirm force purge */
+                "X-Confirm-Name"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentDeleteResponse"];
+                };
+            };
+            /** @description Name confirmation mismatch */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DomainErrorResponse"];
+                };
+            };
+            /** @description Agent not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DomainErrorResponse"];
+                };
+            };
+            /** @description Agent has associated launches or active tasks */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DomainErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    purge_agent_api_v1_agents_purge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentPurgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentDeleteResponse"];
+                };
+            };
+            /** @description Name confirmation mismatch */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DomainErrorResponse"];
+                };
+            };
+            /** @description Agent not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DomainErrorResponse"];
+                };
+            };
+            /** @description Active tasks in progress */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DomainErrorResponse"];
                 };
             };
             /** @description Validation Error */

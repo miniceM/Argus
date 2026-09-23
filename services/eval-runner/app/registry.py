@@ -8,11 +8,26 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import IntegrityError
 
 from .config import find_path
 from .db import DatabaseManager
-from .db_models import AgentRecord, AgentVersionRecord
+from .db_models import (
+    AgentRecord,
+    AgentVersionRecord,
+    ExperimentItemExecutionRecord,
+    ExperimentLaunchRecord,
+    LangfuseSyncTaskRecord,
+)
+from .models import (
+    AgentConcurrencyError,
+    AgentHasActiveLaunchesError,
+    AgentHasLaunchesError,
+    AgentNameMismatchError,
+    AgentNotFoundError,
+)
+from .state_machine import TERMINAL_LAUNCH_STATUSES
 
 
 def compute_spec_digest(spec_dict: dict[str, Any]) -> str:
@@ -146,6 +161,21 @@ class AgentRegistry:
                 .order_by(AgentVersionRecord.created_at.desc())
                 .limit(1)
             )
+            l_count = (
+                session.scalar(
+                    select(func.count(ExperimentLaunchRecord.id)).where(ExperimentLaunchRecord.agent_id == agent_id)
+                )
+                or 0
+            )
+            active_l_count = (
+                session.scalar(
+                    select(func.count(ExperimentLaunchRecord.id)).where(
+                        ExperimentLaunchRecord.agent_id == agent_id,
+                        ExperimentLaunchRecord.status.not_in(TERMINAL_LAUNCH_STATUSES),
+                    )
+                )
+                or 0
+            )
             return {
                 "id": agent.id,
                 "name": agent.name,
@@ -154,6 +184,8 @@ class AgentRegistry:
                 "status": agent.status,
                 "version_count": v_count,
                 "latest_version": latest_active,
+                "launch_count": l_count,
+                "active_launch_count": active_l_count,
                 "created_at": agent.created_at,
                 "updated_at": agent.updated_at,
             }
@@ -186,7 +218,29 @@ class AgentRegistry:
                 if aid not in latest_active:
                     latest_active[aid] = ver
 
-            # 3. Get all agents
+            # 3. Total launch count per agent
+            l_counts = dict(
+                session.execute(
+                    select(
+                        ExperimentLaunchRecord.agent_id,
+                        func.count(ExperimentLaunchRecord.id),
+                    ).group_by(ExperimentLaunchRecord.agent_id)
+                ).all()
+            )
+
+            # 4. Active launch count per agent
+            active_l_counts = dict(
+                session.execute(
+                    select(
+                        ExperimentLaunchRecord.agent_id,
+                        func.count(ExperimentLaunchRecord.id),
+                    )
+                    .where(ExperimentLaunchRecord.status.not_in(TERMINAL_LAUNCH_STATUSES))
+                    .group_by(ExperimentLaunchRecord.agent_id)
+                ).all()
+            )
+
+            # 5. Get all agents
             agents = session.scalars(select(AgentRecord).order_by(AgentRecord.created_at)).all()
             result = []
             for agent in agents:
@@ -199,11 +253,111 @@ class AgentRegistry:
                         "status": agent.status,
                         "version_count": v_counts.get(agent.id, 0),
                         "latest_version": latest_active.get(agent.id),
+                        "launch_count": l_counts.get(agent.id, 0),
+                        "active_launch_count": active_l_counts.get(agent.id, 0),
                         "created_at": agent.created_at,
                         "updated_at": agent.updated_at,
                     }
                 )
             return result
+
+    def delete_agent(
+        self, agent_id: str, force: bool = False, confirm_name: str | None = None
+    ) -> dict[str, Any]:
+        with self.db_manager.get_session() as session:
+            # Row-level lock to prevent concurrent modification
+            agent = session.scalar(
+                select(AgentRecord).where(AgentRecord.id == agent_id).with_for_update()
+            )
+            if not agent:
+                raise AgentNotFoundError(agent_id)
+
+            # Server-side strong validation of agent full name when force is requested or confirm_name provided
+            if force or confirm_name is not None:
+                if confirm_name != agent.name:
+                    raise AgentNameMismatchError(
+                        agent_id=agent_id,
+                        expected_name=agent.name,
+                        provided_name=confirm_name or "",
+                    )
+
+            # Check for existing launches
+            launches = session.scalars(
+                select(ExperimentLaunchRecord).where(ExperimentLaunchRecord.agent_id == agent_id)
+            ).all()
+            launch_count = len(launches)
+
+            if launch_count > 0:
+                active_launches = [launch for launch in launches if launch.status not in TERMINAL_LAUNCH_STATUSES]
+                active_count = len(active_launches)
+
+                if not force:
+                    raise AgentHasLaunchesError(
+                        agent_id=agent_id,
+                        launch_count=launch_count,
+                        active_launch_count=active_count,
+                    )
+
+                # Check for active (non-terminal) launches
+                if active_launches:
+                    active_summary = ", ".join(f"'{launch.id}' ({launch.status})" for launch in active_launches[:3])
+                    if len(active_launches) > 3:
+                        active_summary += f" 等共 {len(active_launches)} 个任务"
+                    raise AgentHasActiveLaunchesError(
+                        agent_id=agent_id,
+                        active_summary=active_summary,
+                        active_launch_count=len(active_launches),
+                    )
+
+            # Set status to "deleting" and flush to block concurrent launch creations
+            agent.status = "deleting"
+            session.flush()
+
+            if launch_count > 0:
+                # Force delete: clean launches and their dependent records in local DB only.
+                # Notice: we DO NOT call Langfuse API/SDK.
+                launch_ids = [launch_rec.id for launch_rec in launches]
+                if launch_ids:
+                    # Clean up sync tasks explicitly for database engines without full ON DELETE CASCADE support (like SQLite in tests)
+                    session.execute(
+                        delete(LangfuseSyncTaskRecord).where(
+                            LangfuseSyncTaskRecord.launch_id.in_(launch_ids)
+                        )
+                    )
+                    # Clear final_attempt_id to avoid circular foreign key dependency during deletion
+                    session.execute(
+                        update(ExperimentItemExecutionRecord)
+                        .where(ExperimentItemExecutionRecord.launch_id.in_(launch_ids))
+                        .values(final_attempt_id=None)
+                    )
+                    for launch in launches:
+                        session.delete(launch)
+                    session.flush()
+
+            try:
+                session.delete(agent)
+                session.commit()
+            except IntegrityError as exc:
+                session.rollback()
+                raise AgentConcurrencyError(
+                    agent_id=agent_id,
+                    reason="存在并发创建的评测任务或关联记录冲突，请稍后重试",
+                ) from exc
+
+            return {
+                "id": agent_id,
+                "deleted": True,
+                "launches_deleted": launch_count,
+                "message": (
+                    f"Agent '{agent_id}' 及其本地数据已完全删除"
+                    if launch_count == 0
+                    else f"Agent '{agent_id}' 及其关联的 {launch_count} 条本地评测记录已完全清理（Langfuse 远程记录完整保留）"
+                ),
+            }
+
+    def purge_agent(self, agent_id: str, confirm_name: str) -> dict[str, Any]:
+        """Irreversible purge: cascade deletes agent and local evaluation history with strict server-side confirmation."""
+        return self.delete_agent(agent_id=agent_id, force=True, confirm_name=confirm_name)
 
     def create_version(
         self,

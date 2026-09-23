@@ -156,7 +156,7 @@ def determine_allowed_actions(
         reasons["run"] = f"当前状态 '{st}' 已启动或无法再次直接启动"
 
     # 1. Cancel
-    if st in ("QUEUED", "RUNNING") and not cancel_requested_at:
+    if st in ("PENDING", "QUEUED", "RUNNING") and not cancel_requested_at:
         allowed.append("cancel")
     else:
         if cancel_requested_at:

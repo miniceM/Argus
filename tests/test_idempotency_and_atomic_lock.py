@@ -218,3 +218,167 @@ def test_idempotent_replay_succeeds_even_when_evaluator_unregistered(tmp_path):
         assert launch2.id == launch1.id
         mock_resolve.assert_not_called()
 
+
+def test_concurrent_delete_agent_and_create_launch(tmp_path):
+    """Verifies concurrency safety between delete_agent and create_launch:
+    either delete succeeds and create is rejected, or create succeeds and delete is rejected.
+    No orphaned launches or corrupt state can occur."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.db_models import ExperimentLaunchRecord
+    from app.models import AgentConcurrencyError, AgentHasActiveLaunchesError
+
+    db_file = tmp_path / "concurrent_del_launch.db"
+    db_mgr = DatabaseManager(f"sqlite:///{db_file}")
+    MigrationRunner(engine=db_mgr.engine, migrations_dir=ROOT / "migrations").apply_all()
+    registry = AgentRegistry(db_mgr)
+    registry.create_agent("target-agent", name="Target Agent")
+    registry.create_version(
+        agent_id="target-agent",
+        version="v1",
+        endpoint="http://localhost:8080/invoke",
+    )
+
+    launch_svc = LaunchService(db_mgr, registry)
+
+    results = {"delete": None, "create": None, "del_err": None, "create_err": None}
+    barrier = threading.Barrier(2)
+
+    def _do_delete():
+        barrier.wait()
+        try:
+            results["delete"] = registry.delete_agent("target-agent", force=True, confirm_name="Target Agent")
+        except Exception as exc:
+            results["del_err"] = exc
+
+    def _do_create():
+        barrier.wait()
+        try:
+            results["create"] = launch_svc.create_launch(
+                agent_id="target-agent",
+                agent_version="v1",
+                dataset_name="banking-agent-regression",
+            )
+        except Exception as exc:
+            results["create_err"] = exc
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f1 = pool.submit(_do_delete)
+        f2 = pool.submit(_do_create)
+        f1.result()
+        f2.result()
+
+    # Core Invariants:
+    # 1. Both must never succeed simultaneously (orphaned launch invariant)
+    assert not (results["delete"] is not None and results["create"] is not None), "Both operations must not succeed simultaneously"
+    # 2. Exactly one succeeded, one failed
+    assert (results["delete"] is not None) ^ (results["create"] is not None)
+
+    if results["delete"] is not None:
+        assert results["del_err"] is None
+        assert results["create_err"] is not None
+        assert isinstance(results["create_err"], ValueError)
+        assert registry.get_agent("target-agent") is None
+    else:
+        assert results["create"] is not None
+        assert results["del_err"] is not None
+        # In concurrent scheduling, delete is blocked by either active launch check or database foreign key concurrency error
+        assert isinstance(results["del_err"], (AgentHasActiveLaunchesError, AgentConcurrencyError))
+        assert registry.get_agent("target-agent") is not None
+        # Verify launch record exists consistently in DB
+        with db_mgr.get_session() as session:
+            launch_rec = session.get(ExperimentLaunchRecord, results["create"].id)
+            assert launch_rec is not None
+            assert launch_rec.agent_id == "target-agent"
+
+
+def test_postgres_row_level_lock_mutual_exclusion_agent_delete_and_launch():
+    """Validates real PostgreSQL row-level exclusive lock (SELECT ... FOR UPDATE)
+    mutual exclusion between Agent deletion and Launch creation transactions."""
+    import os
+    import time
+    from pathlib import Path
+
+    import pytest
+    from app.db import DatabaseManager, MigrationRunner
+    from app.db_models import AgentRecord
+    from sqlalchemy import select, text
+
+    pg_url = os.getenv("TEST_POSTGRES_URL")
+    if not pg_url:
+        pytest.skip("TEST_POSTGRES_URL is not configured; skipping real PostgreSQL row lock test")
+
+    root_dir = Path(__file__).resolve().parents[1]
+    db_mgr = DatabaseManager(pg_url)
+    runner = MigrationRunner(engine=db_mgr.engine, migrations_dir=root_dir / "migrations")
+    runner.apply_all()
+
+    with db_mgr.engine.connect() as conn:
+        conn.execute(
+            text(
+                "TRUNCATE TABLE execution_attempts, experiment_item_executions, "
+                "langfuse_sync_tasks, experiment_launches, agent_versions, agents CASCADE;"
+            )
+        )
+        conn.execute(text("INSERT INTO agents (id, name, status) VALUES ('pg-lock-agent', 'PG Agent', 'active');"))
+        conn.execute(
+            text(
+                "INSERT INTO agent_versions (id, agent_id, version, spec_digest, endpoint) "
+                "VALUES ('pg-ver-1', 'pg-lock-agent', 'v1', 'digest1', 'http://localhost:8080/invoke');"
+            )
+        )
+        conn.commit()
+
+    import threading
+
+    lock_acquired = threading.Event()
+    waiter_started = threading.Event()
+    waiter_completed = threading.Event()
+    waiter_observed_status = []
+
+    def lock_holder():
+        with db_mgr.get_session() as session:
+            # Transaction 1 acquires exclusive row lock on the agent
+            agent = session.scalar(
+                select(AgentRecord).where(AgentRecord.id == "pg-lock-agent").with_for_update()
+            )
+            assert agent is not None
+            # Mutate status to deleting
+            agent.status = "deleting"
+            session.flush()
+            lock_acquired.set()
+
+            # Wait for Transaction 2 to attempt acquiring lock
+            waiter_started.wait(timeout=5)
+            time.sleep(0.5)
+            # Commit transaction, releasing the row lock
+            session.commit()
+
+    def lock_waiter():
+        lock_acquired.wait(timeout=5)
+        with db_mgr.get_session() as session:
+            waiter_started.set()
+            # Transaction 2 will block here until Transaction 1 commits
+            agent = session.scalar(
+                select(AgentRecord).where(AgentRecord.id == "pg-lock-agent").with_for_update()
+            )
+            assert agent is not None
+            waiter_observed_status.append(agent.status)
+            session.commit()
+        waiter_completed.set()
+
+    t1 = threading.Thread(target=lock_holder)
+    t2 = threading.Thread(target=lock_waiter)
+
+    t1.start()
+    t2.start()
+    t1.join(timeout=10)
+    t2.join(timeout=10)
+
+    assert waiter_completed.is_set()
+    # Transaction 2 was blocked until Transaction 1 committed, observing the updated 'deleting' status
+    assert waiter_observed_status == ["deleting"]
+
+
+

@@ -1,16 +1,24 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Bot, ChevronRight, Layers, Plus, User } from "lucide-react";
+import { Bot, ChevronRight, Layers, Plus, Trash2, User } from "lucide-react";
 import { api } from "../../api/client";
 import { queryKeys } from "../../api/query-keys";
 import { formatApiError } from "../../api/errors";
 import { RegisterAgentDialog } from "./RegisterAgentDialog";
+import { DeleteAgentModal } from "./DeleteAgentModal";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 
 export const AgentsList: React.FC = () => {
   const navigate = useNavigate();
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+  const [agentToDelete, setAgentToDelete] = useState<{
+    id: string;
+    name: string;
+    version_count?: number;
+    launch_count?: number;
+    active_launch_count?: number;
+  } | null>(null);
 
   const { data: agents, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.agents.list(),
@@ -71,6 +79,7 @@ export const AgentsList: React.FC = () => {
                   <th className="px-6 py-3.5">状态</th>
                   <th className="px-6 py-3.5">最新可用版本</th>
                   <th className="px-6 py-3.5">历史版本数</th>
+                  <th className="px-6 py-3.5">评测记录</th>
                   <th className="px-6 py-3.5">更新时间</th>
                   <th className="px-6 py-3.5 text-right">操作</th>
                 </tr>
@@ -96,9 +105,9 @@ export const AgentsList: React.FC = () => {
                       </div>
                     </td>
 
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 text-xs">
                       {agent.owner ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                        <span className="inline-flex items-center gap-1 text-slate-700 font-medium">
                           <User className="w-3.5 h-3.5 text-slate-400" />
                           <span>{agent.owner}</span>
                         </span>
@@ -130,19 +139,50 @@ export const AgentsList: React.FC = () => {
                       </span>
                     </td>
 
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+                        <span>{agent.launch_count ?? 0}</span>
+                        {(agent.active_launch_count ?? 0) > 0 && (
+                          <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                            {agent.active_launch_count} 运行中
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
                     <td className="px-6 py-4 text-xs text-slate-500">
                       {new Date(agent.updated_at).toLocaleString("zh-CN", { hour12: false })}
                     </td>
 
                     <td className="px-6 py-4 text-right">
-                      <Link
-                        to={`/agents/${agent.id}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
-                      >
-                        <span>管理</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </Link>
+                      <div className="inline-flex items-center justify-end gap-3">
+                        <Link
+                          to={`/agents/${agent.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                        >
+                          <span>管理</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAgentToDelete({
+                              id: agent.id,
+                              name: agent.name,
+                              version_count: agent.version_count,
+                              launch_count: agent.launch_count,
+                              active_launch_count: agent.active_launch_count,
+                            });
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                          title="删除 Agent"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>删除</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -157,6 +197,13 @@ export const AgentsList: React.FC = () => {
         isOpen={isRegisterOpen}
         onClose={() => setIsRegisterOpen(false)}
         onSuccess={(id) => navigate(`/agents/${id}`)}
+      />
+
+      {/* Delete Agent Modal */}
+      <DeleteAgentModal
+        isOpen={Boolean(agentToDelete)}
+        agent={agentToDelete}
+        onClose={() => setAgentToDelete(null)}
       />
     </div>
   );

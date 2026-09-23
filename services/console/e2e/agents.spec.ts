@@ -55,6 +55,16 @@ test.describe("E2E-01: Agent Registry & Immutable Version UX Flow", () => {
         return;
       }
 
+      if (route.request().method() === "DELETE") {
+        if (queryId) {
+          agentList = agentList.filter((a) => a.id !== queryId);
+          await route.fulfill({ status: 200, json: { id: queryId, deleted: true, launches_deleted: 0 } });
+        } else {
+          await route.fulfill({ status: 400, json: { detail: "Missing id" } });
+        }
+        return;
+      }
+
       if (queryId) {
         const match = agentList.find((a) => a.id === queryId);
         if (match) {
@@ -157,5 +167,26 @@ test.describe("E2E-01: Agent Registry & Immutable Version UX Flow", () => {
     // Click reveal button to see full credential reference
     await page.getByTitle("显示引用名").click();
     await expect(page.getByText("vault:secrets/agents#key")).toBeVisible();
+
+    // Mock purge route as well
+    await page.route("**/api/v1/agents/purge**", async (route) => {
+      const body = JSON.parse(route.request().postData() || "{}");
+      agentList = agentList.filter((a) => a.id !== body.agent_id);
+      await route.fulfill({ status: 200, json: { id: body.agent_id, deleted: true, launches_deleted: 1 } });
+    });
+
+    // 6. Delete Agent (since launch_count is 0, normal safe delete applies directly)
+    await page.goto(`/agents/${dynamicId}`);
+    await page.getByRole("button", { name: "删除 Agent" }).click();
+    await expect(page.getByRole("heading", { name: "删除 Agent" })).toBeVisible();
+
+    // Normal safe delete button is enabled without needing name confirmation
+    const confirmBtn = page.getByRole("button", { name: "确认删除" });
+    await expect(confirmBtn).toBeEnabled();
+    await confirmBtn.click();
+
+    // Navigated back to /agents and agent is removed
+    await page.waitForURL("**/agents");
+    await expect(page.getByText(dynamicId)).not.toBeVisible();
   });
 });

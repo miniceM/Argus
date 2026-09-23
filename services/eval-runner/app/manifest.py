@@ -99,6 +99,12 @@ class LaunchService:
         if not ver_rec.is_active:
             raise ValueError(f"AgentVersion '{agent_id}:{agent_version}' is archived/inactive")
 
+        agent_rec = self.registry.get_agent(agent_id)
+        if not agent_rec or agent_rec.status != "active":
+            raise ValueError(
+                f"Agent '{agent_id}' 处于不可用状态 '{getattr(agent_rec, 'status', 'not_found')}'，不可创建新的评测任务"
+            )
+
         eval_specs = [default_evaluator_registry.resolve(eid) for eid in eval_list]
         if not allow_run_scope:
             run_scoped = [e["id"] for e in eval_specs if e.get("scope") != "item"]
@@ -186,6 +192,16 @@ class LaunchService:
 
         with self.db_manager.get_session() as session:
             try:
+                # Lock agent row to prevent concurrent deletion and ensure active status within transaction
+                from .db_models import AgentRecord
+                agent_rec = session.scalar(
+                    select(AgentRecord).where(AgentRecord.id == agent_id).with_for_update()
+                )
+                if not agent_rec or agent_rec.status != "active":
+                    raise ValueError(
+                        f"Agent '{agent_id}' 处于不可用状态 '{getattr(agent_rec, 'status', 'not_found')}'，不可创建新的评测任务"
+                    )
+
                 session.add(launch)
                 session.flush()
 
@@ -222,6 +238,12 @@ class LaunchService:
                         raise ValueError(
                             f"Idempotency key conflict: key '{idempotency_key}' already used with different payload."
                         ) from exc
+                orig_err = str(getattr(exc, "orig", exc)).lower()
+                pgcode = getattr(getattr(exc, "orig", None), "pgcode", None)
+                if "foreign key" in orig_err or pgcode == "23503":
+                    raise ValueError(
+                        f"Agent '{agent_id}' 或其版本规格已被并发清理或不可用，无法创建评测任务"
+                    ) from exc
                 raise
 
 

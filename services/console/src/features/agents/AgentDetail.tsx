@@ -1,17 +1,20 @@
 import React, { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, ArrowLeft, Bot, Calendar, ChevronRight, Layers, Plus, User } from "lucide-react";
+import { Archive, ArrowLeft, Bot, Calendar, ChevronRight, Layers, Plus, Trash2, User } from "lucide-react";
 import { api } from "../../api/client";
 import { queryKeys } from "../../api/query-keys";
 import { formatApiError } from "../../api/errors";
 import { CreateVersionDialog } from "./CreateVersionDialog";
+import { DeleteAgentModal } from "./DeleteAgentModal";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 
 export const AgentDetail: React.FC = () => {
   const { agentId } = useParams<{ agentId: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const { data: agent, isLoading: isAgentLoading, error: agentError, refetch: refetchAgent } = useQuery({
@@ -94,13 +97,25 @@ export const AgentDetail: React.FC = () => {
             </div>
           </div>
 
-          <button
-            onClick={() => setIsCreateOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
-          >
-            <Plus className="w-4 h-4" />
-            <span>创建新版本</span>
-          </button>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setIsDeleteOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
+              title="删除该 Agent"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>删除 Agent</span>
+            </button>
+
+            <button
+              onClick={() => setIsCreateOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs transition-colors cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>创建新版本</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -111,7 +126,7 @@ export const AgentDetail: React.FC = () => {
       )}
 
       {/* Metadata Card */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
         <div>
           <span className="text-xs font-medium text-slate-400 block mb-1">负责人 / 团队</span>
           <span className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
@@ -124,6 +139,17 @@ export const AgentDetail: React.FC = () => {
           <span className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
             <Calendar className="w-4 h-4 text-slate-400" />
             <span>{new Date(agent.created_at).toLocaleString("zh-CN", { hour12: false })}</span>
+          </span>
+        </div>
+        <div>
+          <span className="text-xs font-medium text-slate-400 block mb-1">评测记录</span>
+          <span className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+            <span>{agent.launch_count ?? 0} 次</span>
+            {(agent.active_launch_count ?? 0) > 0 && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                {agent.active_launch_count} 运行中
+              </span>
+            )}
           </span>
         </div>
         <div>
@@ -260,6 +286,20 @@ export const AgentDetail: React.FC = () => {
         agentId={agent.id}
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
+      />
+
+      {/* Delete Agent Modal */}
+      <DeleteAgentModal
+        isOpen={isDeleteOpen}
+        agent={{
+          id: agent.id,
+          name: agent.name,
+          version_count: versions?.length ?? agent.version_count,
+          launch_count: agent.launch_count,
+          active_launch_count: agent.active_launch_count,
+        }}
+        onClose={() => setIsDeleteOpen(false)}
+        onSuccess={() => navigate("/agents")}
       />
     </div>
   );

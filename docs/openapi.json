@@ -105,6 +105,179 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "Agent Registry"
+        ],
+        "summary": "Delete an Agent by ID (?id=...) with optional force cleanup of local evaluation records",
+        "operationId": "delete_agent_api_v1_agents_delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Agent ID to delete (required)",
+              "title": "Id"
+            },
+            "description": "Agent ID to delete (required)"
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Whether to cascade delete local evaluation records.",
+              "default": false,
+              "title": "Force"
+            },
+            "description": "Whether to cascade delete local evaluation records."
+          },
+          {
+            "name": "X-Confirm-Name",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Agent exact name to confirm force purge",
+              "title": "X-Confirm-Name"
+            },
+            "description": "Agent exact name to confirm force purge"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentDeleteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Name confirmation mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Agent has associated launches or active tasks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agents/purge": {
+      "post": {
+        "tags": [
+          "Agent Registry"
+        ],
+        "summary": "Irreversibly purge an Agent and its local evaluation records with exact name confirmation",
+        "operationId": "purge_agent_api_v1_agents_purge_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentPurgeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentDeleteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Name confirmation mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Active tasks in progress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/agent-versions": {
@@ -1233,6 +1406,57 @@
         ],
         "title": "AgentCreateRequest"
       },
+      "AgentDeleteResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "ID of deleted Agent"
+          },
+          "deleted": {
+            "type": "boolean",
+            "title": "Deleted",
+            "description": "Whether the Agent was successfully deleted",
+            "default": true
+          },
+          "launches_deleted": {
+            "type": "integer",
+            "title": "Launches Deleted",
+            "description": "Number of associated experiment launches cleaned up",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "Agent deleted successfully"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "AgentDeleteResponse"
+      },
+      "AgentPurgeRequest": {
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "title": "Agent Id",
+            "description": "Agent ID to permanently purge"
+          },
+          "confirm_name": {
+            "type": "string",
+            "title": "Confirm Name",
+            "description": "Exact agent name to confirm irreversible purge"
+          }
+        },
+        "type": "object",
+        "required": [
+          "agent_id",
+          "confirm_name"
+        ],
+        "title": "AgentPurgeRequest"
+      },
       "AgentResponse": {
         "properties": {
           "id": {
@@ -1284,6 +1508,16 @@
               }
             ],
             "title": "Latest Version"
+          },
+          "launch_count": {
+            "type": "integer",
+            "title": "Launch Count",
+            "default": 0
+          },
+          "active_launch_count": {
+            "type": "integer",
+            "title": "Active Launch Count",
+            "default": 0
           },
           "created_at": {
             "type": "string",
@@ -1357,6 +1591,16 @@
               }
             ],
             "title": "Latest Version"
+          },
+          "launch_count": {
+            "type": "integer",
+            "title": "Launch Count",
+            "default": 0
+          },
+          "active_launch_count": {
+            "type": "integer",
+            "title": "Active Launch Count",
+            "default": 0
           },
           "created_at": {
             "type": "string",
@@ -1729,6 +1973,50 @@
           "items_upserted"
         ],
         "title": "BootstrapResult"
+      },
+      "DomainErrorResponse": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "Machine-readable error code"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Human-readable explanation"
+          },
+          "launch_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Launch Count",
+            "description": "Associated launch count if applicable"
+          },
+          "active_launch_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Launch Count",
+            "description": "Active launch count if applicable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "detail"
+        ],
+        "title": "DomainErrorResponse"
       },
       "EvaluatorResponse": {
         "properties": {

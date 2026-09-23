@@ -7,6 +7,11 @@ export function formatApiError(error: unknown): string {
     if (typeof errObj.detail === "string") {
       return errObj.detail;
     }
+    if (typeof errObj.detail === "object" && errObj.detail !== null) {
+      const detailObj = errObj.detail as Record<string, unknown>;
+      if (typeof detailObj.detail === "string") return detailObj.detail;
+      if (typeof detailObj.message === "string") return detailObj.message;
+    }
     if (Array.isArray(errObj.detail)) {
       return errObj.detail
         .map((d: Record<string, unknown>) => {
@@ -22,4 +27,16 @@ export function formatApiError(error: unknown): string {
   }
 
   return String(error);
+}
+
+export function getApiErrorCode(error: unknown): string | null {
+  if (typeof error === "object" && error !== null) {
+    const errObj = error as Record<string, unknown>;
+    if (typeof errObj.code === "string") return errObj.code;
+    if (typeof errObj.detail === "object" && errObj.detail !== null) {
+      const detailObj = errObj.detail as Record<string, unknown>;
+      if (typeof detailObj.code === "string") return detailObj.code;
+    }
+  }
+  return null;
 }

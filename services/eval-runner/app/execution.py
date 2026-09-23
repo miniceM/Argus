@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 from fastapi import HTTPException, status
 from opentelemetry.propagate import inject
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from .config import settings
 from .dataset import parse_dataset_version
@@ -18,12 +19,23 @@ from .db_models import (
     ExperimentLaunchRecord,
 )
 from .evaluators import default_evaluator_registry, evaluate_item_quality
-from .executor import RemoteAgentExecutor, aggregate_launch_status
+from .executor import RemoteAgentExecutor
 from .manifest import acquire_launch_execution
 from .registry import AgentRegistry, AgentVersionSpec, map_request
+from .state_machine import aggregate_launch_status_from_items, assert_terminal_launch_invariants
+
+
+@dataclass
+class LaunchExecutionOutcome:
+    """Standard execution outcome returned by LaunchExecutionService."""
+    launch: ExperimentLaunchRecord
+    dataset_run_url: str | None = None
+    langfuse_experiment_id: str | None = None
+    result_summary: dict[str, Any] | None = None
 
 
 def get_langfuse_client_safe():
+
     """Safely obtain Langfuse client if configured; returns None if not available."""
     try:
         from .main import _client
@@ -78,11 +90,15 @@ async def _execute_single_item(
 
     last_attempt_id: str | None = None
 
-    def on_attempt_start(attempt_no: int) -> str:
+    def on_attempt_start(attempt_no: int) -> str | None:
         nonlocal last_attempt_id
         att_id = str(uuid.uuid4())
-        last_attempt_id = att_id
         with db_mgr.get_session() as session:
+            # CAS check: parent item must still be running
+            it = session.get(ExperimentItemExecutionRecord, item_exec_id)
+            if not it or it.execution_status != "running":
+                return None
+            last_attempt_id = att_id
             att_rec = ExecutionAttemptRecord(
                 id=att_id,
                 item_execution_id=item_exec_id,
@@ -91,6 +107,7 @@ async def _execute_single_item(
                 started_at=datetime.utcnow(),
             )
             session.add(att_rec)
+            session.commit()
         return att_id
 
     def on_attempt_end(
@@ -104,15 +121,24 @@ async def _execute_single_item(
         if not att_id:
             return
         with db_mgr.get_session() as session:
-            att = session.get(ExecutionAttemptRecord, att_id)
-            if att:
-                att.status = "COMPLETED" if error_type is None else "FAILED"
-                att.http_status = http_status
-                att.error_type = str(error_type) if error_type else None
-                att.error_message = error_message
-                att.latency_ms = latency_ms
-                att.trace_context_received = trace_received
-                att.completed_at = datetime.utcnow()
+            # Atomic CAS: only update if attempt is still RUNNING
+            session.execute(
+                update(ExecutionAttemptRecord)
+                .where(
+                    ExecutionAttemptRecord.id == att_id,
+                    ExecutionAttemptRecord.status == "RUNNING",
+                )
+                .values(
+                    status="COMPLETED" if error_type is None else "FAILED",
+                    http_status=http_status,
+                    error_type=str(error_type) if error_type else None,
+                    error_message=error_message,
+                    latency_ms=latency_ms,
+                    trace_context_received=trace_received,
+                    completed_at=datetime.utcnow(),
+                )
+            )
+            session.commit()
 
     mapped_payload = map_request(dataset_input, spec.request_mapping)
     headers = {
@@ -172,7 +198,7 @@ async def _execute_single_item(
         execution_status = "failed"
         execution_error = str(exc)
         eval_status = "skipped"
-        quality_conclusion = "fail"
+        quality_conclusion = "unknown"
 
     if execution_status == "succeeded" and agent_output is not None:
         item_eval_specs = [
@@ -202,20 +228,29 @@ async def _execute_single_item(
 
     completed_at = datetime.utcnow()
     with db_mgr.get_session() as session:
-        rec = session.get(ExperimentItemExecutionRecord, item_exec_id)
-        if rec:
-            rec.execution_status = execution_status
-            rec.eval_status = eval_status
-            rec.quality_conclusion = quality_conclusion
-            rec.execution_error = execution_error
-            rec.eval_error = eval_error
-            rec.scores = scores_dict
-            if last_attempt_id:
-                att = session.get(ExecutionAttemptRecord, last_attempt_id)
-                if not att or att.item_execution_id != item_exec_id:
-                    raise ValueError(f"Attempt '{last_attempt_id}' does not belong to item '{item_exec_id}'")
-                rec.final_attempt_id = last_attempt_id
-            rec.completed_at = completed_at
+        # Atomic CAS: only update if item is still running (Invariant 6)
+        values_to_update: dict[str, Any] = {
+            "execution_status": execution_status,
+            "eval_status": eval_status,
+            "quality_conclusion": quality_conclusion,
+            "execution_error": execution_error,
+            "eval_error": eval_error,
+            "scores": scores_dict,
+            "completed_at": completed_at,
+        }
+        if last_attempt_id:
+            values_to_update["final_attempt_id"] = last_attempt_id
+
+        session.execute(
+            update(ExperimentItemExecutionRecord)
+            .where(
+                ExperimentItemExecutionRecord.id == item_exec_id,
+                ExperimentItemExecutionRecord.execution_status == "running",
+            )
+            .values(**values_to_update)
+        )
+        session.commit()
+
 
     return {
         "dataset_item_id": item_id,
@@ -228,6 +263,44 @@ async def _execute_single_item(
     }
 
 
+def _safe_summary(result: Any) -> dict[str, Any]:
+    if not result:
+        return {}
+    summary: dict[str, Any] = {}
+    for key in ["run_name", "dataset_run_id", "dataset_run_url", "experiment_id"]:
+        value = getattr(result, key, None)
+        if value is not None:
+            summary[key] = str(value)
+
+    item_rows: list[dict[str, Any]] = []
+    for item_result in getattr(result, "item_results", []) or []:
+        item = getattr(item_result, "item", None)
+        row = {
+            "dataset_item_id": str(getattr(item, "id", "")) if item is not None else None,
+            "input": getattr(item, "input", None) if item is not None else None,
+            "output": getattr(item_result, "output", None),
+            "error": str(getattr(item_result, "error", "")) if getattr(item_result, "error", None) else None,
+            "scores": {
+                str(getattr(e, "name", "score")): getattr(e, "value", None)
+                for e in (getattr(item_result, "evaluations", []) or [])
+            },
+        }
+        item_rows.append(row)
+    if item_rows:
+        summary["items"] = item_rows
+
+    run_scores = {
+        str(getattr(e, "name", "score")): getattr(e, "value", None)
+        for e in (getattr(result, "run_evaluations", []) or [])
+    }
+    if run_scores:
+        summary["run_scores"] = run_scores
+
+    if not summary:
+        summary["repr"] = repr(result)
+    return summary
+
+
 class LaunchExecutionService:
     """Unified service for executing versioned experiment launches with Langfuse sync."""
 
@@ -236,7 +309,7 @@ class LaunchExecutionService:
         self.registry = registry
         self.gather_fn = gather_fn or asyncio.gather
 
-    async def execute_launch(self, launch_id: str) -> ExperimentLaunchRecord:
+    async def execute_launch(self, launch_id: str, dataset_client: Any = None) -> LaunchExecutionOutcome:
         # 1. Acquire atomic execution lock
         acquired = acquire_launch_execution(self.db_manager, launch_id)
         if not acquired:
@@ -282,10 +355,35 @@ class LaunchExecutionService:
             executor = RemoteAgentExecutor(spec)
             items = manifest.get("dataset", {}).get("items", [])
 
+            # Ensure initial DB records exist for all dataset items
+            with self.db_manager.get_session() as session:
+                for row in items:
+                    row_id = str(row.get("id", ""))
+                    if not row_id:
+                        continue
+                    existing = session.scalars(
+                        select(ExperimentItemExecutionRecord).where(
+                            ExperimentItemExecutionRecord.launch_id == launch_id,
+                            ExperimentItemExecutionRecord.dataset_item_id == row_id,
+                        )
+                    ).first()
+                    if not existing:
+                        session.add(
+                            ExperimentItemExecutionRecord(
+                                id=str(uuid.uuid4()),
+                                launch_id=launch_id,
+                                dataset_item_id=row_id,
+                                execution_status="pending",
+                                eval_status="pending",
+                                quality_conclusion="unknown",
+                            )
+                        )
+                session.commit()
+
             # 3. Check Langfuse integration
             lf = get_langfuse_client_safe()
-            lf_dataset = None
-            if lf:
+            lf_dataset = dataset_client
+            if lf and lf_dataset is None:
                 try:
                     version_dt = None
                     try:
@@ -300,10 +398,12 @@ class LaunchExecutionService:
                 except Exception:
                     lf_dataset = None
 
+
             run_id = None
             run_url = None
             sync_status = "NOT_APPLICABLE"
             sync_error = None
+            result_summary: dict[str, Any] = {}
 
             # 4. Run items with Langfuse experiment if dataset is available
             if lf and lf_dataset and hasattr(lf_dataset, "run_experiment"):
@@ -319,8 +419,6 @@ class LaunchExecutionService:
                     if ev.get("scope") == "run"
                 ]
 
-                item_results_map: list[dict[str, Any]] = []
-
                 async def remote_task(*, item: Any, **_: Any) -> dict[str, Any]:
                     item_id = str(getattr(item, "id", ""))
                     item_row = next((r for r in items if str(r.get("id")) == item_id), None)
@@ -333,7 +431,6 @@ class LaunchExecutionService:
                     res = await _execute_single_item(
                         self.db_manager, executor, launch_id, item_row, spec, manifest, lf=lf
                     )
-                    item_results_map.append(res)
                     return res.get("output") or {}
 
                 try:
@@ -369,15 +466,11 @@ class LaunchExecutionService:
                         run_url = f"{base}/project/poc-project/datasets/{dataset_name}/runs/{run_id}"
 
                     sync_status = "SYNCED"
+                    result_summary = _safe_summary(result)
                 except Exception as exc:
                     sync_status = "FAILED"
                     sync_error = str(exc)
-
-                if sync_status == "FAILED" or (items and len(item_results_map) < len(items)):
-                    agg_status = "FAILED"
-                    agg_quality = "fail"
-                else:
-                    agg_status, agg_quality = aggregate_launch_status(item_results_map)
+                    result_summary = {}
 
             else:
                 # Local execution without Langfuse experiment
@@ -390,11 +483,54 @@ class LaunchExecutionService:
                         )
 
                 item_results = await self.gather_fn(*[_worker(row) for row in items])
-                agg_status, agg_quality = aggregate_launch_status(item_results)
+                result_summary = {"items": item_results}
 
-            # 5. Persist final launch state
-            completed_at = datetime.utcnow()
+            # 5. Persist final launch state by aggregating persisted DB Item facts (Invariant 2)
             with self.db_manager.get_session() as session:
+                item_recs = session.scalars(
+                    select(ExperimentItemExecutionRecord)
+                    .where(ExperimentItemExecutionRecord.launch_id == launch_id)
+                ).all()
+
+                now = datetime.utcnow()
+                # Converge any unexecuted active items to failed/unknown (Invariant 1 & 5)
+                active_recs = [
+                    it for it in item_recs
+                    if it.execution_status in ("pending", "queued", "running", "retry_wait")
+                ]
+                for it in active_recs:
+                    it.execution_status = "failed"
+                    it.eval_status = "skipped"
+                    it.quality_conclusion = "unknown"
+                    it.execution_error = "Execution completed without item execution"
+                    it.completed_at = now
+                    session.execute(
+                        update(ExecutionAttemptRecord)
+                        .where(
+                            ExecutionAttemptRecord.item_execution_id == it.id,
+                            ExecutionAttemptRecord.status == "RUNNING",
+                        )
+                        .values(
+                            status="FAILED",
+                            error_message="Execution completed without item execution",
+                            completed_at=now,
+                        )
+                    )
+                if active_recs:
+                    session.flush()
+
+                # Re-query all items counts and quality
+                counts: dict[str, int] = {}
+                quality_counts: dict[str, int] = {}
+                for it in item_recs:
+                    st_key = it.execution_status.lower()
+                    counts[st_key] = counts.get(st_key, 0) + 1
+                    q_key = (it.quality_conclusion or "unknown").lower()
+                    quality_counts[q_key] = quality_counts.get(q_key, 0) + 1
+
+                agg_status, agg_quality = aggregate_launch_status_from_items(counts, quality_counts)
+                assert_terminal_launch_invariants(agg_status, active_item_count=0)
+
                 launch_rec = session.get(ExperimentLaunchRecord, launch_id)
                 assert launch_rec is not None
                 launch_rec.status = agg_status
@@ -403,17 +539,52 @@ class LaunchExecutionService:
                 launch_rec.langfuse_sync_error = sync_error
                 launch_rec.langfuse_experiment_id = str(run_id) if run_id else None
                 launch_rec.langfuse_experiment_url = str(run_url) if run_url else None
-                launch_rec.completed_at = completed_at
+                launch_rec.completed_at = now
                 session.commit()
                 session.refresh(launch_rec)
-                return launch_rec
+
+                return LaunchExecutionOutcome(
+                    launch=launch_rec,
+                    dataset_run_url=str(run_url) if run_url else None,
+                    langfuse_experiment_id=str(run_id) if run_id else None,
+                    result_summary=result_summary,
+                )
 
         except Exception:
             with self.db_manager.get_session() as session:
+                now = datetime.utcnow()
+                # Converge active items to failed / unknown (Invariant 1 & 5)
+                active_items = session.scalars(
+                    select(ExperimentItemExecutionRecord)
+                    .where(
+                        ExperimentItemExecutionRecord.launch_id == launch_id,
+                        ExperimentItemExecutionRecord.execution_status.in_(["pending", "queued", "running", "retry_wait"]),
+                    )
+                ).all()
+                for it in active_items:
+                    it.execution_status = "failed"
+                    it.eval_status = "skipped"
+                    it.quality_conclusion = "unknown"
+                    it.execution_error = "Launch execution aborted unexpectedly"
+                    it.completed_at = now
+                    session.execute(
+                        update(ExecutionAttemptRecord)
+                        .where(
+                            ExecutionAttemptRecord.item_execution_id == it.id,
+                            ExecutionAttemptRecord.status == "RUNNING",
+                        )
+                        .values(
+                            status="FAILED",
+                            error_message="Launch execution aborted unexpectedly",
+                            completed_at=now,
+                        )
+                    )
+
                 launch_rec = session.get(ExperimentLaunchRecord, launch_id)
-                if launch_rec and launch_rec.status == "RUNNING":
+                if launch_rec and launch_rec.status in ("PENDING", "RUNNING"):
                     launch_rec.status = "FAILED"
-                    launch_rec.quality_conclusion = "fail"
-                    launch_rec.completed_at = datetime.utcnow()
+                    launch_rec.quality_conclusion = "unknown"
+                    launch_rec.completed_at = now
                     session.commit()
             raise
+

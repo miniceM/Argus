@@ -69,7 +69,7 @@ def test_unified_execution_with_langfuse(client):
         r_run = client.post("/api/v1/experiment-launches/run", json={"launch_id": launch_id})
         assert r_run.status_code == 200
         run_data = r_run.json()
-        assert run_data["status"] == "SUCCEEDED"
+        assert run_data["status"] == "COMPLETED"
         assert run_data["langfuse_sync_status"] == "SYNCED"
         assert run_data["langfuse_experiment_id"] == "lf-exp-999"
         assert run_data["langfuse_experiment_url"] == "http://localhost:3000/project/poc-project/datasets/banking-agent-regression/runs/lf-exp-999"
@@ -109,7 +109,8 @@ def test_unified_execution_langfuse_run_experiment_failure_marks_launch_failed(c
         assert r_run.status_code == 200
         run_data = r_run.json()
         assert run_data["status"] == "FAILED"
-        assert run_data["quality_conclusion"] == "fail"
+        assert run_data["quality_conclusion"] == "unknown"
         assert run_data["langfuse_sync_status"] == "FAILED"
         assert "failed to start" in run_data["langfuse_sync_error"]
+
 

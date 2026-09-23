@@ -209,21 +209,32 @@ def validate_launch_action_allowed(
         raise DomainConflictError(reason)
 
 
+def assert_terminal_launch_invariants(launch_status: str, active_item_count: int) -> None:
+    """Defensive Guard for Invariant 1: Terminal Launch disallows active items.
+    Raises DomainConflictError if a launch is or is being transitioned to a terminal status while active items remain.
+    """
+    st = launch_status.upper()
+    if st in TERMINAL_LAUNCH_STATUSES and active_item_count > 0:
+        raise DomainConflictError(
+            f"Terminal Launch status '{st}' disallows active items (found {active_item_count} active items)"
+        )
+
+
 def aggregate_quality_conclusion(
     quality_counts: dict[str, int] | None,
     total_items: int,
     terminal_fails: int = 0,
 ) -> str:
     """Strictly independent quality conclusion aggregation according to objective truth table:
-    1. Any explicit FAIL or terminal execution failure -> 'fail'
+    1. Any explicit FAIL evaluator outcome -> 'fail'
     2. No FAIL, and ALL necessary items are PASS (denominator not shrunk) -> 'pass'
-    3. Any UNKNOWN, missing, skipped or cancelled -> 'unknown'
+    3. Any UNKNOWN, missing, skipped, timed out or cancelled without evaluation -> 'unknown'
     """
     if total_items == 0:
         return "unknown"
 
     qc = {k.lower(): v for k, v in (quality_counts or {}).items()}
-    if qc.get("fail", 0) > 0 or terminal_fails > 0:
+    if qc.get("fail", 0) > 0:
         return "fail"
     if qc.get("pass", 0) == total_items and total_items > 0:
         return "pass"
@@ -269,4 +280,5 @@ def aggregate_launch_status_from_items(
     term_quality = aggregate_quality_conclusion(quality_counts, total, terminal_fails)
 
     return term_status, term_quality
+
 

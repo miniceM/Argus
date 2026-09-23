@@ -135,7 +135,7 @@ class ExecutionReconciler:
                         .values(
                             execution_status="failed",
                             eval_status="skipped",
-                            quality_conclusion="fail",
+                            quality_conclusion="unknown",
                             final_attempt_id=active_att.id if active_att else None,
                             execution_error=(
                                 "Worker lease expired after request was dispatched. Non-idempotent agent outcome is ambiguous. Automatic retry prohibited."
@@ -240,7 +240,7 @@ class ExecutionReconciler:
                             .values(
                                 execution_status="timed_out",
                                 eval_status="skipped",
-                                quality_conclusion="fail",
+                                quality_conclusion="unknown",
                                 lease_owner=None,
                                 lease_token=None,
                                 lease_expires_at=None,
@@ -341,11 +341,59 @@ class ExecutionReconciler:
         finalized_launch_ids = []
 
         with self.db_mgr.get_session() as session:
+            # 1. Reconcile terminal launches that have active items (Invariant 1)
+            terminal_launches = session.scalars(
+                select(ExperimentLaunchRecord).where(
+                    ExperimentLaunchRecord.status.in_(TERMINAL_LAUNCH_STATUSES)
+                )
+            ).all()
+
+            for t_launch in terminal_launches:
+                active_items = session.scalars(
+                    select(ExperimentItemExecutionRecord)
+                    .where(
+                        ExperimentItemExecutionRecord.launch_id == t_launch.id,
+                        ExperimentItemExecutionRecord.execution_status.in_(["pending", "queued", "running", "retry_wait"]),
+                    )
+                ).all()
+                if not active_items:
+                    continue
+
+                def _is_lease_valid(exp_at: datetime | None) -> bool:
+                    if exp_at is None:
+                        return False
+                    if exp_at.tzinfo is None:
+                        return exp_at > now.replace(tzinfo=None)
+                    return exp_at > now
+
+                has_valid_lease = any(
+                    it.execution_status == "running" and _is_lease_valid(it.lease_expires_at)
+                    for it in active_items
+                )
+                if has_valid_lease:
+                    # Legitimate running task found: revert Launch to RUNNING / CANCELLING
+                    t_launch.status = "CANCELLING" if t_launch.cancel_requested_at else "RUNNING"
+                    t_launch.completed_at = None
+                    t_launch.updated_at = now
+                    updated_count += 1
+                else:
+                    # Converge pending/queued legacy orphans safely to failed / unknown
+                    for it in active_items:
+                        if it.execution_status in ("pending", "queued"):
+                            it.execution_status = "failed"
+                            it.eval_status = "skipped"
+                            it.quality_conclusion = "unknown"
+                            it.execution_error = "Reconciled legacy orphan item without execution"
+                            it.completed_at = now
+                            it.updated_at = now
+                            updated_count += 1
+
             active_launches = session.scalars(
                 select(ExperimentLaunchRecord).where(
                     ExperimentLaunchRecord.status.in_(["RUNNING", "CANCELLING", "QUEUED"])
                 )
             ).all()
+
 
             for launch in active_launches:
                 is_cancelling = bool(launch.cancel_requested_at or launch.status == "CANCELLING")

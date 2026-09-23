@@ -265,7 +265,11 @@ class LaunchService:
             if agent_id:
                 stmt = stmt.where(ExperimentLaunchRecord.agent_id == agent_id)
             if status:
-                stmt = stmt.where(ExperimentLaunchRecord.status == status.upper())
+                normalized_status = status.upper()
+                if normalized_status in ("SUCCEEDED", "COMPLETED"):
+                    stmt = stmt.where(ExperimentLaunchRecord.status.in_(["COMPLETED", "SUCCEEDED"]))
+                else:
+                    stmt = stmt.where(ExperimentLaunchRecord.status == normalized_status)
             if quality_conclusion:
                 stmt = stmt.where(ExperimentLaunchRecord.quality_conclusion == quality_conclusion.lower())
             stmt = stmt.order_by(ExperimentLaunchRecord.created_at.desc())

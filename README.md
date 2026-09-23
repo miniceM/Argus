@@ -305,6 +305,22 @@ make demo
 - FastAPI / OpenAPI Docs: `http://localhost:18080/docs`
 - Langfuse: `http://localhost:3000`
 
+Console 侧边栏的 Langfuse Dashboard 链接使用 `ARGUS_LANGFUSE_DASHBOARD_URL`。本地 Compose 未单独配置时沿用 `NEXTAUTH_URL`；若浏览器访问地址不同，请在 `.env.poc` 中设置该变量。这个浏览器 UI 地址与 Runner 在容器网络内使用的 `LANGFUSE_BASE_URL` 可以不同。远程访问时请配置浏览器实际可达的域名或 IP，不要使用服务器侧的 `localhost`。地址中的 `/langfuse` 等路径前缀会原样保留；Langfuse 及反向代理的子路径部署仍需由部署配置支持。
+
+该变量由 Compose 在创建 Runner 容器时注入；修改配置后需要重新创建容器，单独执行 `docker compose restart` 不会更新容器环境变量。按所用部署方式执行：
+
+```bash
+# 本地全栈（读取 .env.poc）
+docker compose --env-file .env.poc up -d --force-recreate eval-runner
+
+# Langfuse Cloud（读取 .env.cloud）
+docker compose -f docker-compose.cloud.yml --env-file .env.cloud up -d --force-recreate eval-runner
+```
+
+无需重新构建 Console。
+
+使用 Langfuse Cloud 时，在 `.env.cloud` 中同时配置 `LANGFUSE_BASE_URL`（Runner API 地址）和 `ARGUS_LANGFUSE_DASHBOARD_URL`（浏览器 UI 地址），并确保 Dashboard URL 对应所选 Cloud 区域；示例见 [`.env.cloud.example`](./.env.cloud.example)。Cloud Compose 通过 `env_file` 将该配置传给 Runner。
+
 停止环境：
 
 ```bash

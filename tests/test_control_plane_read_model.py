@@ -170,3 +170,111 @@ def test_experiment_launches_query_filters(client):
     data = r_all.json()
     assert isinstance(data, list)
     assert len(data) <= 2
+
+
+def test_langfuse_dashboard_url_validation_contract():
+    import app.config as config
+
+    validator = getattr(config, "validate_langfuse_dashboard_url", None)
+    assert callable(validator), "dashboard URL validator must be implemented in app.config"
+
+    accepted = {
+        " http://localhost:13000 ": "http://localhost:13000",
+        "https://observability.example.com/langfuse": "https://observability.example.com/langfuse",
+        "https://observability.example.com/langfuse/v1/": "https://observability.example.com/langfuse/v1/",
+        "https://observability.example.com/%E4%B8%AD%E6%96%87/": "https://observability.example.com/%E4%B8%AD%E6%96%87/",
+        "http://127.0.0.1:8080": "http://127.0.0.1:8080",
+        "http://[::1]:8080/langfuse": "http://[::1]:8080/langfuse",
+    }
+    for value, expected in accepted.items():
+        assert validator(value) == expected
+
+    rejected = [
+        None,
+        "",
+        "   ",
+        "/langfuse",
+        "//observability.example.com/langfuse",
+        "javascript:alert(1)",
+        "ftp://observability.example.com",
+        "http:///langfuse",
+        "http://user:password@observability.example.com",
+        "https://observability.example.com/path?token=secret",
+        "https://observability.example.com/path#fragment",
+        "https://observability.example.com:invalid",
+        "https://observability.example.com:65536",
+        "https://observability.example.com:/path",
+        "https://[not-ipv6]:8080/path",
+        "https://observability.example.com/path with space",
+        "https://observability.example.com/path\\suffix",
+        "https://observability.example.com/path\nmalicious",
+    ]
+    for value in rejected:
+        assert validator(value) is None, f"expected URL to be rejected: {value!r}"
+
+
+def test_invalid_dashboard_url_logs_without_disclosing_configured_value(monkeypatch, caplog):
+    import logging
+
+    import app.config as config
+
+    secret_url = "https://user:top-secret@observability.example.com/?token=top-secret"
+    monkeypatch.setenv("ARGUS_LANGFUSE_DASHBOARD_URL", secret_url)
+    caplog.set_level(logging.WARNING, logger="app.config")
+
+    assert config._load_langfuse_dashboard_url() is None
+    assert "ARGUS_LANGFUSE_DASHBOARD_URL" in caplog.text
+    assert secret_url not in caplog.text
+    assert "top-secret" not in caplog.text
+
+
+def test_system_info_exposes_only_validated_langfuse_dashboard_url(client, monkeypatch):
+    from types import SimpleNamespace
+
+    import app.api_system as api_system
+
+    monkeypatch.setattr(
+        api_system,
+        "settings",
+        SimpleNamespace(
+            runner_version="0.2.0",
+            environment="staging",
+            build_id="commit-abc1234",
+            langfuse_base_url="http://langfuse-web:3000",
+            argus_langfuse_dashboard_url="https://observability.example.com/langfuse/",
+        ),
+    )
+
+    res = client.get("/api/v1/system/info")
+    assert res.status_code == 200
+    info = res.json()
+    assert info == {
+        "service": "argus-control-plane",
+        "version": "0.2.0",
+        "build_id": "commit-abc1234",
+        "environment": "staging",
+        "langfuse_dashboard_url": "https://observability.example.com/langfuse/",
+    }
+
+
+def test_system_info_dashboard_url_is_null_when_unconfigured_even_if_internal_url_exists(client, monkeypatch):
+    from types import SimpleNamespace
+
+    import app.api_system as api_system
+
+    monkeypatch.setattr(
+        api_system,
+        "settings",
+        SimpleNamespace(
+            runner_version="0.2.0",
+            environment="local",
+            build_id="dev",
+            langfuse_base_url="http://langfuse-web:3000",
+            argus_langfuse_dashboard_url=None,
+        ),
+    )
+
+    res = client.get("/api/v1/system/info")
+    assert res.status_code == 200
+    assert res.json()["langfuse_dashboard_url"] is None
+    assert res.json()["environment"] == "local"

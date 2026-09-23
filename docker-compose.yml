@@ -196,6 +196,7 @@ services:
       LANGFUSE_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:-lf_sk_poc_0123456789abcdef}
       LANGFUSE_BASE_URL: http://langfuse-web:3000
       LANGFUSE_HOST: http://langfuse-web:3000
+      ARGUS_LANGFUSE_DASHBOARD_URL: ${ARGUS_LANGFUSE_DASHBOARD_URL:-${NEXTAUTH_URL:-http://localhost:3000}}
       LANGFUSE_TRACING_ENVIRONMENT: poc
       AGENT_REGISTRY_PATH: /app/config/agents.yaml
       DATASET_SEED_PATH: /app/data/dataset.json

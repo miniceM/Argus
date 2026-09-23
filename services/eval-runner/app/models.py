@@ -60,6 +60,8 @@ class AgentSummaryResponse(BaseModel):
     status: str
     version_count: int = 0
     latest_version: str | None = None
+    launch_count: int = 0
+    active_launch_count: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -73,6 +75,92 @@ class AgentDeleteResponse(BaseModel):
     deleted: bool = Field(default=True, description="Whether the Agent was successfully deleted")
     launches_deleted: int = Field(default=0, description="Number of associated experiment launches cleaned up")
     message: str = Field(default="Agent deleted successfully")
+
+
+class AgentPurgeRequest(BaseModel):
+    agent_id: str = Field(..., description="Agent ID to permanently purge")
+    confirm_name: str = Field(..., description="Exact agent name to confirm irreversible purge")
+
+
+class DomainErrorResponse(BaseModel):
+    code: str = Field(..., description="Machine-readable error code")
+    detail: str = Field(..., description="Human-readable explanation")
+    launch_count: int | None = Field(default=None, description="Associated launch count if applicable")
+    active_launch_count: int | None = Field(default=None, description="Active launch count if applicable")
+
+
+# ---------------------------------------------------------
+# Domain Exceptions with Machine-Readable Codes
+# ---------------------------------------------------------
+class AgentRegistryError(Exception):
+    def __init__(
+        self,
+        message: str,
+        code: str,
+        launch_count: int | None = None,
+        active_launch_count: int | None = None,
+    ):
+        super().__init__(message)
+        self.message = message
+        self.code = code
+        self.launch_count = launch_count
+        self.active_launch_count = active_launch_count
+
+
+class AgentNotFoundError(AgentRegistryError, KeyError):
+    def __init__(self, agent_id: str):
+        super().__init__(
+            message=f"Agent '{agent_id}' not found",
+            code="AGENT_NOT_FOUND",
+        )
+        self.agent_id = agent_id
+
+
+class AgentHasLaunchesError(AgentRegistryError, ValueError):
+    def __init__(self, agent_id: str, launch_count: int, active_launch_count: int = 0):
+        super().__init__(
+            message=(
+                f"无法删除 Agent '{agent_id}'：存在 {launch_count} 条关联的评测记录 (Experiment Launches)。"
+                "为防止误删历史评测数据，如确认清理，请通过 Purge 接口并确认 Agent 全称进行不可逆强制清理。"
+            ),
+            code="AGENT_HAS_LAUNCHES",
+            launch_count=launch_count,
+            active_launch_count=active_launch_count,
+        )
+        self.agent_id = agent_id
+
+
+class AgentHasActiveLaunchesError(AgentRegistryError, ValueError):
+    def __init__(self, agent_id: str, active_summary: str, active_launch_count: int):
+        super().__init__(
+            message=(
+                f"无法删除 Agent '{agent_id}'：存在正在执行或排队中的评测任务（如 {active_summary}）。"
+                "为防止任务执行中产生未定义副作用，请先取消或等待所有关联评测任务结束（状态为 COMPLETED、FAILED、CANCELLED 等终态）后，再进行删除。"
+            ),
+            code="AGENT_HAS_ACTIVE_LAUNCHES",
+            active_launch_count=active_launch_count,
+        )
+        self.agent_id = agent_id
+
+
+class AgentNameMismatchError(AgentRegistryError, ValueError):
+    def __init__(self, agent_id: str, expected_name: str, provided_name: str):
+        super().__init__(
+            message=f"Agent 全称确认不匹配：期望 '{expected_name}'，实际提供 '{provided_name}'",
+            code="AGENT_NAME_MISMATCH",
+        )
+        self.agent_id = agent_id
+        self.expected_name = expected_name
+        self.provided_name = provided_name
+
+
+class AgentConcurrencyError(AgentRegistryError, ValueError):
+    def __init__(self, agent_id: str, reason: str):
+        super().__init__(
+            message=f"Agent '{agent_id}' 并发操作冲突：{reason}",
+            code="AGENT_CONCURRENCY_CONFLICT",
+        )
+        self.agent_id = agent_id
 
 
 

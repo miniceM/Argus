@@ -5,7 +5,8 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import status as http_status
 from sqlalchemy import func, select
 
 from .db import DatabaseManager
@@ -52,7 +53,7 @@ def _enrich_launch(launch: ExperimentLaunchRecord, orchestrator: LaunchOrchestra
 @router.post(
     "/experiment-launches",
     response_model=ExperimentLaunchResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=http_status.HTTP_201_CREATED,
     summary="Create an Experiment Launch with frozen 4D Manifest & Idempotency",
 )
 def create_experiment_launch(
@@ -77,17 +78,17 @@ def create_experiment_launch(
     except ValueError as exc:
         msg = str(exc)
         if "conflict" in msg.lower():
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg) from exc
+            raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail=msg) from exc
         elif "not found" in msg.lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg) from exc
+            raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=msg) from exc
         else:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from exc
+            raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=msg) from exc
 
 
 @router.post(
     "/experiment-launches/{launch_id}/run",
     response_model=ExperimentLaunchRunActionResponse,
-    status_code=status.HTTP_202_ACCEPTED,
+    status_code=http_status.HTTP_202_ACCEPTED,
     summary="Trigger asynchronous execution of a PENDING Experiment Launch",
 )
 def run_launch_async(
@@ -103,12 +104,12 @@ def run_launch_async(
             message="Launch queued for asynchronous execution",
         )
     except DomainConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         msg = str(exc)
         if "not found" in msg.lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg) from exc
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg) from exc
+            raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=msg) from exc
+        raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail=msg) from exc
 
 
 @router.post(
@@ -125,12 +126,12 @@ def cancel_launch(
         launch = orchestrator.cancel_launch(launch_id)
         return _enrich_launch(launch, orchestrator)
     except DomainConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         msg = str(exc)
         if "not found" in msg.lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg) from exc
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from exc
+            raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=msg) from exc
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=msg) from exc
 
 
 @router.post(
@@ -147,12 +148,12 @@ def resume_launch(
         launch = orchestrator.resume_launch(launch_id)
         return _enrich_launch(launch, orchestrator)
     except DomainConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         msg = str(exc)
         if "not found" in msg.lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg) from exc
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from exc
+            raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=msg) from exc
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=msg) from exc
 
 
 @router.post(
@@ -171,14 +172,14 @@ def retry_failed_launch(
         launch = orchestrator.retry_failed_items(launch_id, force=actual_payload.force)
         return _enrich_launch(launch, orchestrator)
     except DomainConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         msg = str(exc)
         if "not found" in msg.lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg) from exc
+            raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=msg) from exc
         if "ambiguous_outcome" in msg.lower() or "unsafe" in msg.lower():
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg) from exc
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from exc
+            raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail=msg) from exc
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=msg) from exc
 
 
 @router.get(
@@ -193,7 +194,7 @@ def get_launch_detail(
     _, _, launch_svc, orchestrator = services
     launch = launch_svc.get_launch(launch_id)
     if not launch:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Launch '{launch_id}' not found")
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=f"Launch '{launch_id}' not found")
     return _enrich_launch(launch, orchestrator)
 
 
@@ -215,7 +216,7 @@ def get_or_list_launches(
     if id:
         launch = launch_svc.get_launch(id)
         if not launch:
-            raise HTTPException(status_code=404, detail=f"Launch '{id}' not found")
+            raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=f"Launch '{id}' not found")
         return _enrich_launch(launch, orchestrator)
     else:
         launches = launch_svc.list_launches(

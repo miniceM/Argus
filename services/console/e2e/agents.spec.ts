@@ -168,17 +168,20 @@ test.describe("E2E-01: Agent Registry & Immutable Version UX Flow", () => {
     await page.getByTitle("显示引用名").click();
     await expect(page.getByText("vault:secrets/agents#key")).toBeVisible();
 
-    // 6. Delete Agent with strong name verification
+    // Mock purge route as well
+    await page.route("**/api/v1/agents/purge**", async (route) => {
+      const body = JSON.parse(route.request().postData() || "{}");
+      agentList = agentList.filter((a) => a.id !== body.agent_id);
+      await route.fulfill({ status: 200, json: { id: body.agent_id, deleted: true, launches_deleted: 1 } });
+    });
+
+    // 6. Delete Agent (since launch_count is 0, normal safe delete applies directly)
     await page.goto(`/agents/${dynamicId}`);
     await page.getByRole("button", { name: "删除 Agent" }).click();
-    await expect(page.getByText("高危：强制删除 Agent")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "删除 Agent" })).toBeVisible();
 
-    // Force delete button disabled before exact name
-    const confirmBtn = page.getByRole("button", { name: "确认强制删除" });
-    await expect(confirmBtn).toBeDisabled();
-
-    // Fill exact name
-    await page.fill(`input[placeholder="请输入 ${dynamicName}"]`, dynamicName);
+    // Normal safe delete button is enabled without needing name confirmation
+    const confirmBtn = page.getByRole("button", { name: "确认删除" });
     await expect(confirmBtn).toBeEnabled();
     await confirmBtn.click();
 

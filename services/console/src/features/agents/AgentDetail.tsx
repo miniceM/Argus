@@ -126,7 +126,7 @@ export const AgentDetail: React.FC = () => {
       )}
 
       {/* Metadata Card */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
         <div>
           <span className="text-xs font-medium text-slate-400 block mb-1">负责人 / 团队</span>
           <span className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
@@ -139,6 +139,17 @@ export const AgentDetail: React.FC = () => {
           <span className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
             <Calendar className="w-4 h-4 text-slate-400" />
             <span>{new Date(agent.created_at).toLocaleString("zh-CN", { hour12: false })}</span>
+          </span>
+        </div>
+        <div>
+          <span className="text-xs font-medium text-slate-400 block mb-1">评测记录</span>
+          <span className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+            <span>{agent.launch_count ?? 0} 次</span>
+            {(agent.active_launch_count ?? 0) > 0 && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                {agent.active_launch_count} 运行中
+              </span>
+            )}
           </span>
         </div>
         <div>
@@ -284,6 +295,8 @@ export const AgentDetail: React.FC = () => {
           id: agent.id,
           name: agent.name,
           version_count: versions?.length ?? agent.version_count,
+          launch_count: agent.launch_count,
+          active_launch_count: agent.active_launch_count,
         }}
         onClose={() => setIsDeleteOpen(false)}
         onSuccess={() => navigate("/agents")}

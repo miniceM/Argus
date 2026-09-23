@@ -16,6 +16,8 @@ export const AgentsList: React.FC = () => {
     id: string;
     name: string;
     version_count?: number;
+    launch_count?: number;
+    active_launch_count?: number;
   } | null>(null);
 
   const { data: agents, isLoading, error, refetch } = useQuery({
@@ -77,6 +79,7 @@ export const AgentsList: React.FC = () => {
                   <th className="px-6 py-3.5">状态</th>
                   <th className="px-6 py-3.5">最新可用版本</th>
                   <th className="px-6 py-3.5">历史版本数</th>
+                  <th className="px-6 py-3.5">评测记录</th>
                   <th className="px-6 py-3.5">更新时间</th>
                   <th className="px-6 py-3.5 text-right">操作</th>
                 </tr>
@@ -102,9 +105,9 @@ export const AgentsList: React.FC = () => {
                       </div>
                     </td>
 
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 text-xs">
                       {agent.owner ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                        <span className="inline-flex items-center gap-1 text-slate-700 font-medium">
                           <User className="w-3.5 h-3.5 text-slate-400" />
                           <span>{agent.owner}</span>
                         </span>
@@ -136,6 +139,17 @@ export const AgentsList: React.FC = () => {
                       </span>
                     </td>
 
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+                        <span>{agent.launch_count ?? 0}</span>
+                        {(agent.active_launch_count ?? 0) > 0 && (
+                          <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                            {agent.active_launch_count} 运行中
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
                     <td className="px-6 py-4 text-xs text-slate-500">
                       {new Date(agent.updated_at).toLocaleString("zh-CN", { hour12: false })}
                     </td>
@@ -158,6 +172,8 @@ export const AgentsList: React.FC = () => {
                               id: agent.id,
                               name: agent.name,
                               version_count: agent.version_count,
+                              launch_count: agent.launch_count,
+                              active_launch_count: agent.active_launch_count,
                             });
                           }}
                           className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"

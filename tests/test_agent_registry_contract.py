@@ -187,8 +187,64 @@ def test_delete_agent_not_found(tmp_path):
         registry.delete_agent("non-existent-agent")
 
 
+def test_agent_summary_includes_launch_and_active_launch_counts(tmp_path):
+    from app.db_models import ExperimentLaunchRecord
+
+    db_file = tmp_path / "summary_counts.db"
+    db_mgr = DatabaseManager(f"sqlite:///{db_file}")
+    MigrationRunner(engine=db_mgr.engine, migrations_dir=ROOT / "migrations").apply_all()
+
+    registry = AgentRegistry(db_mgr)
+    registry.create_agent(agent_id="count-agent", name="Count Agent")
+    ver = registry.create_version(
+        agent_id="count-agent",
+        version="v1",
+        endpoint="http://localhost:8080/invoke",
+    )
+
+    # Initial summary without launches
+    sum_init = registry.get_agent_summary("count-agent")
+    assert sum_init["launch_count"] == 0
+    assert sum_init["active_launch_count"] == 0
+
+    # Add 1 terminal launch, 1 running launch
+    with db_mgr.get_session() as session:
+        l1 = ExperimentLaunchRecord(
+            id="launch-completed",
+            name="L1",
+            agent_id="count-agent",
+            agent_version="v1",
+            agent_version_id=ver.id,
+            dataset_name="banking-reg",
+            status="COMPLETED",
+            manifest={},
+        )
+        l2 = ExperimentLaunchRecord(
+            id="launch-running",
+            name="L2",
+            agent_id="count-agent",
+            agent_version="v1",
+            agent_version_id=ver.id,
+            dataset_name="banking-reg",
+            status="RUNNING",
+            manifest={},
+        )
+        session.add_all([l1, l2])
+        session.commit()
+
+    sum_after = registry.get_agent_summary("count-agent")
+    assert sum_after["launch_count"] == 2
+    assert sum_after["active_launch_count"] == 1
+
+    list_sums = registry.list_agents_summary()
+    assert len(list_sums) == 1
+    assert list_sums[0]["launch_count"] == 2
+    assert list_sums[0]["active_launch_count"] == 1
+
+
 def test_delete_agent_with_launches_rejected_when_not_force(tmp_path):
     from app.db_models import ExperimentLaunchRecord
+    from app.models import AgentHasLaunchesError
 
     db_file = tmp_path / "del_rejected.db"
     db_mgr = DatabaseManager(f"sqlite:///{db_file}")
@@ -210,16 +266,71 @@ def test_delete_agent_with_launches_rejected_when_not_force(tmp_path):
             agent_version="v1",
             agent_version_id=ver.id,
             dataset_name="banking-reg",
+            status="COMPLETED",
             manifest={},
         )
         session.add(launch)
         session.commit()
 
-    with pytest.raises(ValueError, match="关联的评测记录"):
+    with pytest.raises(AgentHasLaunchesError) as exc_info:
         registry.delete_agent("bank-agent", force=False)
+
+    assert exc_info.value.code == "AGENT_HAS_LAUNCHES"
+    assert exc_info.value.launch_count == 1
+    assert "关联的评测记录" in str(exc_info.value)
 
     # Agent still exists
     assert registry.get_agent("bank-agent") is not None
+
+
+def test_delete_agent_force_server_side_name_validation(tmp_path):
+    from app.db_models import ExperimentLaunchRecord
+    from app.models import AgentNameMismatchError
+
+    db_file = tmp_path / "del_name_val.db"
+    db_mgr = DatabaseManager(f"sqlite:///{db_file}")
+    MigrationRunner(engine=db_mgr.engine, migrations_dir=ROOT / "migrations").apply_all()
+
+    registry = AgentRegistry(db_mgr)
+    registry.create_agent(agent_id="secure-agent", name="Secure Banking Agent")
+    ver = registry.create_version(
+        agent_id="secure-agent",
+        version="v1",
+        endpoint="http://localhost:8080/invoke",
+    )
+
+    with db_mgr.get_session() as session:
+        launch = ExperimentLaunchRecord(
+            id="launch-sec",
+            name="Launch Sec",
+            agent_id="secure-agent",
+            agent_version="v1",
+            agent_version_id=ver.id,
+            dataset_name="banking-reg",
+            status="COMPLETED",
+            manifest={},
+        )
+        session.add(launch)
+        session.commit()
+
+    # 1. Missing or wrong name must be rejected with AgentNameMismatchError
+    with pytest.raises(AgentNameMismatchError) as exc1:
+        registry.delete_agent("secure-agent", force=True, confirm_name=None)
+    assert exc1.value.code == "AGENT_NAME_MISMATCH"
+
+    with pytest.raises(AgentNameMismatchError) as exc2:
+        registry.delete_agent("secure-agent", force=True, confirm_name="Secure Banking")
+    assert exc2.value.code == "AGENT_NAME_MISMATCH"
+
+    # Strict match: whitespace mismatch also rejected
+    with pytest.raises(AgentNameMismatchError):
+        registry.delete_agent("secure-agent", force=True, confirm_name=" Secure Banking Agent ")
+
+    # 2. Correct name succeeds via delete_agent(force=True, confirm_name=...) or purge_agent(...)
+    res = registry.purge_agent("secure-agent", confirm_name="Secure Banking Agent")
+    assert res["deleted"] is True
+    assert res["launches_deleted"] == 1
+    assert registry.get_agent("secure-agent") is None
 
 
 def test_delete_agent_force_cleans_launches_and_leaves_langfuse_untouched(tmp_path):
@@ -284,8 +395,8 @@ def test_delete_agent_force_cleans_launches_and_leaves_langfuse_untouched(tmp_pa
         session.add(task)
         session.commit()
 
-    # Perform force delete
-    res = registry.delete_agent("force-agent", force=True)
+    # Perform force delete with confirmed name
+    res = registry.delete_agent("force-agent", force=True, confirm_name="Force Agent")
     assert res["id"] == "force-agent"
     assert res["deleted"] is True
     assert res["launches_deleted"] == 1
@@ -303,6 +414,7 @@ def test_delete_agent_force_cleans_launches_and_leaves_langfuse_untouched(tmp_pa
 
 def test_delete_agent_force_rejects_active_launches(tmp_path):
     from app.db_models import ExperimentLaunchRecord
+    from app.models import AgentHasActiveLaunchesError
 
     db_file = tmp_path / "del_active.db"
     db_mgr = DatabaseManager(f"sqlite:///{db_file}")
@@ -332,8 +444,11 @@ def test_delete_agent_force_rejects_active_launches(tmp_path):
             session.add(launch)
             session.commit()
 
-        with pytest.raises(ValueError, match="正在执行或排队中"):
-            registry.delete_agent("active-agent", force=True)
+        with pytest.raises(AgentHasActiveLaunchesError) as exc_info:
+            registry.delete_agent("active-agent", force=True, confirm_name="Active Agent")
+
+        assert exc_info.value.code == "AGENT_HAS_ACTIVE_LAUNCHES"
+        assert exc_info.value.active_launch_count >= 1
 
         # Confirm agent still exists
         assert registry.get_agent("active-agent") is not None

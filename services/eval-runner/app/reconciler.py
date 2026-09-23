@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import func, select, update
 
@@ -14,7 +16,11 @@ from .langfuse_sync import aggregate_launch_sync_status
 from .limiter import DistributedAgentLimiter
 from .metrics import runtime_metrics
 from .queue import QueueAdapter
-from .state_machine import TERMINAL_LAUNCH_STATUSES, aggregate_launch_status_from_items
+from .state_machine import (
+    TERMINAL_LAUNCH_STATUSES,
+    aggregate_launch_status_from_items,
+    assert_terminal_launch_invariants,
+)
 
 
 class ExecutionReconciler:
@@ -25,10 +31,83 @@ class ExecutionReconciler:
         db_mgr: DatabaseManager,
         queue: QueueAdapter,
         limiter: DistributedAgentLimiter,
+        langfuse_client: Any | Callable[[], Any] | None = None,
     ):
         self.db_mgr = db_mgr
         self.queue = queue
         self.limiter = limiter
+        self._lf_provider = langfuse_client
+
+    @property
+    def langfuse_client(self) -> Any | None:
+        provider = self._lf_provider
+        if provider is None:
+            return None
+        if hasattr(provider, "get_dataset_run") or hasattr(provider, "api"):
+            return provider
+        if callable(provider):
+            try:
+                return provider()
+            except Exception:
+                return None
+        return provider
+
+    @langfuse_client.setter
+    def langfuse_client(self, client: Any | None) -> None:
+        self._lf_provider = client
+
+    def reconcile_legacy_terminal_launch_evidence(self, launch_id: str | None = None) -> int:
+        """Entry point for evidence-first reconciliation of legacy terminal launches."""
+        return self.reconcile_launch_states()
+
+    def _fetch_langfuse_evidence(self, t_launch: ExperimentLaunchRecord) -> dict[str, Any] | None:
+        """Attempts to fetch Langfuse execution evidence for a terminal launch.
+        Returns a dict mapping dataset_item_id -> evidence_item if found, or None.
+        """
+        lf = self.langfuse_client
+        if not lf:
+            return None
+
+        dataset_name = t_launch.dataset_name
+        run_name = t_launch.name
+        run_id = t_launch.langfuse_experiment_id
+
+        # 1. Try get_dataset_run by dataset_name and run_name/run_id
+        for candidate_name in filter(None, [run_name, run_id]):
+            try:
+                run_data = lf.get_dataset_run(dataset_name=dataset_name, run_name=candidate_name)
+                items = getattr(run_data, "dataset_run_items", None) or []
+                res = {}
+                for it in items:
+                    d_id = getattr(it, "dataset_item_id", None)
+                    if d_id:
+                        res[str(d_id)] = it
+                if res:
+                    return res
+            except Exception:
+                pass
+
+        # 2. Try get_dataset_runs list to find matching run
+        if hasattr(lf, "get_dataset_runs"):
+            try:
+                paginated = lf.get_dataset_runs(dataset_name=dataset_name, limit=50)
+                runs = getattr(paginated, "data", []) or []
+                for r in runs:
+                    if (run_id and getattr(r, "id", None) == run_id) or (run_name and getattr(r, "name", None) == run_name):
+                        matched_run_name = getattr(r, "name", None)
+                        if matched_run_name:
+                            run_data = lf.get_dataset_run(dataset_name=dataset_name, run_name=matched_run_name)
+                            items = getattr(run_data, "dataset_run_items", None) or []
+                            if items:
+                                return {
+                                    getattr(it, "dataset_item_id", None): it
+                                    for it in items
+                                    if getattr(it, "dataset_item_id", None)
+                                }
+            except Exception:
+                pass
+
+        return None
 
     def reconcile_all_active_launches(self) -> int:
         """Alias for reconcile_launch_states."""
@@ -135,7 +214,7 @@ class ExecutionReconciler:
                         .values(
                             execution_status="failed",
                             eval_status="skipped",
-                            quality_conclusion="fail",
+                            quality_conclusion="unknown",
                             final_attempt_id=active_att.id if active_att else None,
                             execution_error=(
                                 "Worker lease expired after request was dispatched. Non-idempotent agent outcome is ambiguous. Automatic retry prohibited."
@@ -240,7 +319,7 @@ class ExecutionReconciler:
                             .values(
                                 execution_status="timed_out",
                                 eval_status="skipped",
-                                quality_conclusion="fail",
+                                quality_conclusion="unknown",
                                 lease_owner=None,
                                 lease_token=None,
                                 lease_expires_at=None,
@@ -341,11 +420,135 @@ class ExecutionReconciler:
         finalized_launch_ids = []
 
         with self.db_mgr.get_session() as session:
+            # 1. Reconcile terminal launches that have active items (Invariant 1)
+            terminal_launches = session.scalars(
+                select(ExperimentLaunchRecord).where(
+                    ExperimentLaunchRecord.status.in_(TERMINAL_LAUNCH_STATUSES)
+                )
+            ).all()
+
+            for t_launch in terminal_launches:
+                active_items = session.scalars(
+                    select(ExperimentItemExecutionRecord)
+                    .where(
+                        ExperimentItemExecutionRecord.launch_id == t_launch.id,
+                        ExperimentItemExecutionRecord.execution_status.in_(["pending", "queued", "running", "retry_wait"]),
+                    )
+                ).all()
+                if not active_items:
+                    continue
+
+                def _is_lease_valid(exp_at: datetime | None) -> bool:
+                    if exp_at is None:
+                        return False
+                    if exp_at.tzinfo is None:
+                        return exp_at > now.replace(tzinfo=None)
+                    return exp_at > now
+
+                has_valid_lease = any(
+                    it.execution_status == "running" and _is_lease_valid(it.lease_expires_at)
+                    for it in active_items
+                )
+                if has_valid_lease:
+                    # Legitimate running task found: revert Launch to RUNNING / CANCELLING
+                    t_launch.status = "CANCELLING" if t_launch.cancel_requested_at else "RUNNING"
+                    t_launch.completed_at = None
+                    t_launch.updated_at = now
+                    updated_count += 1
+                else:
+                    # 1. Evidence-first: attempt to fetch Langfuse evidence for this terminal launch
+                    evidence_map = self._fetch_langfuse_evidence(t_launch)
+
+                    target_status = (
+                        "cancelled"
+                        if (t_launch.status == "CANCELLED" or t_launch.cancel_requested_at)
+                        else "failed"
+                    )
+                    for it in active_items:
+                        item_evidence = evidence_map.get(it.dataset_item_id) if evidence_map else None
+                        if item_evidence is not None and target_status != "cancelled":
+                            # Evidence Found: Recover legitimate historical execution facts!
+                            it.execution_status = "succeeded"
+                            it.eval_status = "succeeded"
+                            it.trace_id = getattr(item_evidence, "trace_id", None) or it.trace_id
+                            if t_launch.quality_conclusion in ("pass", "fail"):
+                                it.quality_conclusion = t_launch.quality_conclusion
+                            else:
+                                it.quality_conclusion = "pass"
+                            it.execution_error = None
+                            it.eval_error = None
+                        else:
+                            # Fallback: Converge active orphans without evidence to failed / unknown
+                            it.execution_status = target_status
+                            it.eval_status = "skipped"
+                            it.quality_conclusion = "unknown"
+                            it.execution_error = "Reconciled legacy orphan item without execution (no Langfuse evidence)"
+
+                        it.lease_owner = None
+                        it.lease_token = None
+                        it.lease_expires_at = None
+                        it.completed_at = now
+                        it.updated_at = now
+
+                        att_status = (
+                            "CANCELLED"
+                            if target_status == "cancelled"
+                            else ("COMPLETED" if it.execution_status == "succeeded" else "FAILED")
+                        )
+                        session.execute(
+                            update(ExecutionAttemptRecord)
+                            .where(
+                                ExecutionAttemptRecord.item_execution_id == it.id,
+                                ExecutionAttemptRecord.status == "RUNNING",
+                            )
+                            .values(
+                                status=att_status,
+                                error_message=None if att_status == "COMPLETED" else "Reconciled orphan attempt",
+                                completed_at=now,
+                            )
+                        )
+                        updated_count += 1
+
+                    session.flush()
+
+                    # Re-aggregate Launch status and quality from all items to maintain Invariants 2 & 3
+                    counts_res = session.execute(
+                        select(
+                            ExperimentItemExecutionRecord.execution_status,
+                            func.count(ExperimentItemExecutionRecord.id),
+                        )
+                        .where(ExperimentItemExecutionRecord.launch_id == t_launch.id)
+                        .group_by(ExperimentItemExecutionRecord.execution_status)
+                    ).all()
+                    counts = {row[0].lower(): row[1] for row in counts_res}
+
+                    quality_res = session.execute(
+                        select(
+                            ExperimentItemExecutionRecord.quality_conclusion,
+                            func.count(ExperimentItemExecutionRecord.id),
+                        )
+                        .where(ExperimentItemExecutionRecord.launch_id == t_launch.id)
+                        .group_by(ExperimentItemExecutionRecord.quality_conclusion)
+                    ).all()
+                    quality_counts = {row[0].lower(): row[1] for row in quality_res}
+
+                    term_status, term_quality = aggregate_launch_status_from_items(counts, quality_counts)
+                    t_launch.status = term_status
+                    t_launch.quality_conclusion = term_quality
+                    t_launch.updated_at = now
+
+                    active_cnt = sum(
+                        counts.get(s, 0)
+                        for s in ("pending", "queued", "running", "retry_wait")
+                    )
+                    assert_terminal_launch_invariants(term_status, active_item_count=active_cnt)
+
             active_launches = session.scalars(
                 select(ExperimentLaunchRecord).where(
                     ExperimentLaunchRecord.status.in_(["RUNNING", "CANCELLING", "QUEUED"])
                 )
             ).all()
+
 
             for launch in active_launches:
                 is_cancelling = bool(launch.cancel_requested_at or launch.status == "CANCELLING")

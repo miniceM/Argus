@@ -5,13 +5,11 @@ import json
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
 from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException
 from langfuse import get_client
-from opentelemetry.propagate import inject
 
 from .api_evaluators import router as evaluators_router
 from .api_launches import router as launches_router
@@ -19,18 +17,16 @@ from .api_registry import router as registry_router
 from .api_system import router as system_router
 from .config import find_path, settings
 from .db import DatabaseManager, MigrationRunner
-from .db_models import ExperimentLaunchRecord
-from .evaluators import default_evaluator_registry
-from .executor import RemoteAgentExecutor
+from .execution import LaunchExecutionService
 from .langfuse_sync import LangfuseOutboxSyncer
 from .limiter import DistributedAgentLimiter, MemoryAgentLimiter, RedisDistributedLimiter
-from .manifest import LaunchService, acquire_launch_execution
+from .manifest import LaunchService
 from .metrics import metrics_router
 from .models import BootstrapResult, ExperimentRequest, ExperimentResult
 from .orchestrator import LaunchOrchestrator
 from .queue import MemoryQueueAdapter, QueueAdapter, RedisStreamQueueAdapter
 from .reconciler import ExecutionReconciler
-from .registry import AgentRegistry, map_request
+from .registry import AgentRegistry
 from .worker import ExecutionWorker
 
 # 1. Initialize Database Manager & Migrations
@@ -93,7 +89,7 @@ def _client():
 # 4. Initialize Orchestrator, Worker, Reconciler, OutboxSyncer
 orchestrator = LaunchOrchestrator(db_manager, queue_adapter, limiter)
 worker = ExecutionWorker(db_manager, queue_adapter, limiter)
-reconciler = ExecutionReconciler(db_manager, queue_adapter, limiter)
+reconciler = ExecutionReconciler(db_manager, queue_adapter, limiter, langfuse_client=_client)
 outbox_syncer = LangfuseOutboxSyncer(db_manager, langfuse_client=_client)
 
 # 5. Initialize Launch Service
@@ -200,6 +196,8 @@ app.include_router(evaluators_router)
 app.include_router(system_router)
 app.include_router(metrics_router)
 
+# Remote Experiment and W3C trace propagation contract: inject(headers) handled in LaunchExecutionService
+
 
 
 
@@ -302,14 +300,15 @@ def bootstrap() -> BootstrapResult:
 
 
 @app.post("/experiments/run", response_model=ExperimentResult)
-def run_experiment(request: ExperimentRequest) -> ExperimentResult:
+async def run_experiment(request: ExperimentRequest) -> ExperimentResult:
     launch_id = str(uuid.uuid4())
     try:
-        _wait_for_langfuse()
+        # Pre-validate agent existence according to legacy contract (raises KeyError -> 404)
+        registry.get(request.agent_id, request.agent_version)
+
+        await asyncio.to_thread(_wait_for_langfuse)
         lf = _client()
-        spec = registry.get(request.agent_id, request.agent_version)
-        dataset = lf.get_dataset(request.dataset_name)
-        executor = RemoteAgentExecutor(spec)
+        dataset = await asyncio.to_thread(lf.get_dataset, request.dataset_name) if lf else None
         experiment_name = request.experiment_name or f"{request.agent_id}-{request.agent_version}"
 
         # Legacy experiment evaluator set: 5 item evaluators + 1 run evaluator
@@ -335,140 +334,33 @@ def run_experiment(request: ExperimentRequest) -> ExperimentResult:
             dataset_client=dataset,
             allow_run_scope=True,
         )
-        launch_id = persisted.id
-        acquire_launch_execution(db_manager, launch_id)
 
-        # Execution core derives exact item and run evaluators from frozen manifest
-        frozen_eval_specs = persisted.manifest.get("evaluators", [])
-        frozen_item_evaluators = [
-            default_evaluator_registry.get_evaluator_fn(ev["id"], ev.get("version"))
-            for ev in frozen_eval_specs
-            if ev.get("scope", "item") == "item"
-        ]
-        frozen_run_evaluators = [
-            default_evaluator_registry.get_evaluator_fn(ev["id"], ev.get("version"))
-            for ev in frozen_eval_specs
-            if ev.get("scope") == "run"
-        ]
-        effective_max_concurrency = persisted.manifest["execution_policy"]["max_concurrency"]
+        # Delegate execution to the unified LaunchExecutionService
+        svc = LaunchExecutionService(db_manager, registry)
+        outcome = await svc.execute_launch(persisted.id, dataset_client=dataset)
 
-        async def remote_task(*, item: Any, **_: Any) -> dict[str, Any]:
-            payload = map_request(item.input, spec.request_mapping)
-            headers = {
-                "Content-Type": "application/json",
-                "X-Eval-Launch-Id": launch_id,
-                "X-Eval-Dataset-Item-Id": str(item.id),
-                "X-Eval-Agent-Version": spec.version,
-            }
-
-            with lf.start_as_current_observation(
-                as_type="tool",
-                name="remote-agent-http",
-                input={"agent": f"{spec.agent_id}:{spec.version}", "request": payload},
-                metadata={"endpoint": spec.endpoint, "execution_mode": "SYNC_HTTP"},
-            ) as call_observation:
-                inject(headers)
-                result = await executor.invoke(payload, headers)
-                call_observation.update(
-                    output=result.body,
-                    metadata={
-                        "endpoint": spec.endpoint,
-                        "http_status": result.status_code,
-                        "attempts": result.attempts,
-                        "duration_ms": result.duration_ms,
-                        "trace_context_received": result.trace_context_received,
-                    },
-                )
-                return result.body
-
-        result = dataset.run_experiment(
-            name=experiment_name,
-            description=(
-                "Remote Agent Evaluation PoC: Langfuse is the system of record; "
-                "the runner calls an existing agent endpoint without adding evaluation code to the agent."
-            ),
-            task=remote_task,
-            evaluators=frozen_item_evaluators,
-            run_evaluators=frozen_run_evaluators,
-            max_concurrency=effective_max_concurrency,
-            metadata={
-                "launch_id": launch_id,
-                "agent_id": spec.agent_id,
-                "agent_version": spec.version,
-                "runner_version": settings.runner_version,
-                "execution_mode": "SYNC_HTTP",
-            },
-        )
-        lf.flush()
-        summary = _safe_summary(result)
-
-        # Mark launch completed and synced to Langfuse in Argus DB
-        try:
-            with db_manager.get_session() as session:
-                rec = session.get(ExperimentLaunchRecord, launch_id)
-                if rec:
-                    rec.status = "SUCCEEDED"
-                    run_scores = summary.get("run_scores", {})
-                    pass_rate = run_scores.get("overall_pass_rate")
-                    if pass_rate is not None:
-                        # Extract threshold from frozen run_pass_rate evaluator
-                        run_threshold = 1.0
-                        for ev in frozen_eval_specs:
-                            if ev.get("id") == "run_pass_rate":
-                                run_threshold = float(ev.get("threshold", 1.0))
-                                break
-                        rec.quality_conclusion = "pass" if float(pass_rate) >= run_threshold else "fail"
-                    else:
-                        rec.quality_conclusion = "unknown"
-                    run_id = (
-                        getattr(result, "experiment_id", None)
-                        or getattr(result, "dataset_run_id", None)
-                        or getattr(result, "id", None)
-                        or summary.get("experiment_id")
-                        or summary.get("dataset_run_id")
-                    )
-                    rec.langfuse_experiment_id = str(run_id) if run_id else None
-                    rec.langfuse_sync_status = "SYNCED"
-                    rec.langfuse_sync_error = None
-                    rec.completed_at = datetime.utcnow()
-                    session.commit()
-        except Exception:
-            pass
+        summary = outcome.result_summary or {}
+        if not summary.get("dataset_run_url") and outcome.dataset_run_url:
+            summary["dataset_run_url"] = outcome.dataset_run_url
+        if not summary.get("experiment_id") and outcome.langfuse_experiment_id:
+            summary["experiment_id"] = outcome.langfuse_experiment_id
 
         return ExperimentResult(
-            launch_id=launch_id,
-            agent_id=spec.agent_id,
-            agent_version=spec.version,
-            experiment_name=experiment_name,
-            dataset_run_url=summary.get("dataset_run_url"),
+            launch_id=persisted.id,
+            agent_id=persisted.agent_id,
+            agent_version=persisted.agent_version,
+            experiment_name=persisted.name,
+            dataset_run_url=outcome.dataset_run_url or summary.get("dataset_run_url"),
             result=summary,
         )
     except KeyError as exc:
-        try:
-            with db_manager.get_session() as session:
-                rec = session.get(ExperimentLaunchRecord, launch_id)
-                if rec and rec.status in ("PENDING", "RUNNING"):
-                    rec.status = "FAILED"
-                    rec.quality_conclusion = "fail"
-                    rec.langfuse_sync_status = "FAILED"
-                    rec.langfuse_sync_error = str(exc)
-                    rec.completed_at = datetime.utcnow()
-                    session.commit()
-        except Exception:
-            pass
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        msg = str(exc)
+        if "not found" in msg.lower() or "archived" in msg.lower() or "inactive" in msg.lower():
+            raise HTTPException(status_code=404, detail=msg) from exc
+        raise HTTPException(status_code=400, detail=msg) from exc
     except Exception as exc:
-        try:
-            with db_manager.get_session() as session:
-                rec = session.get(ExperimentLaunchRecord, launch_id)
-                if rec and rec.status in ("PENDING", "RUNNING"):
-                    rec.status = "FAILED"
-                    rec.quality_conclusion = "fail"
-                    rec.langfuse_sync_status = "FAILED"
-                    rec.langfuse_sync_error = str(exc)
-                    rec.completed_at = datetime.utcnow()
-                    session.commit()
-        except Exception:
-            pass
         raise HTTPException(status_code=500, detail=f"experiment failed: {exc}") from exc
+
 

@@ -536,7 +536,9 @@ async def run_launch_synchronously(
     from .execution import LaunchExecutionService
 
     svc = LaunchExecutionService(db_mgr, registry, gather_fn=asyncio.gather)
-    return await svc.execute_launch(launch_id)
+    outcome = await svc.execute_launch(launch_id)
+    return outcome.launch
+
 
 
 

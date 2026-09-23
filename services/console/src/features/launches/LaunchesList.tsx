@@ -110,7 +110,7 @@ export const LaunchesList: React.FC = () => {
           <option value="QUEUED">QUEUED (队列中)</option>
           <option value="RUNNING">RUNNING (运行中)</option>
           <option value="RETRY_WAIT">RETRY_WAIT (重试等待)</option>
-          <option value="SUCCEEDED">SUCCEEDED (成功)</option>
+          <option value="COMPLETED">COMPLETED (已完成)</option>
           <option value="PARTIAL_FAILED">PARTIAL_FAILED (部分失败)</option>
           <option value="FAILED">FAILED (失败)</option>
           <option value="CANCELLING">CANCELLING (取消中)</option>

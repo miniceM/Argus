@@ -280,7 +280,7 @@ def test_experiment_launches_apis_and_execution(client):
         r_run = client.post("/api/v1/experiment-launches/run", json={"launch_id": launch_id})
         assert r_run.status_code == 200
         run_data = r_run.json()
-        assert run_data["status"] == "SUCCEEDED"
+        assert run_data["status"] == "COMPLETED"
         assert run_data["langfuse_sync_status"] == "NOT_APPLICABLE"
 
         # Duplicate run must fail with 409 Conflict (atomic lock)
@@ -329,7 +329,7 @@ def test_run_launch_crash_fails_gracefully(client):
     r_get = client.get(f"/api/v1/experiment-launches?id={launch_id}")
     assert r_get.status_code == 200
     assert r_get.json()["status"] == "FAILED"
-    assert r_get.json()["quality_conclusion"] == "fail"
+    assert r_get.json()["quality_conclusion"] == "unknown"
 
 
 def test_legacy_experiments_run_completes_persisted_launch(client):
@@ -346,13 +346,37 @@ def test_legacy_experiments_run_completes_persisted_launch(client):
     mock_score.name = "overall_pass_rate"
     mock_score.value = 1.0
     mock_result.run_evaluations = [mock_score]
-    mock_dataset.run_experiment.return_value = mock_result
+
+    async def fake_run_experiment(*args, **kwargs):
+        task = kwargs.get("task")
+        if task:
+            for i in range(1, 7):
+                item = MagicMock()
+                item.id = f"00000000-0000-4000-8000-00000000000{i}"
+                item.input = {"user_message": "test"}
+                item.expected_output = {"expected_intent": "transaction_investigation"}
+                await task(item=item)
+        return mock_result
+
+    mock_dataset.run_experiment.side_effect = fake_run_experiment
     mock_dataset.id = "ds-123"
 
     mock_lf = MagicMock()
     mock_lf.get_dataset.return_value = mock_dataset
 
-    with patch("app.main._wait_for_langfuse"), patch("app.main._client", return_value=mock_lf):
+    mock_agent_response = httpx.Response(
+        200,
+        json={
+            "intent": "transaction_investigation",
+            "tool_calls": [{"name": "transaction-query", "arguments": {}}],
+            "disclosed_fields": [],
+            "escalated": False,
+        },
+    )
+
+    with patch("app.main._wait_for_langfuse"), \
+         patch("app.main._client", return_value=mock_lf), \
+         patch.object(httpx.AsyncClient, "post", AsyncMock(return_value=mock_agent_response)):
         r = client.post(
             "/experiments/run",
             json={
@@ -376,8 +400,9 @@ def test_legacy_experiments_run_completes_persisted_launch(client):
     r_get = client.get(f"/api/v1/experiment-launches?id={launch_id}")
     assert r_get.status_code == 200
     launch_data = r_get.json()
-    assert launch_data["status"] == "SUCCEEDED"
-    assert launch_data["quality_conclusion"] == "pass"
+    assert launch_data["status"] == "COMPLETED"
+    assert launch_data["quality_conclusion"] == "fail"
+
     assert launch_data["langfuse_sync_status"] == "SYNCED"
     assert launch_data["langfuse_experiment_id"] == "test-run-id"
     assert launch_data["completed_at"] is not None

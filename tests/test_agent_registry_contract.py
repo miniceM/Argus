@@ -250,6 +250,7 @@ def test_delete_agent_force_cleans_launches_and_leaves_langfuse_untouched(tmp_pa
             agent_version="v1",
             agent_version_id=ver.id,
             dataset_name="banking-reg",
+            status="COMPLETED",
             manifest={},
         )
         session.add(launch)
@@ -298,4 +299,48 @@ def test_delete_agent_force_cleans_launches_and_leaves_langfuse_untouched(tmp_pa
         assert session.get(ExperimentItemExecutionRecord, "item-force-1") is None
         assert session.get(ExecutionAttemptRecord, "att-force-1") is None
         assert session.get(LangfuseSyncTaskRecord, "sync-force-1") is None
+
+
+def test_delete_agent_force_rejects_active_launches(tmp_path):
+    from app.db_models import ExperimentLaunchRecord
+
+    db_file = tmp_path / "del_active.db"
+    db_mgr = DatabaseManager(f"sqlite:///{db_file}")
+    MigrationRunner(engine=db_mgr.engine, migrations_dir=ROOT / "migrations").apply_all()
+
+    registry = AgentRegistry(db_mgr)
+    registry.create_agent(agent_id="active-agent", name="Active Agent")
+    ver = registry.create_version(
+        agent_id="active-agent",
+        version="v1",
+        endpoint="http://localhost:8080/invoke",
+    )
+
+    # Test each active status: PENDING, QUEUED, RUNNING, CANCELLING
+    for active_status in ("PENDING", "QUEUED", "RUNNING", "CANCELLING"):
+        with db_mgr.get_session() as session:
+            launch = ExperimentLaunchRecord(
+                id=f"launch-{active_status.lower()}",
+                name=f"Launch {active_status}",
+                agent_id="active-agent",
+                agent_version="v1",
+                agent_version_id=ver.id,
+                dataset_name="banking-reg",
+                status=active_status,
+                manifest={},
+            )
+            session.add(launch)
+            session.commit()
+
+        with pytest.raises(ValueError, match="正在执行或排队中"):
+            registry.delete_agent("active-agent", force=True)
+
+        # Confirm agent still exists
+        assert registry.get_agent("active-agent") is not None
+
+        # Clean up this launch record for testing next status
+        with db_mgr.get_session() as session:
+            rec = session.get(ExperimentLaunchRecord, f"launch-{active_status.lower()}")
+            session.delete(rec)
+            session.commit()
 

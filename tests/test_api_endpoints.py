@@ -142,7 +142,17 @@ def test_delete_agent_api_force_and_conflict(client):
     assert r_del_no_force.status_code == 409
     assert "关联的评测记录" in r_del_no_force.json()["detail"]
 
-    # 4. Force delete must succeed and return 200
+    # 4. Force delete on active launch (status: PENDING) must be rejected with 409 Conflict
+    r_del_active_force = client.delete("/api/v1/agents?id=conflict-agent&force=true")
+    assert r_del_active_force.status_code == 409
+    assert "正在执行或排队中" in r_del_active_force.json()["detail"]
+
+    # 5. Cancel the active launch so it reaches a terminal status (CANCELLED)
+    r_cancel = client.post(f"/api/v1/experiment-launches/{launch_id}/cancel")
+    assert r_cancel.status_code == 200
+    assert r_cancel.json()["status"] == "CANCELLED"
+
+    # 6. Force delete after launches are terminal must succeed and return 200
     r_del_force = client.delete("/api/v1/agents?id=conflict-agent&force=true")
     assert r_del_force.status_code == 200
     force_data = r_del_force.json()

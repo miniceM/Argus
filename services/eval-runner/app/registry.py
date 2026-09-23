@@ -19,6 +19,7 @@ from .db_models import (
     ExperimentLaunchRecord,
     LangfuseSyncTaskRecord,
 )
+from .state_machine import TERMINAL_LAUNCH_STATUSES
 
 
 def compute_spec_digest(spec_dict: dict[str, Any]) -> str:
@@ -228,6 +229,17 @@ class AgentRegistry:
                     raise ValueError(
                         f"无法删除 Agent '{agent_id}'：存在 {launch_count} 条关联的评测记录 (Experiment Launches)。"
                         "为防止误删历史评测数据，如确认清理，请开启强制删除并确认 Agent 全称。"
+                    )
+
+                # Check for active (non-terminal) launches
+                active_launches = [launch for launch in launches if launch.status not in TERMINAL_LAUNCH_STATUSES]
+                if active_launches:
+                    active_summary = ", ".join(f"'{launch.id}' ({launch.status})" for launch in active_launches[:3])
+                    if len(active_launches) > 3:
+                        active_summary += f" 等共 {len(active_launches)} 个任务"
+                    raise ValueError(
+                        f"无法删除 Agent '{agent_id}'：存在正在执行或排队中的评测任务（如 {active_summary}）。"
+                        "为防止任务执行中产生未定义副作用，请先取消或等待所有关联评测任务结束（状态为 COMPLETED、FAILED、CANCELLED 等终态）后，再进行强制删除。"
                     )
 
                 # Force delete: clean launches and their dependent records in local DB only.

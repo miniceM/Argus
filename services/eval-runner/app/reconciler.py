@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import func, select, update
 
@@ -29,10 +31,83 @@ class ExecutionReconciler:
         db_mgr: DatabaseManager,
         queue: QueueAdapter,
         limiter: DistributedAgentLimiter,
+        langfuse_client: Any | Callable[[], Any] | None = None,
     ):
         self.db_mgr = db_mgr
         self.queue = queue
         self.limiter = limiter
+        self._lf_provider = langfuse_client
+
+    @property
+    def langfuse_client(self) -> Any | None:
+        provider = self._lf_provider
+        if provider is None:
+            return None
+        if hasattr(provider, "get_dataset_run") or hasattr(provider, "api"):
+            return provider
+        if callable(provider):
+            try:
+                return provider()
+            except Exception:
+                return None
+        return provider
+
+    @langfuse_client.setter
+    def langfuse_client(self, client: Any | None) -> None:
+        self._lf_provider = client
+
+    def reconcile_legacy_terminal_launch_evidence(self, launch_id: str | None = None) -> int:
+        """Entry point for evidence-first reconciliation of legacy terminal launches."""
+        return self.reconcile_launch_states()
+
+    def _fetch_langfuse_evidence(self, t_launch: ExperimentLaunchRecord) -> dict[str, Any] | None:
+        """Attempts to fetch Langfuse execution evidence for a terminal launch.
+        Returns a dict mapping dataset_item_id -> evidence_item if found, or None.
+        """
+        lf = self.langfuse_client
+        if not lf:
+            return None
+
+        dataset_name = t_launch.dataset_name
+        run_name = t_launch.name
+        run_id = t_launch.langfuse_experiment_id
+
+        # 1. Try get_dataset_run by dataset_name and run_name/run_id
+        for candidate_name in filter(None, [run_name, run_id]):
+            try:
+                run_data = lf.get_dataset_run(dataset_name=dataset_name, run_name=candidate_name)
+                items = getattr(run_data, "dataset_run_items", None) or []
+                res = {}
+                for it in items:
+                    d_id = getattr(it, "dataset_item_id", None)
+                    if d_id:
+                        res[str(d_id)] = it
+                if res:
+                    return res
+            except Exception:
+                pass
+
+        # 2. Try get_dataset_runs list to find matching run
+        if hasattr(lf, "get_dataset_runs"):
+            try:
+                paginated = lf.get_dataset_runs(dataset_name=dataset_name, limit=50)
+                runs = getattr(paginated, "data", []) or []
+                for r in runs:
+                    if (run_id and getattr(r, "id", None) == run_id) or (run_name and getattr(r, "name", None) == run_name):
+                        matched_run_name = getattr(r, "name", None)
+                        if matched_run_name:
+                            run_data = lf.get_dataset_run(dataset_name=dataset_name, run_name=matched_run_name)
+                            items = getattr(run_data, "dataset_run_items", None) or []
+                            if items:
+                                return {
+                                    getattr(it, "dataset_item_id", None): it
+                                    for it in items
+                                    if getattr(it, "dataset_item_id", None)
+                                }
+            except Exception:
+                pass
+
+        return None
 
     def reconcile_all_active_launches(self) -> int:
         """Alias for reconcile_launch_states."""
@@ -381,22 +456,45 @@ class ExecutionReconciler:
                     t_launch.updated_at = now
                     updated_count += 1
                 else:
-                    # Converge all active legacy orphans safely to terminal (failed or cancelled)
+                    # 1. Evidence-first: attempt to fetch Langfuse evidence for this terminal launch
+                    evidence_map = self._fetch_langfuse_evidence(t_launch)
+
                     target_status = (
                         "cancelled"
                         if (t_launch.status == "CANCELLED" or t_launch.cancel_requested_at)
                         else "failed"
                     )
                     for it in active_items:
-                        it.execution_status = target_status
-                        it.eval_status = "skipped"
-                        it.quality_conclusion = "unknown"
-                        it.execution_error = "Reconciled legacy orphan item without execution"
+                        item_evidence = evidence_map.get(it.dataset_item_id) if evidence_map else None
+                        if item_evidence is not None and target_status != "cancelled":
+                            # Evidence Found: Recover legitimate historical execution facts!
+                            it.execution_status = "succeeded"
+                            it.eval_status = "succeeded"
+                            it.trace_id = getattr(item_evidence, "trace_id", None) or it.trace_id
+                            if t_launch.quality_conclusion in ("pass", "fail"):
+                                it.quality_conclusion = t_launch.quality_conclusion
+                            else:
+                                it.quality_conclusion = "pass"
+                            it.execution_error = None
+                            it.eval_error = None
+                        else:
+                            # Fallback: Converge active orphans without evidence to failed / unknown
+                            it.execution_status = target_status
+                            it.eval_status = "skipped"
+                            it.quality_conclusion = "unknown"
+                            it.execution_error = "Reconciled legacy orphan item without execution (no Langfuse evidence)"
+
                         it.lease_owner = None
                         it.lease_token = None
                         it.lease_expires_at = None
                         it.completed_at = now
                         it.updated_at = now
+
+                        att_status = (
+                            "CANCELLED"
+                            if target_status == "cancelled"
+                            else ("COMPLETED" if it.execution_status == "succeeded" else "FAILED")
+                        )
                         session.execute(
                             update(ExecutionAttemptRecord)
                             .where(
@@ -404,8 +502,8 @@ class ExecutionReconciler:
                                 ExecutionAttemptRecord.status == "RUNNING",
                             )
                             .values(
-                                status="CANCELLED" if target_status == "cancelled" else "FAILED",
-                                error_message="Reconciled orphan attempt",
+                                status=att_status,
+                                error_message=None if att_status == "COMPLETED" else "Reconciled orphan attempt",
                                 completed_at=now,
                             )
                         )

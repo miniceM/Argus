@@ -483,3 +483,114 @@ def test_legacy_api_filter_succeeded_maps_to_completed(client):
     found = next(launch_item for launch_item in launches if launch_item["id"] == lid)
     assert found["status"] == "COMPLETED"
 
+
+def test_legacy_experiments_run_unknown_agent_returns_404(client):
+    """测试 10 (Review Blocker 2):
+    /experiments/run 请求未知的 agent_id 或 agent_version 时，
+    必须保持旧契约返回 404 Not Found，严禁抛 500。
+    """
+    with patch("app.main._wait_for_langfuse"), patch("app.main._client"):
+        r = client.post(
+            "/experiments/run",
+            json={
+                "agent_id": "non-existent-agent",
+                "agent_version": "v999",
+                "dataset_name": "banking-agent-regression",
+            },
+        )
+        assert r.status_code == 404
+
+
+def test_reconcile_legacy_terminal_launch_with_langfuse_evidence(setup_runtime):
+    """测试 11 (Review Blocker 1):
+    当历史 Launch 处于 COMPLETED / PASS，包含 pending 孤儿 Item，
+    但 Langfuse 中存在该 Run 真实执行成功的证据时：
+    1. Reconciler 必须按 dataset_item_id 恢复真实历史事实为 succeeded / pass；
+    2. Launch 保持 COMPLETED / PASS，进度恢复为 100%；
+    3. 严禁把历史真实成功结果误改为 failed / unknown。
+    """
+    db_mgr, queue, limiter, orchestrator, worker, reconciler = setup_runtime
+
+    launch_id = f"launch-evidence-{uuid.uuid4().hex[:8]}"
+    item_exec_id_1 = f"item-evidence-1-{uuid.uuid4().hex[:8]}"
+    item_exec_id_2 = f"item-evidence-2-{uuid.uuid4().hex[:8]}"
+
+    with db_mgr.get_session() as session:
+        l_rec = ExperimentLaunchRecord(
+            id=launch_id,
+            name="banking-agent-regression",
+            dataset_name="banking-agent-regression",
+            agent_id="test-agent",
+            agent_version="v1",
+            agent_version_id="test-agent-v1",
+            status="COMPLETED",
+            quality_conclusion="pass",
+            langfuse_experiment_id="exp-history-123",
+            manifest={},
+        )
+        session.add(l_rec)
+
+        # 孤儿 1: pending
+        session.add(
+            ExperimentItemExecutionRecord(
+                id=item_exec_id_1,
+                launch_id=launch_id,
+                dataset_item_id="ds-item-1",
+                execution_status="pending",
+                eval_status="pending",
+                quality_conclusion="unknown",
+            )
+        )
+        # 孤儿 2: pending
+        session.add(
+            ExperimentItemExecutionRecord(
+                id=item_exec_id_2,
+                launch_id=launch_id,
+                dataset_item_id="ds-item-2",
+                execution_status="pending",
+                eval_status="pending",
+                quality_conclusion="unknown",
+            )
+        )
+
+    # 构造 mock Langfuse client，提供该 Run 的历史证据
+    mock_run_item_1 = MagicMock()
+    mock_run_item_1.dataset_item_id = "ds-item-1"
+    mock_run_item_1.trace_id = "trace-ds-1"
+
+    mock_run_item_2 = MagicMock()
+    mock_run_item_2.dataset_item_id = "ds-item-2"
+    mock_run_item_2.trace_id = "trace-ds-2"
+
+    mock_run = MagicMock()
+    mock_run.dataset_run_items = [mock_run_item_1, mock_run_item_2]
+
+    mock_lf = MagicMock()
+    mock_lf.get_dataset_run.return_value = mock_run
+
+    reconciler.langfuse_client = mock_lf
+
+    # 运行带有证据的历史对账
+    if hasattr(reconciler, "reconcile_legacy_terminal_launch_evidence"):
+        reconciler.reconcile_legacy_terminal_launch_evidence()
+    else:
+        reconciler.reconcile_launch_states()
+
+    with db_mgr.get_session() as session:
+        it1 = session.get(ExperimentItemExecutionRecord, item_exec_id_1)
+        it2 = session.get(ExperimentItemExecutionRecord, item_exec_id_2)
+        # 必须根据证据精准恢复为 succeeded / pass
+        assert it1.execution_status == "succeeded"
+        assert it1.quality_conclusion == "pass"
+        assert it1.trace_id == "trace-ds-1"
+
+        assert it2.execution_status == "succeeded"
+        assert it2.quality_conclusion == "pass"
+        assert it2.trace_id == "trace-ds-2"
+
+        # Launch 必须维持正确的历史成功结论 COMPLETED / pass
+        launch = session.get(ExperimentLaunchRecord, launch_id)
+        assert launch.status == "COMPLETED"
+        assert launch.quality_conclusion == "pass"
+
+

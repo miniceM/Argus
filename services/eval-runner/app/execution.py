@@ -465,7 +465,7 @@ class LaunchExecutionService:
                         result = await result
 
                     if hasattr(lf, "flush"):
-                        lf.flush()
+                        await asyncio.to_thread(lf.flush)
 
                     run_id = (
                         getattr(result, "experiment_id", None)

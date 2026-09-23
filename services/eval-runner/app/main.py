@@ -89,7 +89,7 @@ def _client():
 # 4. Initialize Orchestrator, Worker, Reconciler, OutboxSyncer
 orchestrator = LaunchOrchestrator(db_manager, queue_adapter, limiter)
 worker = ExecutionWorker(db_manager, queue_adapter, limiter)
-reconciler = ExecutionReconciler(db_manager, queue_adapter, limiter)
+reconciler = ExecutionReconciler(db_manager, queue_adapter, limiter, langfuse_client=_client)
 outbox_syncer = LangfuseOutboxSyncer(db_manager, langfuse_client=_client)
 
 # 5. Initialize Launch Service
@@ -303,9 +303,12 @@ def bootstrap() -> BootstrapResult:
 async def run_experiment(request: ExperimentRequest) -> ExperimentResult:
     launch_id = str(uuid.uuid4())
     try:
+        # Pre-validate agent existence according to legacy contract (raises KeyError -> 404)
+        registry.get(request.agent_id, request.agent_version)
+
         await asyncio.to_thread(_wait_for_langfuse)
         lf = _client()
-        dataset = lf.get_dataset(request.dataset_name)
+        dataset = await asyncio.to_thread(lf.get_dataset, request.dataset_name) if lf else None
         experiment_name = request.experiment_name or f"{request.agent_id}-{request.agent_version}"
 
         # Legacy experiment evaluator set: 5 item evaluators + 1 run evaluator
@@ -352,6 +355,11 @@ async def run_experiment(request: ExperimentRequest) -> ExperimentResult:
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        msg = str(exc)
+        if "not found" in msg.lower() or "archived" in msg.lower() or "inactive" in msg.lower():
+            raise HTTPException(status_code=404, detail=msg) from exc
+        raise HTTPException(status_code=400, detail=msg) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"experiment failed: {exc}") from exc
 

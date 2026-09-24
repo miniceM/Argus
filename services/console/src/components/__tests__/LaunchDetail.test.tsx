@@ -63,10 +63,10 @@ describe("LaunchDetail Frozen Manifest Structured Audit View", () => {
 
   it("renders all critical frozen snapshot audit fields structured in UI", async () => {
     (api.GET as any).mockImplementation((path: string) => {
-      if (path === "/api/v1/experiment-launches") {
+      if (path === "/api/v1/experiment-launches/{launch_id}") {
         return Promise.resolve({ data: mockLaunch });
       }
-      if (path === "/api/v1/experiment-launch-items") {
+      if (path === "/api/v1/experiment-launches/{launch_id}/items") {
         return Promise.resolve({ data: [] });
       }
       return Promise.resolve({ data: null });
@@ -214,5 +214,116 @@ describe("LaunchDetail Frozen Manifest Structured Audit View", () => {
 
     expect(screen.getByText("强制重试非幂等可能已发送用例 (Force Replay)")).toBeInTheDocument();
     expect(screen.getByText("确认重新调度")).toBeInTheDocument();
+  });
+
+  it("never renders a different Launch when the detail response ID does not match the route", async () => {
+    const requestedId = "launch-requested-001";
+    const wrongLaunch = { ...mockLaunch, id: "launch-wrong-001", name: "Wrong Launch" };
+
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path === "/api/v1/experiment-launches" || path === "/api/v1/experiment-launches/{launch_id}") {
+        return Promise.resolve({ data: [wrongLaunch] });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/launches/${requestedId}`]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<LaunchDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByTestId("error-state")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: wrongLaunch.id })).not.toBeInTheDocument();
+    expect(screen.queryByText("Wrong Launch")).not.toBeInTheDocument();
+  });
+
+  it("shows Items API failures instead of presenting them as an empty result", async () => {
+    const requestedId = "launch-items-error-001";
+    const launch = { ...mockLaunch, id: requestedId };
+
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path === "/api/v1/experiment-launches" || path === "/api/v1/experiment-launches/{launch_id}") {
+        return Promise.resolve({ data: launch });
+      }
+      if (
+        path === "/api/v1/experiment-launch-items" ||
+        path === "/api/v1/experiment-launches/{launch_id}/items"
+      ) {
+        return Promise.resolve({
+          error: { detail: "Items service unavailable" },
+          response: { status: 503 },
+        });
+      }
+      return Promise.resolve({ data: null });
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/launches/${requestedId}`]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<LaunchDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText("Items service unavailable")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新加载" })).toBeInTheDocument();
+    expect(screen.getByText("暂不可用")).toBeInTheDocument();
+  });
+
+  it("does not treat a Launch permission error as a missing record", async () => {
+    const requestedId = "launch-forbidden-001";
+    (api.GET as any).mockResolvedValue({
+      error: { detail: "You do not have permission to view this Launch" },
+      response: { status: 403 },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/launches/${requestedId}`]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<LaunchDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText("You do not have permission to view this Launch")).toBeInTheDocument();
+    expect(screen.queryByText("不存在或已删除")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "返回评测列表" })).toBeInTheDocument();
+  });
+
+  it("rejects Items that belong to another Launch", async () => {
+    const requestedId = "launch-items-mismatch-001";
+    const launch = { ...mockLaunch, id: requestedId };
+
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path === "/api/v1/experiment-launches/{launch_id}") {
+        return Promise.resolve({ data: launch });
+      }
+      if (path === "/api/v1/experiment-launches/{launch_id}/items") {
+        return Promise.resolve({ data: [{ id: "item-from-other-launch", launch_id: "another-launch" }] });
+      }
+      return Promise.resolve({ data: null });
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/launches/${requestedId}`]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<LaunchDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText("用例明细归属的 Launch 与当前页面不一致，请重新加载")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新加载" })).toBeInTheDocument();
   });
 });

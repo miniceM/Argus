@@ -51,6 +51,21 @@ export const LAUNCH_STATUS_LABELS: Record<LaunchStatus, string> = {
   CANCELLED: "CANCELLED (已取消)",
 };
 
+const isSafeLangfuseUrl = (value: unknown): value is string => {
+  if (typeof value !== "string" || !value.trim()) return false;
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      Boolean(url.hostname) &&
+      !url.username &&
+      !url.password
+    );
+  } catch {
+    return false;
+  }
+};
+
 export const LaunchesList: React.FC = () => {
   const [filterAgent, setFilterAgent] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("");
@@ -233,7 +248,7 @@ export const LaunchesList: React.FC = () => {
       {!isLoading && !error && launches && launches.length > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1080px] table-fixed text-left text-sm text-slate-600">
+            <table className="w-full min-w-[1200px] table-fixed text-left text-sm text-slate-600">
               <colgroup>
                 <col className="w-[150px]" />
                 <col className="w-[180px]" />
@@ -242,7 +257,7 @@ export const LaunchesList: React.FC = () => {
                 <col className="w-[90px]" />
                 <col className="w-[100px]" />
                 <col className="w-[160px]" />
-                <col className="w-[80px]" />
+                <col className="w-[200px]" />
               </colgroup>
               <thead className="bg-slate-50/75 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 <tr>
@@ -380,20 +395,30 @@ export const LaunchesList: React.FC = () => {
                         <div className="flex items-center justify-end gap-2">
                           <Link
                             to={`/launches/${launch.id}`}
-                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                            aria-label={`查看 Launch ${launch.id} 详情`}
+                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded"
                           >
                             详情
                           </Link>
-                          {launch.langfuse_experiment_url && (
+                          {isSafeLangfuseUrl(launch.langfuse_experiment_url) ? (
                             <a
                               href={launch.langfuse_experiment_url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-indigo-600"
+                              aria-label="在 Langfuse 中查看"
+                              className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-indigo-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded"
                               title="在 Langfuse UI 中查看"
                             >
+                              Langfuse
                               <ExternalLink className="w-3 h-3" />
                             </a>
+                          ) : (
+                            <span
+                              className="text-xs text-slate-400"
+                              title={launch.langfuse_experiment_url ? "Langfuse 地址无效" : "尚未创建 Langfuse 链接"}
+                            >
+                              Langfuse 未就绪
+                            </span>
                           )}
                         </div>
                       </td>

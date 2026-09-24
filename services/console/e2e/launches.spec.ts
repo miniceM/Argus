@@ -133,9 +133,10 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
       await route.fulfill({ json: launchObj });
     });
 
-    // Launches endpoints (captures query strings like ?id=...)
+    // Launch collection and detail endpoints share a prefix; leave execution/items to their handlers.
     await page.route("**/api/v1/experiment-launches**", async (route) => {
-      if (route.request().url().includes("/run")) {
+      const pathname = new URL(route.request().url()).pathname;
+      if (pathname.endsWith("/run") || pathname.endsWith("/items")) {
         await route.fallback();
         return;
       }
@@ -150,7 +151,7 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     });
 
     // Launch items endpoint
-    await page.route("**/api/v1/experiment-launch-items**", async (route) => {
+    await page.route(`**/api/v1/experiment-launches/${launchId}/items`, async (route) => {
       if (currentLaunchStatus === "PENDING") {
         await route.fulfill({ json: [] });
       } else {

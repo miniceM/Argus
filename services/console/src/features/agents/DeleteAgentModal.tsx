@@ -200,7 +200,7 @@ export const DeleteAgentModal: React.FC<DeleteAgentModalProps> = ({
                 <span>禁止删除：存在活跃评测任务</span>
               </p>
               <p>
-                该 Agent 当前有 <strong>{effectiveActiveLaunchCount}</strong> 个正在执行或排队中的评测任务。为避免未定义副作用，请先取消或等待所有任务完成后再进行删除。
+                该 Agent 当前有 <strong>{effectiveActiveLaunchCount}</strong> 条尚未结束的评测记录。活跃评测包括待执行、排队中、运行中、取消中等尚未结束状态的任务。请先取消或等待任务结束，再进行删除。
               </p>
             </div>
           )}

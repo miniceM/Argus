@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { DeleteAgentModal } from "../../features/agents/DeleteAgentModal";
 import { api } from "../../api/client";
@@ -36,7 +36,13 @@ describe("DeleteAgentModal UX and Strong Name Verification Flow", () => {
     summaryResponse?: unknown,
   ) => {
     if (agent) {
-      (api.GET as any).mockResolvedValue(summaryResponse ?? { data: [agent] });
+      (api.GET as any).mockResolvedValue(summaryResponse ?? {
+        data: [{
+          ...agent,
+          launch_count: agent.launch_count ?? 0,
+          active_launch_count: agent.active_launch_count ?? 0,
+        }],
+      });
     }
     return render(
       <QueryClientProvider client={queryClient}>
@@ -215,6 +221,79 @@ describe("DeleteAgentModal UX and Strong Name Verification Flow", () => {
     const confirmInput = screen.getByPlaceholderText("请输入 Cached Agent");
     fireEvent.change(confirmInput, { target: { value: "Cached Agent" } });
     await waitFor(() => expect(screen.getByRole("button", { name: "确认强制清理" })).toBeEnabled());
+  });
+
+  it("starts a distinct validation request when reopened before the prior request settles", async () => {
+    queryClient.setDefaultOptions({ queries: { retry: false, staleTime: 5000 } });
+    const agent = {
+      id: "pending-reopen-agent",
+      name: "Pending Reopen Agent",
+      launch_count: 0,
+      active_launch_count: 0,
+    };
+    const firstIdleResult = { ...agent };
+    const secondActiveResult = { ...agent, active_launch_count: 1 };
+    const pendingResponses: Array<(value: unknown) => void> = [];
+    (api.GET as any).mockImplementation(
+      () => new Promise((resolve) => pendingResponses.push(resolve))
+    );
+
+    const renderTree = (isOpen: boolean) => (
+      <QueryClientProvider client={queryClient}>
+        <DeleteAgentModal agent={agent} isOpen={isOpen} onClose={vi.fn()} />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(renderTree(true));
+    await waitFor(() => expect(api.GET).toHaveBeenCalledTimes(1));
+
+    rerender(renderTree(false));
+    rerender(renderTree(true));
+    await waitFor(() => expect(api.GET).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      pendingResponses[0]!({ data: [firstIdleResult] });
+    });
+    expect(screen.getByRole("button", { name: "确认删除" })).toBeDisabled();
+
+    await act(async () => {
+      pendingResponses[1]!({ data: [secondActiveResult] });
+    });
+    expect(screen.getByText("禁止删除：存在活跃评测任务")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "确认删除" })).toBeDisabled();
+  });
+
+  it("blocks submit if the active count changes before React rerenders", async () => {
+    const agent = {
+      id: "validated-active-agent",
+      name: "Validated Active Agent",
+      launch_count: 0,
+      active_launch_count: 0,
+    };
+    renderModal(agent);
+
+    const deleteButton = screen.getByRole("button", { name: "确认删除" });
+    await waitFor(() => expect(deleteButton).toBeEnabled());
+    const form = deleteButton.closest("form");
+    expect(form).not.toBeNull();
+
+    // Simulate another observer refreshing the shared cache immediately before
+    // submit. Batching both operations preserves the button's old render, while
+    // the submit handler must still read and reject the latest cached count.
+    act(() => {
+      queryClient.setQueryData(queryKeys.agents.detail(agent.id), {
+        ...agent,
+        launch_count: 1,
+        active_launch_count: 1,
+      });
+      fireEvent.submit(form!);
+    });
+
+    expect(api.DELETE).not.toHaveBeenCalled();
+    expect(api.POST).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getByText("禁止删除：存在活跃评测任务")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "确认强制清理" })).toBeDisabled();
+    });
   });
 
   it("revalidates fresh cached summaries when switching agents while open", async () => {

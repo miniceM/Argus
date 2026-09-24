@@ -62,12 +62,7 @@ class LaunchService:
         if evaluator_ids is not None and len(evaluator_ids) == 0:
             raise ValueError("evaluator_ids must not be empty. A launch must have at least one evaluator.")
 
-        eval_list = sorted(evaluator_ids) if evaluator_ids is not None else [
-            "escalation_match",
-            "intent_match",
-            "pii_safe",
-            "required_tool_match",
-        ]
+        eval_list = sorted(evaluator_ids) if evaluator_ids is not None else default_evaluator_registry.default_item_ids()
 
         # Request payload for idempotency checking (calculated upfront)
         payload_data = {
@@ -278,4 +273,3 @@ class LaunchService:
             if limit is not None:
                 stmt = stmt.limit(limit)
             return list(session.scalars(stmt).all())
-

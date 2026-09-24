@@ -35,8 +35,10 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
           spec_digest: "sha256:specs987654321",
         },
         evaluators: [
+          { id: "escalation_match", version: "1.0.0", scope: "item" },
           { id: "intent_match", version: "1.0.0", scope: "item" },
           { id: "pii_safe", version: "1.0.0", scope: "item" },
+          { id: "required_tool_match", version: "1.0.0", scope: "item" },
         ],
         execution_policy: { timeout_seconds: 30, max_retries: 2, max_concurrency: 2 },
         runner: { runner_version: "0.1.0", mapping_engine_version: "sha256-mapping-engine-v1" },
@@ -90,16 +92,27 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
       });
     });
 
-    // Evaluators specs: includes both item-scope and run-scope (real registry contract)
+    // Evaluators specs: default diagnostics, their composite, and unsupported run scope.
     await page.route("**/api/v1/evaluators", async (route) => {
       await route.fulfill({
         json: [
+          {
+            id: "escalation_match",
+            version: "1.0.0",
+            scope: "item",
+            threshold: 1.0,
+            description: "升级处理诊断",
+            default_selected: true,
+            composed_of: [],
+          },
           {
             id: "intent_match",
             version: "1.0.0",
             scope: "item",
             threshold: 1.0,
             description: "意图匹配评测器",
+            default_selected: true,
+            composed_of: [],
           },
           {
             id: "pii_safe",
@@ -107,6 +120,26 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
             scope: "item",
             threshold: 1.0,
             description: "敏感数据保护评测器",
+            default_selected: true,
+            composed_of: [],
+          },
+          {
+            id: "required_tool_match",
+            version: "1.0.0",
+            scope: "item",
+            threshold: 1.0,
+            description: "工具调用诊断",
+            default_selected: true,
+            composed_of: [],
+          },
+          {
+            id: "overall_pass",
+            version: "1.0.0",
+            scope: "item",
+            threshold: 1.0,
+            description: "Legacy composite",
+            default_selected: false,
+            composed_of: ["escalation_match", "intent_match", "pii_safe", "required_tool_match"],
           },
           {
             id: "run_pass_rate",
@@ -114,6 +147,8 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
             scope: "run",
             threshold: 1.0,
             description: "整体通过率门禁指标",
+            default_selected: false,
+            composed_of: [],
           },
         ],
       });
@@ -142,6 +177,11 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
       }
       if (route.request().method() === "POST") {
         interceptedCreationPayload = route.request().postDataJSON();
+        launchObj.manifest.evaluators = interceptedCreationPayload.evaluator_ids.map((id: string) => ({
+          id,
+          version: "1.0.0",
+          scope: "item",
+        }));
         await route.fulfill({ status: 201, json: launchObj });
         return;
       }
@@ -212,10 +252,18 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     await expect(page.getByRole("heading", { name: "发起新评测任务" })).toBeVisible();
 
     // Verify Evaluators selection and scope restriction
-    await expect(page.getByText("intent_match")).toBeVisible();
-    await expect(page.getByText("pii_safe")).toBeVisible();
-    await expect(page.getByText("run_pass_rate")).toBeVisible();
-    await expect(page.getByText("(聚合指标，暂不支持在单次 Launch 中直接运行)")).toBeVisible();
+    await expect(page.getByText("intent_match", { exact: true })).toBeVisible();
+    await expect(page.getByText("pii_safe", { exact: true })).toBeVisible();
+    await expect(page.getByText("run_pass_rate", { exact: true })).toBeVisible();
+    await expect(page.getByText(/聚合指标，暂不支持在单次 Launch 中直接运行/)).toBeVisible();
+    await expect(page.getByRole("radio", { name: /逐项诊断/ })).toBeChecked();
+    await expect(page.getByRole("radio", { name: /复合结论/ })).not.toBeChecked();
+
+    // Switching modes is exclusive; returning to diagnostics restores its defaults.
+    await page.getByRole("radio", { name: /复合结论/ }).check();
+    await expect(page.getByRole("radio", { name: /复合结论/ })).toBeChecked();
+    await page.getByRole("radio", { name: /逐项诊断/ }).check();
+    await expect(page.getByText("已选 4 项")).toBeVisible();
 
     // Adjust Concurrency
     await page.getByRole("spinbutton").fill("2");
@@ -225,7 +273,12 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
 
     // Verify Creation Payload Contract: must NOT include run_pass_rate, dataset_version undefined when latest
     expect(interceptedCreationPayload).not.toBeNull();
-    expect(interceptedCreationPayload.evaluator_ids).toEqual(["intent_match", "pii_safe"]);
+    expect(interceptedCreationPayload.evaluator_ids).toEqual([
+      "escalation_match",
+      "intent_match",
+      "pii_safe",
+      "required_tool_match",
+    ]);
     expect(interceptedCreationPayload.evaluator_ids).not.toContain("run_pass_rate");
     expect(interceptedCreationPayload.dataset_version).toBeUndefined();
     expect(interceptedCreationPayload.max_concurrency).toBe(2);
@@ -233,6 +286,11 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     // 2. Navigates to Launch Detail
     await page.waitForURL(`**/launches/${launchId}`);
     await expect(page.getByRole("heading", { name: launchId })).toBeVisible();
+    await expect(page.getByText("3. 评测门禁指标 (4)")).toBeVisible();
+    for (const id of ["escalation_match", "intent_match", "pii_safe", "required_tool_match"]) {
+      await expect(page.getByText(id, { exact: true })).toBeVisible();
+    }
+    await expect(page.getByText("overall_pass", { exact: true })).toHaveCount(0);
 
     // Verify initial PENDING state and Run button visible
     await expect(page.getByTestId("status-badge").first()).toContainText("PENDING");

@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Check,
+  Copy,
   ExternalLink,
   Filter,
   Plus,
@@ -16,11 +18,32 @@ import { QualityBadge } from "../../components/QualityBadge";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 
 type LaunchResponse = import("../../api/schema").components["schemas"]["ExperimentLaunchResponse"];
+type AgentSummary = import("../../api/schema").components["schemas"]["AgentSummaryResponse"];
 
 export const LaunchesList: React.FC = () => {
   const [filterAgent, setFilterAgent] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("");
   const [filterQuality, setFilterQuality] = useState<string>("");
+  const [copiedLaunchId, setCopiedLaunchId] = useState<string | null>(null);
+
+  // Non-blocking enrichment: fetch registered agents to display readable names
+  const { data: agents = [] } = useQuery<AgentSummary[]>({
+    queryKey: queryKeys.agents.list(),
+    queryFn: async () => {
+      try {
+        const res = await api.GET("/api/v1/agents");
+        if (res.error || !res.data) return [];
+        return Array.isArray(res.data) ? res.data : [res.data];
+      } catch {
+        return [];
+      }
+    },
+  });
+
+  const agentNameById = useMemo(
+    () => new Map(agents.map((agent) => [agent.id, agent.name])),
+    [agents]
+  );
 
   const { data: launches, isLoading, error, refetch, isFetching } = useQuery<LaunchResponse[]>({
     queryKey: queryKeys.launches.list({
@@ -50,6 +73,19 @@ export const LaunchesList: React.FC = () => {
       return hasActive ? 2000 : false;
     },
   });
+
+  const handleCopyId = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(id);
+      setCopiedLaunchId(id);
+      setTimeout(() => {
+        setCopiedLaunchId((curr) => (curr === id ? null : curr));
+      }, 2000);
+    } catch {
+      // Clipboard access denied or failed; do not fake success
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -170,107 +206,170 @@ export const LaunchesList: React.FC = () => {
       {!isLoading && !error && launches && launches.length > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-600">
+            <table className="w-full min-w-[1080px] table-fixed text-left text-sm text-slate-600">
+              <colgroup>
+                <col className="w-[150px]" />
+                <col className="w-[180px]" />
+                <col className="w-[160px]" />
+                <col className="w-[145px]" />
+                <col className="w-[95px]" />
+                <col className="w-[110px]" />
+                <col className="w-[160px]" />
+                <col className="w-[80px]" />
+              </colgroup>
               <thead className="bg-slate-50/75 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 <tr>
-                  <th className="px-6 py-3.5">评测任务 (Launch ID)</th>
-                  <th className="px-6 py-3.5">被测 Agent @ 版本</th>
-                  <th className="px-6 py-3.5">评测集 (Dataset @ Ver)</th>
-                  <th className="px-6 py-3.5">执行状态 (Status)</th>
-                  <th className="px-6 py-3.5">质量结论 (Quality)</th>
-                  <th className="px-6 py-3.5">Langfuse 同步</th>
-                  <th className="px-6 py-3.5">创建时间</th>
-                  <th className="px-6 py-3.5 text-right">操作</th>
+                  <th className="px-4 py-2.5">Launch</th>
+                  <th className="px-4 py-2.5">Agent</th>
+                  <th className="px-4 py-2.5">Dataset</th>
+                  <th className="px-4 py-2.5">状态</th>
+                  <th className="px-4 py-2.5">质量</th>
+                  <th className="px-4 py-2.5">Langfuse</th>
+                  <th className="px-4 py-2.5">创建时间</th>
+                  <th className="px-4 py-2.5 text-right">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {launches.map((launch) => (
-                  <tr key={launch.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-6 py-4">
-                      <Link
-                        to={`/launches/${launch.id}`}
-                        className="font-mono text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline block"
-                      >
-                        {launch.id}
-                      </Link>
-                    </td>
+                {launches.map((launch) => {
+                  const agentName = agentNameById.get(launch.agent_id);
+                  const isCopied = copiedLaunchId === launch.id;
 
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-1 text-xs">
-                        <span className="font-semibold text-slate-900">{launch.agent_id}</span>
-                        <span className="text-slate-400">@</span>
-                        <span className="font-mono text-slate-600">{launch.agent_version}</span>
-                      </div>
-                    </td>
+                  return (
+                    <tr key={launch.id} className="hover:bg-slate-50/80 transition-colors">
+                      {/* Launch ID */}
+                      <td className="px-4 py-3">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <Link
+                            to={`/launches/${launch.id}`}
+                            className="min-w-0 flex-1 truncate font-mono text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline block"
+                            title={launch.id}
+                          >
+                            {launch.id}
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={(e) => handleCopyId(launch.id, e)}
+                            className="size-7 shrink-0 inline-flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
+                            title={isCopied ? "已复制" : "复制完整 Launch ID"}
+                            aria-label={`复制 Launch ID ${launch.id}`}
+                          >
+                            {isCopied ? (
+                              <Check className="size-3.5 text-emerald-600" />
+                            ) : (
+                              <Copy className="size-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
 
-                    <td className="px-6 py-4">
-                      <div className="text-xs">
-                        <span className="font-semibold text-slate-800">{launch.dataset_name}</span>
-                        <span className="text-slate-400 font-mono text-[11px] block truncate max-w-[140px]" title={launch.dataset_version || ""}>
-                          {launch.dataset_version || "-"}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4">
-                      <div className="space-y-1">
-                        <StatusBadge status={launch.status} />
-                        {launch.progress && launch.progress.total > 0 && (
-                          <div className="text-[11px] text-slate-500 font-mono">
-                            <span>{launch.progress.percentage}%</span>
-                            <span className="text-slate-400 ml-1">
-                              ({launch.progress.completed}/{launch.progress.total})
+                      {/* Agent */}
+                      <td className="px-4 py-3">
+                        <div className="min-w-0 text-xs">
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <span
+                              className="min-w-0 flex-1 truncate font-semibold text-slate-900"
+                              title={agentName || launch.agent_id}
+                            >
+                              {agentName || launch.agent_id}
+                            </span>
+                            <span className="shrink-0 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[10px] whitespace-nowrap">
+                              {launch.agent_version}
                             </span>
                           </div>
-                        )}
-                      </div>
-                    </td>
+                          {agentName && agentName !== launch.agent_id && (
+                            <div
+                              className="truncate font-mono text-[11px] text-slate-400 mt-0.5"
+                              title={launch.agent_id}
+                            >
+                              {launch.agent_id}
+                            </div>
+                          )}
+                        </div>
+                      </td>
 
-                    <td className="px-6 py-4">
-                      <QualityBadge quality={launch.quality_conclusion} />
-                    </td>
-
-                    <td className="px-6 py-4 text-xs font-mono">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${
-                          launch.langfuse_sync_status === "SYNCED"
-                            ? "bg-purple-50 text-purple-700 border border-purple-200"
-                            : launch.langfuse_sync_status === "FAILED"
-                            ? "bg-rose-50 text-rose-700 border border-rose-200"
-                            : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        {launch.langfuse_sync_status || "PENDING"}
-                      </span>
-                    </td>
-
-                    <td className="px-6 py-4 text-xs text-slate-500 whitespace-nowrap">
-                      {new Date(launch.created_at).toLocaleString("zh-CN", { hour12: false })}
-                    </td>
-
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Link
-                          to={`/launches/${launch.id}`}
-                          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
-                        >
-                          详情
-                        </Link>
-                        {launch.langfuse_experiment_url && (
-                          <a
-                            href={launch.langfuse_experiment_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-indigo-600"
-                            title="在 Langfuse UI 中查看"
+                      {/* Dataset */}
+                      <td className="px-4 py-3">
+                        <div className="min-w-0 text-xs">
+                          <span
+                            className="min-w-0 block truncate font-semibold text-slate-800"
+                            title={launch.dataset_name}
                           >
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                            {launch.dataset_name}
+                          </span>
+                          <span
+                            className="text-slate-400 font-mono text-[11px] block truncate mt-0.5"
+                            title={launch.dataset_version || ""}
+                          >
+                            {launch.dataset_version || "-"}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Status + Progress */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                          <StatusBadge status={launch.status} />
+                          {launch.progress && launch.progress.total > 0 && (
+                            <span className="font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                              {launch.progress.percentage}% · {launch.progress.completed}/{launch.progress.total}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Quality */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <QualityBadge quality={launch.quality_conclusion} />
+                      </td>
+
+                      {/* Langfuse */}
+                      <td className="px-4 py-3 text-xs font-mono whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold whitespace-nowrap ${
+                            launch.langfuse_sync_status === "SYNCED"
+                              ? "bg-purple-50 text-purple-700 border border-purple-200"
+                              : launch.langfuse_sync_status === "FAILED"
+                              ? "bg-rose-50 text-rose-700 border border-rose-200"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {launch.langfuse_sync_status || "PENDING"}
+                        </span>
+                      </td>
+
+                      {/* Created At */}
+                      <td
+                        className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap truncate"
+                        title={new Date(launch.created_at).toLocaleString("zh-CN", { hour12: false })}
+                      >
+                        {new Date(launch.created_at).toLocaleString("zh-CN", { hour12: false })}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-2">
+                          <Link
+                            to={`/launches/${launch.id}`}
+                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                          >
+                            详情
+                          </Link>
+                          {launch.langfuse_experiment_url && (
+                            <a
+                              href={launch.langfuse_experiment_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-indigo-600"
+                              title="在 Langfuse UI 中查看"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

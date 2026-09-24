@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, AlertTriangle, Trash2, X } from "lucide-react";
 import { api } from "../../api/client";
 import { queryKeys } from "../../api/query-keys";
@@ -32,6 +32,36 @@ export const DeleteAgentModal: React.FC<DeleteAgentModalProps> = ({
     launch_count?: number;
     active_launch_count?: number;
   }>({});
+  const [validatedSummaryAgentId, setValidatedSummaryAgentId] = useState<string | null>(null);
+  const summaryValidationRequestId = useRef(0);
+  const agentId = agent?.id;
+
+  const summaryQuery = useQuery({
+    queryKey: queryKeys.agents.detail(agentId ?? ""),
+    queryFn: async () => {
+      if (!agentId) throw new Error("缺少 Agent 信息");
+      const res = await api.GET("/api/v1/agents", {
+        params: { query: { id: agentId } },
+      });
+      if (res.error) throw res.error;
+      const data = Array.isArray(res.data) ? res.data[0] : res.data;
+      if (!data) throw new Error("未找到 Agent 最新统计");
+      return data as import("../../api/schema").components["schemas"]["AgentResponse"];
+    },
+    enabled: false,
+  });
+
+  const verifyLatestSummary = useCallback(async () => {
+    if (!agentId) return false;
+    const requestId = ++summaryValidationRequestId.current;
+    setValidatedSummaryAgentId(null);
+    const result = await summaryQuery.refetch();
+    const isSuccessful = result.isSuccess && !result.isError;
+    if (summaryValidationRequestId.current === requestId) {
+      setValidatedSummaryAgentId(isSuccessful ? agentId : null);
+    }
+    return isSuccessful;
+  }, [agentId, summaryQuery.refetch]);
 
   useEffect(() => {
     if (isOpen && agent) {
@@ -44,11 +74,43 @@ export const DeleteAgentModal: React.FC<DeleteAgentModalProps> = ({
       // Only require force purge if associated launches exist; version alone does not require force
       setRequiresForce((agent.launch_count ?? 0) > 0);
     }
-  }, [isOpen, agent]);
+  }, [isOpen, agent?.id]);
 
-  const effectiveLaunchCount = localCounts.launch_count ?? agent?.launch_count ?? 0;
-  const effectiveActiveLaunchCount = localCounts.active_launch_count ?? agent?.active_launch_count ?? 0;
+  useEffect(() => {
+    if (isOpen && summaryQuery.data) {
+      setLocalCounts({
+        launch_count: summaryQuery.data.launch_count,
+        active_launch_count: summaryQuery.data.active_launch_count,
+      });
+      setRequiresForce((summaryQuery.data.launch_count ?? 0) > 0);
+    }
+  }, [isOpen, summaryQuery.data]);
+
+  useEffect(() => {
+    if (!isOpen || !agentId) {
+      summaryValidationRequestId.current += 1;
+      setValidatedSummaryAgentId(null);
+      return;
+    }
+
+    void verifyLatestSummary();
+    return () => {
+      summaryValidationRequestId.current += 1;
+    };
+  }, [isOpen, agentId, verifyLatestSummary]);
+
+  const effectiveLaunchCount = localCounts.launch_count ?? summaryQuery.data?.launch_count ?? agent?.launch_count ?? 0;
+  const effectiveActiveLaunchCount = localCounts.active_launch_count ?? summaryQuery.data?.active_launch_count ?? agent?.active_launch_count ?? 0;
   const hasActiveLaunches = effectiveActiveLaunchCount > 0;
+  const summaryReady = Boolean(isOpen && agentId && validatedSummaryAgentId === agentId);
+
+  useEffect(() => {
+    if (!isOpen || effectiveActiveLaunchCount <= 0) return;
+    const intervalId = window.setInterval(() => {
+      void summaryQuery.refetch();
+    }, 2000);
+    return () => window.clearInterval(intervalId);
+  }, [isOpen, effectiveActiveLaunchCount, summaryQuery.refetch]);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -136,7 +198,11 @@ export const DeleteAgentModal: React.FC<DeleteAgentModalProps> = ({
 
   // Strict exact match without trimming
   const isNameMatched = confirmName === agent.name;
-  const canSubmit = !hasActiveLaunches && (requiresForce ? isNameMatched : true);
+  const canSubmit =
+    summaryReady &&
+    !summaryQuery.isError &&
+    !hasActiveLaunches &&
+    (requiresForce ? isNameMatched : true);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,6 +252,21 @@ export const DeleteAgentModal: React.FC<DeleteAgentModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {!summaryReady && !summaryQuery.isError && (
+            <p role="status" className="text-xs text-slate-500">正在核对最新评测状态...</p>
+          )}
+          {summaryQuery.isError && (
+            <div role="alert" className="p-3 text-xs bg-rose-50 border border-rose-200 rounded-lg text-rose-700">
+              <p>无法加载最新评测状态：{formatApiError(summaryQuery.error)}</p>
+              <button
+                type="button"
+                onClick={() => { void verifyLatestSummary(); }}
+                className="mt-2 underline font-semibold"
+              >
+                重新加载状态
+              </button>
+            </div>
+          )}
           {errorMsg && (
             <div className="p-3 text-xs bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-medium leading-relaxed">
               {errorMsg}

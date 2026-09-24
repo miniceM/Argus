@@ -670,16 +670,16 @@ def test_claim_lease_starts_after_cleanup_wait(setup_runtime):
         if statement.startswith("UPDATE langfuse_sync_tasks"):
             import time
 
-            time.sleep(0.2)
+            time.sleep(0.4)
 
     event.listen(db.engine, "before_cursor_execute", delay)
-    sync = LangfuseOutboxSyncer(db, None, lease_duration_seconds=0.1)
+    sync = LangfuseOutboxSyncer(db, None, lease_duration_seconds=0.5)
     try:
         tasks = sync.claim_tasks()
     finally:
         event.remove(db.engine, "before_cursor_execute", delay)
     tid, token, payload = tasks[0]
-    assert sync.renew_task_lease(tid, token, 0.1), "Freshly claimed task already expired"
+    assert sync.renew_task_lease(tid, token, 0.5), "Freshly claimed task already expired"
 
 
 # 22. 任务总时限在调用超时后立即释放消费处理线程（不无限等待阻塞调用）

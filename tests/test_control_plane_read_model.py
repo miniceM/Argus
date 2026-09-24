@@ -31,6 +31,15 @@ def test_evaluator_registry_list_specs_public():
     assert spec_map["intent_match"]["threshold"] == 1.0
     assert "description" in spec_map["intent_match"]
     assert len(spec_map["intent_match"]["description"]) > 0
+    assert spec_map["intent_match"]["default_selected"] is True
+    assert spec_map["intent_match"]["composed_of"] == []
+    assert spec_map["overall_pass"]["default_selected"] is False
+    assert set(spec_map["overall_pass"]["composed_of"]) == {
+        "escalation_match",
+        "intent_match",
+        "pii_safe",
+        "required_tool_match",
+    }
 
 
 def test_api_evaluators_endpoint(client):
@@ -47,6 +56,10 @@ def test_api_evaluators_endpoint(client):
         assert "scope" in item
         assert "threshold" in item
         assert "description" in item
+        assert "default_selected" in item
+        assert "composed_of" in item
+        assert isinstance(item["default_selected"], bool)
+        assert isinstance(item["composed_of"], list)
 
 
 def test_system_info_endpoint(client, monkeypatch):

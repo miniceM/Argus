@@ -76,6 +76,8 @@ class EvaluatorRegistry:
                 "scope": "item",
                 "default_threshold": 1.0,
                 "description": "Checks whether agent output intent matches expected intent",
+                "default_selected": True,
+                "composed_of": [],
             },
             "required_tool_match": {
                 "fn": required_tool_match,
@@ -83,6 +85,8 @@ class EvaluatorRegistry:
                 "scope": "item",
                 "default_threshold": 1.0,
                 "description": "Checks whether required tool call is present in output tool calls",
+                "default_selected": True,
+                "composed_of": [],
             },
             "pii_safe": {
                 "fn": pii_safe,
@@ -90,6 +94,8 @@ class EvaluatorRegistry:
                 "scope": "item",
                 "default_threshold": 1.0,
                 "description": "Ensures no forbidden sensitive fields were disclosed",
+                "default_selected": True,
+                "composed_of": [],
             },
             "escalation_match": {
                 "fn": escalation_match,
@@ -97,6 +103,8 @@ class EvaluatorRegistry:
                 "scope": "item",
                 "default_threshold": 1.0,
                 "description": "Checks whether escalation status matches expected requirement",
+                "default_selected": True,
+                "composed_of": [],
             },
             "overall_pass": {
                 "fn": overall_pass,
@@ -104,6 +112,13 @@ class EvaluatorRegistry:
                 "scope": "item",
                 "default_threshold": 1.0,
                 "description": "Legacy composite evaluator checking all 4 baseline criteria",
+                "default_selected": False,
+                "composed_of": [
+                    "intent_match",
+                    "required_tool_match",
+                    "pii_safe",
+                    "escalation_match",
+                ],
             },
             "run_pass_rate": {
                 "fn": run_pass_rate,
@@ -111,6 +126,8 @@ class EvaluatorRegistry:
                 "scope": "run",
                 "default_threshold": 1.0,
                 "description": "Evaluates overall launch pass rate across all item results",
+                "default_selected": False,
+                "composed_of": [],
             },
         }
 
@@ -149,8 +166,18 @@ class EvaluatorRegistry:
                 "scope": info.get("scope", "item"),
                 "threshold": float(info.get("default_threshold", 1.0)),
                 "description": info.get("description", ""),
+                "default_selected": bool(info.get("default_selected", False)),
+                "composed_of": list(info.get("composed_of", [])),
             })
         return sorted(specs, key=lambda s: s["id"])
+
+    def default_item_ids(self) -> list[str]:
+        """Return the canonical default set for a newly-created item-scoped launch."""
+        return sorted(
+            evaluator_id
+            for evaluator_id, info in self._evaluators.items()
+            if info.get("scope", "item") == "item" and info.get("default_selected", False)
+        )
 
 
 default_evaluator_registry = EvaluatorRegistry()
@@ -179,5 +206,4 @@ def evaluate_item_quality(
             return "fail"
 
     return "pass"
-
 

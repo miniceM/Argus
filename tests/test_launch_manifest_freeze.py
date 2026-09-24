@@ -56,7 +56,20 @@ def test_launch_manifest_snapshot_freeze(tmp_path):
     assert manifest["runner"]["runner_version"] == "0.1.0"
     assert manifest["runner"]["mapping_engine_version"] is not None
     assert manifest["execution_policy"]["max_concurrency"] == 2
-    assert len(manifest["evaluators"]) >= 4
+    assert {spec["id"] for spec in manifest["evaluators"]} == {
+        "escalation_match",
+        "intent_match",
+        "pii_safe",
+        "required_tool_match",
+    }
+
+    composite_launch = launch_svc.create_launch(
+        agent_id="banking-agent",
+        agent_version="v1",
+        dataset_name="banking-agent-regression",
+        evaluator_ids=["overall_pass"],
+    )
+    assert [spec["id"] for spec in composite_launch.manifest["evaluators"]] == ["overall_pass"]
 
     # Idempotent re-creation with same key and payload returns existing launch
     same_launch = launch_svc.create_launch(
@@ -157,6 +170,7 @@ def test_launch_concurrency_inherits_agent_version_policy(tmp_path):
 
 
 def test_api_request_model_concurrency_defaults_to_none():
+    from app.evaluators import default_evaluator_registry
     from app.models import ExperimentLaunchCreateRequest
 
     req = ExperimentLaunchCreateRequest(
@@ -166,6 +180,7 @@ def test_api_request_model_concurrency_defaults_to_none():
     )
     # Default must be None, NOT hardcoded 4
     assert req.max_concurrency is None
+    assert req.evaluator_ids == default_evaluator_registry.default_item_ids()
 
 
 def test_create_launch_rejects_run_scope_evaluator_by_default(tmp_path):
@@ -224,7 +239,3 @@ def test_list_launches_case_insensitive_filtering(tmp_path):
     # Query with non-matching quality
     res3 = launch_svc.list_launches(quality_conclusion="FAIL")
     assert len(res3) == 0
-
-
-
-

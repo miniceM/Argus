@@ -26,11 +26,14 @@ test.describe("Real API Acceptance E2E (Zero Mock)", () => {
     await expect(page.getByRole("heading", { name: /发起新评测任务/ })).toBeVisible();
 
     // Verify real Evaluators loaded from GET /api/v1/evaluators
-    await expect(page.getByText("intent_match")).toBeVisible();
-    await expect(page.getByText("run_pass_rate")).toBeVisible();
+    await expect(page.getByText("intent_match", { exact: true })).toBeVisible();
+    await expect(page.getByText("run_pass_rate", { exact: true })).toBeVisible();
+    await expect(page.getByRole("radio", { name: /逐项诊断/ })).toBeChecked();
+    await expect(page.getByRole("radio", { name: /复合结论/ })).toBeEnabled();
+    await expect(page.getByText("已选 4 项")).toBeVisible();
 
     // Critical Invariant: run_pass_rate (run scope) must be disabled and not selected!
-    await expect(page.getByText("(聚合指标，暂不支持在单次 Launch 中直接运行)").first()).toBeVisible();
+    await expect(page.getByText(/聚合指标，暂不支持在单次 Launch 中直接运行/).first()).toBeVisible();
 
     // Fill custom Launch Name
     const customName = `real-e2e-${Date.now()}`;
@@ -60,6 +63,11 @@ test.describe("Real API Acceptance E2E (Zero Mock)", () => {
 
     // Dimension 3: Evaluators (item-scope selected, no run_pass_rate)
     await expect(page.getByText("intent_match").first()).toBeVisible();
+    await expect(page.getByText("3. 评测门禁指标 (4)")).toBeVisible();
+    for (const id of ["escalation_match", "intent_match", "pii_safe", "required_tool_match"]) {
+      await expect(page.getByText(id, { exact: true })).toBeVisible();
+    }
+    await expect(page.getByText("overall_pass", { exact: true })).toHaveCount(0);
 
     // Dimension 4: Runner and Concurrency
     await expect(page.getByTestId("runner-version")).toBeVisible();

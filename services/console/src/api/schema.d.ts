@@ -730,6 +730,13 @@ export interface components {
             threshold: number;
             /** Description */
             description?: string | null;
+            /**
+             * Default Selected
+             * @default false
+             */
+            default_selected: boolean;
+            /** Composed Of */
+            composed_of?: string[];
         };
         /** ExecutionAttemptResponse */
         ExecutionAttemptResponse: {

@@ -237,10 +237,10 @@ export const LaunchesList: React.FC = () => {
               <colgroup>
                 <col className="w-[150px]" />
                 <col className="w-[180px]" />
-                <col className="w-[160px]" />
-                <col className="w-[145px]" />
-                <col className="w-[95px]" />
-                <col className="w-[110px]" />
+                <col className="w-[155px]" />
+                <col className="w-[165px]" />
+                <col className="w-[90px]" />
+                <col className="w-[100px]" />
                 <col className="w-[160px]" />
                 <col className="w-[80px]" />
               </colgroup>
@@ -332,12 +332,15 @@ export const LaunchesList: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Status + Progress */}
+                      {/* Status + Progress (Contained within 165px column, overflow safe) */}
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        <div className="flex min-w-0 items-center gap-1.5">
                           <StatusBadge status={launch.status} />
                           {launch.progress && launch.progress.total > 0 && (
-                            <span className="font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                            <span
+                              className="min-w-0 truncate font-mono text-[11px] text-slate-500"
+                              title={`${launch.progress.percentage}% · ${launch.progress.completed}/${launch.progress.total}`}
+                            >
                               {launch.progress.percentage}% · {launch.progress.completed}/{launch.progress.total}
                             </span>
                           )}

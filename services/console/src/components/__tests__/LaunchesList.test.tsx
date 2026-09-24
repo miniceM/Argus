@@ -66,7 +66,7 @@ describe("LaunchesList High-Density Table & Information Hierarchy (Issue #26)", 
     },
   ];
 
-  it("renders table with fixed layout, min-w-[1080px], and simplified headers", async () => {
+  it("renders table with fixed layout, min-w-[1200px], and simplified headers", async () => {
     (api.GET as any).mockImplementation((path: string) => {
       if (path === "/api/v1/experiment-launches") {
         return Promise.resolve({ data: mockLaunches });
@@ -91,7 +91,7 @@ describe("LaunchesList High-Density Table & Information Hierarchy (Issue #26)", 
 
     const table = screen.getByRole("table");
     expect(table).toHaveClass("table-fixed");
-    expect(table).toHaveClass("min-w-[1080px]");
+    expect(table).toHaveClass("min-w-[1200px]");
 
     // Simplified headers without long verbose titles
     expect(screen.getByRole("columnheader", { name: "Launch" })).toBeInTheDocument();
@@ -99,6 +99,51 @@ describe("LaunchesList High-Density Table & Information Hierarchy (Issue #26)", 
     expect(screen.getByRole("columnheader", { name: "Dataset" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "状态" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "质量" })).toBeInTheDocument();
+  });
+
+  it("keeps a consistently labeled detail action for every status and distinguishes Langfuse links", async () => {
+    const statusLaunches = LAUNCH_STATUSES.map((status, index) => ({
+      ...mockLaunches[0],
+      id: `launch-${status.toLowerCase()}`,
+      status,
+      langfuse_experiment_url:
+        index === 0
+          ? "https://langfuse.example/runs/run-001?view=detail#trace"
+          : index === 1
+            ? "javascript:alert(1)"
+            : undefined,
+    }));
+
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path === "/api/v1/experiment-launches") return Promise.resolve({ data: statusLaunches });
+      if (path === "/api/v1/agents") return Promise.resolve({ data: mockAgents });
+      return Promise.resolve({ data: null });
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <LaunchesList />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(screen.getByRole("table")).toBeInTheDocument());
+
+    for (const launch of statusLaunches) {
+      expect(
+        screen.getByRole("link", { name: `查看 Launch ${launch.id} 详情` })
+      ).toHaveAttribute("href", `/launches/${launch.id}`);
+    }
+
+    const langfuseLink = screen.getByRole("link", { name: "在 Langfuse 中查看" });
+    expect(langfuseLink).toHaveAttribute(
+      "href",
+      "https://langfuse.example/runs/run-001?view=detail#trace"
+    );
+    expect(langfuseLink).toHaveAttribute("target", "_blank");
+    expect(langfuseLink).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.getAllByText("Langfuse 未就绪")).toHaveLength(LAUNCH_STATUSES.length - 1);
   });
 
   it("displays truncated Launch ID, provides copy button with accessible label and clipboard action", async () => {

@@ -73,7 +73,7 @@ test.describe("E2E-02: Frozen Manifest Absolute Immutability Verification", () =
     });
 
     // Items route
-    await page.route("**/api/v1/experiment-launch-items**", async (route) => {
+    await page.route(`**/api/v1/experiment-launches/${historicalLaunchId}/items`, async (route) => {
       await route.fulfill({
         json: [
           {

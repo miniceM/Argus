@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -88,6 +88,13 @@ export const LaunchDetail: React.FC = () => {
   const [showRetryModal, setShowRetryModal] = useState(false);
   const [forceRetry, setForceRetry] = useState(false);
 
+  useEffect(() => {
+    setShowRawManifest(false);
+    setActionError(null);
+    setShowRetryModal(false);
+    setForceRetry(false);
+  }, [launchId]);
+
   // 1. Fetch Launch Details with S2 Polling
   const {
     data: launch,
@@ -99,29 +106,27 @@ export const LaunchDetail: React.FC = () => {
     queryKey: queryKeys.launches.detail(launchId || ""),
     queryFn: async () => {
       if (!launchId) throw new Error("缺少 Launch ID");
-      // Prefer standard query endpoint for mock & contract backward compatibility
-      try {
-        const fallback = await api.GET("/api/v1/experiment-launches", {
-          params: { query: { id: launchId } },
-        });
-        if (fallback.data) {
-          const list = Array.isArray(fallback.data) ? fallback.data : [fallback.data];
-          const match = list.find((l) => l?.id === launchId) || list[0];
-          if (match && typeof match === "object" && "id" in match) {
-            return match as LaunchResponse;
-          }
-        }
-      } catch {
-        // Fallback to path-based endpoint
-      }
-
       const res = await api.GET("/api/v1/experiment-launches/{launch_id}", {
         params: { path: { launch_id: launchId } },
       });
-      if (res.data && typeof res.data === "object" && "id" in res.data) {
-        return res.data as LaunchResponse;
+
+      if (res.error) {
+        if (res.response.status === 404) {
+          throw new Error(`Launch ${launchId} 不存在或已删除`);
+        }
+        throw res.error;
       }
-      throw new Error(`Launch ${launchId} not found`);
+
+      if (
+        !res.data ||
+        Array.isArray(res.data) ||
+        typeof res.data !== "object" ||
+        res.data.id !== launchId
+      ) {
+        throw new Error("Launch 详情响应与请求 ID 不一致，请重新加载");
+      }
+
+      return res.data as LaunchResponse;
     },
     enabled: Boolean(launchId),
     refetchInterval: (query) => {
@@ -146,32 +151,22 @@ export const LaunchDetail: React.FC = () => {
     queryKey: queryKeys.launches.items(launchId || ""),
     queryFn: async () => {
       if (!launchId) return [];
-      // Prefer /api/v1/experiment-launch-items for mock & contract backward compatibility
-      try {
-        const fallback = await api.GET("/api/v1/experiment-launch-items", {
-          params: { query: { launch_id: launchId } },
-        });
-        if (fallback.data && Array.isArray(fallback.data)) {
-          return fallback.data as ItemExecution[];
-        }
-      } catch {
-        // Fallback to path-based endpoint
+      const res = await api.GET("/api/v1/experiment-launches/{launch_id}/items", {
+        params: { path: { launch_id: launchId } },
+      });
+
+      if (res.error) throw res.error;
+      if (!Array.isArray(res.data)) {
+        throw new Error("用例明细响应格式无效，请重新加载");
       }
 
-      try {
-        const res = await api.GET("/api/v1/experiment-launches/{launch_id}/items", {
-          params: { path: { launch_id: launchId } },
-        });
-        if (res.data && Array.isArray(res.data)) {
-          return res.data as ItemExecution[];
-        }
-      } catch {
-        // Safe empty array
+      if (res.data.some((item) => item.launch_id !== launchId)) {
+        throw new Error("用例明细归属的 Launch 与当前页面不一致，请重新加载");
       }
 
-      return [];
+      return res.data as ItemExecution[];
     },
-    enabled: Boolean(launchId),
+    enabled: Boolean(launchId && launch?.id === launchId),
     refetchInterval: () => {
       if (
         launch &&
@@ -265,7 +260,20 @@ export const LaunchDetail: React.FC = () => {
   });
 
   if (isLaunchLoading) return <LoadingState message="正在加载评测任务与不可变快照..." />;
-  if (launchError) return <ErrorState message={formatApiError(launchError)} onRetry={() => refetchLaunch()} />;
+  if (launchError) {
+    return (
+      <div className="space-y-3">
+        <Link
+          to="/launches"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>返回评测列表</span>
+        </Link>
+        <ErrorState message={formatApiError(launchError)} onRetry={() => refetchLaunch()} />
+      </div>
+    );
+  }
   if (!launch) return <ErrorState message="未找到对应的评测任务" />;
 
   const allowedActions = launch.allowed_actions || (launch.status === "PENDING" ? ["run"] : []);
@@ -278,8 +286,10 @@ export const LaunchDetail: React.FC = () => {
   const manifestRunner = manifest.runner || {};
 
   // Metrics calculation from items
-  const totalItems = items ? items.length : 0;
-  const passedItems = items ? items.filter((i) => i.quality_conclusion?.toLowerCase() === "pass").length : 0;
+  const totalItems = itemsError ? null : items.length;
+  const passedItems = itemsError
+    ? null
+    : items.filter((i) => i.quality_conclusion?.toLowerCase() === "pass").length;
 
   // Duration calculation
   let durationText = "-";
@@ -479,13 +489,15 @@ export const LaunchDetail: React.FC = () => {
             用例通过率 (Pass Rate)
           </span>
           <span className="text-base font-bold font-mono text-slate-900">
-            {totalItems > 0 ? (
+            {itemsError ? (
+              <span className="text-xs text-rose-600">暂不可用</span>
+            ) : totalItems !== null && totalItems > 0 ? (
               <>
                 <span className="text-emerald-600">{passedItems}</span>
                 <span className="text-slate-400 font-normal"> / </span>
                 <span>{totalItems}</span>
                 <span className="text-xs text-slate-500 font-normal ml-2">
-                  ({((passedItems / totalItems) * 100).toFixed(1)}%)
+                  ({(((passedItems ?? 0) / totalItems) * 100).toFixed(1)}%)
                 </span>
               </>
             ) : (
@@ -746,7 +758,7 @@ export const LaunchDetail: React.FC = () => {
       {/* Items Execution & Evaluations */}
       {isItemsLoading && <LoadingState message="正在加载用例明细与得分..." />}
       {itemsError && <ErrorState message={formatApiError(itemsError)} onRetry={() => refetchItems()} />}
-      {!isItemsLoading && !itemsError && items && (
+      {!isItemsLoading && !itemsError && (
         <ItemTable items={items} />
       )}
 

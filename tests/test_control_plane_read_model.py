@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -120,6 +121,75 @@ def test_agent_summary_read_model(client):
     assert matched3 is not None
     assert matched3["version_count"] == 2
     assert matched3["latest_version"] == "1.0.0"
+
+
+def test_agent_launch_summary_matches_launch_list_api(client):
+    from app.db_models import ExperimentLaunchRecord
+    from app.main import db_manager
+    from sqlalchemy import delete
+
+    agent_id = f"issue-23-api-{uuid4().hex}"
+    agent_name = "Issue 23 API Cross-check"
+    created = False
+    try:
+        agent_response = client.post(
+            "/api/v1/agents",
+            json={"id": agent_id, "name": agent_name},
+        )
+        assert agent_response.status_code == 201
+        created = True
+
+        version_response = client.post(
+            "/api/v1/agent-versions",
+            json={
+                "agent_id": agent_id,
+                "version": "v1",
+                "endpoint": "http://127.0.0.1:18081/invoke",
+            },
+        )
+        assert version_response.status_code == 201
+        version_id = version_response.json()["id"]
+
+        statuses = ("SUCCEEDED", "SUCCEEDED", "PENDING", "PARTIAL_FAILED", "COMPLETED")
+        with db_manager.get_session() as session:
+            session.add_all(
+                [
+                    ExperimentLaunchRecord(
+                        id=f"issue-23-api-launch-{index}",
+                        name=f"Issue 23 API Launch {index}",
+                        agent_id=agent_id,
+                        agent_version="v1",
+                        agent_version_id=version_id,
+                        dataset_name="banking-reg",
+                        status=status,
+                        manifest={},
+                    )
+                    for index, status in enumerate(statuses)
+                ]
+            )
+            session.commit()
+
+        agent_detail = client.get(f"/api/v1/agents?id={agent_id}")
+        agent_list = client.get("/api/v1/agents")
+        launch_list = client.get(f"/api/v1/experiment-launches?agent_id={agent_id}")
+        assert agent_detail.status_code == agent_list.status_code == launch_list.status_code == 200
+
+        detail_summary = agent_detail.json()
+        list_summary = next(item for item in agent_list.json() if item["id"] == agent_id)
+        launches = launch_list.json()
+        assert len(launches) == detail_summary["launch_count"] == list_summary["launch_count"] == 5
+
+        terminal_statuses = {"SUCCEEDED", "COMPLETED", "PARTIAL_FAILED", "FAILED", "CANCELLED"}
+        launch_list_active_count = sum(launch["status"] not in terminal_statuses for launch in launches)
+        assert launch_list_active_count == detail_summary["active_launch_count"] == list_summary["active_launch_count"] == 1
+        assert [launch["status"] for launch in launches].count("PENDING") == 1
+    finally:
+        if created:
+            with db_manager.get_session() as session:
+                session.execute(delete(ExperimentLaunchRecord).where(ExperimentLaunchRecord.agent_id == agent_id))
+                session.commit()
+            cleanup_response = client.delete(f"/api/v1/agents?id={agent_id}")
+            assert cleanup_response.status_code == 200
 
 
 def test_item_summary_attempt_metrics(client):

@@ -143,8 +143,11 @@ export const AgentsList: React.FC = () => {
                       <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
                         <span>{agent.launch_count ?? 0}</span>
                         {(agent.active_launch_count ?? 0) > 0 && (
-                          <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                            {agent.active_launch_count} 运行中
+                          <span
+                            title="活跃评测包含待执行、排队中、运行中、取消中等尚未结束状态的 Launch。"
+                            className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200"
+                          >
+                            {agent.active_launch_count} 条活跃评测
                           </span>
                         )}
                       </div>

@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from sqlalchemy import select
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "services" / "eval-runner"))
@@ -242,6 +243,144 @@ def test_agent_summary_includes_launch_and_active_launch_counts(tmp_path):
     assert list_sums[0]["active_launch_count"] == 1
 
 
+def test_agent_summary_matches_issue_23_launch_statuses(tmp_path):
+    from app.db_models import ExperimentLaunchRecord
+
+    db_file = tmp_path / "issue_23_summary.db"
+    db_mgr = DatabaseManager(f"sqlite:///{db_file}")
+    MigrationRunner(engine=db_mgr.engine, migrations_dir=ROOT / "migrations").apply_all()
+
+    registry = AgentRegistry(db_mgr)
+    registry.create_agent(agent_id="issue-23-agent", name="Issue 23 Agent")
+    ver = registry.create_version(
+        agent_id="issue-23-agent",
+        version="v1",
+        endpoint="http://localhost:8080/invoke",
+    )
+
+    statuses = ("SUCCEEDED", "SUCCEEDED", "PENDING", "PARTIAL_FAILED", "COMPLETED")
+    with db_mgr.get_session() as session:
+        session.add_all(
+            [
+                ExperimentLaunchRecord(
+                    id=f"issue-23-launch-{index}",
+                    name=f"Issue 23 Launch {index}",
+                    agent_id="issue-23-agent",
+                    agent_version="v1",
+                    agent_version_id=ver.id,
+                    dataset_name="banking-reg",
+                    status=status,
+                    manifest={},
+                )
+                for index, status in enumerate(statuses)
+            ]
+        )
+        session.commit()
+
+    summary = registry.get_agent_summary("issue-23-agent")
+    listed = next(agent for agent in registry.list_agents_summary() if agent["id"] == "issue-23-agent")
+
+    assert summary["launch_count"] == 5
+    assert summary["active_launch_count"] == 1
+    assert listed["launch_count"] == 5
+    assert listed["active_launch_count"] == 1
+
+
+def test_succeeded_launch_does_not_block_confirmed_agent_purge(tmp_path):
+    from app.db_models import ExperimentLaunchRecord
+
+    db_file = tmp_path / "succeeded_launch_purge.db"
+    db_mgr = DatabaseManager(f"sqlite:///{db_file}")
+    MigrationRunner(engine=db_mgr.engine, migrations_dir=ROOT / "migrations").apply_all()
+
+    registry = AgentRegistry(db_mgr)
+    registry.create_agent(agent_id="succeeded-agent", name="Succeeded Agent")
+    ver = registry.create_version(
+        agent_id="succeeded-agent",
+        version="v1",
+        endpoint="http://localhost:8080/invoke",
+    )
+    with db_mgr.get_session() as session:
+        session.add(
+            ExperimentLaunchRecord(
+                id="legacy-succeeded-launch",
+                name="Legacy Succeeded Launch",
+                agent_id="succeeded-agent",
+                agent_version="v1",
+                agent_version_id=ver.id,
+                dataset_name="banking-reg",
+                status="SUCCEEDED",
+                manifest={},
+            )
+        )
+        session.commit()
+
+    summary = registry.get_agent_summary("succeeded-agent")
+    assert summary["launch_count"] == 1
+    assert summary["active_launch_count"] == 0
+
+    # Normal deletion remains guarded by associated records; exact-name purge is allowed.
+    from app.models import AgentHasLaunchesError
+
+    with pytest.raises(AgentHasLaunchesError) as exc_info:
+        registry.delete_agent("succeeded-agent", force=False)
+    assert exc_info.value.active_launch_count == 0
+
+    result = registry.purge_agent("succeeded-agent", confirm_name="Succeeded Agent")
+    assert result["launches_deleted"] == 1
+    assert registry.get_agent("succeeded-agent") is None
+
+
+def test_succeeded_and_pending_launches_still_block_agent_purge(tmp_path):
+    from app.db_models import ExperimentLaunchRecord
+    from app.models import AgentHasActiveLaunchesError
+
+    db_file = tmp_path / "mixed_active_launch_purge.db"
+    db_mgr = DatabaseManager(f"sqlite:///{db_file}")
+    MigrationRunner(engine=db_mgr.engine, migrations_dir=ROOT / "migrations").apply_all()
+
+    registry = AgentRegistry(db_mgr)
+    registry.create_agent(agent_id="mixed-agent", name="Mixed Agent")
+    ver = registry.create_version(
+        agent_id="mixed-agent",
+        version="v1",
+        endpoint="http://localhost:8080/invoke",
+    )
+    statuses = ("SUCCEEDED", "PENDING")
+    with db_mgr.get_session() as session:
+        session.add_all(
+            [
+                ExperimentLaunchRecord(
+                    id=f"mixed-launch-{status.lower()}",
+                    name=f"Mixed Launch {status}",
+                    agent_id="mixed-agent",
+                    agent_version="v1",
+                    agent_version_id=ver.id,
+                    dataset_name="banking-reg",
+                    status=status,
+                    manifest={},
+                )
+                for status in statuses
+            ]
+        )
+        session.commit()
+
+    summary = registry.get_agent_summary("mixed-agent")
+    assert summary["launch_count"] == 2
+    assert summary["active_launch_count"] == 1
+
+    with pytest.raises(AgentHasActiveLaunchesError) as exc_info:
+        registry.delete_agent("mixed-agent", force=True, confirm_name="Mixed Agent")
+
+    assert exc_info.value.active_launch_count == 1
+    assert registry.get_agent("mixed-agent") is not None
+    with db_mgr.get_session() as session:
+        remaining = session.scalars(
+            select(ExperimentLaunchRecord).where(ExperimentLaunchRecord.agent_id == "mixed-agent")
+        ).all()
+    assert sorted(launch.status for launch in remaining) == ["PENDING", "SUCCEEDED"]
+
+
 def test_delete_agent_with_launches_rejected_when_not_force(tmp_path):
     from app.db_models import ExperimentLaunchRecord
     from app.models import AgentHasLaunchesError
@@ -428,8 +567,8 @@ def test_delete_agent_force_rejects_active_launches(tmp_path):
         endpoint="http://localhost:8080/invoke",
     )
 
-    # Test each active status: PENDING, QUEUED, RUNNING, CANCELLING
-    for active_status in ("PENDING", "QUEUED", "RUNNING", "CANCELLING"):
+    # Unknown states remain conservatively protected from destructive cleanup.
+    for active_status in ("PENDING", "QUEUED", "RUNNING", "CANCELLING", "UNRECOGNIZED_TEST_STATUS"):
         with db_mgr.get_session() as session:
             launch = ExperimentLaunchRecord(
                 id=f"launch-{active_status.lower()}",
@@ -483,5 +622,3 @@ def test_purge_agent_without_launches_still_requires_exact_name(tmp_path):
     assert res["deleted"] is True
     assert res["launches_deleted"] == 0
     assert registry.get_agent("empty-agent") is None
-
-

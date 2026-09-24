@@ -29,6 +29,10 @@ from .models import (
 )
 from .state_machine import TERMINAL_LAUNCH_STATUSES
 
+# Registry 查询将历史成功状态视为终态。兼容范围仅限 Registry，避免改变
+# Reconciler 和 Langfuse 同步逻辑的现有语义。
+_REGISTRY_TERMINAL_LAUNCH_STATUSES = (*TERMINAL_LAUNCH_STATUSES, "SUCCEEDED")
+
 
 def compute_spec_digest(spec_dict: dict[str, Any]) -> str:
     """Compute deterministic SHA-256 digest of normalized execution specification."""
@@ -171,7 +175,7 @@ class AgentRegistry:
                 session.scalar(
                     select(func.count(ExperimentLaunchRecord.id)).where(
                         ExperimentLaunchRecord.agent_id == agent_id,
-                        ExperimentLaunchRecord.status.not_in(TERMINAL_LAUNCH_STATUSES),
+                        ExperimentLaunchRecord.status.not_in(_REGISTRY_TERMINAL_LAUNCH_STATUSES),
                     )
                 )
                 or 0
@@ -235,7 +239,7 @@ class AgentRegistry:
                         ExperimentLaunchRecord.agent_id,
                         func.count(ExperimentLaunchRecord.id),
                     )
-                    .where(ExperimentLaunchRecord.status.not_in(TERMINAL_LAUNCH_STATUSES))
+                    .where(ExperimentLaunchRecord.status.not_in(_REGISTRY_TERMINAL_LAUNCH_STATUSES))
                     .group_by(ExperimentLaunchRecord.agent_id)
                 ).all()
             )
@@ -288,7 +292,9 @@ class AgentRegistry:
             launch_count = len(launches)
 
             if launch_count > 0:
-                active_launches = [launch for launch in launches if launch.status not in TERMINAL_LAUNCH_STATUSES]
+                active_launches = [
+                    launch for launch in launches if launch.status not in _REGISTRY_TERMINAL_LAUNCH_STATUSES
+                ]
                 active_count = len(active_launches)
 
                 if not force:

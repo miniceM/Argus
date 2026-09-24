@@ -8,7 +8,6 @@ import {
   Database,
   Rocket,
   Sliders,
-  Square,
 } from "lucide-react";
 import { api } from "../../api/client";
 import { queryKeys } from "../../api/query-keys";
@@ -17,6 +16,8 @@ import { ErrorState, LoadingState } from "../../components/StateViews";
 
 type EvaluatorResponse = import("../../api/schema").components["schemas"]["EvaluatorResponse"];
 type AgentVersionResponse = import("../../api/schema").components["schemas"]["AgentVersionResponse"];
+
+const composedOf = (evaluator: EvaluatorResponse) => evaluator.composed_of ?? [];
 
 export const CreateLaunch: React.FC = () => {
   const navigate = useNavigate();
@@ -28,7 +29,8 @@ export const CreateLaunch: React.FC = () => {
   const [datasetName, setDatasetName] = useState<string>("banking-agent-regression");
   const [datasetVersionMode, setDatasetVersionMode] = useState<"latest" | "custom">("latest");
   const [customDatasetVersion, setCustomDatasetVersion] = useState<string>("");
-  const [selectedEvaluators, setSelectedEvaluators] = useState<string[]>([]);
+  const [evaluatorMode, setEvaluatorMode] = useState<"diagnostic" | "composite">("diagnostic");
+  const [selectedEvaluators, setSelectedEvaluators] = useState<string[] | null>(null);
   const [concurrency, setConcurrency] = useState<number>(1);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -65,6 +67,11 @@ export const CreateLaunch: React.FC = () => {
       const res = await api.GET("/api/v1/evaluators");
       if (!res.data) throw new Error("获取 Evaluators 失败");
       const list = Array.isArray(res.data) ? res.data : [res.data];
+      if (list.some((item) => (
+        typeof item.default_selected !== "boolean" || !Array.isArray(item.composed_of)
+      ))) {
+        throw new Error("Evaluator 目录契约不完整，请升级服务端后重试");
+      }
       return list as EvaluatorResponse[];
     },
   });
@@ -85,25 +92,55 @@ export const CreateLaunch: React.FC = () => {
     }
   }, [versions]);
 
-  // Auto select only item-scope evaluators by default (standalone launch runner rejects run-scope)
+  // Initialize once: an empty array after this point is an intentional user selection.
   useEffect(() => {
-    if (evaluators && evaluators.length > 0 && selectedEvaluators.length === 0) {
+    if (evaluators && selectedEvaluators === null) {
       setSelectedEvaluators(
-        evaluators.filter((e) => e.scope === "item").map((e) => e.id)
+        evaluators
+          .filter((e) => e.scope === "item" && e.default_selected === true && composedOf(e).length === 0)
+          .map((e) => e.id)
+          .sort()
       );
     }
-  }, [evaluators, selectedEvaluators.length]);
+  }, [evaluators, selectedEvaluators]);
+
+  const selectedEvaluatorIds = selectedEvaluators ?? [];
+  const compositeEvaluator = evaluators?.find((e) => e.scope === "item" && composedOf(e).length > 0);
+  const isCompositeMode = evaluatorMode === "composite";
+  const selectedSpecs = selectedEvaluatorIds.map((id) => evaluators?.find((e) => e.id === id));
+  const hasInvalidSelection = selectedEvaluators !== null && evaluators !== undefined && (
+    selectedSpecs.some((spec) => !spec || spec.scope !== "item") ||
+    (isCompositeMode
+      ? !compositeEvaluator || selectedEvaluatorIds.length !== 1 || selectedEvaluatorIds[0] !== compositeEvaluator.id
+      : selectedSpecs.some((spec) => spec && composedOf(spec).length > 0))
+  );
+
+  const selectDiagnosticMode = () => {
+    setEvaluatorMode("diagnostic");
+    setSelectedEvaluators(
+      (evaluators ?? [])
+        .filter((e) => e.scope === "item" && e.default_selected === true && composedOf(e).length === 0)
+        .map((e) => e.id)
+        .sort()
+    );
+  };
+
+  const selectCompositeMode = () => {
+    if (compositeEvaluator) {
+      setEvaluatorMode("composite");
+      setSelectedEvaluators([compositeEvaluator.id]);
+    }
+  };
 
   const toggleEvaluator = (evalId: string) => {
     const target = evaluators?.find((e) => e.id === evalId);
-    if (target && target.scope !== "item") {
-      return; // Do not allow selecting unsupported run-scope evaluators
-    }
-    if (selectedEvaluators.includes(evalId)) {
-      setSelectedEvaluators(selectedEvaluators.filter((e) => e !== evalId));
-    } else {
-      setSelectedEvaluators([...selectedEvaluators, evalId]);
-    }
+    if (!target || target.scope !== "item" || composedOf(target).length > 0) return;
+    setSelectedEvaluators((current) => {
+      const selection = current ?? [];
+      return selection.includes(evalId)
+        ? selection.filter((id) => id !== evalId)
+        : [...selection, evalId];
+    });
   };
 
   const createMutation = useMutation({
@@ -123,8 +160,13 @@ export const CreateLaunch: React.FC = () => {
         throw new Error("请输入自定义评测集版本号（如 ISO-8601 UTC 时间戳）");
       }
 
-      if (selectedEvaluators.length === 0) {
+      const selectedIds = selectedEvaluatorIds;
+      if (selectedIds.length === 0) {
         throw new Error("请至少选择一个评测指标 (Evaluator)");
+      }
+
+      if (hasInvalidSelection) {
+        throw new Error("评测指标选择已失效，请重新选择");
       }
 
       const res = await api.POST("/api/v1/experiment-launches", {
@@ -134,7 +176,7 @@ export const CreateLaunch: React.FC = () => {
           agent_version: selectedAgentVersion,
           dataset_name: datasetName.trim(),
           dataset_version: finalDatasetVersion,
-          evaluator_ids: selectedEvaluators,
+          evaluator_ids: selectedIds,
           max_concurrency: concurrency,
         },
       });
@@ -341,56 +383,99 @@ export const CreateLaunch: React.FC = () => {
               <CheckSquare className="w-4 h-4 text-indigo-600" />
               <h3 className="text-sm font-bold text-slate-900">3. 评测指标与门禁 (Evaluators)</h3>
             </div>
-            <span className="text-xs text-slate-400">已选 {selectedEvaluators.length} 项</span>
+            <span className="text-xs text-slate-400">已选 {selectedEvaluatorIds.length} 项</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {evaluators?.map((ev) => {
-              const isItemScope = ev.scope === "item";
-              const isSelected = selectedEvaluators.includes(ev.id);
-              return (
-                <div
-                  key={ev.id}
-                  onClick={() => isItemScope && toggleEvaluator(ev.id)}
-                  className={`p-3 rounded-lg border text-xs transition-colors flex items-start gap-3 ${
-                    !isItemScope
-                      ? "bg-slate-100/70 border-slate-200 text-slate-400 cursor-not-allowed opacity-60"
-                      : isSelected
-                      ? "bg-indigo-50/50 border-indigo-300 text-slate-900 cursor-pointer"
-                      : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100 cursor-pointer"
-                  }`}
-                >
-                  <div className="mt-0.5 text-indigo-600 shrink-0">
-                    {!isItemScope ? (
-                      <Square className="w-4 h-4 text-slate-300" />
-                    ) : isSelected ? (
-                      <CheckSquare className="w-4 h-4" />
-                    ) : (
-                      <Square className="w-4 h-4" />
-                    )}
-                  </div>
-                  <div>
-                    <div className="font-semibold text-slate-900 flex items-center gap-2">
-                      <span className={!isItemScope ? "text-slate-500" : ""}>{ev.id}</span>
-                      <span
-                        className={`px-1.5 py-0.2 rounded text-[10px] uppercase font-mono ${
-                          isItemScope ? "bg-slate-200 text-slate-700" : "bg-amber-100 text-amber-700"
-                        }`}
-                      >
-                        {ev.scope}
-                      </span>
-                      {!isItemScope && (
-                        <span className="text-[10px] text-amber-600 font-normal">
-                          (聚合指标，暂不支持在单次 Launch 中直接运行)
+          <fieldset className="space-y-3">
+            <legend className="sr-only">选择评测结果模式</legend>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 bg-slate-50 cursor-pointer has-[:checked]:border-indigo-300 has-[:checked]:bg-indigo-50/50">
+                <input
+                  type="radio"
+                  name="evaluatorMode"
+                  checked={evaluatorMode === "diagnostic"}
+                  onChange={selectDiagnosticMode}
+                  className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span>
+                  <span className="block text-xs font-semibold text-slate-900">逐项诊断（推荐）</span>
+                  <span className="block text-[11px] text-slate-500 mt-1">
+                    分别记录各项评分，便于定位失败原因。所有已选指标达到阈值时，用例质量结论为通过；取消的指标不参与本次判定。
+                  </span>
+                </span>
+              </label>
+              <label className={`flex items-start gap-3 p-3 rounded-lg border border-slate-200 ${compositeEvaluator ? "bg-slate-50 cursor-pointer has-[:checked]:border-indigo-300 has-[:checked]:bg-indigo-50/50" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
+                <input
+                  type="radio"
+                  name="evaluatorMode"
+                  checked={evaluatorMode === "composite"}
+                  onChange={selectCompositeMode}
+                  disabled={!compositeEvaluator}
+                  className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span>
+                  <span className="block text-xs font-semibold text-slate-900">复合结论</span>
+                  <span className="block text-[11px] text-slate-500 mt-1">
+                    只记录一个复合评分{compositeEvaluator ? `（${compositeEvaluator.id}）` : ""}；
+                    {compositeEvaluator ? composedOf(compositeEvaluator).join("、") : "复合 Evaluator 尚不可用"} 均通过时，用例质量结论才通过，不额外记录组成项的独立评分。
+                  </span>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+
+          <p className="text-[11px] text-slate-500" role="note">
+            当前内置版本及默认阈值下，两种默认配置的质量通过条件等价，但结果明细不同；执行成功不等于质量通过。切换模式会重置指标选择。
+          </p>
+
+          {hasInvalidSelection && (
+            <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-3 space-y-2" role="alert">
+              <p>Evaluator 目录已变化，当前选择不再有效。重新应用当前可用的逐项诊断默认指标后再创建 Launch。</p>
+              <button type="button" onClick={selectDiagnosticMode} className="font-semibold underline underline-offset-2 focus:outline-hidden focus:ring-2 focus:ring-rose-500 rounded-sm">
+                重新选择逐项诊断默认指标
+              </button>
+            </div>
+          )}
+
+          {!isCompositeMode && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(evaluators ?? []).filter((ev) => composedOf(ev).length === 0).map((ev) => {
+                const isItemScope = ev.scope === "item";
+                const isSelected = selectedEvaluatorIds.includes(ev.id);
+                return (
+                  <label
+                    key={ev.id}
+                    className={`p-3 rounded-lg border text-xs transition-colors flex items-start gap-3 ${
+                      !isItemScope
+                        ? "bg-slate-100/70 border-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                        : isSelected
+                          ? "bg-indigo-50/50 border-indigo-300 text-slate-900 cursor-pointer"
+                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100 cursor-pointer"
+                    }`}
+                    aria-disabled={!isItemScope}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      disabled={!isItemScope}
+                      onChange={() => toggleEvaluator(ev.id)}
+                      className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
+                    />
+                    <span>
+                      <span className="flex items-center gap-2 font-semibold text-slate-900">
+                        <span className={!isItemScope ? "text-slate-500" : ""}>{ev.id}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-mono ${isItemScope ? "bg-slate-200 text-slate-700" : "bg-amber-100 text-amber-700"}`}>
+                          {ev.scope}
                         </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-500 mt-0.5">{ev.description || "确定性规则评测器"}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                        {!isItemScope && <span className="text-[10px] text-amber-600 font-normal">（聚合指标，暂不支持在单次 Launch 中直接运行）</span>}
+                      </span>
+                      <span className="block text-[11px] text-slate-500 mt-0.5">{ev.description || "确定性规则评测器"}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Section 4: Concurrency Execution Policy */}
@@ -428,7 +513,7 @@ export const CreateLaunch: React.FC = () => {
           </Link>
           <button
             type="submit"
-            disabled={createMutation.isPending || !selectedAgentVersion}
+            disabled={createMutation.isPending || !selectedAgentVersion || hasInvalidSelection}
             className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50"
           >
             <Rocket className="w-3.5 h-3.5" />

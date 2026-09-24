@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .evaluators import default_evaluator_registry
 from .security import validate_credential_ref, validate_endpoint_url
 
 
@@ -273,7 +274,7 @@ class ExperimentLaunchCreateRequest(BaseModel):
     dataset_name: str
     dataset_version: str | None = None
     evaluator_ids: list[str] = Field(
-        default_factory=lambda: ["intent_match", "required_tool_match", "pii_safe", "escalation_match"],
+        default_factory=default_evaluator_registry.default_item_ids,
         min_length=1,
         description="List of item-scope evaluator IDs to run; must contain at least one evaluator. Run-scope evaluators are not supported by the standalone launch runner.",
     )
@@ -290,6 +291,8 @@ class EvaluatorResponse(BaseModel):
     scope: str
     threshold: float
     description: str | None = None
+    default_selected: bool = False
+    composed_of: list[str] = Field(default_factory=list)
 
 
 class SystemInfoResponse(BaseModel):

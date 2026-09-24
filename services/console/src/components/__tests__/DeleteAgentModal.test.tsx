@@ -123,6 +123,12 @@ describe("DeleteAgentModal UX and Strong Name Verification Flow", () => {
     });
 
     expect(screen.getByText("禁止删除：存在活跃评测任务")).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) =>
+        element?.tagName === "P" && element.textContent?.includes("当前有 1 条尚未结束的评测记录") === true
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText(/待执行、排队中、运行中、取消中等尚未结束状态/)).toBeInTheDocument();
     const submitBtn = screen.getByRole("button", { name: "确认强制清理" });
     expect(submitBtn).toBeDisabled();
 
@@ -252,4 +258,3 @@ describe("DeleteAgentModal UX and Strong Name Verification Flow", () => {
     expect(forceBtn).toBeDisabled();
   });
 });
-

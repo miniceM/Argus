@@ -22,6 +22,7 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { QualityBadge } from "../../components/QualityBadge";
 import { JsonViewer } from "../../components/JsonViewer";
 import { ItemTable } from "./ItemTable";
+import { ACTIVE_LAUNCH_STATUSES, LaunchStatus } from "./LaunchesList";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 
 type LaunchResponse = import("../../api/schema").components["schemas"]["ExperimentLaunchResponse"];
@@ -127,9 +128,7 @@ export const LaunchDetail: React.FC = () => {
       const data = query.state.data;
       if (
         data &&
-        ["PENDING", "QUEUED", "RUNNING", "CANCELLING", "RETRY_WAIT"].includes(
-          data.status?.toUpperCase() || ""
-        )
+        ACTIVE_LAUNCH_STATUSES.has((data.status?.toUpperCase() || "") as LaunchStatus)
       ) {
         return 1500;
       }
@@ -176,9 +175,7 @@ export const LaunchDetail: React.FC = () => {
     refetchInterval: () => {
       if (
         launch &&
-        ["PENDING", "QUEUED", "RUNNING", "CANCELLING", "RETRY_WAIT"].includes(
-          launch.status?.toUpperCase() || ""
-        )
+        ACTIVE_LAUNCH_STATUSES.has((launch.status?.toUpperCase() || "") as LaunchStatus)
       ) {
         return 1500;
       }

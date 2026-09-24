@@ -265,8 +265,38 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     await page.getByRole("radio", { name: /逐项诊断/ }).check();
     await expect(page.getByText("已选 4 项")).toBeVisible();
 
+    // Keyboard users can reach and operate native evaluator checkboxes without submitting.
+    const diagnosticMode = page.getByRole("radio", { name: /逐项诊断/ });
+    await diagnosticMode.focus();
+    await page.keyboard.press("Tab");
+    const firstEvaluator = page.getByRole("checkbox", { name: /escalation_match/ });
+    await expect(firstEvaluator).toBeFocused();
+    await expect(firstEvaluator).toHaveCSS("outline-style", "solid");
+
+    for (const id of ["escalation_match", "intent_match", "pii_safe", "required_tool_match"]) {
+      const checkbox = page.getByRole("checkbox", { name: new RegExp(id) });
+      await expect(checkbox).toBeFocused();
+      if (id !== "required_tool_match") await page.keyboard.press("Tab");
+    }
+
+    // Toggle the last diagnostic so keyboard testing doesn't alter the initial request order.
+    const lastEvaluator = page.getByRole("checkbox", { name: /required_tool_match/ });
+    await page.keyboard.press("Space");
+    await expect(lastEvaluator).not.toBeChecked();
+    await expect(page.getByText("已选 3 项")).toBeVisible();
+    expect(interceptedCreationPayload).toBeNull();
+
+    await page.keyboard.press("Enter");
+    await expect(lastEvaluator).toBeChecked();
+    await expect(page.getByText("已选 4 项")).toBeVisible();
+    expect(interceptedCreationPayload).toBeNull();
+
+    const concurrencyInput = page.getByRole("spinbutton");
+    await page.keyboard.press("Tab");
+    await expect(concurrencyInput).toBeFocused();
+
     // Adjust Concurrency
-    await page.getByRole("spinbutton").fill("2");
+    await concurrencyInput.fill("2");
 
     // Submit Launch
     await page.getByRole("button", { name: "创建评测任务" }).click();

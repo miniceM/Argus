@@ -459,7 +459,13 @@ export const CreateLaunch: React.FC = () => {
                       checked={isSelected}
                       disabled={!isItemScope}
                       onChange={() => toggleEvaluator(ev.id)}
-                      className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        event.preventDefault();
+                        if (event.repeat || event.nativeEvent.isComposing) return;
+                        toggleEvaluator(ev.id);
+                      }}
+                      className="mt-0.5 rounded border-slate-300 text-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700 disabled:cursor-not-allowed"
                     />
                     <span>
                       <span className="flex items-center gap-2 font-semibold text-slate-900">

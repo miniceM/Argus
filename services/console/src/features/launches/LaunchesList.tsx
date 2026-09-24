@@ -17,6 +17,37 @@ import { EmptyState, ErrorState, LoadingState } from "../../components/StateView
 
 type LaunchResponse = import("../../api/schema").components["schemas"]["ExperimentLaunchResponse"];
 
+export const LAUNCH_STATUSES = [
+  "PENDING",
+  "QUEUED",
+  "RUNNING",
+  "COMPLETED",
+  "PARTIAL_FAILED",
+  "FAILED",
+  "CANCELLING",
+  "CANCELLED",
+] as const;
+
+export type LaunchStatus = (typeof LAUNCH_STATUSES)[number];
+
+export const ACTIVE_LAUNCH_STATUSES = new Set<LaunchStatus>([
+  "PENDING",
+  "QUEUED",
+  "RUNNING",
+  "CANCELLING",
+]);
+
+export const LAUNCH_STATUS_LABELS: Record<LaunchStatus, string> = {
+  PENDING: "PENDING (准备中)",
+  QUEUED: "QUEUED (队列中)",
+  RUNNING: "RUNNING (运行中)",
+  COMPLETED: "COMPLETED (已完成)",
+  PARTIAL_FAILED: "PARTIAL_FAILED (部分失败)",
+  FAILED: "FAILED (失败)",
+  CANCELLING: "CANCELLING (取消中)",
+  CANCELLED: "CANCELLED (已取消)",
+};
+
 export const LaunchesList: React.FC = () => {
   const [filterAgent, setFilterAgent] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("");
@@ -45,7 +76,7 @@ export const LaunchesList: React.FC = () => {
     refetchInterval: (query) => {
       const data = query.state.data;
       const hasActive = data?.some((l) =>
-        ["PENDING", "QUEUED", "RUNNING", "CANCELLING", "RETRY_WAIT"].includes(l.status.toUpperCase())
+        ACTIVE_LAUNCH_STATUSES.has(l.status.toUpperCase() as LaunchStatus)
       );
       return hasActive ? 2000 : false;
     },
@@ -106,15 +137,11 @@ export const LaunchesList: React.FC = () => {
           className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-700"
         >
           <option value="">全部执行状态 (Status)</option>
-          <option value="PENDING">PENDING (准备中)</option>
-          <option value="QUEUED">QUEUED (队列中)</option>
-          <option value="RUNNING">RUNNING (运行中)</option>
-          <option value="RETRY_WAIT">RETRY_WAIT (重试等待)</option>
-          <option value="COMPLETED">COMPLETED (已完成)</option>
-          <option value="PARTIAL_FAILED">PARTIAL_FAILED (部分失败)</option>
-          <option value="FAILED">FAILED (失败)</option>
-          <option value="CANCELLING">CANCELLING (取消中)</option>
-          <option value="CANCELLED">CANCELLED (已取消)</option>
+          {LAUNCH_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {LAUNCH_STATUS_LABELS[status]}
+            </option>
+          ))}
         </select>
 
         {/* Quality Filter */}

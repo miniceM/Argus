@@ -98,6 +98,27 @@ describe("CreateLaunch Evaluator selection", () => {
     expect(screen.getByText(/执行成功不等于质量通过/)).toBeInTheDocument();
   });
 
+  it("toggles an evaluator with Enter without submitting the launch form", async () => {
+    renderCreateLaunch();
+    await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
+
+    const checkbox = screen.getByRole("checkbox", { name: /escalation_match/ });
+    fireEvent.keyDown(checkbox, { key: "Enter", code: "Enter" });
+
+    expect(checkbox).not.toBeChecked();
+    expect(screen.getByText("已选 3 项")).toBeInTheDocument();
+    expect(api.POST).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(checkbox, { key: "Enter", code: "Enter", repeat: true });
+    expect(checkbox).not.toBeChecked();
+    expect(screen.getByText("已选 3 项")).toBeInTheDocument();
+
+    fireEvent.keyDown(checkbox, { key: "Enter", code: "Enter" });
+    expect(checkbox).toBeChecked();
+    expect(screen.getByText("已选 4 项")).toBeInTheDocument();
+    expect(api.POST).not.toHaveBeenCalled();
+  });
+
   it("switches exclusively between diagnostic and composite results", async () => {
     renderCreateLaunch();
     await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());

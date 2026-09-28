@@ -7,7 +7,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "services" / "eval-runner"))
+runner_path = ROOT / "services" / "eval-runner"
+if runner_path.exists():
+    sys.path.insert(0, str(runner_path))
+else:
+    sys.path.insert(0, str(ROOT))
 
 from app.db import DatabaseManager, MigrationRunner  # noqa: E402
 from app.db_models import (  # noqa: E402
@@ -21,7 +25,8 @@ from app.db_models import (  # noqa: E402
 
 def seed():
     db_manager = DatabaseManager.from_env()
-    runner = MigrationRunner(db_manager.engine, ROOT / "migrations")
+    migrations_dir = ROOT / "migrations" if (ROOT / "migrations").exists() else Path("/app/migrations")
+    runner = MigrationRunner(db_manager.engine, migrations_dir)
     runner.apply_all()
 
     now = datetime.now(UTC)

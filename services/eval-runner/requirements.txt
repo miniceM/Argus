@@ -1,10 +1,10 @@
-fastapi>=0.128,<0.129
+fastapi>=0.141.1,<0.142
 uvicorn[standard]>=0.35,<0.49
 httpx>=0.28,<0.29
-PyYAML>=6,<7
+PyYAML>=6.0.3,<7
 pydantic>=2.12,<3
 langfuse==4.15.3
-opentelemetry-api>=1.30,<2
+opentelemetry-api>=1.45.0,<2
 sqlalchemy>=2.0,<3
-psycopg[binary]>=3.1,<4
+psycopg[binary]>=3.3.6,<4
 redis>=5.0,<6

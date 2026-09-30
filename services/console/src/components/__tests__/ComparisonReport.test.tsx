@@ -50,12 +50,17 @@ const metrics = (overrides: Record<string, unknown> = {}) => ({
   execution_error_rate: 0,
   evaluator_error_count: 0,
   p95_latency_ms: 120,
-  cost_per_case: null,
+  cost_per_case: 0.021,
+  total_cost: 0.21,
+  cost_currency: "USD",
+  cost_case_count: 10,
+  cost_coverage: 1,
+  cost_unavailable_reason: null,
   score_means: { correctness: 0.9 },
   ...overrides,
 });
 
-const comparisonPage = (snapshotId: string, caseId: string, nextCursor: number | null, launchId = "candidate-launch") => ({
+const comparisonPage = (snapshotId: string, caseId: string, nextCursor: number | null, launchId = "candidate-launch"): any => ({
   launch_id: launchId,
   candidate_snapshot_id: snapshotId,
   baseline_snapshot_id: "baseline-snapshot",
@@ -79,8 +84,13 @@ const comparisonPage = (snapshotId: string, caseId: string, nextCursor: number |
       evaluator_error_count: 1,
     }),
     comparable_cohort: {
-      baseline: metrics(),
-      candidate: metrics({ pass_rate: 0.8, score_means: { correctness: 0.8 } }),
+      baseline: metrics({ cost_per_case: 0.021, total_cost: 0.168, cost_case_count: 8, total_cases: 8, cost_coverage: 1 }),
+      candidate: metrics({ pass_rate: 0.8, score_means: { correctness: 0.8 }, cost_per_case: 0.017, total_cost: 0.136, cost_case_count: 8, total_cases: 8, cost_coverage: 1 }),
+    },
+    cost_comparison: {
+      status: "COMPARABLE", reason: null, cohort: "quality_comparable_cases", case_count: 8,
+      currency: "USD", baseline_cost_per_case: 0.021, candidate_cost_per_case: 0.017,
+      delta: -0.004, baseline_coverage: 1, candidate_coverage: 1,
     },
   },
   classification_counts: { REGRESSION: 1, IMPROVEMENT: 1, UNCHANGED: 0, NOT_COMPARABLE: 0 },
@@ -136,11 +146,15 @@ const ComparisonReportRoute = ({ launchStatus }: { launchStatus: string }) => {
 describe("ComparisonReport", () => {
   let queryClient: QueryClient;
   let latestSummaryReads: number;
+  let costReason: string | null;
+  let fullRunCostUnavailable: boolean;
 
   beforeEach(() => {
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     vi.clearAllMocks();
     latestSummaryReads = 0;
+    costReason = null;
+    fullRunCostUnavailable = false;
     window.history.replaceState({}, "", "/launches/candidate-launch");
     (api.GET as any).mockImplementation((path: string, options: any) => {
       const launchId = options.params.path.launch_id;
@@ -161,11 +175,33 @@ describe("ComparisonReport", () => {
       }
       if (path.endsWith("/comparison")) {
         const { cursor, snapshot_id: snapshotId } = options.params.query;
-        return Promise.resolve({
-          data: cursor === 0
-            ? comparisonPage(snapshotId, "case-1", 1, launchId)
-            : comparisonPage(snapshotId, "case-2", null, launchId),
-        });
+        const page = cursor === 0
+          ? comparisonPage(snapshotId, "case-1", 1, launchId)
+          : comparisonPage(snapshotId, "case-2", null, launchId);
+        if (fullRunCostUnavailable) {
+          for (const run of [page.summary.baseline, page.summary.candidate]) {
+            run.total_cost = null;
+            run.cost_per_case = null;
+            run.cost_currency = null;
+            run.cost_unavailable_reason = "MIXED_CURRENCIES";
+          }
+        }
+        if (costReason) {
+          page.summary.cost_comparison = { ...page.summary.cost_comparison, status: "NOT_COMPARABLE", reason: costReason, delta: null };
+          if (costReason === "PARTIAL_COST_COVERAGE") {
+            page.summary.comparable_cohort.candidate.cost_case_count = 4;
+            page.summary.comparable_cohort.candidate.cost_coverage = 0.5;
+            page.summary.cost_comparison.candidate_coverage = 0.5;
+          }
+          if (costReason === "COST_NOT_RECORDED") {
+            page.summary.comparable_cohort.candidate.cost_per_case = null;
+            page.summary.comparable_cohort.candidate.cost_case_count = 0;
+            page.summary.comparable_cohort.candidate.cost_coverage = 0;
+            page.summary.cost_comparison.candidate_cost_per_case = null;
+            page.summary.cost_comparison.candidate_coverage = 0;
+          }
+        }
+        return Promise.resolve({ data: page });
       }
       return Promise.resolve({ data: null });
     });
@@ -181,6 +217,116 @@ describe("ComparisonReport", () => {
       </QueryClientProvider>
     </MemoryRouter>,
   );
+
+  it("labels the comparable-cohort ratio as quality pass rate and explains its denominator", async () => {
+    // Issue #45: the comparable-cohort ratio is a quality metric over the shared
+    // comparable cases, not the live all-cases quality ratio shown on the detail
+    // header and not an execution success rate. It must say so explicitly.
+    renderReport();
+
+    await waitFor(() => {
+      expect(screen.getByText("共同可比样本质量（8 个 Case）")).toBeInTheDocument();
+    });
+
+    // The cohort table row is renamed from the ambiguous "Pass Rate".
+    const cohortTable = screen.getByRole("table", { name: "Baseline 与 Candidate 聚合指标对比" });
+    expect(within(cohortTable).getByText("质量通过率 (Quality Pass Rate)")).toBeInTheDocument();
+    expect(within(cohortTable).queryByText("Pass Rate")).not.toBeInTheDocument();
+
+    // Values stay exactly as the API reported them.
+    expect(within(cohortTable).getByText("100.0%")).toBeInTheDocument();
+    expect(within(cohortTable).getByText("80.0%")).toBeInTheDocument();
+
+    // The denominator rule is stated in always-visible text.
+    const help = screen.getByTestId("comparable-quality-pass-rate-help");
+    expect(help).toHaveTextContent("仅统计双方共同可比样本");
+    expect(help).toHaveTextContent("执行成功、评测成功且质量结论为 PASS 或 FAIL");
+    expect(help).toHaveTextContent("不可比或无有效质量结论的用例不参与该比例");
+    expect(help).toHaveTextContent("全量运行健康指标");
+  });
+
+  it("does not render a fabricated 0% when the comparable cohort has no evaluable case", async () => {
+    // aggregate_run returns pass_rate=null when no case has a comparable quality
+    // verdict. That must stay visibly absent, never collapse to 0%.
+    (api.GET as any).mockImplementation((path: string, options: any) => {
+      const launchId = options.params.path.launch_id;
+      if (path.endsWith("/summary")) {
+        return Promise.resolve({ data: summaryFor("candidate-snapshot", launchId) });
+      }
+      if (path.includes("/baselines")) {
+        return Promise.resolve({ error: {}, response: { status: 404 } });
+      }
+      if (path.endsWith("/comparison")) {
+        const page = comparisonPage(options.params.query.snapshot_id, "case-1", null, launchId);
+        return Promise.resolve({
+          data: {
+            ...page,
+            summary: {
+              ...page.summary,
+              comparable_case_count: 0,
+              comparable_cohort: {
+                baseline: metrics({ pass_rate: null, evaluated_cases: 0 }),
+                candidate: metrics({ pass_rate: null, evaluated_cases: 0 }),
+              },
+            },
+          },
+        });
+      }
+      return Promise.resolve({ data: null });
+    });
+
+    renderReport();
+
+    await waitFor(() => {
+      expect(screen.getByText("共同可比样本质量（0 个 Case）")).toBeInTheDocument();
+    });
+
+    const cohortTable = screen.getByRole("table", { name: "Baseline 与 Candidate 聚合指标对比" });
+    const passRateRow = within(cohortTable).getByText("质量通过率 (Quality Pass Rate)").closest("tr");
+    expect(passRateRow).not.toBeNull();
+    // The absent value renders as a placeholder, never as a measured zero.
+    expect(passRateRow).toHaveTextContent("—");
+    expect(passRateRow).not.toHaveTextContent("0.0%");
+  });
+
+  it("shows the no-comparable-sample notice instead of an empty quality table", async () => {
+    (api.GET as any).mockImplementation((path: string, options: any) => {
+      const launchId = options.params.path.launch_id;
+      if (path.endsWith("/summary")) {
+        return Promise.resolve({ data: summaryFor("candidate-snapshot", launchId) });
+      }
+      if (path.includes("/baselines")) {
+        return Promise.resolve({ error: {}, response: { status: 404 } });
+      }
+      if (path.endsWith("/comparison")) {
+        const page = comparisonPage(options.params.query.snapshot_id, "case-1", null, launchId);
+        return Promise.resolve({
+          data: {
+            ...page,
+            summary: {
+              ...page.summary,
+              comparable_case_count: 0,
+              comparable_cohort: null,
+            },
+          },
+        });
+      }
+      return Promise.resolve({ data: null });
+    });
+
+    renderReport();
+
+    await waitFor(() => {
+      expect(screen.getByText("无可比样本，质量差异未计算。")).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole("table", { name: "Baseline 与 Candidate 聚合指标对比" })
+    ).not.toBeInTheDocument();
+    // The full-run health table is independent of cohort comparability.
+    expect(
+      screen.getByRole("table", { name: "Baseline 与 Candidate 全量运行健康指标" })
+    ).toBeInTheDocument();
+  });
 
   it("pins the first revision in the URL and sends it on every comparison page", async () => {
     renderReport();
@@ -202,6 +348,11 @@ describe("ComparisonReport", () => {
     );
     expect(screen.getByRole("table", { name: "Baseline 与 Candidate 全量运行健康指标" })).toHaveTextContent("80.0%");
     expect(screen.getByRole("table", { name: "Baseline 与 Candidate 全量运行健康指标" })).toHaveTextContent("1");
+    const aggregateTable = screen.getByRole("table", { name: "Baseline 与 Candidate 聚合指标对比" });
+    expect(within(aggregateTable).getByRole("row", { name: /Cost \/ Case/ })).toHaveTextContent("$0.021");
+    expect(within(aggregateTable).getByRole("row", { name: /Cost \/ Case/ })).toHaveTextContent("$0.017");
+    expect(within(aggregateTable).getByRole("row", { name: /Cost \/ Case/ })).toHaveTextContent("-$0.004");
+    expect(within(aggregateTable).getByRole("row", { name: /Cost Coverage/ })).toHaveTextContent("8/8 (100.0%)");
 
     fireEvent.click(await screen.findByRole("button", { name: "加载更多用例（已显示 1 条）" }));
     expect(await screen.findByText("case-2")).toBeInTheDocument();
@@ -210,6 +361,45 @@ describe("ComparisonReport", () => {
       expect(comparisonCalls.length).toBeGreaterThanOrEqual(2);
       expect(comparisonCalls.every((call: any[]) => call[1].params.query.snapshot_id === "candidate-snapshot")).toBe(true);
     });
+  });
+
+
+  it("does not invent a cost delta when coverage is partial and explains why", async () => {
+    costReason = "PARTIAL_COST_COVERAGE";
+    renderReport();
+    const aggregateTable = await screen.findByRole("table", { name: "Baseline 与 Candidate 聚合指标对比" });
+    const row = within(aggregateTable).getByRole("row", { name: /Cost \/ Case/ });
+    expect(row).toHaveTextContent("$0.021");
+    expect(row).toHaveTextContent("$0.017");
+    expect(row).toHaveTextContent("—");
+    expect(within(aggregateTable).getByRole("row", { name: /Cost Coverage/ })).toHaveTextContent("4/8 (50.0%)");
+    expect(await screen.findByText(/成本说明：/)).toHaveTextContent("覆盖不完整");
+  });
+
+  it("shows em dashes and an explanation when no cost evidence was recorded", async () => {
+    costReason = "COST_NOT_RECORDED";
+    renderReport();
+    const aggregateTable = await screen.findByRole("table", { name: "Baseline 与 Candidate 聚合指标对比" });
+    const row = within(aggregateTable).getByRole("row", { name: /Cost \/ Case/ });
+    expect(row).toHaveTextContent("$0.021");
+    expect(row).toHaveTextContent("—");
+    expect(within(aggregateTable).getByRole("row", { name: /Cost Coverage/ })).toHaveTextContent("0/8 (0.0%)");
+    expect(await screen.findByText(/成本说明：/)).toHaveTextContent("未记录成本的 Case 不按 0 计入");
+  });
+
+  it("explains full-run mixed currencies without hiding comparable-cohort costs", async () => {
+    fullRunCostUnavailable = true;
+    renderReport();
+
+    const aggregateTable = await screen.findByRole("table", { name: "Baseline 与 Candidate 聚合指标对比" });
+    expect(within(aggregateTable).getByRole("row", { name: /Cost \/ Case/ })).toHaveTextContent("-$0.004");
+    expect(within(aggregateTable).getByRole("row", { name: /Cost Coverage/ })).toHaveTextContent("8/8 (100.0%)");
+
+    const fullRunTable = screen.getByRole("table", { name: "Baseline 与 Candidate 全量运行健康指标" });
+    expect(within(fullRunTable).getByRole("row", { name: /Run Cost \/ Case/ })).toHaveTextContent("—");
+    expect(within(fullRunTable).getByRole("row", { name: /Run Cost Coverage/ })).toHaveTextContent("10/10 (100.0%)");
+    expect(await screen.findByText(/全量 Baseline 成本说明：/)).toHaveTextContent("存在多种币种");
+    expect(await screen.findByText(/全量 Candidate 成本说明：/)).toHaveTextContent("存在多种币种");
   });
 
   it("loads an explicitly pinned historical snapshot while a retry is running", async () => {

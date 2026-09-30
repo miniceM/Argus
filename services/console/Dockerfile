@@ -3,7 +3,9 @@ FROM node:26-alpine AS builder
 
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@10.5.2 --activate
+RUN npm install --global corepack@0.36.0 \
+    && corepack enable \
+    && corepack prepare pnpm@10.5.2 --activate
 
 COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install

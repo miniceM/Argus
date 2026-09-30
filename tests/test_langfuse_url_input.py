@@ -12,6 +12,7 @@ import importlib
 import os
 import sys
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -512,3 +513,55 @@ def test_remote_identity_lookup_avoids_legacy_dataset_run_endpoint(monkeypatch):
     assert evidence["remote_run_id"] == run_id
     assert evidence["remote_dataset_id"] == dataset_id
     assert evidence["key_project_id"] == project_id
+
+
+def test_remote_identity_lookup_retries_within_a_bounded_recent_window(monkeypatch):
+    """实验刚创建，Cloud 可能尚未可读；查询必须收敛到最近窗口并重试。
+
+    from_start_time 若从 2020 年起算且 limit=100，返回的是最早的一页，
+    永远不会包含本次刚创建的 Experiment。
+    """
+    script = _load_verification_script()
+    monkeypatch.setattr(script, "EXPERIMENT_LOOKUP_ATTEMPTS", 3, raising=False)
+    monkeypatch.setattr(script, "EXPERIMENT_LOOKUP_INTERVAL_SECONDS", 0.0, raising=False)
+
+    run_id = "11111111-2222-3333-4444-555555555555"
+    dataset_id = "dddddddd-2222-3333-4444-555555555555"
+    project_id = "pppppppp-2222-3333-4444-555555555555"
+    url = f"{CLEAN}/project/{project_id}/datasets/{dataset_id}/runs/{run_id}"
+
+    launch = SimpleNamespace(dataset_name="ds", langfuse_experiment_url=url)
+    tasks = [SimpleNamespace(dataset_run_name="argus-test")]
+
+    seen: list[dict] = []
+
+    def _list(**kwargs):
+        seen.append(kwargs)
+        recent = datetime.now(UTC) - timedelta(hours=7)
+        assert kwargs["from_start_time"] >= recent, kwargs
+        assert kwargs["to_start_time"] > datetime.now(UTC) - timedelta(minutes=1), kwargs
+        if len(seen) < 3:
+            return SimpleNamespace(data=[])
+        return SimpleNamespace(
+            data=[SimpleNamespace(id=run_id, name="argus-test", dataset_id=dataset_id)]
+        )
+
+    fake_client = SimpleNamespace(
+        api=SimpleNamespace(
+            projects=SimpleNamespace(
+                get=lambda **_kw: SimpleNamespace(data=[SimpleNamespace(id=project_id)])
+            ),
+            experiments=SimpleNamespace(list=_list),
+        )
+    )
+    monkeypatch.setattr("langfuse.get_client", lambda: fake_client)
+
+    evidence = script._verify_remote_identity(
+        SimpleNamespace(get_session=lambda: _FakeVerifySession(launch, tasks)),
+        "launch-1",
+        run_id,
+        CLEAN,
+    )
+
+    assert evidence["remote_run_id"] == run_id
+    assert len(seen) >= 3

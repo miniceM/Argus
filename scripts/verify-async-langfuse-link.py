@@ -21,7 +21,7 @@ import sys
 import tempfile
 import time
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -32,9 +32,14 @@ sys.path.insert(0, str(EVAL_RUNNER))
 
 TIMEOUT_SECONDS = 120.0
 
-# Experiment lookups are scoped by name, so the time window only has to be wide
-# enough to cover the run; it is not used to narrow results.
-EXPERIMENT_LOOKUP_START = datetime(2020, 1, 1, tzinfo=UTC)
+# Experiment lookups are scoped by name and to the window below. The window has to
+# stay recent: GET /api/public/experiments pages by start_time, so an unbounded
+# from_start_time with a small limit returns the oldest page and never the run that
+# was just created.
+EXPERIMENT_LOOKUP_WINDOW_HOURS = 6
+EXPERIMENT_LOOKUP_ATTEMPTS = 12
+EXPERIMENT_LOOKUP_INTERVAL_SECONDS = 5.0
+EXPERIMENT_LOOKUP_LIMIT = 100
 
 
 def _fail(message: str) -> None:
@@ -328,31 +333,38 @@ def _verify_remote_identity(
     # after 2026-09-16: GET /api/public/datasets/{name}/runs/{run} now answers
     # 410 LEGACY_API_UNAVAILABLE_FOR_NEW_ORGANIZATION. A Dataset Run is an Experiment
     # in Langfuse v4, so identity is verified through /api/public/experiments.
-    remote_run = None
-    for run_name in dict.fromkeys(run_names):
+    def _lookup_experiment(run_name: str) -> Any | None:
+        now = datetime.now(UTC)
+        window = {
+            "from_start_time": now - timedelta(hours=EXPERIMENT_LOOKUP_WINDOW_HOURS),
+            "to_start_time": now + timedelta(minutes=5),
+            "limit": EXPERIMENT_LOOKUP_LIMIT,
+            "request_options": {"timeout_in_seconds": 5, "max_retries": 1},
+        }
         try:
-            try:
-                response = client.api.experiments.list(
-                    name=run_name,
-                    from_start_time=EXPERIMENT_LOOKUP_START,
-                    limit=100,
-                    request_options={"timeout_in_seconds": 5, "max_retries": 1},
-                )
-            except TypeError:
-                # Guard against SDK signature drift: fall back to an unfiltered page
-                # and match the run name locally.
-                response = client.api.experiments.list(
-                    from_start_time=EXPERIMENT_LOOKUP_START,
-                    limit=100,
-                    request_options={"timeout_in_seconds": 5, "max_retries": 1},
-                )
-        except Exception as exc:  # noqa: BLE001 - reported as verification evidence
-            print(f"  experiment lookup failed for {run_name}: {exc}", file=sys.stderr)
-            continue
+            response = client.api.experiments.list(name=run_name, **window)
+        except TypeError:
+            # Guard against SDK signature drift: fall back to an unfiltered page and
+            # match on the run id there. The bounded window keeps that page small.
+            response = client.api.experiments.list(**window)
         for candidate in getattr(response, "data", None) or []:
             if str(getattr(candidate, "id", "")) == persisted_run_id:
-                remote_run = candidate
+                return candidate
+        return None
+
+    remote_run = None
+    for run_name in dict.fromkeys(run_names):
+        for attempt in range(EXPERIMENT_LOOKUP_ATTEMPTS):
+            try:
+                remote_run = _lookup_experiment(run_name)
+            except Exception as exc:  # noqa: BLE001 - reported as verification evidence
+                print(f"  experiment lookup failed for {run_name}: {exc}", file=sys.stderr)
+                remote_run = None
+            if remote_run is not None:
                 break
+            if attempt + 1 < EXPERIMENT_LOOKUP_ATTEMPTS:
+                # The run was created seconds ago and the Cloud read path can lag.
+                time.sleep(EXPERIMENT_LOOKUP_INTERVAL_SECONDS)
         if remote_run is not None:
             break
     if remote_run is None:

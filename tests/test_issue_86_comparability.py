@@ -31,11 +31,11 @@ from app.comparison_contracts import (  # noqa: E402
     assess_comparability,
     contract_digests_for,
 )
+from app.db_models import ExperimentItemExecutionRecord as Item  # noqa: E402
 from app.db_models import (  # noqa: E402
     ExperimentLaunchRecord,
     RunResultSnapshotRecord,
 )
-from app.db_models import ExperimentItemExecutionRecord as Item  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Manifest fixtures: every contract dimension is varied independently.
@@ -450,9 +450,8 @@ def _payload(dataset_item_id: str, quality: str, score: float) -> dict:
 
 
 def _comparison(setup_runtime, monkeypatch, seeded) -> dict:
-    from fastapi.testclient import TestClient
-
     from app import main
+    from fastapi.testclient import TestClient
 
     db_mgr, _, _, _, _, _ = setup_runtime
     monkeypatch.setattr(main, "db_manager", db_mgr)

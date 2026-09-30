@@ -9,6 +9,10 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
+from .comparison_contracts import (
+    COMPARISON_CONTRACT_SCHEMA_VERSION,
+    aggregation_comparison_digest,
+)
 from .dataset import DatasetResolver
 from .db import DatabaseManager
 from .db_models import ExperimentLaunchRecord
@@ -17,10 +21,6 @@ from .evaluator_binding import (
     EvaluatorBinding,
     freeze_binding,
     manifest_measurement_digest,
-)
-from .comparison_contracts import (
-    COMPARISON_CONTRACT_SCHEMA_VERSION,
-    aggregation_comparison_digest,
 )
 from .evaluators import EvaluatorSelectionError, default_evaluator_registry
 from .quality_policy import (

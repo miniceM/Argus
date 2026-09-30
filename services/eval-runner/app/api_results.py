@@ -24,7 +24,6 @@ from .models import (
 from .result_outputs import ComparisonCaseOutputResponse, fetch_observation_output
 from .result_snapshots import (
     EVIDENCE_COMPLETE,
-    EVIDENCE_DIAGNOSTIC,
     create_result_snapshot,
     latest_result_snapshot,
     list_result_snapshots,

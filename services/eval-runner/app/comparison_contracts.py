@@ -12,8 +12,9 @@ Agent regression.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 from .evaluator_binding import canonical_digest
 

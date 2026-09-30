@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { buildEvaluatorCatalog } from "./fixtures/evaluators";
 
 test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Attempt Drawer", () => {
   test("creates launch, runs evaluation, verifies decoupled dual badges and lazy attempts", async ({ page }) => {
@@ -92,66 +93,9 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
       });
     });
 
-    // Evaluators specs: default diagnostics, their composite, and unsupported run scope.
+    // Evaluators catalog: default diagnostics, their composite, and unsupported run scope.
     await page.route("**/api/v1/evaluators", async (route) => {
-      await route.fulfill({
-        json: [
-          {
-            id: "escalation_match",
-            version: "1.0.0",
-            scope: "item",
-            threshold: 1.0,
-            description: "升级处理诊断",
-            default_selected: true,
-            composed_of: [],
-          },
-          {
-            id: "intent_match",
-            version: "1.0.0",
-            scope: "item",
-            threshold: 1.0,
-            description: "意图匹配评测器",
-            default_selected: true,
-            composed_of: [],
-          },
-          {
-            id: "pii_safe",
-            version: "1.0.0",
-            scope: "item",
-            threshold: 1.0,
-            description: "敏感数据保护评测器",
-            default_selected: true,
-            composed_of: [],
-          },
-          {
-            id: "required_tool_match",
-            version: "1.0.0",
-            scope: "item",
-            threshold: 1.0,
-            description: "工具调用诊断",
-            default_selected: true,
-            composed_of: [],
-          },
-          {
-            id: "overall_pass",
-            version: "1.0.0",
-            scope: "item",
-            threshold: 1.0,
-            description: "Legacy composite",
-            default_selected: false,
-            composed_of: ["escalation_match", "intent_match", "pii_safe", "required_tool_match"],
-          },
-          {
-            id: "run_pass_rate",
-            version: "1.0.0",
-            scope: "run",
-            threshold: 1.0,
-            description: "整体通过率门禁指标",
-            default_selected: false,
-            composed_of: [],
-          },
-        ],
-      });
+      await route.fulfill({ json: buildEvaluatorCatalog() });
     });
 
     // Launch run endpoint (Resource-based POST /api/v1/experiment-launches/{id}/run)
@@ -177,11 +121,13 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
       }
       if (route.request().method() === "POST") {
         interceptedCreationPayload = route.request().postDataJSON();
-        launchObj.manifest.evaluators = interceptedCreationPayload.evaluator_ids.map((id: string) => ({
-          id,
-          version: "1.0.0",
-          scope: "item",
-        }));
+        launchObj.manifest.evaluators = interceptedCreationPayload.evaluator_selections.map(
+          (selection: { id: string; version: string }) => ({
+            id: selection.id,
+            version: selection.version,
+            scope: "item",
+          }),
+        );
         await route.fulfill({ status: 201, json: launchObj });
         return;
       }

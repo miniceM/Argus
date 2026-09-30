@@ -15,7 +15,11 @@ from .db_models import (
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
 )
-from .evaluators import default_evaluator_registry, evaluate_item_quality
+from .evaluators import (
+    EvaluatorSelectionError,
+    default_evaluator_registry,
+    evaluate_item_quality,
+)
 from .executor import RemoteAgentExecutor
 from .models import (
     ExecutionAttemptResponse,
@@ -75,8 +79,19 @@ def create_experiment_launch(
             idempotency_key=effective_key,
             max_concurrency=payload.max_concurrency,
             evaluator_ids=payload.evaluator_ids,
+            evaluator_selections=(
+                [sel.model_dump() for sel in payload.evaluator_selections]
+                if payload.evaluator_selections is not None
+                else None
+            ),
         )
         return _enrich_launch(launch, orchestrator)
+    except EvaluatorSelectionError as exc:
+        # Issue #80: structured, machine-readable rejection for unusable selections.
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=exc.to_payload(),
+        ) from exc
     except ValueError as exc:
         msg = str(exc)
         if "conflict" in msg.lower() or msg.startswith("RUNNER_"):

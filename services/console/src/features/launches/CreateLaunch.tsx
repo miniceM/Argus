@@ -12,6 +12,7 @@ import {
 import { api } from "../../api/client";
 import { queryKeys } from "../../api/query-keys";
 import { formatApiError } from "../../api/errors";
+import { Badge } from "../../components/Badge";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import {
   Button,
@@ -21,9 +22,34 @@ import {
 } from "../../components/ui/Primitives";
 
 type EvaluatorResponse = import("../../api/schema").components["schemas"]["EvaluatorResponse"];
+type EvaluatorVersionInfo = import("../../api/schema").components["schemas"]["EvaluatorVersionInfo"];
 type AgentVersionResponse = import("../../api/schema").components["schemas"]["AgentVersionResponse"];
 
 const composedOf = (evaluator: EvaluatorResponse) => evaluator.composed_of ?? [];
+const versionsOf = (evaluator: EvaluatorResponse): EvaluatorVersionInfo[] => evaluator.versions ?? [];
+const reasonsOf = (value: { eligibility_reasons?: string[] }): string[] => value.eligibility_reasons ?? [];
+const messagesOf = (value: { eligibility_messages?: string[] }): string[] => value.eligibility_messages ?? [];
+
+const findVersion = (
+  evaluator: EvaluatorResponse,
+  version: string,
+): EvaluatorVersionInfo | undefined => versionsOf(evaluator).find((v) => v.version === version);
+
+const versionMessages = (evaluator: EvaluatorResponse, version: string): string[] =>
+  messagesOf(findVersion(evaluator, version) ?? { eligibility_messages: [] });
+
+/** The exact version the user confirmed for an evaluator, per evaluator id. */
+type SelectionMap = Record<string, string>;
+
+const diagnosticDefaults = (evaluators: EvaluatorResponse[]): SelectionMap =>
+  evaluators
+    .filter((e) => e.scope === "item" && e.default_selected === true && composedOf(e).length === 0)
+    .reduce<SelectionMap>((acc, e) => {
+      const preferred = versionsOf(e).find((v) => v.release_eligible) ?? versionsOf(e)[0];
+      if (preferred) acc[e.id] = preferred.version;
+      return acc;
+    }, {});
+
 
 export const CreateLaunch: React.FC = () => {
   const navigate = useNavigate();
@@ -37,7 +63,7 @@ export const CreateLaunch: React.FC = () => {
   const [datasetVersionMode, setDatasetVersionMode] = useState<"latest" | "custom">("latest");
   const [customDatasetVersion, setCustomDatasetVersion] = useState<string>("");
   const [evaluatorMode, setEvaluatorMode] = useState<"diagnostic" | "composite">("diagnostic");
-  const [selectedEvaluators, setSelectedEvaluators] = useState<string[] | null>(null);
+  const [selectedEvaluators, setSelectedEvaluators] = useState<SelectionMap | null>(null);
   const [concurrency, setConcurrency] = useState<number>(1);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -75,9 +101,13 @@ export const CreateLaunch: React.FC = () => {
       if (!res.data) throw new Error("获取 Evaluators 失败");
       const list = Array.isArray(res.data) ? res.data : [res.data];
       if (list.some((item) => (
-        typeof item.default_selected !== "boolean" || !Array.isArray(item.composed_of)
+        typeof item.default_selected !== "boolean" ||
+        !Array.isArray(item.composed_of) ||
+        !Array.isArray(item.versions) ||
+        item.versions.length === 0 ||
+        typeof item.default_version !== "string"
       ))) {
-        throw new Error("Evaluator 目录契约不完整，请升级服务端后重试");
+        throw new Error("Evaluator 目录契约不完整（缺少版本信息），请升级服务端后重试");
       }
       return list as EvaluatorResponse[];
     },
@@ -99,55 +129,85 @@ export const CreateLaunch: React.FC = () => {
     }
   }, [versions]);
 
-  // Initialize once: an empty array after this point is an intentional user selection.
+  // Initialize once. A previously confirmed selection is restored so that a
+  // Catalog refresh never silently swaps the version the user picked (#80).
   useEffect(() => {
     if (evaluators && selectedEvaluators === null) {
-      setSelectedEvaluators(
-        evaluators
-          .filter((e) => e.scope === "item" && e.default_selected === true && composedOf(e).length === 0)
-          .map((e) => e.id)
-          .sort()
-      );
+      setSelectedEvaluators(diagnosticDefaults(evaluators));
     }
   }, [evaluators, selectedEvaluators]);
 
-  const selectedEvaluatorIds = selectedEvaluators ?? [];
+  const selection: SelectionMap = selectedEvaluators ?? {};
+  const selectedEvaluatorIds = Object.keys(selection).sort();
   const compositeEvaluator = evaluators?.find((e) => e.scope === "item" && composedOf(e).length > 0);
   const isCompositeMode = evaluatorMode === "composite";
-  const selectedSpecs = selectedEvaluatorIds.map((id) => evaluators?.find((e) => e.id === id));
+
+  // A selection is invalid when the pinned id/version is no longer offered, is
+  // out of scope, or has become ineligible for release evidence.
+  const staleSelections = selectedEvaluatorIds.flatMap((id) => {
+    const spec = evaluators?.find((e) => e.id === id);
+    if (!spec) return [{ id, version: selection[id], reason: "该指标已不在当前目录中" }];
+    if (spec.scope !== "item") {
+      return [{ id, version: selection[id], reason: `scope「${spec.scope}」不支持在此流程运行` }];
+    }
+    const picked = findVersion(spec, selection[id]);
+    if (!picked) {
+      return [{ id, version: selection[id], reason: `版本 ${selection[id]} 已不在当前目录中` }];
+    }
+    if (!picked.release_eligible) {
+      return [{ id, version: selection[id], reason: messagesOf(picked).join("；") }];
+    }
+    if (isCompositeMode && composedOf(spec).length === 0) {
+      return [{ id, version: selection[id], reason: "复合结论模式只能选择一个复合指标" }];
+    }
+    return [];
+  });
+
   const hasInvalidSelection = selectedEvaluators !== null && evaluators !== undefined && (
-    selectedSpecs.some((spec) => !spec || spec.scope !== "item") ||
+    staleSelections.length > 0 ||
     (isCompositeMode
       ? !compositeEvaluator || selectedEvaluatorIds.length !== 1 || selectedEvaluatorIds[0] !== compositeEvaluator.id
-      : selectedSpecs.some((spec) => spec && composedOf(spec).length > 0))
+      : selectedEvaluatorIds.some((id) => {
+          const spec = evaluators?.find((e) => e.id === id);
+          return Boolean(spec && composedOf(spec).length > 0);
+        }))
   );
+
+  const applySelection = (next: SelectionMap) => setSelectedEvaluators(next);
 
   const selectDiagnosticMode = () => {
     setEvaluatorMode("diagnostic");
-    setSelectedEvaluators(
-      (evaluators ?? [])
-        .filter((e) => e.scope === "item" && e.default_selected === true && composedOf(e).length === 0)
-        .map((e) => e.id)
-        .sort()
-    );
+    applySelection(diagnosticDefaults(evaluators ?? []));
   };
 
   const selectCompositeMode = () => {
-    if (compositeEvaluator) {
-      setEvaluatorMode("composite");
-      setSelectedEvaluators([compositeEvaluator.id]);
-    }
+    if (!compositeEvaluator) return;
+    setEvaluatorMode("composite");
+    const preferred =
+      versionsOf(compositeEvaluator).find((v) => v.release_eligible) ?? versionsOf(compositeEvaluator)[0];
+    if (preferred) applySelection({ [compositeEvaluator.id]: preferred.version });
   };
 
   const toggleEvaluator = (evalId: string) => {
     const target = evaluators?.find((e) => e.id === evalId);
     if (!target || target.scope !== "item" || composedOf(target).length > 0) return;
     setSelectedEvaluators((current) => {
-      const selection = current ?? [];
-      return selection.includes(evalId)
-        ? selection.filter((id) => id !== evalId)
-        : [...selection, evalId];
+      const base = current ?? {};
+      const next = base[evalId] !== undefined
+        ? Object.fromEntries(Object.entries(base).filter(([key]) => key !== evalId))
+        : (() => {
+            const preferred = versionsOf(target).find((v) => v.release_eligible) ?? versionsOf(target)[0];
+            return preferred ? { ...base, [evalId]: preferred.version } : base;
+          })();
+      return next;
     });
+  };
+
+  const selectedVersion = (evaluator: EvaluatorResponse): EvaluatorVersionInfo | undefined =>
+    findVersion(evaluator, selection[evaluator.id] ?? evaluator.default_version);
+
+  const selectVersion = (evalId: string, version: string) => {
+    setSelectedEvaluators((current) => ({ ...(current ?? {}), [evalId]: version }));
   };
 
   const createMutation = useMutation({
@@ -173,8 +233,17 @@ export const CreateLaunch: React.FC = () => {
       }
 
       if (hasInvalidSelection) {
-        throw new Error("评测指标选择已失效，请重新选择");
+        const detail = staleSelections
+          .map((item) => `${item.id}@${item.version}：${item.reason}`)
+          .join("；");
+        throw new Error(`评测指标选择已失效，无法创建任务。${detail}`);
       }
+
+      // Issue #80: submit the exact user-confirmed versions, never a moving alias.
+      const evaluator_selections = selectedIds.map((id) => ({
+        id,
+        version: selection[id],
+      }));
 
       const res = await api.POST("/api/v1/experiment-launches", {
         body: {
@@ -184,7 +253,7 @@ export const CreateLaunch: React.FC = () => {
           dataset_name: datasetName.trim(),
           dataset_version: finalDatasetVersion,
           environment: environment.trim() || "production",
-          evaluator_ids: selectedIds,
+          evaluator_selections,
           max_concurrency: concurrency,
         },
       });
@@ -478,9 +547,16 @@ export const CreateLaunch: React.FC = () => {
 
           {hasInvalidSelection && (
             <div className="text-xs text-fail bg-fail-subtle border border-fail-border rounded-lg p-3 space-y-2" role="alert">
-              <p>Evaluator 目录已变化，当前选择不再有效。重新应用当前可用的逐项诊断默认指标后再创建 Launch。</p>
+              <p className="font-semibold">当前评测指标版本不可用，无法创建任务。</p>
+              <ul className="list-disc pl-4 space-y-1">
+                {staleSelections.map((item) => (
+                  <li key={`${item.id}@${item.version}`}>
+                    <span className="font-mono">{item.id}@{item.version}</span>：{item.reason}
+                  </li>
+                ))}
+              </ul>
               <button type="button" onClick={selectDiagnosticMode} className="font-semibold underline underline-offset-2 focus:outline-hidden focus:ring-2 focus:ring-fail rounded-sm">
-                重新选择逐项诊断默认指标
+                重新选择当前可用的默认指标版本
               </button>
             </div>
           )}
@@ -490,42 +566,109 @@ export const CreateLaunch: React.FC = () => {
               {(evaluators ?? []).filter((ev) => composedOf(ev).length === 0).map((ev) => {
                 const isItemScope = ev.scope === "item";
                 const isSelected = selectedEvaluatorIds.includes(ev.id);
+                const picked = isItemScope ? selectedVersion(ev) : undefined;
+                const selectable = isItemScope && Boolean(picked?.release_eligible);
                 return (
-                  <label
+                  <div
                     key={ev.id}
                     className={`p-3 rounded-lg border text-xs transition-colors flex items-start gap-3 ${
                       !isItemScope
-                        ? "bg-surface-muted/70 border-border text-muted-foreground cursor-not-allowed opacity-60"
+                        ? "bg-surface-muted/70 border-border text-muted-foreground opacity-60"
                         : isSelected
-                          ? "bg-primary-subtle/50 border-primary-border text-foreground cursor-pointer"
-                          : "bg-canvas border-border text-muted-foreground hover:bg-surface-muted cursor-pointer"
+                          ? "bg-primary-subtle/50 border-primary-border text-foreground"
+                          : "bg-canvas border-border text-muted-foreground hover:bg-surface-muted"
                     }`}
-                    aria-disabled={!isItemScope}
                   >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      disabled={!isItemScope}
-                      onChange={() => toggleEvaluator(ev.id)}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter") return;
-                        event.preventDefault();
-                        if (event.repeat || event.nativeEvent.isComposing) return;
-                        toggleEvaluator(ev.id);
-                      }}
-                      className="mt-0.5 rounded border-border-strong text-primary focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed"
-                    />
-                    <span>
-                      <span className="flex items-center gap-2 font-semibold text-foreground">
-                        <span className={!isItemScope ? "text-muted-foreground" : ""}>{ev.id}</span>
-                        <span className={`px-1.5 py-0.5 rounded text-2xs uppercase font-mono ${isItemScope ? "bg-surface-muted text-foreground-secondary" : "bg-timeout-subtle text-timeout"}`}>
-                          {ev.scope}
+                    <label
+                      className={`flex items-start gap-3 min-w-0 flex-1 ${
+                        isItemScope ? "cursor-pointer" : "cursor-not-allowed"
+                      }`}
+                      aria-disabled={!isItemScope}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        disabled={!isItemScope}
+                        onChange={() => toggleEvaluator(ev.id)}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter") return;
+                          event.preventDefault();
+                          if (event.repeat || event.nativeEvent.isComposing) return;
+                          toggleEvaluator(ev.id);
+                        }}
+                        className="mt-0.5 rounded border-border-strong text-primary focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed"
+                      />
+                      <span className="min-w-0 flex-1 space-y-1">
+                        <span className="flex flex-wrap items-center gap-2 font-semibold text-foreground">
+                          <span>{ev.name || ev.id}</span>
+                          <span className="font-mono text-micro font-normal text-muted-foreground">{ev.id}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-2xs uppercase font-mono ${isItemScope ? "bg-surface-muted text-foreground-secondary" : "bg-timeout-subtle text-timeout"}`}>
+                            {ev.scope}
+                          </span>
+                          <Badge tone={selectable ? "pass" : "timeout"}>
+                            {isItemScope
+                              ? selectable ? "可用于发布评测" : "不可用于发布评测"
+                              : "不适用于单次 Launch"}
+                          </Badge>
                         </span>
-                        {!isItemScope && <span className="text-2xs text-timeout font-normal">（聚合指标，暂不支持在单次 Launch 中直接运行）</span>}
+                        <span className="block text-micro text-muted-foreground">{ev.description || "确定性规则评测器"}</span>
+                        {!isItemScope && (
+                          <span className="block text-micro text-timeout">
+                            派生运行指标，不能作为用例指标选择{reasonsOf(ev).length > 0 ? `（${reasonsOf(ev).join("、")}）` : ""}
+                          </span>
+                        )}
+                        {isItemScope && !selectable && (
+                          <span className="block text-micro text-timeout">
+                            {versionMessages(ev, selection[ev.id] ?? ev.default_version).join("；") || "该版本当前不可用于发布评测"}
+                          </span>
+                        )}
                       </span>
-                      <span className="block text-micro text-muted-foreground mt-0.5">{ev.description || "确定性规则评测器"}</span>
-                    </span>
-                  </label>
+                    </label>
+                    {isItemScope && (
+                      <div className="w-full shrink-0 space-y-1.5 pl-6">
+                        <label className="flex items-center gap-1.5 text-micro text-muted-foreground">
+                          <span>版本</span>
+                          <select
+                            aria-label={`${ev.id} 版本`}
+                            value={selection[ev.id] ?? ""}
+                            disabled={!isSelected}
+                            onChange={(event) => selectVersion(ev.id, event.target.value)}
+                            className="ui-control text-micro py-0.5 disabled:opacity-60"
+                          >
+                            {versionsOf(ev).length === 0 && <option value="">无可用版本</option>}
+                            {versionsOf(ev).map((version) => (
+                              <option key={version.version} value={version.version}>
+                                {version.version}
+                                {version.version === ev.default_version ? "（默认）" : ""}
+                                {version.release_eligible ? "" : "（不可用于发布评测）"}
+                              </option>
+                            ))}
+                          </select>
+                          {picked && (
+                            <span>结果类型：{picked.result_type}</span>
+                          )}
+                        </label>
+                        {isSelected && picked && (
+                          <details className="text-micro text-muted-foreground">
+                            <summary className="cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-focus rounded-sm">
+                              查看输入/输出契约与制品标识
+                            </summary>
+                            <div className="mt-1 space-y-1 rounded border border-border bg-surface-muted px-2 py-1.5">
+                              <p>
+                                执行器：<span className="font-mono">{picked.executor_type}</span>
+                                {" · "}归属：<span className="font-mono">{ev.execution_owner}</span>
+                                {" · "}来源：<span className="font-mono">{ev.definition_source}</span>
+                              </p>
+                              <p className="font-mono break-all">实现引用：{picked.implementation_ref ?? "无"}</p>
+                              <p className="font-mono break-all">内容摘要：{picked.content_digest}</p>
+                              <p className="font-mono break-all">输入契约：{JSON.stringify(picked.input_contract ?? {})}</p>
+                              <p className="font-mono break-all">输出契约：{JSON.stringify(picked.output_contract ?? {})}</p>
+                            </div>
+                          </details>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>

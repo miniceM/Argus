@@ -270,7 +270,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List all registered Evaluators and their specifications */
+        /**
+         * List registered Evaluators with their immutable versions and release eligibility
+         * @description Return the Evaluator catalog.
+         *
+         *     Each entry carries the stable definition identity plus every immutable
+         *     version the caller may select from. The user must confirm an exact version;
+         *     there is deliberately no ``latest`` alias (Issue #80).
+         */
         get: operations["list_evaluators_api_v1_evaluators_get"];
         put?: never;
         post?: never;
@@ -937,10 +944,15 @@ export interface components {
              */
             active_launch_count?: number | null;
         };
-        /** EvaluatorResponse */
+        /**
+         * EvaluatorResponse
+         * @description Catalog entry for one Evaluator, carrying its immutable version list.
+         */
         EvaluatorResponse: {
             /** Id */
             id: string;
+            /** Name */
+            name: string;
             /** Version */
             version: string;
             /** Scope */
@@ -966,6 +978,106 @@ export interface components {
              * @default false
              */
             critical: boolean;
+            /**
+             * Result Type
+             * @default numeric
+             */
+            result_type: string;
+            /**
+             * Definition Source
+             * @default ARGUS_BUILTIN
+             */
+            definition_source: string;
+            /**
+             * Execution Owner
+             * @default ARGUS
+             */
+            execution_owner: string;
+            /** Implementation Ref */
+            implementation_ref?: string | null;
+            /**
+             * Executor Type
+             * @default builtin_python
+             */
+            executor_type: string;
+            /** Content Digest */
+            content_digest: string;
+            /**
+             * Release Eligible
+             * @default false
+             */
+            release_eligible: boolean;
+            /** Eligibility Reasons */
+            eligibility_reasons?: string[];
+            /** Default Version */
+            default_version: string;
+            /** Versions */
+            versions?: components["schemas"]["EvaluatorVersionInfo"][];
+        };
+        /**
+         * EvaluatorSelection
+         * @description An exact Evaluator id + version the user confirmed on the create form.
+         */
+        EvaluatorSelection: {
+            /** Id */
+            id: string;
+            /** Version */
+            version: string;
+        };
+        /**
+         * EvaluatorVersionInfo
+         * @description One immutable Evaluator version exposed in the catalog (Issue #80).
+         */
+        EvaluatorVersionInfo: {
+            /** Version */
+            version: string;
+            /** Result Type */
+            result_type: string;
+            /** Scope */
+            scope: string;
+            /** Threshold */
+            threshold: number;
+            /**
+             * Direction
+             * @default higher_is_better
+             */
+            direction: string;
+            /**
+             * Critical
+             * @default false
+             */
+            critical: boolean;
+            /** Input Contract */
+            input_contract?: {
+                [key: string]: unknown;
+            };
+            /** Output Contract */
+            output_contract?: {
+                [key: string]: unknown;
+            };
+            /** Param Schema */
+            param_schema?: {
+                [key: string]: unknown;
+            };
+            /** Implementation Ref */
+            implementation_ref?: string | null;
+            /** Executor Type */
+            executor_type: string;
+            /** Category Values */
+            category_values?: string[] | null;
+            /** Ordered Category Values */
+            ordered_category_values?: string[] | null;
+            /** Content Digest */
+            content_digest: string;
+            /**
+             * Release Eligible
+             * @default false
+             */
+            release_eligible: boolean;
+            /** Eligibility Reasons */
+            eligibility_reasons?: string[];
+            /** Eligibility Messages */
+            eligibility_messages?: string[];
         };
         /** ExecutionAttemptResponse */
         ExecutionAttemptResponse: {
@@ -1082,9 +1194,14 @@ export interface components {
             baseline_snapshot_id?: string | null;
             /**
              * Evaluator Ids
-             * @description List of item-scope evaluator IDs to run; must contain at least one evaluator. Run-scope evaluators are not supported by the standalone launch runner.
+             * @description Legacy convenience field: item-scope evaluator IDs resolved to their current default version at submission time and frozen into the Manifest. Prefer `evaluator_selections`, which pins an explicit user-confirmed version per id.
              */
-            evaluator_ids?: string[];
+            evaluator_ids?: string[] | null;
+            /**
+             * Evaluator Selections
+             * @description Exact Evaluator id + immutable version selections confirmed by the user. Each entry is validated for release eligibility and scope server-side.
+             */
+            evaluator_selections?: components["schemas"]["EvaluatorSelection"][] | null;
             /**
              * Max Concurrency
              * @description Optional concurrency override; if omitted, inherits from AgentVersion

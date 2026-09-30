@@ -1202,7 +1202,8 @@
         "tags": [
           "Evaluators"
         ],
-        "summary": "List all registered Evaluators and their specifications",
+        "summary": "List registered Evaluators with their immutable versions and release eligibility",
+        "description": "Return the Evaluator catalog.\n\nEach entry carries the stable definition identity plus every immutable\nversion the caller may select from. The user must confirm an exact version;\nthere is deliberately no ``latest`` alias (Issue #80).",
         "operationId": "list_evaluators_api_v1_evaluators_get",
         "responses": {
           "200": {
@@ -2853,6 +2854,10 @@
             "type": "string",
             "title": "Id"
           },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
           "version": {
             "type": "string",
             "title": "Version"
@@ -2897,16 +2902,223 @@
             "type": "boolean",
             "title": "Critical",
             "default": false
+          },
+          "result_type": {
+            "type": "string",
+            "title": "Result Type",
+            "default": "numeric"
+          },
+          "definition_source": {
+            "type": "string",
+            "title": "Definition Source",
+            "default": "ARGUS_BUILTIN"
+          },
+          "execution_owner": {
+            "type": "string",
+            "title": "Execution Owner",
+            "default": "ARGUS"
+          },
+          "implementation_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Implementation Ref"
+          },
+          "executor_type": {
+            "type": "string",
+            "title": "Executor Type",
+            "default": "builtin_python"
+          },
+          "content_digest": {
+            "type": "string",
+            "title": "Content Digest"
+          },
+          "release_eligible": {
+            "type": "boolean",
+            "title": "Release Eligible",
+            "default": false
+          },
+          "eligibility_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Eligibility Reasons"
+          },
+          "default_version": {
+            "type": "string",
+            "title": "Default Version"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluatorVersionInfo"
+            },
+            "type": "array",
+            "title": "Versions"
           }
         },
         "type": "object",
         "required": [
           "id",
+          "name",
           "version",
           "scope",
-          "threshold"
+          "threshold",
+          "content_digest",
+          "default_version"
         ],
-        "title": "EvaluatorResponse"
+        "title": "EvaluatorResponse",
+        "description": "Catalog entry for one Evaluator, carrying its immutable version list."
+      },
+      "EvaluatorSelection": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Id"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "version"
+        ],
+        "title": "EvaluatorSelection",
+        "description": "An exact Evaluator id + version the user confirmed on the create form."
+      },
+      "EvaluatorVersionInfo": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "result_type": {
+            "type": "string",
+            "title": "Result Type"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "threshold": {
+            "type": "number",
+            "title": "Threshold"
+          },
+          "direction": {
+            "type": "string",
+            "title": "Direction",
+            "default": "higher_is_better"
+          },
+          "critical": {
+            "type": "boolean",
+            "title": "Critical",
+            "default": false
+          },
+          "input_contract": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input Contract"
+          },
+          "output_contract": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Output Contract"
+          },
+          "param_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Param Schema"
+          },
+          "implementation_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Implementation Ref"
+          },
+          "executor_type": {
+            "type": "string",
+            "title": "Executor Type"
+          },
+          "category_values": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Values"
+          },
+          "ordered_category_values": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ordered Category Values"
+          },
+          "content_digest": {
+            "type": "string",
+            "title": "Content Digest"
+          },
+          "release_eligible": {
+            "type": "boolean",
+            "title": "Release Eligible",
+            "default": false
+          },
+          "eligibility_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Eligibility Reasons"
+          },
+          "eligibility_messages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Eligibility Messages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "result_type",
+          "scope",
+          "threshold",
+          "executor_type",
+          "content_digest"
+        ],
+        "title": "EvaluatorVersionInfo",
+        "description": "One immutable Evaluator version exposed in the catalog (Issue #80)."
       },
       "ExecutionAttemptResponse": {
         "properties": {
@@ -3267,13 +3479,34 @@
             "title": "Baseline Snapshot Id"
           },
           "evaluator_ids": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "minItems": 1,
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Evaluator Ids",
-            "description": "List of item-scope evaluator IDs to run; must contain at least one evaluator. Run-scope evaluators are not supported by the standalone launch runner."
+            "description": "Legacy convenience field: item-scope evaluator IDs resolved to their current default version at submission time and frozen into the Manifest. Prefer `evaluator_selections`, which pins an explicit user-confirmed version per id."
+          },
+          "evaluator_selections": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/EvaluatorSelection"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluator Selections",
+            "description": "Exact Evaluator id + immutable version selections confirmed by the user. Each entry is validated for release eligibility and scope server-side."
           },
           "max_concurrency": {
             "anyOf": [

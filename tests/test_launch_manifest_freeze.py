@@ -188,7 +188,18 @@ def test_api_request_model_concurrency_defaults_to_none():
     )
     # Default must be None, NOT hardcoded 4
     assert req.max_concurrency is None
-    assert req.evaluator_ids == default_evaluator_registry.default_item_ids()
+    # Issue #80: neither selection field is pre-filled by the request model, so a
+    # caller can submit explicit evaluator_selections without tripping the
+    # mutual-exclusion guard. LaunchService still falls back to the registry
+    # default item set when both are omitted.
+    assert req.evaluator_ids is None
+    assert req.evaluator_selections is None
+    assert default_evaluator_registry.default_item_ids() == [
+        "escalation_match",
+        "intent_match",
+        "pii_safe",
+        "required_tool_match",
+    ]
 
 
 def test_create_launch_rejects_run_scope_evaluator_by_default(tmp_path):

@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from .dataset import DatasetResolver
 from .db import DatabaseManager
 from .db_models import ExperimentLaunchRecord
-from .evaluators import default_evaluator_registry
+from .evaluators import EvaluatorSelectionError, default_evaluator_registry
 from .registry import AgentRegistry
 from .runner_identity import current_runner_identity, validate_runner_identity
 
@@ -54,6 +54,7 @@ class LaunchService:
         idempotency_key: str | None = None,
         max_concurrency: int | None = None,
         evaluator_ids: list[str] | None = None,
+        evaluator_selections: list[dict[str, Any]] | None = None,
         items_count: int | None = None,
         item_ids: list[str] | None = None,
         created_by: str | None = None,
@@ -69,10 +70,57 @@ class LaunchService:
         identity_error = validate_runner_identity(runner_identity.model_dump(), runner_identity)
         if identity_error:
             raise ValueError(f"{identity_error}: runner build identity is unavailable")
-        if evaluator_ids is not None and len(evaluator_ids) == 0:
-            raise ValueError("evaluator_ids must not be empty. A launch must have at least one evaluator.")
+        # ---- Issue #80: normalize the request into explicit (id, version) selections ----
+        if evaluator_selections is not None and evaluator_ids is not None:
+            raise EvaluatorSelectionError(
+                "Provide either evaluator_selections or evaluator_ids, not both.",
+                code="EVALUATOR_SELECTION_AMBIGUOUS",
+            )
 
-        eval_list = sorted(evaluator_ids) if evaluator_ids is not None else default_evaluator_registry.default_item_ids()
+        if evaluator_selections is not None:
+            if len(evaluator_selections) == 0:
+                raise EvaluatorSelectionError(
+                    "evaluator_selections must not be empty. A launch must have at least one evaluator.",
+                    code="EVALUATOR_SELECTION_EMPTY",
+                )
+            requested = [
+                (str(item["id"]), str(item["version"])) for item in evaluator_selections
+            ]
+        elif evaluator_ids is not None:
+            if len(evaluator_ids) == 0:
+                raise EvaluatorSelectionError(
+                    "evaluator_ids must not be empty. A launch must have at least one evaluator.",
+                    code="EVALUATOR_SELECTION_EMPTY",
+                )
+            requested = [(evaluator_id, None) for evaluator_id in evaluator_ids]
+        else:
+            requested = [
+                (evaluator_id, None)
+                for evaluator_id in default_evaluator_registry.default_item_ids()
+            ]
+
+        seen: set[str] = set()
+        for evaluator_id, _ver in requested:
+            if evaluator_id in seen:
+                raise EvaluatorSelectionError(
+                    f"Duplicate evaluator selection: '{evaluator_id}'.",
+                    code="EVALUATOR_SELECTION_DUPLICATE",
+                    evaluator_id=evaluator_id,
+                )
+            seen.add(evaluator_id)
+
+        # Issue #80: every selection goes through the single server-side
+        # release-eligibility gate, so a hand-crafted request cannot bypass the UI.
+        eval_specs = [
+            default_evaluator_registry.resolve_for_release(
+                evaluator_id,
+                version,
+                required_scope=None if allow_run_scope else "item",
+            )
+            for evaluator_id, version in requested
+        ]
+        eval_specs.sort(key=lambda spec: spec["id"])
+
 
         # Request payload for idempotency checking (calculated upfront)
         payload_data = {
@@ -82,7 +130,9 @@ class LaunchService:
             "dataset_version": dataset_version,
             "environment": normalized_environment,
             "baseline_snapshot_id": baseline_snapshot_id,
-            "evaluator_ids": eval_list,
+            "evaluator_selections": [
+                {"id": spec["id"], "version": spec["version"]} for spec in eval_specs
+            ],
             "max_concurrency": max_concurrency,
             "name": name,
         }
@@ -111,15 +161,6 @@ class LaunchService:
             raise ValueError(
                 f"Agent '{agent_id}' 处于不可用状态 '{getattr(agent_rec, 'status', 'not_found')}'，不可创建新的评测任务"
             )
-
-        eval_specs = [default_evaluator_registry.resolve(eid) for eid in eval_list]
-        if not allow_run_scope:
-            run_scoped = [e["id"] for e in eval_specs if e.get("scope") != "item"]
-            if run_scoped:
-                raise ValueError(
-                    f"Run-scope evaluators ({', '.join(run_scoped)}) are not supported by the standalone launch runner. "
-                    "Only item-scope evaluators are supported."
-                )
 
         # Concurrency policy: inherit from AgentVersion if None, enforce limit if specified
         if max_concurrency is not None:

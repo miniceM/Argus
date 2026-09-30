@@ -7,7 +7,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .evaluators import default_evaluator_registry
 from .security import validate_credential_ref, validate_endpoint_url
 
 
@@ -310,10 +309,20 @@ class ExperimentLaunchCreateRequest(BaseModel):
     dataset_version: str | None = None
     environment: str = Field(default="production", min_length=1, max_length=64)
     baseline_snapshot_id: str | None = Field(default=None, min_length=1, max_length=64)
-    evaluator_ids: list[str] = Field(
-        default_factory=default_evaluator_registry.default_item_ids,
-        min_length=1,
-        description="List of item-scope evaluator IDs to run; must contain at least one evaluator. Run-scope evaluators are not supported by the standalone launch runner.",
+    evaluator_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            "Legacy convenience field: item-scope evaluator IDs resolved to their current "
+            "default version at submission time and frozen into the Manifest. Prefer "
+            "`evaluator_selections`, which pins an explicit user-confirmed version per id."
+        ),
+    )
+    evaluator_selections: list[EvaluatorSelection] | None = Field(
+        default=None,
+        description=(
+            "Exact Evaluator id + immutable version selections confirmed by the user. "
+            "Each entry is validated for release eligibility and scope server-side."
+        ),
     )
     max_concurrency: int | None = Field(default=None, ge=1, le=50, description="Optional concurrency override; if omitted, inherits from AgentVersion")
 
@@ -322,8 +331,33 @@ class ExperimentLaunchCreateRequest(BaseModel):
 
 
 
+class EvaluatorVersionInfo(BaseModel):
+    """One immutable Evaluator version exposed in the catalog (Issue #80)."""
+
+    version: str
+    result_type: str
+    scope: str
+    threshold: float
+    direction: str = "higher_is_better"
+    critical: bool = False
+    input_contract: dict[str, Any] = Field(default_factory=dict)
+    output_contract: dict[str, Any] = Field(default_factory=dict)
+    param_schema: dict[str, Any] = Field(default_factory=dict)
+    implementation_ref: str | None = None
+    executor_type: str
+    category_values: list[str] | None = None
+    ordered_category_values: list[str] | None = None
+    content_digest: str
+    release_eligible: bool = False
+    eligibility_reasons: list[str] = Field(default_factory=list)
+    eligibility_messages: list[str] = Field(default_factory=list)
+
+
 class EvaluatorResponse(BaseModel):
+    """Catalog entry for one Evaluator, carrying its immutable version list."""
+
     id: str
+    name: str
     version: str
     scope: str
     threshold: float
@@ -332,6 +366,34 @@ class EvaluatorResponse(BaseModel):
     composed_of: list[str] = Field(default_factory=list)
     direction: str = "higher_is_better"
     critical: bool = False
+    # Issue #80: identity / provenance / eligibility
+    result_type: str = "numeric"
+    definition_source: str = "ARGUS_BUILTIN"
+    execution_owner: str = "ARGUS"
+    implementation_ref: str | None = None
+    executor_type: str = "builtin_python"
+    content_digest: str
+    release_eligible: bool = False
+    eligibility_reasons: list[str] = Field(default_factory=list)
+    default_version: str
+    versions: list[EvaluatorVersionInfo] = Field(default_factory=list)
+
+
+class EvaluatorSelection(BaseModel):
+    """An exact Evaluator id + version the user confirmed on the create form."""
+
+    id: str = Field(..., min_length=1, max_length=128)
+    version: str = Field(..., min_length=1, max_length=64)
+
+
+class EvaluatorSelectionErrorResponse(BaseModel):
+    """Structured rejection returned when a selection cannot be used (Issue #80)."""
+
+    code: str = Field(..., description="Machine-readable error code")
+    message: str = Field(..., description="Human-readable explanation")
+    evaluator_id: str | None = None
+    version: str | None = None
+    eligibility_reasons: list[str] = Field(default_factory=list)
 
 
 class BaselineCreateRequest(BaseModel):

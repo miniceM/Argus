@@ -1,0 +1,320 @@
+#!/usr/bin/env python3
+"""Real asynchronous Langfuse link verification (Issue #44).
+
+The Cloud Compose profile runs the control plane in ``ARGUS_DB_MODE=test``, where the
+background worker, outbox syncer and reconciler loops are intentionally disabled.
+Triggering the async API and waiting is therefore not enough: this script drives the
+real Worker, Outbox Syncer, Run Score Syncer and link compensator explicitly, against
+a real Langfuse project and the real demo agent, and then verifies that the persisted
+link describes the actual remote Dataset Run.
+
+Evidence is written to ``$ARTIFACT_DIR`` (default ``artifacts/e2e``).
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import os
+import sys
+import tempfile
+import time
+import uuid
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit
+
+ROOT = Path(__file__).resolve().parents[1]
+EVAL_RUNNER = ROOT / "services" / "eval-runner"
+sys.path.insert(0, str(EVAL_RUNNER))
+
+TIMEOUT_SECONDS = 120.0
+
+
+def _fail(message: str) -> None:
+    print(f"FAIL: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def _require_env(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if not value:
+        _fail(f"{name} is required for the real async link verification")
+    return value
+
+
+def _configure_environment(db_path: Path, dashboard_url: str) -> None:
+    os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
+    os.environ["ARGUS_DB_MODE"] = "test"
+    os.environ["ARGUS_AUTO_IMPORT_YAML"] = "false"
+    os.environ["ARGUS_WORKER_ENABLED"] = "false"
+    os.environ["ARGUS_RECONCILER_ENABLED"] = "false"
+    os.environ["ARGUS_BUILD_ID"] = os.getenv("ARGUS_BUILD_ID", "async-link-verify")
+    # The verification must exercise the real Dataset Run path, never the local seed.
+    os.environ["ARGUS_DATASET_SOURCE"] = "langfuse"
+    os.environ["ARGUS_LANGFUSE_DASHBOARD_URL"] = dashboard_url
+    os.environ.setdefault("LANGFUSE_TRACING_ENVIRONMENT", "poc-cloud")
+
+
+def _register_agent_and_version(client: Any, agent_endpoint: str) -> tuple[str, str]:
+    agent_id = f"async-link-agent-{uuid.uuid4().hex[:8]}"
+    version = "1.0.0"
+    created = client.post("/api/v1/agents", json={"id": agent_id, "name": "Async Link Agent"})
+    if created.status_code != 201:
+        _fail(f"agent registration failed: {created.status_code} {created.text}")
+    spec = client.post(
+        "/api/v1/agent-versions",
+        json={
+            "agent_id": agent_id,
+            "version": version,
+            "endpoint": agent_endpoint,
+            "protocol": "HTTP_JSON",
+            "method": "POST",
+            "request_mapping": {"input": "text"},
+            "timeout_seconds": 30,
+            "max_retries": 1,
+            "max_concurrency": 4,
+            "rate_limit_per_minute": 600,
+            "is_idempotent": False,
+        },
+    )
+    if spec.status_code != 201:
+        _fail(f"agent version registration failed: {spec.status_code} {spec.text}")
+    return agent_id, version
+
+
+def _drive_until_link(
+    app_modules: dict[str, Any],
+    launch_id: str,
+    deadline: float,
+) -> dict[str, Any]:
+    """Explicitly drives worker, outbox syncer, run score syncer and compensation."""
+    worker = app_modules["worker"]
+    outbox_syncer = app_modules["outbox_syncer"]
+    run_score_syncer = app_modules["run_score_syncer"]
+    reconciler = app_modules["reconciler"]
+    link_service = app_modules["launch_link_service"]
+    db_manager = app_modules["db_manager"]
+
+    last_state: dict[str, Any] = {}
+    while time.monotonic() < deadline:
+        messages = worker.poll_queue(count=10, block_ms=200)
+        for message_id, item_id, generation in messages:
+            asyncio.run(worker.execute_item_message(message_id, item_id, generation))
+        if messages:
+            outbox_syncer.process_batch(batch_size=10)
+            run_score_syncer.process_batch(batch_size=10)
+        reconciler.run_reconcile_cycle()
+        # Explicit compensation pass: a SYNCED launch must end up with a valid link.
+        reconciler.reconcile_langfuse_links(link_service)
+
+        with db_manager.get_session() as session:
+            from app.db_models import ExperimentLaunchRecord
+
+            launch = session.get(ExperimentLaunchRecord, launch_id)
+            if launch is None:
+                _fail(f"launch {launch_id} disappeared during execution")
+            last_state = {
+                "status": launch.status,
+                "langfuse_sync_status": launch.langfuse_sync_status,
+                "langfuse_experiment_id": launch.langfuse_experiment_id,
+                "langfuse_experiment_url": launch.langfuse_experiment_url,
+                "langfuse_sync_error": launch.langfuse_sync_error,
+            }
+        if (
+            last_state["status"] in ("COMPLETED", "PARTIAL_FAILED", "FAILED", "CANCELLED")
+            and last_state["langfuse_sync_status"] == "SYNCED"
+            and last_state["langfuse_experiment_id"]
+            and last_state["langfuse_experiment_url"]
+        ):
+            return last_state
+        time.sleep(0.5)
+
+    _fail(f"launch {launch_id} did not reach SYNCED with a link in time: {last_state}")
+    return last_state  # pragma: no cover - _fail raises
+
+
+def _verify_remote_identity(
+    db_manager: Any,
+    launch_id: str,
+    persisted_run_id: str,
+    dashboard_url: str,
+) -> dict[str, Any]:
+    from app.db_models import ExperimentLaunchRecord, LangfuseSyncTaskRecord
+    from langfuse import get_client
+
+    with db_manager.get_session() as session:
+        launch = session.get(ExperimentLaunchRecord, launch_id)
+        dataset_name = launch.dataset_name
+        run_names = [
+            row.dataset_run_name
+            for row in session.query(LangfuseSyncTaskRecord)
+            .filter(LangfuseSyncTaskRecord.launch_id == launch_id)
+            .all()
+            if row.dataset_run_name
+        ]
+        url = launch.langfuse_experiment_url
+
+    client = get_client()
+    projects = client.api.projects.get(
+        request_options={"timeout_in_seconds": 5, "max_retries": 1}
+    ).data
+    if len(projects) != 1:
+        _fail(f"expected exactly one project for the configured key, got {len(projects)}")
+    project_id = str(projects[0].id)
+
+    remote_run = None
+    for run_name in dict.fromkeys(run_names):
+        try:
+            candidate = client.api.datasets.get_run(
+                dataset_name,
+                run_name,
+                request_options={"timeout_in_seconds": 5, "max_retries": 1},
+            )
+        except Exception as exc:  # noqa: BLE001 - reported as verification evidence
+            print(f"  dataset run lookup failed for {run_name}: {exc}", file=sys.stderr)
+            continue
+        if str(getattr(candidate, "id", "")) == persisted_run_id:
+            remote_run = candidate
+            break
+    if remote_run is None:
+        _fail(f"no remote Dataset Run matched the persisted run id {persisted_run_id}")
+
+    remote_dataset_id = str(getattr(remote_run, "dataset_id", ""))
+    parts = urlsplit(url)
+    path_parts = [segment for segment in parts.path.split("/") if segment]
+    # {prefix}/project/{project_id}/datasets/{dataset_id}/runs/{run_id}
+    try:
+        datasets_index = path_parts.index("datasets")
+        runs_index = path_parts.index("runs")
+        url_project_id = path_parts[datasets_index - 1]
+        url_dataset_id = path_parts[datasets_index + 1]
+        url_run_id = path_parts[runs_index + 1]
+    except (ValueError, IndexError):
+        _fail(f"persisted link does not look like a Dataset Run page URL: {url}")
+        raise
+
+    if url_run_id != persisted_run_id:
+        _fail(f"link run id {url_run_id} != persisted run id {persisted_run_id}")
+    if url_run_id != str(remote_run.id):
+        _fail(f"link run id {url_run_id} != remote run id {remote_run.id}")
+    if url_dataset_id != remote_dataset_id:
+        _fail(f"link dataset id {url_dataset_id} != remote dataset id {remote_dataset_id}")
+    if url_project_id != project_id:
+        _fail(f"link project id {url_project_id} != key project id {project_id}")
+    if not parts.scheme.startswith("http"):
+        _fail(f"link is not an absolute http(s) URL: {url}")
+    if dashboard_url and not url.startswith(dashboard_url.rstrip("/")):
+        _fail(f"link {url} does not use the configured dashboard base {dashboard_url}")
+
+    return {
+        "persisted_run_id": persisted_run_id,
+        "remote_run_id": str(remote_run.id),
+        "remote_dataset_id": remote_dataset_id,
+        "key_project_id": project_id,
+        "url": url,
+        "url_project_id": url_project_id,
+        "url_dataset_id": url_dataset_id,
+        "url_run_id": url_run_id,
+        "dataset_run_names": list(dict.fromkeys(run_names)),
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--agent-endpoint", default=os.getenv("ARGUS_VERIFY_AGENT_ENDPOINT", "http://127.0.0.1:18081/invoke"))
+    parser.add_argument("--dataset-name", default=os.getenv("ARGUS_VERIFY_DATASET", "banking-agent-regression"))
+    parser.add_argument("--artifact-dir", default=os.getenv("ARTIFACT_DIR", str(ROOT / "artifacts" / "e2e")))
+    parser.add_argument("--timeout", type=float, default=TIMEOUT_SECONDS)
+    args = parser.parse_args()
+
+    _require_env("LANGFUSE_PUBLIC_KEY")
+    _require_env("LANGFUSE_SECRET_KEY")
+    _require_env("LANGFUSE_BASE_URL")
+    # Cloud E2E connects directly to the managed API host, which is also the UI origin.
+    dashboard_url = os.getenv("ARGUS_LANGFUSE_DASHBOARD_URL", "").strip() or _require_env(
+        "LANGFUSE_BASE_URL"
+    )
+
+    artifact_dir = Path(args.artifact_dir)
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix="argus-async-link-") as tmpdir:
+        db_path = Path(tmpdir) / "async_link_verify.db"
+        _configure_environment(db_path, dashboard_url)
+
+        import app.main as main_module
+        from app.db import MigrationRunner
+        from fastapi.testclient import TestClient
+
+        MigrationRunner(main_module.db_manager.engine, ROOT / "migrations").apply_all()
+
+        components = {
+            "db_manager": main_module.db_manager,
+            "worker": main_module.worker,
+            "outbox_syncer": main_module.outbox_syncer,
+            "run_score_syncer": main_module.run_score_syncer,
+            "reconciler": main_module.reconciler,
+            "launch_link_service": main_module.launch_link_service,
+        }
+
+        with TestClient(main_module.app) as client:
+            agent_id, version = _register_agent_and_version(client, args.agent_endpoint)
+            try:
+                created = client.post(
+                    "/api/v1/experiment-launches",
+                    json={
+                        "agent_id": agent_id,
+                        "agent_version": version,
+                        "dataset_name": args.dataset_name,
+                        "name": f"async-link-verify-{uuid.uuid4().hex[:8]}",
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001 - reported as verification evidence
+                _fail(f"launch creation raised (Langfuse identity/SDK problem?): {exc}")
+                raise
+            if created.status_code != 201:
+                _fail(f"launch creation failed: {created.status_code} {created.text}")
+            launch_id = created.json()["id"]
+
+            accepted = client.post(f"/api/v1/experiment-launches/{launch_id}/run")
+            if accepted.status_code != 202:
+                _fail(f"async run must return 202, got {accepted.status_code} {accepted.text}")
+
+            state = _drive_until_link(components, launch_id, time.monotonic() + args.timeout)
+
+            detail = client.get(f"/api/v1/experiment-launches/{launch_id}").json()
+            if detail["langfuse_experiment_url"] != detail["links"]["langfuse_experiment"]:
+                _fail("API top-level URL and links.langfuse_experiment disagree")
+
+        evidence = _verify_remote_identity(
+            components["db_manager"],
+            launch_id,
+            str(state["langfuse_experiment_id"]),
+            dashboard_url,
+        )
+
+    report = {
+        "launch_id": launch_id,
+        "agent_id": agent_id,
+        "dashboard_url": dashboard_url,
+        "api_state": state,
+        "api_detail_url": detail["langfuse_experiment_url"],
+        "remote_identity": evidence,
+    }
+    evidence_path = artifact_dir / "async-langfuse-link.json"
+    evidence_path.write_text(json.dumps(report, indent=2, ensure_ascii=False))
+
+    print("Async Langfuse link verification: PASS")
+    print(f"launch: {launch_id}")
+    print(f"run id: {evidence['remote_run_id']}")
+    print(f"dataset id: {evidence['remote_dataset_id']}")
+    print(f"project id: {evidence['key_project_id']}")
+    print(f"link: {evidence['url']}")
+    print(f"evidence: {evidence_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

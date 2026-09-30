@@ -18,55 +18,19 @@ import { QualityBadge } from "../../components/QualityBadge";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { SyncStatusBadge } from "../../components/SyncStatusBadge";
 import { Button, buttonClassName, PageHeader, Panel, SelectInput, TextInput } from "../../components/ui/Primitives";
+import { getLangfuseLinkView } from "./langfuseLink";
+import { LAUNCH_STATUSES, LAUNCH_STATUS_LABELS } from "./launchState";
+import { useLaunchPolling } from "./useLaunchPolling";
 
 type LaunchResponse = import("../../api/schema").components["schemas"]["ExperimentLaunchResponse"];
 type AgentSummary = import("../../api/schema").components["schemas"]["AgentSummaryResponse"];
 
-export const LAUNCH_STATUSES = [
-  "PENDING",
-  "QUEUED",
-  "RUNNING",
-  "COMPLETED",
-  "PARTIAL_FAILED",
-  "FAILED",
-  "CANCELLING",
-  "CANCELLED",
-] as const;
-
-export type LaunchStatus = (typeof LAUNCH_STATUSES)[number];
-
-export const ACTIVE_LAUNCH_STATUSES = new Set<LaunchStatus>([
-  "PENDING",
-  "QUEUED",
-  "RUNNING",
-  "CANCELLING",
-]);
-
-export const LAUNCH_STATUS_LABELS: Record<LaunchStatus, string> = {
-  PENDING: "PENDING (准备中)",
-  QUEUED: "QUEUED (队列中)",
-  RUNNING: "RUNNING (运行中)",
-  COMPLETED: "COMPLETED (已完成)",
-  PARTIAL_FAILED: "PARTIAL_FAILED (部分失败)",
-  FAILED: "FAILED (失败)",
-  CANCELLING: "CANCELLING (取消中)",
-  CANCELLED: "CANCELLED (已取消)",
-};
-
-const isSafeLangfuseUrl = (value: unknown): value is string => {
-  if (typeof value !== "string" || !value.trim()) return false;
-  try {
-    const url = new URL(value);
-    return (
-      (url.protocol === "http:" || url.protocol === "https:") &&
-      Boolean(url.hostname) &&
-      !url.username &&
-      !url.password
-    );
-  } catch {
-    return false;
-  }
-};
+export {
+  ACTIVE_LAUNCH_STATUSES,
+  LAUNCH_STATUSES,
+  LAUNCH_STATUS_LABELS,
+} from "./launchState";
+export type { LaunchStatus } from "./launchState";
 
 export const LaunchesList: React.FC = () => {
   const [filterAgent, setFilterAgent] = useState<string>("");
@@ -93,6 +57,8 @@ export const LaunchesList: React.FC = () => {
     [agents]
   );
 
+  const launchPollingInterval = useLaunchPolling<LaunchResponse>(2000);
+
   const { data: launches, isLoading, error, refetch, isFetching } = useQuery<LaunchResponse[]>({
     queryKey: queryKeys.launches.list({
       agent_id: filterAgent || undefined,
@@ -113,13 +79,9 @@ export const LaunchesList: React.FC = () => {
       const list = Array.isArray(res.data) ? res.data : [res.data];
       return list as LaunchResponse[];
     },
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      const hasActive = data?.some((l) =>
-        ACTIVE_LAUNCH_STATUSES.has(l.status.toUpperCase() as LaunchStatus)
-      );
-      return hasActive ? 2000 : false;
-    },
+    // Keeps polling while a launch executes, while Langfuse sync is still running,
+    // and during the bounded window where a synced link may still arrive.
+    refetchInterval: (query) => launchPollingInterval(query.state.data as LaunchResponse[] | undefined),
   });
 
   const handleCopyId = async (id: string, e: React.MouseEvent) => {
@@ -274,6 +236,7 @@ export const LaunchesList: React.FC = () => {
                 {launches.map((launch) => {
                   const agentName = agentNameById.get(launch.agent_id);
                   const isCopied = copiedLaunchId === launch.id;
+                  const langfuseLink = getLangfuseLinkView(launch);
 
                   return (
                     <tr key={launch.id} className="hover:bg-surface-muted/80 transition-colors">
@@ -389,24 +352,25 @@ export const LaunchesList: React.FC = () => {
                           >
                             详情
                           </Link>
-                          {isSafeLangfuseUrl(launch.langfuse_experiment_url) ? (
+                          {langfuseLink.kind === "link" ? (
                             <a
-                              href={launch.langfuse_experiment_url}
+                              href={langfuseLink.href}
                               target="_blank"
                               rel="noopener noreferrer"
                               aria-label="在 Langfuse 中查看"
                               className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus rounded"
-                              title="在 Langfuse UI 中查看"
+                              title={langfuseLink.title}
                             >
-                              Langfuse
+                              {langfuseLink.label}
                               <ExternalLink className="w-3 h-3" />
                             </a>
                           ) : (
                             <span
                               className="text-xs text-muted-foreground"
-                              title={launch.langfuse_experiment_url ? "Langfuse 地址无效" : "尚未创建 Langfuse 链接"}
+                              title={langfuseLink.title}
+                              data-testid="langfuse-link-reason"
                             >
-                              Langfuse 未就绪
+                              {langfuseLink.label}
                             </span>
                           )}
                         </div>

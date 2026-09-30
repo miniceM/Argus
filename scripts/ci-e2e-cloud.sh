@@ -111,3 +111,15 @@ print("v1 = 2/6; v2 = 6/6")
 print(f"v1 run: {v1.get('dataset_run_url')}")
 print(f"v2 run: {v2.get('dataset_run_url')}")
 PY
+
+echo "== Verify asynchronous Langfuse link (real Worker, Outbox Syncer, compensation) =="
+# The Cloud Compose profile runs the control plane with background loops disabled, so the
+# async run API is driven together with explicit Worker/Syncer/Reconciler/compensator passes.
+ASYNC_LINK_PYTHON="${ARGUS_ASYNC_LINK_PYTHON:-$ROOT/.venv/bin/python}"
+if [ ! -x "$ASYNC_LINK_PYTHON" ]; then
+  ASYNC_LINK_PYTHON=python3
+fi
+"$ASYNC_LINK_PYTHON" "$ROOT/scripts/verify-async-langfuse-link.py" \
+  --agent-endpoint "${ARGUS_VERIFY_AGENT_ENDPOINT:-http://127.0.0.1:18081/invoke}" \
+  --artifact-dir "$ARTIFACT_DIR" \
+  | tee "$ARTIFACT_DIR/async-langfuse-link.log"

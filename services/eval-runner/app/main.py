@@ -21,6 +21,7 @@ from .api_system import router as system_router
 from .config import find_path, settings
 from .db import DatabaseManager, MigrationRunner
 from .execution import LaunchExecutionService
+from .langfuse_links import LangfuseLaunchLinkService, LangfuseLinkResolver
 from .langfuse_run_scores import LangfuseRunScoreSyncer
 from .langfuse_sync import LangfuseOutboxSyncer
 from .limiter import DistributedAgentLimiter, MemoryAgentLimiter, RedisDistributedLimiter
@@ -94,7 +95,9 @@ def _client():
 orchestrator = LaunchOrchestrator(db_manager, queue_adapter, limiter)
 worker = ExecutionWorker(db_manager, queue_adapter, limiter)
 reconciler = ExecutionReconciler(db_manager, queue_adapter, limiter, langfuse_client=_client)
-outbox_syncer = LangfuseOutboxSyncer(db_manager, langfuse_client=_client)
+link_resolver = LangfuseLinkResolver(_client, settings.argus_langfuse_dashboard_url)
+launch_link_service = LangfuseLaunchLinkService(db_manager, link_resolver)
+outbox_syncer = LangfuseOutboxSyncer(db_manager, langfuse_client=_client, link_service=launch_link_service)
 run_score_syncer = LangfuseRunScoreSyncer(db_manager, langfuse_client=_client)
 
 # 5. Initialize Launch Service
@@ -106,6 +109,7 @@ async def lifespan(app: FastAPI):
     worker_task = None
     reconciler_task = None
     syncer_task = None
+    link_task = None
     stop_event = asyncio.Event()
 
     async def _worker_loop():
@@ -170,12 +174,25 @@ async def lifespan(app: FastAPI):
             except Exception:
                 await asyncio.sleep(2.0)
 
+    async def _link_loop():
+        # Independent from execution recovery: remote link lookups must never delay
+        # lease recovery or backlog processing.
+        while not stop_event.is_set():
+            try:
+                await asyncio.to_thread(reconciler.reconcile_langfuse_links, launch_link_service)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                pass
+            await asyncio.sleep(5.0)
+
     if settings.argus_worker_enabled and settings.argus_db_mode != "test":
         worker_task = asyncio.create_task(_worker_loop())
     if settings.argus_reconciler_enabled and settings.argus_db_mode != "test":
         reconciler_task = asyncio.create_task(_reconciler_loop())
     if settings.argus_db_mode != "test":
         syncer_task = asyncio.create_task(_syncer_loop())
+        link_task = asyncio.create_task(_link_loop())
 
     yield
 
@@ -186,6 +203,14 @@ async def lifespan(app: FastAPI):
         reconciler_task.cancel()
     if syncer_task:
         syncer_task.cancel()
+    if link_task:
+        link_task.cancel()
+    for task in (worker_task, reconciler_task, syncer_task, link_task):
+        if task is not None:
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
 
 
 app = FastAPI(

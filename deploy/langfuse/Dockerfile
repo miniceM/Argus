@@ -4,7 +4,7 @@ ARG LANGFUSE_REPOSITORY
 ARG LANGFUSE_TAG
 ARG LANGFUSE_COMMIT
 
-FROM alpine/git:2.49.1 AS i18n-source
+FROM alpine/git:v2.52.0 AS i18n-source
 ARG LANGFUSE_REPOSITORY
 ARG LANGFUSE_TAG
 ARG LANGFUSE_COMMIT
@@ -42,7 +42,7 @@ RUN rm -rf /usr/local/lib/node_modules/corepack \
             /root/.cache/node/corepack && \
     rm -f /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
 
-FROM --platform=${BUILDPLATFORM} golang:1.26 AS migrate-builder
+FROM --platform=${BUILDPLATFORM} golang:1.27 AS migrate-builder
 ARG TARGETOS
 ARG TARGETARCH
 ENV CGO_ENABLED=0 \

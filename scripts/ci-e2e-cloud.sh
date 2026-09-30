@@ -122,4 +122,4 @@ fi
 "$ASYNC_LINK_PYTHON" "$ROOT/scripts/verify-async-langfuse-link.py" \
   --agent-endpoint "${ARGUS_VERIFY_AGENT_ENDPOINT:-http://127.0.0.1:18081/invoke}" \
   --artifact-dir "$ARTIFACT_DIR" \
-  | tee "$ARTIFACT_DIR/async-langfuse-link.log"
+  2>&1 | tee "$ARTIFACT_DIR/async-langfuse-link.log"

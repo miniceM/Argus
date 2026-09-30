@@ -37,11 +37,47 @@ def _fail(message: str) -> None:
     raise SystemExit(1)
 
 
-def _require_env(name: str) -> str:
+def _read_env_file(path: Path) -> dict[str, str]:
+    """Parse a ``KEY=VALUE`` env file without adding a dependency.
+
+    The Cloud Compose profile feeds this same file to the eval-runner container, so it
+    is the authoritative description of the configuration under verification.
+    """
+    values: dict[str, str] = {}
+    if not path.is_file():
+        return values
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        values[key.strip()] = value
+    return values
+
+
+def _require_env(name: str, env_file_values: dict[str, str] | None = None) -> str:
+    """Resolve a Langfuse variable, preferring the Compose env file over the shell.
+
+    The verification must exercise the endpoint the container actually used. Shell and
+    environment values can differ from the file after normalization (Docker Compose
+    strips a UTF-8 BOM from env files), so the file wins when it defines the name.
+    """
+    if env_file_values and env_file_values.get(name, "").strip():
+        return env_file_values[name].strip()
     value = os.getenv(name, "").strip()
     if not value:
         _fail(f"{name} is required for the real async link verification")
     return value
+
+
+def _describe_invisible_chars(value: str) -> list[str]:
+    """Report stripped code points without echoing the (possibly sensitive) URL."""
+    from app.config import INVISIBLE_URL_CHARS
+
+    return sorted({f"U+{ord(char):04X}" for char in value if char in INVISIBLE_URL_CHARS})
 
 
 def _configure_environment(db_path: Path, dashboard_url: str) -> None:
@@ -55,6 +91,37 @@ def _configure_environment(db_path: Path, dashboard_url: str) -> None:
     os.environ["ARGUS_DATASET_SOURCE"] = "langfuse"
     os.environ["ARGUS_LANGFUSE_DASHBOARD_URL"] = dashboard_url
     os.environ.setdefault("LANGFUSE_TRACING_ENVIRONMENT", "poc-cloud")
+
+
+def _normalize_langfuse_endpoint(dashboard_url: str) -> str:
+    """Apply the app's own sanitizer and hand the result to the Langfuse SDK.
+
+    The SDK reads ``LANGFUSE_BASE_URL`` straight from the environment and performs no
+    normalization, so an invisible leading BOM there makes every API call fail with an
+    opaque "missing an 'http://' or 'https://' protocol" error. ``app.config`` already
+    strips those characters for its own settings; the sanitized value must be written
+    back so the SDK observes it too.
+    """
+    from app.config import sanitize_langfuse_url_input
+
+    normalized = sanitize_langfuse_url_input(dashboard_url)
+    stripped = _describe_invisible_chars(dashboard_url)
+    if stripped:
+        print(f"Sanitized Langfuse endpoint: removed invisible characters {stripped}")
+    if not normalized:
+        _fail(f"Langfuse endpoint is empty after removing invisible characters {stripped}")
+    parts = urlsplit(normalized)
+    if parts.scheme.lower() not in {"http", "https"} or not parts.hostname:
+        # Deliberately does not echo the value: in CI it is a secret.
+        _fail(
+            "Langfuse endpoint is not an absolute HTTP(S) URL after sanitization "
+            f"(removed {stripped}); got scheme={parts.scheme!r} with_host={bool(parts.netloc)}. "
+            "Check LANGFUSE_BASE_URL / ARGUS_LANGFUSE_DASHBOARD_URL in .env.cloud for stray "
+            "characters such as a UTF-8 BOM."
+        )
+    os.environ["LANGFUSE_BASE_URL"] = normalized
+    os.environ["ARGUS_LANGFUSE_DASHBOARD_URL"] = normalized
+    return normalized
 
 
 def _register_agent_and_version(client: Any, agent_endpoint: str) -> tuple[str, str]:
@@ -229,12 +296,15 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=TIMEOUT_SECONDS)
     args = parser.parse_args()
 
-    _require_env("LANGFUSE_PUBLIC_KEY")
-    _require_env("LANGFUSE_SECRET_KEY")
-    _require_env("LANGFUSE_BASE_URL")
+    env_file_values = _read_env_file(Path(os.getenv("ARGUS_CLOUD_ENV_FILE", ".env.cloud")))
+    _require_env("LANGFUSE_PUBLIC_KEY", env_file_values)
+    _require_env("LANGFUSE_SECRET_KEY", env_file_values)
+    base_url_raw = _require_env("LANGFUSE_BASE_URL", env_file_values)
     # Cloud E2E connects directly to the managed API host, which is also the UI origin.
-    dashboard_url = os.getenv("ARGUS_LANGFUSE_DASHBOARD_URL", "").strip() or _require_env(
-        "LANGFUSE_BASE_URL"
+    dashboard_url = (
+        env_file_values.get("ARGUS_LANGFUSE_DASHBOARD_URL", "").strip()
+        or os.getenv("ARGUS_LANGFUSE_DASHBOARD_URL", "").strip()
+        or base_url_raw
     )
 
     artifact_dir = Path(args.artifact_dir)
@@ -243,6 +313,10 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="argus-async-link-") as tmpdir:
         db_path = Path(tmpdir) / "async_link_verify.db"
         _configure_environment(db_path, dashboard_url)
+
+        # Importing app.config sanitizes the endpoint for its own settings; mirror the
+        # result into the environment the Langfuse SDK reads.
+        _normalize_langfuse_endpoint(dashboard_url)
 
         import app.main as main_module
         from app.db import MigrationRunner

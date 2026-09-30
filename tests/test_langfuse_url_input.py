@@ -427,3 +427,88 @@ def test_environment_is_configured_before_app_config_is_first_imported(monkeypat
     assert calls[0] == "_configure_environment", (
         "必须在设置环境变量之后才允许导入 app.config，实际调用顺序为 " + repr(calls)
     )
+
+
+class _FakeQuery:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def all(self):
+        return self._rows
+
+
+class _FakeVerifySession:
+    def __init__(self, launch, tasks):
+        self._launch = launch
+        self._tasks = tasks
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+    def get(self, _model, _launch_id):
+        return self._launch
+
+    def query(self, _model):
+        return _FakeQuery(self._tasks)
+
+
+def test_remote_identity_lookup_avoids_legacy_dataset_run_endpoint(monkeypatch):
+    """身份校验必须走 experiments.list。
+
+    Langfuse Cloud 对 2026-09-16 之后创建的 Organization 关闭了 v3 的
+    datasets.get_run，返回 410 LEGACY_API_UNAVAILABLE_FOR_NEW_ORGANIZATION；
+    Dataset Run 在 v4 中即 Experiment。
+    """
+    script = _load_verification_script()
+
+    run_id = "11111111-2222-3333-4444-555555555555"
+    dataset_id = "dddddddd-2222-3333-4444-555555555555"
+    project_id = "pppppppp-2222-3333-4444-555555555555"
+    url = f"{CLEAN}/project/{project_id}/datasets/{dataset_id}/runs/{run_id}"
+
+    launch = SimpleNamespace(
+        dataset_name="banking-agent-regression",
+        langfuse_experiment_url=url,
+    )
+    tasks = [SimpleNamespace(dataset_run_name="argus-test")]
+
+    class _LegacyDatasets:
+        @staticmethod
+        def get_run(*_args, **_kwargs):
+            raise AssertionError("legacy datasets.get_run must not be used")
+
+    class _Experiments:
+        @staticmethod
+        def list(**kwargs):
+            assert kwargs.get("name") == "argus-test", kwargs
+            return SimpleNamespace(
+                data=[SimpleNamespace(id=run_id, name="argus-test", dataset_id=dataset_id)]
+            )
+
+    fake_client = SimpleNamespace(
+        api=SimpleNamespace(
+            projects=SimpleNamespace(
+                get=lambda **_kwargs: SimpleNamespace(data=[SimpleNamespace(id=project_id)])
+            ),
+            datasets=_LegacyDatasets,
+            experiments=_Experiments,
+        )
+    )
+    monkeypatch.setattr("langfuse.get_client", lambda: fake_client)
+
+    evidence = script._verify_remote_identity(
+        SimpleNamespace(get_session=lambda: _FakeVerifySession(launch, tasks)),
+        "launch-1",
+        run_id,
+        CLEAN,
+    )
+
+    assert evidence["remote_run_id"] == run_id
+    assert evidence["remote_dataset_id"] == dataset_id
+    assert evidence["key_project_id"] == project_id

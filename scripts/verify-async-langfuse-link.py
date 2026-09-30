@@ -21,6 +21,7 @@ import sys
 import tempfile
 import time
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -30,6 +31,10 @@ EVAL_RUNNER = ROOT / "services" / "eval-runner"
 sys.path.insert(0, str(EVAL_RUNNER))
 
 TIMEOUT_SECONDS = 120.0
+
+# Experiment lookups are scoped by name, so the time window only has to be wide
+# enough to cover the run; it is not used to narrow results.
+EXPERIMENT_LOOKUP_START = datetime(2020, 1, 1, tzinfo=UTC)
 
 
 def _fail(message: str) -> None:
@@ -319,22 +324,43 @@ def _verify_remote_identity(
         _fail(f"expected exactly one project for the configured key, got {len(projects)}")
     project_id = str(projects[0].id)
 
+    # Langfuse Cloud withdrew the v3 dataset-run read path for organizations created
+    # after 2026-09-16: GET /api/public/datasets/{name}/runs/{run} now answers
+    # 410 LEGACY_API_UNAVAILABLE_FOR_NEW_ORGANIZATION. A Dataset Run is an Experiment
+    # in Langfuse v4, so identity is verified through /api/public/experiments.
     remote_run = None
     for run_name in dict.fromkeys(run_names):
         try:
-            candidate = client.api.datasets.get_run(
-                dataset_name,
-                run_name,
-                request_options={"timeout_in_seconds": 5, "max_retries": 1},
-            )
+            try:
+                response = client.api.experiments.list(
+                    name=run_name,
+                    from_start_time=EXPERIMENT_LOOKUP_START,
+                    limit=100,
+                    request_options={"timeout_in_seconds": 5, "max_retries": 1},
+                )
+            except TypeError:
+                # Guard against SDK signature drift: fall back to an unfiltered page
+                # and match the run name locally.
+                response = client.api.experiments.list(
+                    from_start_time=EXPERIMENT_LOOKUP_START,
+                    limit=100,
+                    request_options={"timeout_in_seconds": 5, "max_retries": 1},
+                )
         except Exception as exc:  # noqa: BLE001 - reported as verification evidence
-            print(f"  dataset run lookup failed for {run_name}: {exc}", file=sys.stderr)
+            print(f"  experiment lookup failed for {run_name}: {exc}", file=sys.stderr)
             continue
-        if str(getattr(candidate, "id", "")) == persisted_run_id:
-            remote_run = candidate
+        for candidate in getattr(response, "data", None) or []:
+            if str(getattr(candidate, "id", "")) == persisted_run_id:
+                remote_run = candidate
+                break
+        if remote_run is not None:
             break
     if remote_run is None:
-        _fail(f"no remote Dataset Run matched the persisted run id {persisted_run_id}")
+        _fail(
+            "no remote Experiment matched the persisted run id "
+            f"{persisted_run_id} (dataset {dataset_name}, run names "
+            f"{list(dict.fromkeys(run_names))})"
+        )
 
     remote_dataset_id = str(getattr(remote_run, "dataset_id", ""))
     parts = urlsplit(url)

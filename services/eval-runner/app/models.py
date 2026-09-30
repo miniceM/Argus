@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
-from typing import Any
+from enum import StrEnum
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -169,11 +171,43 @@ class AgentConcurrencyError(AgentRegistryError, ValueError):
 
 
 
+class UsageCostMapping(BaseModel):
+    """Explicit dot-path mapping for usage and invocation-total cost in a JSON response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    input_tokens_path: str | None = None
+    output_tokens_path: str | None = None
+    total_tokens_path: str | None = None
+    amount_path: str | None = None
+    currency_path: str | None = None
+    source: Literal["provider_reported"] = "provider_reported"
+    measurement_scope: Literal["agent_invocation_total"]
+
+    @field_validator(
+        "input_tokens_path", "output_tokens_path", "total_tokens_path", "amount_path", "currency_path"
+    )
+    @classmethod
+    def validate_json_path(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*", value):
+            raise ValueError("Usage/cost paths must be simple dot-separated JSON object keys")
+        return value
+
+    @model_validator(mode="after")
+    def validate_mapping(self) -> UsageCostMapping:
+        if bool(self.amount_path) != bool(self.currency_path):
+            raise ValueError("amount_path and currency_path must be configured together")
+        if not any((self.input_tokens_path, self.output_tokens_path, self.total_tokens_path, self.amount_path)):
+            raise ValueError("At least one usage or cost response path must be configured")
+        return self
+
+
 class AgentVersionSpecValidator(BaseModel):
     endpoint: str = Field(..., description="HTTP POST URL of the agent")
     protocol: str = Field(default="HTTP_JSON", description="Invocation protocol, currently HTTP_JSON only")
     method: str = Field(default="POST", description="HTTP method, currently POST only")
     request_mapping: dict[str, str] = Field(default_factory=dict, description="Dot-path field mapping")
+    usage_cost_mapping: UsageCostMapping | None = None
     request_schema: dict[str, Any] | None = None
     response_schema: dict[str, Any] | None = None
     credential_ref: str | None = Field(default=None, description="Reference to secret, e.g. env://NAME")
@@ -248,6 +282,7 @@ class AgentVersionResponse(BaseModel):
     protocol: str
     method: str
     request_mapping: dict[str, Any]
+    usage_cost_mapping: UsageCostMapping | None = None
     request_schema: dict[str, Any] | None = None
     response_schema: dict[str, Any] | None = None
     credential_ref: str | None = None
@@ -319,6 +354,89 @@ class BaselineResponse(BaseModel):
     summary: dict[str, Any]
 
 
+class RunCostUnavailableReason(StrEnum):
+    COST_NOT_RECORDED = "COST_NOT_RECORDED"
+    INVALID_COST_EVIDENCE = "INVALID_COST_EVIDENCE"
+    INCOMPLETE_ATTEMPT_COST = "INCOMPLETE_ATTEMPT_COST"
+    MIXED_CURRENCIES = "MIXED_CURRENCIES"
+    COST_SOURCE_MISMATCH = "COST_SOURCE_MISMATCH"
+    COST_SCOPE_MISMATCH = "COST_SCOPE_MISMATCH"
+    COST_POLICY_MISMATCH = "COST_POLICY_MISMATCH"
+    PARTIAL_COST_COVERAGE = "PARTIAL_COST_COVERAGE"
+
+
+class CostComparisonReason(StrEnum):
+    COST_NOT_RECORDED = "COST_NOT_RECORDED"
+    INVALID_COST_EVIDENCE = "INVALID_COST_EVIDENCE"
+    INCOMPLETE_ATTEMPT_COST = "INCOMPLETE_ATTEMPT_COST"
+    MIXED_CURRENCIES = "MIXED_CURRENCIES"
+    COST_SOURCE_MISMATCH = "COST_SOURCE_MISMATCH"
+    COST_SCOPE_MISMATCH = "COST_SCOPE_MISMATCH"
+    COST_POLICY_MISMATCH = "COST_POLICY_MISMATCH"
+    PARTIAL_COST_COVERAGE = "PARTIAL_COST_COVERAGE"
+    COST_CURRENCY_MISMATCH = "COST_CURRENCY_MISMATCH"
+    BASELINE_NOT_BOUND = "BASELINE_NOT_BOUND"
+    NO_COMPARABLE_CASES = "NO_COMPARABLE_CASES"
+
+
+class CostComparisonStatus(StrEnum):
+    COMPARABLE = "COMPARABLE"
+    NOT_COMPARABLE = "NOT_COMPARABLE"
+
+
+class RunCostSummaryResponse(BaseModel):
+    """Typed cost portion of a frozen run summary; retain other metrics for compatibility."""
+
+    model_config = ConfigDict(extra="allow")
+
+    total_cost: float | None = None
+    cost_per_case: float | None = None
+    cost_currency: str | None = None
+    cost_case_count: int | None = None
+    cost_coverage: float | None = None
+    cost_source: str | None = None
+    cost_scope: str | None = None
+    cost_policy_version: str | None = None
+    cost_partial: bool | None = None
+    cost_unavailable_reason: RunCostUnavailableReason | None = None
+
+
+class CostComparisonResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    status: CostComparisonStatus
+    reason: CostComparisonReason | None
+    cohort: Literal["quality_comparable_cases"]
+    case_count: int
+    currency: str | None
+    baseline_cost_per_case: float | None
+    candidate_cost_per_case: float | None
+    delta: float | None
+    baseline_coverage: float | None
+    candidate_coverage: float | None
+    policy_version: str | None
+
+
+class ComparableCohortResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    baseline: RunCostSummaryResponse
+    candidate: RunCostSummaryResponse
+
+
+class ComparisonSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    candidate: RunCostSummaryResponse
+    baseline: RunCostSummaryResponse | None
+    comparable_case_count: int
+    classification_counts: dict[str, int]
+    comparable_cohort: ComparableCohortResponse | None
+    cost_comparison: CostComparisonResponse
+    pass_rate_delta: float | None
+    score_mean_deltas: dict[str, float]
+
+
 class RunSummaryResponse(BaseModel):
     launch_id: str
     snapshot_id: str
@@ -326,7 +444,7 @@ class RunSummaryResponse(BaseModel):
     created_at: datetime
     manifest_digest: str
     versions: dict[str, Any]
-    summary: dict[str, Any]
+    summary: RunCostSummaryResponse
     langfuse_score_sync_status: str = "PENDING"
 
 
@@ -336,7 +454,7 @@ class ComparisonResponse(BaseModel):
     baseline_snapshot_id: str | None = None
     baseline_binding_revision: int | None = None
     versions: dict[str, Any]
-    summary: dict[str, Any]
+    summary: ComparisonSummaryResponse
     classification_counts: dict[str, int]
     items: list[dict[str, Any]]
     next_cursor: int | None = None

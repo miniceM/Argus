@@ -1,9 +1,11 @@
 # Build stage
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@10.5.2 --activate
+RUN npm install --global corepack@0.36.0 \
+    && corepack enable \
+    && corepack prepare pnpm@10.5.2 --activate
 
 COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install
@@ -12,7 +14,7 @@ COPY . .
 RUN pnpm build
 
 # Production stage (Unprivileged Non-Root Nginx)
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.29-alpine
 
 ENV RUNNER_HOST=eval-runner
 ENV RUNNER_PORT=8080

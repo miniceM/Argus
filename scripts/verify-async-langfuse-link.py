@@ -40,6 +40,7 @@ EXPERIMENT_LOOKUP_WINDOW_HOURS = 6
 EXPERIMENT_LOOKUP_ATTEMPTS = 12
 EXPERIMENT_LOOKUP_INTERVAL_SECONDS = 5.0
 EXPERIMENT_LOOKUP_LIMIT = 100
+EXPERIMENT_OBSERVED_LIMIT = 20
 
 
 def _fail(message: str) -> None:
@@ -333,23 +334,34 @@ def _verify_remote_identity(
     # after 2026-09-16: GET /api/public/datasets/{name}/runs/{run} now answers
     # 410 LEGACY_API_UNAVAILABLE_FOR_NEW_ORGANIZATION. A Dataset Run is an Experiment
     # in Langfuse v4, so identity is verified through /api/public/experiments.
-    def _lookup_experiment(run_name: str) -> Any | None:
+    observed: list[tuple[str, str]] = []
+
+    def _window() -> dict[str, Any]:
         now = datetime.now(UTC)
-        window = {
+        return {
             "from_start_time": now - timedelta(hours=EXPERIMENT_LOOKUP_WINDOW_HOURS),
             "to_start_time": now + timedelta(minutes=5),
             "limit": EXPERIMENT_LOOKUP_LIMIT,
             "request_options": {"timeout_in_seconds": 5, "max_retries": 1},
         }
-        try:
-            response = client.api.experiments.list(name=run_name, **window)
-        except TypeError:
-            # Guard against SDK signature drift: fall back to an unfiltered page and
-            # match on the run id there. The bounded window keeps that page small.
-            response = client.api.experiments.list(**window)
-        for candidate in getattr(response, "data", None) or []:
-            if str(getattr(candidate, "id", "")) == persisted_run_id:
-                return candidate
+
+    def _page(**kwargs: Any) -> list[Any]:
+        response = client.api.experiments.list(**kwargs)
+        return list(getattr(response, "data", None) or [])
+
+    def _lookup_experiment(run_name: str) -> Any | None:
+        # The name filter is only an optimisation: whether the cloud honours it is not
+        # guaranteed, so an empty filtered page always falls back to the unfiltered
+        # recent window before giving up.
+        for candidates in (_page(name=run_name, **_window()), _page(**_window())):
+            for candidate in candidates:
+                candidate_id = str(getattr(candidate, "id", ""))
+                candidate_name = str(getattr(candidate, "name", ""))
+                pair = (candidate_id, candidate_name)
+                if pair not in observed and len(observed) < EXPERIMENT_OBSERVED_LIMIT:
+                    observed.append(pair)
+                if candidate_id == persisted_run_id:
+                    return candidate
         return None
 
     remote_run = None
@@ -368,10 +380,11 @@ def _verify_remote_identity(
         if remote_run is not None:
             break
     if remote_run is None:
+        seen = ", ".join(f"{cid} (name={cname!r})" for cid, cname in observed) or "none"
         _fail(
-            "no remote Experiment matched the persisted run id "
-            f"{persisted_run_id} (dataset {dataset_name}, run names "
-            f"{list(dict.fromkeys(run_names))})"
+            f"no remote Experiment matched the persisted run id {persisted_run_id} "
+            f"(dataset {dataset_name}, run names {list(dict.fromkeys(run_names))}). "
+            f"Experiments seen in the last {EXPERIMENT_LOOKUP_WINDOW_HOURS}h: {seen}"
         )
 
     remote_dataset_id = str(getattr(remote_run, "dataset_id", ""))

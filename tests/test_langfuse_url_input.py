@@ -467,6 +467,8 @@ def test_remote_identity_lookup_avoids_legacy_dataset_run_endpoint(monkeypatch):
     Dataset Run 在 v4 中即 Experiment。
     """
     script = _load_verification_script()
+    monkeypatch.setattr(script, "EXPERIMENT_LOOKUP_ATTEMPTS", 1, raising=False)
+    monkeypatch.setattr(script, "EXPERIMENT_LOOKUP_INTERVAL_SECONDS", 0.0, raising=False)
 
     run_id = "11111111-2222-3333-4444-555555555555"
     dataset_id = "dddddddd-2222-3333-4444-555555555555"
@@ -487,7 +489,6 @@ def test_remote_identity_lookup_avoids_legacy_dataset_run_endpoint(monkeypatch):
     class _Experiments:
         @staticmethod
         def list(**kwargs):
-            assert kwargs.get("name") == "argus-test", kwargs
             return SimpleNamespace(
                 data=[SimpleNamespace(id=run_id, name="argus-test", dataset_id=dataset_id)]
             )
@@ -565,3 +566,52 @@ def test_remote_identity_lookup_retries_within_a_bounded_recent_window(monkeypat
 
     assert evidence["remote_run_id"] == run_id
     assert len(seen) >= 3
+
+
+def test_remote_identity_falls_back_to_unfiltered_page_and_reports_what_it_saw(monkeypatch, capsys):
+    """名称过滤拿不到结果时必须改查整页，并在失败信息里报告实际观测到的记录。
+
+    否则只能看到 "no remote Experiment matched"，无法判断是名称不匹配、
+    ID 不同，还是读路径滞后。
+    """
+    script = _load_verification_script()
+    monkeypatch.setattr(script, "EXPERIMENT_LOOKUP_ATTEMPTS", 1, raising=False)
+    monkeypatch.setattr(script, "EXPERIMENT_LOOKUP_INTERVAL_SECONDS", 0.0, raising=False)
+
+    run_id = "11111111-2222-3333-4444-555555555555"
+    dataset_id = "dddddddd-2222-3333-4444-555555555555"
+    project_id = "pppppppp-2222-3333-4444-555555555555"
+    url = f"{CLEAN}/project/{project_id}/datasets/{dataset_id}/runs/{run_id}"
+
+    launch = SimpleNamespace(dataset_name="ds", langfuse_experiment_url=url)
+    tasks = [SimpleNamespace(dataset_run_name="argus-test")]
+
+    other = SimpleNamespace(id="99999999-9999-9999-9999-999999999999", name="argus-test")
+
+    def _list(**kwargs):
+        if "name" in kwargs:
+            return SimpleNamespace(data=[])
+        return SimpleNamespace(data=[other])
+
+    fake_client = SimpleNamespace(
+        api=SimpleNamespace(
+            projects=SimpleNamespace(
+                get=lambda **_kw: SimpleNamespace(data=[SimpleNamespace(id=project_id)])
+            ),
+            experiments=SimpleNamespace(list=_list),
+        )
+    )
+    monkeypatch.setattr("langfuse.get_client", lambda: fake_client)
+
+    with pytest.raises(SystemExit):
+        script._verify_remote_identity(
+            SimpleNamespace(get_session=lambda: _FakeVerifySession(launch, tasks)),
+            "launch-1",
+            run_id,
+            CLEAN,
+        )
+
+    message = capsys.readouterr().err
+    assert "argus-test" in message
+    # 报告实际观测到的记录，便于判断是名称不匹配还是 ID 不同
+    assert "99999999-9999-9999-9999-999999999999" in message

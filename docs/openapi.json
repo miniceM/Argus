@@ -2003,6 +2003,16 @@
             "title": "Request Mapping",
             "description": "Dot-path field mapping"
           },
+          "usage_cost_mapping": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UsageCostMapping"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "request_schema": {
             "anyOf": [
               {
@@ -2178,6 +2188,16 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Request Mapping"
+          },
+          "usage_cost_mapping": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UsageCostMapping"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "request_schema": {
             "anyOf": [
@@ -2414,6 +2434,23 @@
         ],
         "title": "BootstrapResult"
       },
+      "ComparableCohortResponse": {
+        "properties": {
+          "baseline": {
+            "$ref": "#/components/schemas/RunCostSummaryResponse"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/RunCostSummaryResponse"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "baseline",
+          "candidate"
+        ],
+        "title": "ComparableCohortResponse"
+      },
       "ComparisonCaseOutputResponse": {
         "properties": {
           "launch_id": {
@@ -2510,9 +2547,7 @@
             "title": "Versions"
           },
           "summary": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Summary"
+            "$ref": "#/components/schemas/ComparisonSummaryResponse"
           },
           "classification_counts": {
             "additionalProperties": {
@@ -2551,6 +2586,222 @@
           "items"
         ],
         "title": "ComparisonResponse"
+      },
+      "ComparisonSummaryResponse": {
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/RunCostSummaryResponse"
+          },
+          "baseline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunCostSummaryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "comparable_case_count": {
+            "type": "integer",
+            "title": "Comparable Case Count"
+          },
+          "classification_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Classification Counts"
+          },
+          "comparable_cohort": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComparableCohortResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cost_comparison": {
+            "$ref": "#/components/schemas/CostComparisonResponse"
+          },
+          "pass_rate_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pass Rate Delta"
+          },
+          "score_mean_deltas": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Score Mean Deltas"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "candidate",
+          "baseline",
+          "comparable_case_count",
+          "classification_counts",
+          "comparable_cohort",
+          "cost_comparison",
+          "pass_rate_delta",
+          "score_mean_deltas"
+        ],
+        "title": "ComparisonSummaryResponse"
+      },
+      "CostComparisonReason": {
+        "type": "string",
+        "enum": [
+          "COST_NOT_RECORDED",
+          "INVALID_COST_EVIDENCE",
+          "INCOMPLETE_ATTEMPT_COST",
+          "MIXED_CURRENCIES",
+          "COST_SOURCE_MISMATCH",
+          "COST_SCOPE_MISMATCH",
+          "COST_POLICY_MISMATCH",
+          "PARTIAL_COST_COVERAGE",
+          "COST_CURRENCY_MISMATCH",
+          "BASELINE_NOT_BOUND",
+          "NO_COMPARABLE_CASES"
+        ],
+        "title": "CostComparisonReason"
+      },
+      "CostComparisonResponse": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/CostComparisonStatus"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CostComparisonReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cohort": {
+            "type": "string",
+            "const": "quality_comparable_cases",
+            "title": "Cohort"
+          },
+          "case_count": {
+            "type": "integer",
+            "title": "Case Count"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "baseline_cost_per_case": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Cost Per Case"
+          },
+          "candidate_cost_per_case": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Cost Per Case"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta"
+          },
+          "baseline_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Coverage"
+          },
+          "candidate_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Coverage"
+          },
+          "policy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Version"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "status",
+          "reason",
+          "cohort",
+          "case_count",
+          "currency",
+          "baseline_cost_per_case",
+          "candidate_cost_per_case",
+          "delta",
+          "baseline_coverage",
+          "candidate_coverage",
+          "policy_version"
+        ],
+        "title": "CostComparisonResponse"
+      },
+      "CostComparisonStatus": {
+        "type": "string",
+        "enum": [
+          "COMPARABLE",
+          "NOT_COMPARABLE"
+        ],
+        "title": "CostComparisonStatus"
       },
       "DomainErrorResponse": {
         "properties": {
@@ -3592,6 +3843,137 @@
         "type": "object",
         "title": "RetryFailedRequest"
       },
+      "RunCostSummaryResponse": {
+        "properties": {
+          "total_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Cost"
+          },
+          "cost_per_case": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Per Case"
+          },
+          "cost_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Currency"
+          },
+          "cost_case_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Case Count"
+          },
+          "cost_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Coverage"
+          },
+          "cost_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Source"
+          },
+          "cost_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Scope"
+          },
+          "cost_policy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Policy Version"
+          },
+          "cost_partial": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Partial"
+          },
+          "cost_unavailable_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunCostUnavailableReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "RunCostSummaryResponse",
+        "description": "Typed cost portion of a frozen run summary; retain other metrics for compatibility."
+      },
+      "RunCostUnavailableReason": {
+        "type": "string",
+        "enum": [
+          "COST_NOT_RECORDED",
+          "INVALID_COST_EVIDENCE",
+          "INCOMPLETE_ATTEMPT_COST",
+          "MIXED_CURRENCIES",
+          "COST_SOURCE_MISMATCH",
+          "COST_SCOPE_MISMATCH",
+          "COST_POLICY_MISMATCH",
+          "PARTIAL_COST_COVERAGE"
+        ],
+        "title": "RunCostUnavailableReason"
+      },
       "RunSummaryResponse": {
         "properties": {
           "launch_id": {
@@ -3621,9 +4003,7 @@
             "title": "Versions"
           },
           "summary": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Summary"
+            "$ref": "#/components/schemas/RunCostSummaryResponse"
           },
           "langfuse_score_sync_status": {
             "type": "string",
@@ -3681,6 +4061,83 @@
           "environment"
         ],
         "title": "SystemInfoResponse"
+      },
+      "UsageCostMapping": {
+        "properties": {
+          "input_tokens_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens Path"
+          },
+          "output_tokens_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Tokens Path"
+          },
+          "total_tokens_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Tokens Path"
+          },
+          "amount_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Path"
+          },
+          "currency_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency Path"
+          },
+          "source": {
+            "type": "string",
+            "const": "provider_reported",
+            "title": "Source",
+            "default": "provider_reported"
+          },
+          "measurement_scope": {
+            "type": "string",
+            "const": "agent_invocation_total",
+            "title": "Measurement Scope"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "measurement_scope"
+        ],
+        "title": "UsageCostMapping",
+        "description": "Explicit dot-path mapping for usage and invocation-total cost in a JSON response."
       },
       "ValidationError": {
         "properties": {

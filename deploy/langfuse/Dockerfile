@@ -4,7 +4,7 @@ ARG LANGFUSE_REPOSITORY
 ARG LANGFUSE_TAG
 ARG LANGFUSE_COMMIT
 
-FROM alpine/git:2.49.1 AS i18n-source
+FROM alpine/git:v2.52.0 AS i18n-source
 ARG LANGFUSE_REPOSITORY
 ARG LANGFUSE_TAG
 ARG LANGFUSE_COMMIT
@@ -18,7 +18,7 @@ RUN test -n "$LANGFUSE_REPOSITORY" \
     && /patch-layer/scripts/apply-patches.sh /src
 
 # The node alpine image is available here: https://github.com/nodejs/docker-node
-FROM --platform=${TARGETPLATFORM:-linux/amd64} node:24-alpine AS alpine
+FROM --platform=${TARGETPLATFORM:-linux/amd64} node:26-alpine AS alpine
 
 # It's important to update the index before installing packages to ensure you're getting the latest versions.
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
@@ -42,7 +42,7 @@ RUN rm -rf /usr/local/lib/node_modules/corepack \
             /root/.cache/node/corepack && \
     rm -f /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
 
-FROM --platform=${BUILDPLATFORM} golang:1.26 AS migrate-builder
+FROM --platform=${BUILDPLATFORM} golang:1.27 AS migrate-builder
 ARG TARGETOS
 ARG TARGETARCH
 ENV CGO_ENABLED=0 \

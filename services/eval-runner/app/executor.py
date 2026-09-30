@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 
+from .costs import extract_usage_cost
 from .registry import AgentVersionSpec
 from .security import resolve_credential
 
@@ -44,6 +45,7 @@ class SingleInvocationResult:
     is_retryable: bool
     may_have_side_effects: bool
     retry_after_seconds: int | None = None
+    usage_cost: dict[str, Any] | None = None
 
 
 def parse_retry_after(header_val: str | None) -> int | None:
@@ -128,6 +130,13 @@ class RemoteAgentExecutor:
             duration_ms = int((time.monotonic() - start_time) * 1000)
             trace_received = resp.headers.get("x-demo-traceparent-received", "").lower() == "true"
             resp_headers = dict(resp.headers)
+            usage_cost = None
+            if self.spec.usage_cost_mapping:
+                try:
+                    usage_payload = resp.json()
+                except Exception:
+                    usage_payload = None
+                usage_cost = extract_usage_cost(usage_payload, self.spec.usage_cost_mapping)
 
             if resp.status_code == 429:
                 retry_after_val = parse_retry_after(resp.headers.get("retry-after"))
@@ -143,6 +152,7 @@ class RemoteAgentExecutor:
                     is_retryable=True,
                     may_have_side_effects=False,
                     retry_after_seconds=retry_after_val,
+                    usage_cost=usage_cost,
                 )
 
             if resp.status_code >= 500:
@@ -157,6 +167,7 @@ class RemoteAgentExecutor:
                     error_message=f"Server error {resp.status_code}",
                     is_retryable=True,
                     may_have_side_effects=False,
+                    usage_cost=usage_cost,
                 )
 
             if 400 <= resp.status_code < 500:
@@ -171,6 +182,7 @@ class RemoteAgentExecutor:
                     error_message=f"Client error {resp.status_code}",
                     is_retryable=False,
                     may_have_side_effects=False,
+                    usage_cost=usage_cost,
                 )
 
             try:
@@ -189,6 +201,7 @@ class RemoteAgentExecutor:
                     error_message=f"Invalid JSON response: {exc}",
                     is_retryable=False,
                     may_have_side_effects=True,
+                    usage_cost=usage_cost,
                 )
 
             return SingleInvocationResult(
@@ -202,6 +215,7 @@ class RemoteAgentExecutor:
                 error_message=None,
                 is_retryable=False,
                 may_have_side_effects=True,
+                usage_cost=usage_cost,
             )
 
         except (httpx.ConnectError, httpx.ConnectTimeout) as exc:

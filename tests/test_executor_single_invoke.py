@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -112,5 +113,41 @@ def test_executor_invoke_once_connect_timeout_has_no_side_effects(agent_spec):
         assert res.error_category == "CONNECT_ERROR"
         assert res.may_have_side_effects is False
         assert res.is_retryable is True
+
+    asyncio.run(_run())
+
+
+def test_executor_extracts_configured_usage_cost_on_success_and_http_error(agent_spec):
+    agent_spec = replace(agent_spec, usage_cost_mapping={
+        "input_tokens_path": "usage.input_tokens",
+        "output_tokens_path": "usage.output_tokens",
+        "amount_path": "billing.cost",
+        "currency_path": "billing.currency",
+        "source": "provider_reported",
+        "measurement_scope": "agent_invocation_total",
+    })
+
+    async def _run():
+        executor = RemoteAgentExecutor(agent_spec)
+        async def mock_post(*args, **kwargs):
+            return httpx.Response(200, json={
+                "result": "ok", "usage": {"input_tokens": 2, "output_tokens": 3},
+                "billing": {"cost": 0.004, "currency": "usd"},
+            })
+        executor._client.post = mock_post
+        result = await executor.invoke_once({}, {})
+        assert result.body == {"result": "ok", "usage": {"input_tokens": 2, "output_tokens": 3},
+                               "billing": {"cost": 0.004, "currency": "usd"}}
+        assert result.usage_cost["cost"]["amount"] == "0.004"
+        assert result.usage_cost["cost"]["currency"] == "USD"
+        assert result.usage_cost["usage"]["total_tokens"] == 5
+
+        async def mock_error(*args, **kwargs):
+            return httpx.Response(503, json={"billing": {"cost": 0.01, "currency": "USD"}})
+        executor._client.post = mock_error
+        failed = await executor.invoke_once({}, {})
+        assert failed.error_category == "HTTP_5XX"
+        assert failed.body is None
+        assert failed.usage_cost["cost"]["amount"] == "0.01"
 
     asyncio.run(_run())

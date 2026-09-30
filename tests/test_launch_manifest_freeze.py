@@ -110,6 +110,12 @@ def test_launch_manifest_snapshot_freeze(tmp_path):
         version="v-idempotent",
         endpoint="http://demo-agent-v1:8080/invoke",
         is_idempotent=True,
+        usage_cost_mapping={
+            "amount_path": "billing.cost",
+            "currency_path": "billing.currency",
+            "source": "provider_reported",
+            "measurement_scope": "agent_invocation_total",
+        },
     )
     launch_idem = launch_svc.create_launch(
         agent_id="banking-agent",
@@ -117,6 +123,8 @@ def test_launch_manifest_snapshot_freeze(tmp_path):
         dataset_name="banking-agent-regression",
     )
     assert launch_idem.manifest["agent"]["is_idempotent"] is True
+    assert launch_idem.manifest["agent"]["usage_cost_mapping"]["amount_path"] == "billing.cost"
+    assert launch_idem.manifest["agent"]["usage_cost_mapping"]["measurement_scope"] == "agent_invocation_total"
 
     # Creating launch with explicitly supplied launch_id
     custom_id = "custom-launch-uuid-123"

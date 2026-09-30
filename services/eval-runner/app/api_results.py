@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 
 from .aggregation import aggregate_run, compare_case_results
+from .costs import compare_costs
 from .db_models import ExperimentLaunchRecord, RunResultSnapshotRecord
 from .models import ComparisonResponse, RunSummaryResponse
 from .result_outputs import ComparisonCaseOutputResponse, fetch_observation_output
@@ -184,6 +185,9 @@ def get_launch_comparison(
                 "baseline": baseline_common,
                 "candidate": candidate_common,
             }
+            summary["cost_comparison"] = compare_costs(
+                baseline_common, candidate_common, len(comparable_baseline)
+            )
             baseline_pass = baseline_common.get("pass_rate")
             candidate_pass = candidate_common.get("pass_rate")
             summary["pass_rate_delta"] = (
@@ -200,6 +204,9 @@ def get_launch_comparison(
             }
         else:
             summary["comparable_cohort"] = None
+            summary["cost_comparison"] = compare_costs(
+                None, candidate_snapshot.summary, int(candidate_snapshot.summary.get("total_cases", 0))
+            )
             summary["pass_rate_delta"] = None
             summary["score_mean_deltas"] = {}
 

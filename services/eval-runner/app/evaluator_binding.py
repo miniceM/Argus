@@ -263,6 +263,24 @@ class EvaluatorBinding:
     def binding_digest(self) -> str:
         return canonical_digest(self.binding_payload())
 
+    def measurement_payload(self) -> dict[str, Any]:
+        """Canonical payload describing *what is measured*, excluding judgement.
+
+        Issue #83 splits measurement from judgement: ``threshold``, ``direction``
+        and ``critical`` decide how a result is read, not what the Evaluator
+        computes. Keeping them out of this payload is what makes a policy-only
+        edit (threshold / critical / operator) leave the measurement digest
+        untouched while the policy digest changes.
+        """
+        payload = self.binding_payload()
+        for judgement_key in ("threshold", "direction", "critical"):
+            payload.pop(judgement_key, None)
+        return payload
+
+    @property
+    def measurement_digest(self) -> str:
+        return canonical_digest(self.measurement_payload())
+
     def to_payload(self) -> dict[str, Any]:
         payload = {
             # Legacy-compatible spec fields (Manifest schema <= 1.1 readers)
@@ -681,6 +699,45 @@ def manifest_contract_status(manifest: dict[str, Any] | None) -> str:
     return LEGACY_CONTRACT_STATUS
 
 
+def manifest_measurement_digest(manifest: dict[str, Any] | None) -> str:
+    """Digest of what the Launch measures, independent of its quality policy.
+
+    Changing only a threshold / critical flag / comparison operator leaves this
+    digest unchanged, which is exactly the property Issue #83 requires: the
+    measurement is reproducible, and the judgement is a separate, versioned
+    decision.
+    """
+    manifest = manifest or {}
+    return canonical_digest(
+        {
+            "schema_version": str(manifest.get("schema_version") or ""),
+            "bindings": [
+                EvaluatorBinding.from_payload(dict(entry)).measurement_digest
+                for entry in (manifest.get("evaluators") or [])
+                if isinstance(entry, dict)
+            ],
+        }
+    )
+
+
+def manifest_quality_policy(manifest: dict[str, Any] | None) -> Any | None:
+    """Read the frozen QualityPolicy, or None for a pre-#83 Manifest.
+
+    A historical Manifest keeps whatever policy it was judged under; this never
+    back-fills a policy onto old results.
+    """
+    from .quality_policy import QualityPolicy
+
+    manifest = manifest or {}
+    payload = manifest.get("quality_policy")
+    if not isinstance(payload, dict) or not payload.get("rules"):
+        return None
+    try:
+        return QualityPolicy.from_payload(payload)
+    except Exception:  # noqa: BLE001 - an unreadable policy must not crash a read path
+        return None
+
+
 def resolve_execution_plan(
     manifest: dict[str, Any] | None,
     *,
@@ -728,6 +785,9 @@ class FrozenItemEvaluation:
     verification_status: str
     evaluators: tuple[dict[str, Any], ...] = ()
     typed_results: tuple[Any, ...] = ()
+    # Issue #83: the per-rule decision, so a reviewer can read *why* this item
+    # is pass / fail / unknown instead of only seeing the verdict.
+    quality_decision: Any = None
 
     @property
     def failed_result_count(self) -> int:
@@ -764,7 +824,7 @@ def evaluate_frozen_item(
         failed_result,
         project_legacy_scores,
     )
-    from .evaluators import evaluate_item_quality
+    from .quality_policy import evaluate_quality_policy
 
     registry = registry or default_evaluator_registry
     executors = executors if executors is not None else build_executor_registry(registry)
@@ -848,31 +908,40 @@ def evaluate_frozen_item(
     # Restricted legacy projection: successful numeric results only.
     scores = project_legacy_scores(typed_results)
 
-    if any(getattr(result, "status", "") != "succeeded" for result in typed_results):
-        # Fail closed / unknown-safe (AGENTS.md §5.4): a Binding that failed,
-        # was skipped or produced no value cannot yield a quality conclusion.
-        quality_conclusion = "unknown"
-        eval_status = "failed" if eval_errors else "succeeded"
-        eval_error = "; ".join(eval_errors) if eval_errors else None
+    # Issue #83: the quality verdict comes from the frozen QualityPolicy, never
+    # from a threshold smuggled into the measurement. The policy reads the typed
+    # results directly, so a missing / failed / skipped *required* rule becomes
+    # UNKNOWN instead of a fabricated FAIL, and an optional diagnostic failure
+    # stays visible without deciding quality.
+    policy = manifest_quality_policy(manifest)
+    decided_by = "QUALITY_POLICY"
+    if policy is None and isinstance(quality_policy, dict) and quality_policy.get("rules"):
+        from .quality_policy import QualityPolicy
+
+        try:
+            policy = QualityPolicy.from_payload(quality_policy)
+        except Exception:  # noqa: BLE001 - unreadable policy => unknown, never fail
+            policy = None
+    if policy is None:
+        # A pre-#83 Manifest froze no policy. Its recorded verdict stays valid
+        # under the rules it was actually judged by, so history is read, never
+        # rewritten.
+        from .quality_policy import legacy_quality_policy
+
+        policy = legacy_quality_policy([resolved.binding for resolved in plan])
+        decided_by = "LEGACY_MANIFEST_POLICY"
+    decision = evaluate_quality_policy(typed_results, policy, decided_by=decided_by)
+    quality_conclusion = decision.conclusion
+
+    # An evaluation anomaly is always surfaced, even when it does not change the
+    # quality verdict (an optional diagnostic is allowed to fail).
+    if eval_errors:
+        eval_status = "failed"
+        eval_error = "; ".join(eval_errors)
+    elif any(getattr(result, "status", "") != "succeeded" for result in typed_results):
+        eval_status = "partial" if decision.conclusion != "unknown" else "failed"
+        eval_error = None
     else:
-        # Issue #82 scope: the threshold gate is defined over *numeric* results
-        # only. Non-numeric typed results (boolean / categorical / text) are
-        # recorded and shown, but their policy decision is #83's job — they
-        # must not silently flip a conclusion to fail via a missing score, nor
-        # fabricate a pass from nothing.
-        numeric_specs = [
-            resolved.binding.to_payload()
-            for resolved in plan
-            if resolved.binding.result_type == "numeric"
-        ]
-        if numeric_specs:
-            quality_conclusion = evaluate_item_quality(
-                scores,
-                numeric_specs,
-                manifest.get("quality_policy") or quality_policy,
-            )
-        else:
-            quality_conclusion = "unknown"
         eval_status = "succeeded"
         eval_error = None
 
@@ -887,6 +956,7 @@ def evaluate_frozen_item(
         verification_status=verification_status,
         evaluators=tuple(evaluators),
         typed_results=tuple(typed_results),
+        quality_decision=decision,
     )
 
 

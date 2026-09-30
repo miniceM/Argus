@@ -20,6 +20,7 @@ from .evaluation_result_store import persist_typed_results, result_to_payload
 from .evaluator_binding import evaluate_frozen_item
 from .evaluators import EvaluatorSelectionError
 from .executor import RemoteAgentExecutor
+from .quality_policy import QualityPolicyError
 from .models import (
     EvaluationResultResponse,
     ExecutionAttemptResponse,
@@ -84,8 +85,20 @@ def create_experiment_launch(
                 if payload.evaluator_selections is not None
                 else None
             ),
+            quality_policy_rules=(
+                [rule.model_dump() for rule in payload.quality_policy.rules]
+                if payload.quality_policy is not None
+                else None
+            ),
         )
         return _enrich_launch(launch, orchestrator)
+    except QualityPolicyError as exc:
+        # Issue #83: an undecidable policy is rejected at creation, with the same
+        # stable-code shape the evaluator gate already uses.
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=exc.to_payload(),
+        ) from exc
     except EvaluatorSelectionError as exc:
         # Issue #80: structured, machine-readable rejection for unusable selections.
         raise HTTPException(
@@ -499,9 +512,13 @@ async def _execute_single_item(
         execution_status = "failed"
         execution_error = str(exc)
         eval_status = "skipped"
-        quality_conclusion = "fail"
+        # Issue #83: an Agent call that never produced an answer cannot support a
+        # quality verdict. Execution failure is not quality failure, so the
+        # conclusion stays UNKNOWN and is reported through execution_status.
+        quality_conclusion = "unknown"
 
     typed_results: list[Any] = []
+    quality_evaluation: dict[str, Any] | None = None
     if execution_status == "succeeded" and agent_output is not None:
         # Issue #81: same frozen boundary as the Worker and synchronous run paths.
         frozen_result = evaluate_frozen_item(
@@ -512,6 +529,8 @@ async def _execute_single_item(
         scores_dict = frozen_result.scores
         quality_conclusion = frozen_result.quality_conclusion
         typed_results = list(frozen_result.typed_results)
+        if frozen_result.quality_decision is not None:
+            quality_evaluation = frozen_result.quality_decision.payload()
 
 
     completed_at = datetime.utcnow()
@@ -524,6 +543,8 @@ async def _execute_single_item(
             rec.execution_error = execution_error
             rec.eval_error = eval_error
             rec.scores = scores_dict
+            if quality_evaluation is not None:
+                rec.quality_evaluation = quality_evaluation
             if last_attempt_id:
                 # Enforce attempt ownership verification
                 att = session.get(ExecutionAttemptRecord, last_attempt_id)
@@ -545,6 +566,7 @@ async def _execute_single_item(
         "eval_status": eval_status,
         "quality_conclusion": quality_conclusion,
         "scores": scores_dict,
+        "quality_evaluation": quality_evaluation,
         "output": agent_output,
         "error": execution_error or eval_error,
     }

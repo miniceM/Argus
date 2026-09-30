@@ -325,6 +325,15 @@ class ExperimentLaunchCreateRequest(BaseModel):
         ),
     )
     max_concurrency: int | None = Field(default=None, ge=1, le=50, description="Optional concurrency override; if omitted, inherits from AgentVersion")
+    quality_policy: QualityPolicyRequest | None = Field(
+        default=None,
+        description=(
+            "Issue #83: the judgement rules frozen with this Launch. Omit it to "
+            "accept the default all-required policy over the selected metrics. "
+            "An illegal rule (unknown operator, type mismatch, unknown metric) is "
+            "rejected at creation instead of failing silently at run time."
+        ),
+    )
 
 
     idempotency_key: str | None = Field(default=None, description="Optional idempotency key (can also be passed via Idempotency-Key header)")
@@ -377,6 +386,66 @@ class EvaluatorResponse(BaseModel):
     eligibility_reasons: list[str] = Field(default_factory=list)
     default_version: str
     versions: list[EvaluatorVersionInfo] = Field(default_factory=list)
+
+
+class QualityRuleRequest(BaseModel):
+    """One user-authored judgement rule over a selected metric (Issue #83)."""
+
+    evaluator_id: str = Field(..., min_length=1, max_length=128)
+    operator: str | None = Field(
+        default=None,
+        description=(
+            "Comparison operator. numeric accepts >= / <=, boolean and categorical "
+            "accept ==. A metric with no operator is recorded as evidence only."
+        ),
+    )
+    threshold: float | None = Field(default=None, description="numeric 规则的阈值")
+    expected_value: Any | None = Field(
+        default=None, description="boolean / categorical 规则的显式期望取值"
+    )
+    result_type: str = Field(default="numeric", description="被引用指标的结果类型")
+    required: bool = Field(default=True, description="是否为必要规则；必要规则的证据不足会得到 UNKNOWN")
+    critical: bool = Field(default=False, description="是否为关键规则")
+    note: str | None = None
+
+
+class QualityPolicyRequest(BaseModel):
+    """The independent quality policy frozen with a new Launch (Issue #83)."""
+
+    rules: list[QualityRuleRequest] = Field(..., min_length=1)
+
+
+class QualityRuleEvaluationResponse(BaseModel):
+    """One rule's outcome for one case, with the reason in plain language."""
+
+    model_config = ConfigDict(extra="allow")
+
+    evaluator_id: str
+    result_type: str | None = None
+    required: bool = True
+    critical: bool = False
+    operator: str | None = None
+    expected: Any | None = None
+    observed_value: Any | None = None
+    observed_status: str | None = None
+    conclusion: str = "unknown"
+    reason_code: str | None = None
+    explanation: str | None = None
+
+
+class QualityEvaluationResponse(BaseModel):
+    """The per-case quality decision recorded under the frozen policy."""
+
+    model_config = ConfigDict(extra="allow")
+
+    conclusion: str
+    policy_id: str | None = None
+    policy_version: str | None = None
+    policy_digest: str | None = None
+    decided_by: str | None = None
+    releasable: bool = False
+    unknown_reasons: list[str] = Field(default_factory=list)
+    rules: list[QualityRuleEvaluationResponse] = Field(default_factory=list)
 
 
 class EvaluatorSelection(BaseModel):
@@ -675,6 +744,10 @@ class ExperimentItemExecutionResponse(BaseModel):
     scores: dict[str, Any] | None = None
     # Issue #82: authoritative typed results; `scores` is only a projection.
     evaluation_results: list[EvaluationResultResponse] = Field(default_factory=list)
+    # Issue #83: the frozen policy's per-rule decision. Null for items judged
+    # before QualityPolicy existed — their verdict stands, it is just not
+    # re-explained under a policy they never had.
+    quality_evaluation: QualityEvaluationResponse | None = None
     attempt_count: int = 0
     final_attempt_http_status: int | None = None
     final_attempt_latency_ms: int | None = None

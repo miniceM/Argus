@@ -80,6 +80,19 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
         and str(item.get("quality_conclusion", "")).lower() in _COMPARABLE_QUALITY
     ]
     passed = sum(str(item.get("quality_conclusion", "")).lower() == "pass" for item in evaluated)
+    # Issue #83: the three-way quality split. UNKNOWN is a first-class outcome,
+    # never folded into FAIL, so the Console can say "not enough evidence"
+    # instead of "the Agent is bad".
+    quality_pass_count = sum(
+        str(item.get("quality_conclusion", "")).lower() == "pass" for item in items
+    )
+    quality_fail_count = sum(
+        str(item.get("quality_conclusion", "")).lower() == "fail" for item in items
+    )
+    quality_unknown_count = sum(
+        str(item.get("quality_conclusion", "")).lower() not in {"pass", "fail"} for item in items
+    )
+    decided_count = quality_pass_count + quality_fail_count
     execution_errors = sum(
         str(item.get("execution_status", "")).lower() in {"failed", "timed_out"} for item in items
     )
@@ -203,6 +216,16 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
         "failed_quality_cases": sum(str(item.get("quality_conclusion", "")).lower() == "fail" for item in evaluated),
         "pass_rate": passed / len(evaluated) if evaluated else None,
         "evaluation_coverage": len(evaluated) / total if total else None,
+        # Issue #83: named denominators. `decided_pass_rate` is PASS/(PASS+FAIL)
+        # — an UNKNOWN case leaves the denominator instead of dragging it down —
+        # and `decision_coverage` is (PASS+FAIL)/total. Both are null when their
+        # denominator is zero, so "no data" never renders as 0% or 100%.
+        "quality_pass_count": quality_pass_count,
+        "quality_fail_count": quality_fail_count,
+        "quality_unknown_count": quality_unknown_count,
+        "decided_case_count": decided_count,
+        "decided_pass_rate": (quality_pass_count / decided_count) if decided_count else None,
+        "decision_coverage": (decided_count / total) if total else None,
         "execution_error_count": execution_errors,
         "execution_error_rate": execution_errors / total if total else None,
         "evaluator_error_count": evaluator_errors,

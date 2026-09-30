@@ -1203,6 +1203,7 @@ export interface components {
             } | null;
             /** Evaluation Results */
             evaluation_results?: components["schemas"]["EvaluationResultResponse"][];
+            quality_evaluation?: components["schemas"]["QualityEvaluationResponse"] | null;
             /**
              * Attempt Count
              * @default 0
@@ -1265,6 +1266,8 @@ export interface components {
              * @description Optional concurrency override; if omitted, inherits from AgentVersion
              */
             max_concurrency?: number | null;
+            /** @description Issue #83: the judgement rules frozen with this Launch. Omit it to accept the default all-required policy over the selected metrics. An illegal rule (unknown operator, type mismatch, unknown metric) is rejected at creation instead of failing silently at run time. */
+            quality_policy?: components["schemas"]["QualityPolicyRequest"] | null;
             /**
              * Idempotency Key
              * @description Optional idempotency key (can also be passed via Idempotency-Key header)
@@ -1498,6 +1501,123 @@ export interface components {
             };
             /** Trace Url */
             trace_url?: string | null;
+        };
+        /**
+         * QualityEvaluationResponse
+         * @description The per-case quality decision recorded under the frozen policy.
+         */
+        QualityEvaluationResponse: {
+            /** Conclusion */
+            conclusion: string;
+            /** Policy Id */
+            policy_id?: string | null;
+            /** Policy Version */
+            policy_version?: string | null;
+            /** Policy Digest */
+            policy_digest?: string | null;
+            /** Decided By */
+            decided_by?: string | null;
+            /**
+             * Releasable
+             * @default false
+             */
+            releasable: boolean;
+            /** Unknown Reasons */
+            unknown_reasons?: string[];
+            /** Rules */
+            rules?: components["schemas"]["QualityRuleEvaluationResponse"][];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * QualityPolicyRequest
+         * @description The independent quality policy frozen with a new Launch (Issue #83).
+         */
+        QualityPolicyRequest: {
+            /** Rules */
+            rules: components["schemas"]["QualityRuleRequest"][];
+        };
+        /**
+         * QualityRuleEvaluationResponse
+         * @description One rule's outcome for one case, with the reason in plain language.
+         */
+        QualityRuleEvaluationResponse: {
+            /** Evaluator Id */
+            evaluator_id: string;
+            /** Result Type */
+            result_type?: string | null;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
+            /**
+             * Critical
+             * @default false
+             */
+            critical: boolean;
+            /** Operator */
+            operator?: string | null;
+            /** Expected */
+            expected?: unknown | null;
+            /** Observed Value */
+            observed_value?: unknown | null;
+            /** Observed Status */
+            observed_status?: string | null;
+            /**
+             * Conclusion
+             * @default unknown
+             */
+            conclusion: string;
+            /** Reason Code */
+            reason_code?: string | null;
+            /** Explanation */
+            explanation?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * QualityRuleRequest
+         * @description One user-authored judgement rule over a selected metric (Issue #83).
+         */
+        QualityRuleRequest: {
+            /** Evaluator Id */
+            evaluator_id: string;
+            /**
+             * Operator
+             * @description Comparison operator. numeric accepts >= / <=, boolean and categorical accept ==. A metric with no operator is recorded as evidence only.
+             */
+            operator?: string | null;
+            /**
+             * Threshold
+             * @description numeric 规则的阈值
+             */
+            threshold?: number | null;
+            /**
+             * Expected Value
+             * @description boolean / categorical 规则的显式期望取值
+             */
+            expected_value?: unknown | null;
+            /**
+             * Result Type
+             * @description 被引用指标的结果类型
+             * @default numeric
+             */
+            result_type: string;
+            /**
+             * Required
+             * @description 是否为必要规则；必要规则的证据不足会得到 UNKNOWN
+             * @default true
+             */
+            required: boolean;
+            /**
+             * Critical
+             * @description 是否为关键规则
+             * @default false
+             */
+            critical: boolean;
+            /** Note */
+            note?: string | null;
         };
         /** RetryFailedRequest */
         RetryFailedRequest: {

@@ -71,6 +71,9 @@ def build_result_items(
             # Issue #82: the typed results are the authoritative record; the
             # `scores` map above is only the restricted numeric projection.
             "evaluation_results": list((typed_results or {}).get(item.id) or []),
+            # Issue #83: the snapshot keeps the per-rule reasons next to the
+            # verdict, so a frozen result can still be explained years later.
+            "quality_evaluation": item.quality_evaluation,
             "latency_ms": attempt.latency_ms if attempt else None,
             "usage": cost_result["usage"],
             "cost": cost_result["cost"],

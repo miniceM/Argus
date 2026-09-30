@@ -238,6 +238,7 @@ class ExecutionWorker:
         attempt_updates: dict[str, Any] | None = None,
         scores: dict[str, Any] | None = None,
         typed_results: list[Any] | None = None,
+        quality_evaluation: dict[str, Any] | None = None,
         execution_error: str | None = None,
         eval_error: str | None = None,
         retry_available_at: datetime | None = None,
@@ -299,6 +300,10 @@ class ExecutionWorker:
             item.final_attempt_id = current_attempt_id
             item.active_attempt_id = None
             item.scores = scores
+            # Only overwrite a recorded decision with a real one: a retry that
+            # never reached evaluation must not erase the earlier reasons.
+            if quality_evaluation is not None:
+                item.quality_evaluation = quality_evaluation
             item.execution_error = execution_error
             item.eval_error = eval_error
             item.available_at = retry_available_at
@@ -765,6 +770,7 @@ class ExecutionWorker:
                                 result.quality_conclusion,
                                 result.eval_error,
                                 result.typed_results,
+                                result.quality_decision,
                             )
 
                         (
@@ -773,6 +779,7 @@ class ExecutionWorker:
                             quality_conclusion,
                             eval_error,
                             typed_results,
+                            quality_decision,
                         ) = await asyncio.to_thread(_do_evaluation)
 
                         if lease_lost.is_set():
@@ -790,6 +797,9 @@ class ExecutionWorker:
                             attempt_updates=att_updates,
                             scores=scores_dict,
                             typed_results=list(typed_results),
+                            quality_evaluation=quality_decision.payload()
+                            if quality_decision is not None
+                            else None,
                             eval_error=eval_error,
                             trace_id=trace_id,
                             trace_url=trace_url,

@@ -12,8 +12,19 @@ from sqlalchemy.exc import IntegrityError
 from .dataset import DatasetResolver
 from .db import DatabaseManager
 from .db_models import ExperimentLaunchRecord
-from .evaluator_binding import MANIFEST_BINDING_SCHEMA_VERSION, freeze_binding
+from .evaluator_binding import (
+    MANIFEST_BINDING_SCHEMA_VERSION,
+    EvaluatorBinding,
+    freeze_binding,
+    manifest_measurement_digest,
+)
 from .evaluators import EvaluatorSelectionError, default_evaluator_registry
+from .quality_policy import (
+    QUALITY_POLICY_SCHEMA_VERSION,
+    QualityRule,
+    default_quality_policy,
+    freeze_quality_policy,
+)
 from .registry import AgentRegistry
 from .runner_identity import current_runner_identity, validate_runner_identity
 
@@ -63,6 +74,7 @@ class LaunchService:
         dataset_snapshot: dict[str, Any] | None = None,
         dataset_client: Any | None = None,
         allow_run_scope: bool = False,
+        quality_policy_rules: list[dict[str, Any]] | None = None,
     ) -> ExperimentLaunchRecord:
         from .baselines import normalize_environment
 
@@ -135,6 +147,26 @@ class LaunchService:
             for spec in eval_specs
         ]
 
+        # ---- Issue #83: freeze an independent, digested QualityPolicy --------
+        # Judgement is a separate, versioned decision from measurement. When the
+        # user does not supply rules, every selected diagnostic becomes a
+        # required rule following its own frozen direction, so a new Launch never
+        # needs the composite `overall_pass` metric to reach a verdict.
+        frozen_bindings = {
+            spec["id"]: EvaluatorBinding.from_payload(spec) for spec in eval_specs
+        }
+        item_bindings = [
+            binding for binding in frozen_bindings.values() if binding.scope == "item"
+        ]
+        if quality_policy_rules is not None:
+            policy = freeze_quality_policy(
+                policy_id=str(quality_policy_rules and "custom") or "custom",
+                version=QUALITY_POLICY_SCHEMA_VERSION,
+                rules=[QualityRule.from_payload(rule) for rule in quality_policy_rules],
+                bindings=frozen_bindings,
+            )
+        else:
+            policy = default_quality_policy(item_bindings)
 
         # Request payload for idempotency checking (calculated upfront)
         payload_data = {
@@ -149,6 +181,7 @@ class LaunchService:
             ],
             "max_concurrency": max_concurrency,
             "name": name,
+            "quality_policy_digest": policy.policy_digest,
         }
         payload_digest = compute_payload_digest(payload_data)
 
@@ -225,10 +258,12 @@ class LaunchService:
                 "is_idempotent": ver_rec.is_idempotent,
             },
             "evaluators": eval_specs,
-            "quality_policy": {
-                "mode": "all_selected_must_pass",
-                "threshold_rule": "score >= threshold",
-            },
+            # Issue #83: the real, digested policy replaces the old placeholder.
+            "quality_policy": policy.to_payload(),
+            # What was measured, kept separate from how it is judged.
+            "measurement_digest": manifest_measurement_digest(
+                {"schema_version": MANIFEST_BINDING_SCHEMA_VERSION, "evaluators": eval_specs}
+            ),
             "runner": {
                 **runner_identity.model_dump(),
             },

@@ -3541,6 +3541,16 @@
             "type": "array",
             "title": "Evaluation Results"
           },
+          "quality_evaluation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QualityEvaluationResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "attempt_count": {
             "type": "integer",
             "title": "Attempt Count",
@@ -3744,6 +3754,17 @@
             ],
             "title": "Max Concurrency",
             "description": "Optional concurrency override; if omitted, inherits from AgentVersion"
+          },
+          "quality_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QualityPolicyRequest"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Issue #83: the judgement rules frozen with this Launch. Omit it to accept the default all-required policy over the selected metrics. An illegal rule (unknown operator, type mismatch, unknown metric) is rejected at creation instead of failing silently at run time."
           },
           "idempotency_key": {
             "anyOf": [
@@ -4286,6 +4307,284 @@
           "output_status"
         ],
         "title": "OutputSideResponse"
+      },
+      "QualityEvaluationResponse": {
+        "properties": {
+          "conclusion": {
+            "type": "string",
+            "title": "Conclusion"
+          },
+          "policy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Id"
+          },
+          "policy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Version"
+          },
+          "policy_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Digest"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "releasable": {
+            "type": "boolean",
+            "title": "Releasable",
+            "default": false
+          },
+          "unknown_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unknown Reasons"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/QualityRuleEvaluationResponse"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "conclusion"
+        ],
+        "title": "QualityEvaluationResponse",
+        "description": "The per-case quality decision recorded under the frozen policy."
+      },
+      "QualityPolicyRequest": {
+        "properties": {
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/QualityRuleRequest"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Rules"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rules"
+        ],
+        "title": "QualityPolicyRequest",
+        "description": "The independent quality policy frozen with a new Launch (Issue #83)."
+      },
+      "QualityRuleEvaluationResponse": {
+        "properties": {
+          "evaluator_id": {
+            "type": "string",
+            "title": "Evaluator Id"
+          },
+          "result_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Type"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": true
+          },
+          "critical": {
+            "type": "boolean",
+            "title": "Critical",
+            "default": false
+          },
+          "operator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator"
+          },
+          "expected": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected"
+          },
+          "observed_value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Value"
+          },
+          "observed_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Status"
+          },
+          "conclusion": {
+            "type": "string",
+            "title": "Conclusion",
+            "default": "unknown"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "evaluator_id"
+        ],
+        "title": "QualityRuleEvaluationResponse",
+        "description": "One rule's outcome for one case, with the reason in plain language."
+      },
+      "QualityRuleRequest": {
+        "properties": {
+          "evaluator_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Evaluator Id"
+          },
+          "operator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator",
+            "description": "Comparison operator. numeric accepts >= / <=, boolean and categorical accept ==. A metric with no operator is recorded as evidence only."
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold",
+            "description": "numeric 规则的阈值"
+          },
+          "expected_value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Value",
+            "description": "boolean / categorical 规则的显式期望取值"
+          },
+          "result_type": {
+            "type": "string",
+            "title": "Result Type",
+            "description": "被引用指标的结果类型",
+            "default": "numeric"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "description": "是否为必要规则；必要规则的证据不足会得到 UNKNOWN",
+            "default": true
+          },
+          "critical": {
+            "type": "boolean",
+            "title": "Critical",
+            "description": "是否为关键规则",
+            "default": false
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evaluator_id"
+        ],
+        "title": "QualityRuleRequest",
+        "description": "One user-authored judgement rule over a selected metric (Issue #83)."
       },
       "RetryFailedRequest": {
         "properties": {

@@ -141,6 +141,8 @@ class ExperimentItemExecutionRecord(Base):
     )
     active_attempt_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     scores: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Issue #83: the frozen policy's per-rule decision for this item.
+    quality_evaluation: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     available_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     lease_owner: Mapped[str | None] = mapped_column(String(128), nullable=True)

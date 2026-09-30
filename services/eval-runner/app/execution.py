@@ -239,6 +239,7 @@ async def _execute_single_item(
         quality_conclusion = "unknown"
 
     typed_results: list[Any] = []
+    quality_evaluation: dict[str, Any] | None = None
     if execution_status == "succeeded" and agent_output is not None:
         # Issue #81: one shared, pre-validated frozen evaluation boundary.
         frozen_result = evaluate_frozen_item(
@@ -249,6 +250,8 @@ async def _execute_single_item(
         scores_dict = frozen_result.scores
         quality_conclusion = frozen_result.quality_conclusion
         typed_results = list(frozen_result.typed_results)
+        if frozen_result.quality_decision is not None:
+            quality_evaluation = frozen_result.quality_decision.payload()
 
     completed_at = datetime.utcnow()
     with db_mgr.get_session() as session:
@@ -260,6 +263,7 @@ async def _execute_single_item(
             "execution_error": execution_error,
             "eval_error": eval_error,
             "scores": scores_dict,
+            "quality_evaluation": quality_evaluation,
             "trace_id": trace_id,
             "langfuse_trace_url": trace_url,
             "observation_id": observation_id,
@@ -292,6 +296,7 @@ async def _execute_single_item(
         "eval_status": eval_status,
         "quality_conclusion": quality_conclusion,
         "scores": scores_dict,
+        "quality_evaluation": quality_evaluation,
         "output": agent_output,
         "error": execution_error or eval_error,
     }

@@ -122,8 +122,16 @@ def test_launch_manifest_has_frozen_dataset_and_evaluators(monkeypatch, tmp_path
     assert manifest["evaluators"][0]["id"] == "pii_safe"
     assert manifest["evaluators"][0]["threshold"] == 1.0
 
-    # Quality policy must be explicitly recorded
-    assert manifest["quality_policy"]["mode"] == "all_selected_must_pass"
+    # Issue #83: the quality policy is a real, digested decision — not a
+    # placeholder — and it is recorded separately from what was measured.
+    policy = manifest["quality_policy"]
+    assert policy["policy_id"] == "default-all-required"
+    assert policy["policy_digest"].startswith("sha256:")
+    assert [rule["evaluator_id"] for rule in policy["rules"]] == ["pii_safe"]
+    assert policy["rules"][0]["operator"] == ">="
+    assert policy["rules"][0]["threshold"] == 1.0
+    assert policy["rules"][0]["required"] is True
+    assert manifest["measurement_digest"].startswith("sha256:")
 
 
 def test_parse_dataset_version_contract():

@@ -98,12 +98,26 @@ def test_agent_and_version_registration(tmp_path, monkeypatch):
         method="POST",
         protocol="HTTP_JSON",
         request_mapping={"messages": "input.messages"},
+        usage_cost_mapping={
+            "amount_path": "billing.cost",
+            "currency_path": "billing.currency",
+            "source": "provider_reported",
+            "measurement_scope": "agent_invocation_total",
+        },
         credential_ref="env://DEMO_AUTH_TOKEN",
         timeout_seconds=15.0,
         max_retries=2,
     )
     assert version.version == "v1"
     assert version.spec_digest is not None
+    assert version.usage_cost_mapping["amount_path"] == "billing.cost"
+    assert registry.get("test-agent", "v1").usage_cost_mapping["measurement_scope"] == "agent_invocation_total"
+    from app.models import AgentVersionResponse
+    from app.registry import compute_spec_digest
+    assert AgentVersionResponse.model_validate(version).usage_cost_mapping.amount_path == "billing.cost"
+    assert compute_spec_digest({"endpoint": version.endpoint}) != compute_spec_digest({
+        "endpoint": version.endpoint, "usage_cost_mapping": version.usage_cost_mapping,
+    })
 
     # Duplicate version must fail
     with pytest.raises(ValueError, match="already exists"):

@@ -51,7 +51,7 @@ class ExecutionWorker:
         self.local_concurrency = asyncio.Semaphore(10)
         self.heartbeat_interval = 5.0
 
-    def poll_queue(self, count: int = 10, block_ms: int = 1000) -> list[tuple[str, str, int]]:
+    def poll_queue(self, count: int = 10, block_ms: int = 1000) -> list[tuple[str, str, int, str]]:
         """Synchronously reads/claims items from the queue adapter, meant to be run in asyncio.to_thread."""
         return self.queue.read_group(self.worker_id, count=count, block_ms=block_ms)
 
@@ -419,8 +419,14 @@ class ExecutionWorker:
         message_id: str,
         item_id: str,
         generation: int,
+        work_type: str | None = None,
     ) -> bool:
-        """Full pipeline: reserve local slot -> claim -> authorize attempt -> invoke -> finalize -> ack."""
+        """Full pipeline: reserve local slot -> claim -> authorize attempt -> invoke -> finalize -> ack.
+
+        ``work_type`` is accepted (and ignored) so a raw queue message tuple can
+        be splatted straight into this method; ``main`` routes evaluation-only
+        work to :meth:`execute_evaluation_message` before calling here.
+        """
         async with self.local_concurrency:
             claim_info = self.claim_item(item_id, generation)
             if not claim_info:
@@ -756,6 +762,25 @@ class ExecutionWorker:
                         if lease_lost.is_set():
                             return False
 
+                        # Issue #84: persist the recoverable Agent output BEFORE
+                        # evaluating, so a failed evaluation can be retried later
+                        # without ever calling the Agent again — even if Langfuse
+                        # is unavailable or has not synced.
+                        self._persist_execution_checkpoint(
+                            item_id=item_id,
+                            launch_id=launch_id,
+                            dataset_item_id=claim_info["dataset_item_id"],
+                            generation=generation,
+                            output=inv_res.body,
+                            dataset_input=dataset_input,
+                            expected_output=expected_output,
+                            manifest=manifest,
+                            final_attempt_id=current_attempt_id,
+                            trace_id=trace_id,
+                            trace_url=trace_url,
+                            observation_id=obs_id,
+                        )
+
                         # Successful execution -> evaluate quality (ASYNC offloaded via asyncio.to_thread)
                         def _do_evaluation():
                             # Issue #81: shared frozen evaluation boundary; no per-id lookup.
@@ -912,3 +937,81 @@ class ExecutionWorker:
             self.queue.ack(message_id)
             return True
 
+
+
+    def _persist_execution_checkpoint(
+        self,
+        *,
+        item_id: str,
+        launch_id: str,
+        dataset_item_id: str,
+        generation: int,
+        output: Any,
+        dataset_input: Any,
+        expected_output: Any,
+        manifest: dict[str, Any],
+        final_attempt_id: str | None,
+        trace_id: str | None,
+        trace_url: str | None,
+        observation_id: str | None,
+    ) -> None:
+        """Write the recoverable Agent output for a successful execution (#84).
+
+        Best-effort: a checkpoint failure must never turn a successful execution
+        into a failure. When retention is disabled this is simply a no-op and
+        evaluation-only recovery is unavailable for that deployment.
+        """
+        from .execution_checkpoint import write_execution_checkpoint
+
+        try:
+            with self.db_mgr.get_session() as session:
+                write_execution_checkpoint(
+                    session,
+                    item_execution_id=item_id,
+                    launch_id=launch_id,
+                    dataset_item_id=dataset_item_id,
+                    dispatch_generation=generation,
+                    output=output,
+                    input_payload=dataset_input,
+                    expected_output=expected_output,
+                    manifest=manifest,
+                    final_attempt_id=final_attempt_id,
+                    trace_id=trace_id,
+                    observation_id=observation_id,
+                    langfuse_trace_url=trace_url,
+                )
+                session.commit()
+        except Exception:  # noqa: BLE001 - recovery metadata must not fail execution
+            pass
+
+    async def execute_evaluation_message(
+        self,
+        message_id: str,
+        item_id: str,
+        evaluation_generation: int,
+    ) -> bool:
+        """Evaluation-only recovery: re-judge a stored Agent output (Issue #84).
+
+        This path never invokes the Agent and never touches the execution
+        attempt or ``dispatch_generation``. It claims a generation-scoped
+        evaluation lease, re-runs only the failed / missing Bindings against the
+        verified checkpoint, and finalizes under a compare-and-set so a late or
+        superseded result can never overwrite the current one.
+        """
+        async with self.local_concurrency:
+            from .evaluation_recovery import recover_evaluation
+
+            # Take the fenced lease first; a duplicate / competing delivery is a
+            # no-op here and the message is simply acked.
+            outcome = await asyncio.to_thread(
+                recover_evaluation,
+                self.db_mgr,
+                item_id=item_id,
+                evaluation_generation=evaluation_generation,
+                worker_id=self.worker_id,
+            )
+            if not outcome.get("claimed"):
+                self.queue.ack(message_id)
+                return False
+            self.queue.ack(message_id)
+            return bool(outcome.get("finalized"))

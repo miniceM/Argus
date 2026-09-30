@@ -761,3 +761,190 @@ describe("Issue #45 quality pass rate wording", () => {
     expect(metric).not.toHaveTextContent("(0.0%)");
   });
 });
+
+describe("Issue #84 evaluation-only retry UI", () => {
+  const buildLaunch = (overrides: Record<string, unknown> = {}) => ({
+    id: "launch-84",
+    name: "Eval-Only Retry Launch",
+    status: "PARTIAL_FAILED",
+    quality_conclusion: "unknown",
+    dataset_name: "banking-regression",
+    dataset_version: "2026-09-30T00:00:00Z",
+    agent_id: "banking-agent",
+    agent_version: "v2",
+    langfuse_sync_status: "SYNCED",
+    created_at: "2026-09-30T00:00:00Z",
+    started_at: "2026-09-30T00:00:01Z",
+    completed_at: "2026-09-30T00:00:05Z",
+    manifest: { schema_version: "1.2", dataset: { items_count: 2 } },
+    allowed_actions: ["retry_evaluation"],
+    progress: {
+      total: 2,
+      pending: 0,
+      queued: 0,
+      running: 0,
+      retry_wait: 0,
+      succeeded: 2,
+      failed: 0,
+      timed_out: 0,
+      cancelled: 0,
+      completed: 2,
+      percentage: 100,
+      attempts: 2,
+      retries: 0,
+      recoverable_evaluation_count: 1,
+      allowed_actions: ["retry_evaluation"],
+    },
+    ...overrides,
+  });
+
+  const buildItems = (launchId: string) => [
+    {
+      id: "item-84-a",
+      launch_id: launchId,
+      dataset_item_id: "case-84-a",
+      execution_status: "succeeded",
+      eval_status: "failed",
+      quality_conclusion: "unknown",
+      scores: {},
+      attempt_count: 1,
+      evaluation_status: "none",
+      evaluation_recoverable: true,
+      evaluation_error: null,
+      started_at: "2026-09-30T00:00:01Z",
+    },
+  ];
+
+  const renderDetail = (launch: Record<string, unknown>, items: Array<Record<string, unknown>>) => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path.includes("/items")) return Promise.resolve({ data: items });
+      if (path.includes("/summary") || path.includes("/comparison") || path.includes("/baselines")) {
+        return Promise.resolve({ data: null });
+      }
+      if (path.includes("/api/v1/experiment-launches")) return Promise.resolve({ data: launch });
+      return Promise.resolve({ data: null });
+    });
+    (api.POST as any).mockImplementation((path: string) => {
+      if (path.includes("retry-evaluation")) {
+        return Promise.resolve({
+          data: {
+            launch,
+            submitted: ["case-84-a"],
+            already_running: [],
+            blocked: [],
+            message: "已提交 1 个用例仅重试评测（复用原 Agent 输出，不会再次调用 Agent）。",
+          },
+        });
+      }
+      return Promise.resolve({ data: null });
+    });
+
+    return render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[`/launches/${launch.id}`]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<LaunchDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+  };
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("offers a retry-evaluation action only when retry_evaluation is allowed", async () => {
+    renderDetail(buildLaunch(), buildItems("launch-84"));
+    const button = await screen.findByTestId("retry-evaluation-button");
+    expect(button).toBeInTheDocument();
+    expect(button).toHaveAttribute("title", expect.stringContaining("不会再次调用 Agent"));
+  });
+
+  it("hides the retry-evaluation action when it is not an allowed action", async () => {
+    renderDetail(
+      buildLaunch({
+        allowed_actions: [],
+        progress: { total: 2, completed: 2, allowed_actions: [] },
+      }),
+      buildItems("launch-84"),
+    );
+    // The Launch itself must still render, otherwise the assertion below would
+    // pass for the wrong reason.
+    await waitFor(() => {
+      expect(screen.getByTestId("quality-badge")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("retry-evaluation-button")).not.toBeInTheDocument();
+  });
+
+  it("calls retry-evaluation and reports submitted count plus reuse of the Agent output", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    renderDetail(buildLaunch(), buildItems("launch-84"));
+
+    const button = await screen.findByTestId("retry-evaluation-button");
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledWith(
+        "/api/v1/experiment-launches/{launch_id}/retry-evaluation",
+        expect.objectContaining({ params: { path: { launch_id: "launch-84" } } }),
+      );
+    });
+
+    const notice = await screen.findByTestId("retry-evaluation-notice");
+    expect(notice).toHaveTextContent("已提交 1 个用例");
+    expect(notice).toHaveTextContent("复用原 Agent 输出，不会再次调用 Agent");
+  });
+
+  it("surfaces blocked cases with the reason instead of silently doing nothing", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    const launch = buildLaunch();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path.includes("/items")) return Promise.resolve({ data: buildItems("launch-84") });
+      if (path.includes("/summary") || path.includes("/comparison") || path.includes("/baselines")) {
+        return Promise.resolve({ data: null });
+      }
+      if (path.includes("/api/v1/experiment-launches")) return Promise.resolve({ data: launch });
+      return Promise.resolve({ data: null });
+    });
+    (api.POST as any).mockImplementation((path: string) => {
+      if (path.includes("retry-evaluation")) {
+        return Promise.resolve({
+          data: {
+            launch,
+            submitted: [],
+            already_running: [],
+            blocked: [
+              {
+                item_execution_id: "item-84-a",
+                dataset_item_id: "case-84-a",
+                code: "CHECKPOINT_EXPIRED",
+                message: "检查点已过期，无法仅重试评测。",
+                hint: "请重新执行该用例。",
+              },
+            ],
+            message: "所有候选评测都已在重评中，未产生重复任务。 1 个用例因检查点不可用被阻止。",
+          },
+        });
+      }
+      return Promise.resolve({ data: null });
+    });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[`/launches/${launch.id}`]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<LaunchDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    fireEvent.click(await screen.findByTestId("retry-evaluation-button"));
+
+    const notice = await screen.findByTestId("retry-evaluation-notice");
+    expect(notice).toHaveTextContent("检查点已过期");
+  });
+});

@@ -323,7 +323,7 @@ def test_outbox_processing_lease_expiry_reclaim(setup_runtime):
 def test_finalize_active_attempt_id_cas_and_running_status_enforced(setup_runtime):
     db_mgr, q, lim, orch, w, rec = setup_runtime
     lid, msgs = create_launch_helper(setup_runtime)
-    msg_id, item_id, gen = msgs[0]
+    msg_id, item_id, gen, _work = msgs[0]
 
     # Claim and authorize attempt
     claim_info = w.claim_item(item_id, gen)
@@ -665,7 +665,7 @@ def test_clock_timestamp_lock_wait_expiration_fails_on_postgres():
 def test_finalize_persists_attempt_usage_cost_atomically(setup_runtime):
     db_mgr, _, _, _, worker, _ = setup_runtime
     _, messages = create_launch_helper(setup_runtime)
-    _, item_id, generation = messages[0]
+    _, item_id, generation, _work = messages[0]
     claim = worker.claim_item(item_id, generation)
     assert claim is not None
     token = claim["lease_token"]

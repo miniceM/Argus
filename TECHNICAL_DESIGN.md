@@ -441,6 +441,71 @@ Manifest 的 `evaluators[]` 在 schema 1.2 起不再是「id + version」，而�
 - 历史 Manifest 未冻结策略时回落到 `legacy_quality_policy`（复现 #83 之前的 `>=` 阈值语义），并在 `decided_by` 标记 `LEGACY_MANIFEST_POLICY`；Console 显示为"历史契约"，不展示空的规则列表。
 - Console 顶部不再输出单一"质量通过率"，改为 **PASS / FAIL / UNKNOWN 三个计数** + `已判定通过率 = PASS/(PASS+FAIL)` + `判定覆盖率 = (PASS+FAIL)/total`；分母为 0 时渲染 `—` 而非伪造 0%。全用例 PASS 占比单独展示并标注分母含 UNKNOWN。
 
+#### 8.3.4 仅重试评测与执行检查点（Issue #84）
+
+Agent 已成功返回、但评测失败 / 未产出时，允许**只重试评测**：复用已持久化的 Agent 输出，
+**永不再次调用 Agent**。执行与评测成为两条独立的生命周期。
+
+```text
+Agent 调用 ──► 200 ──► 写入执行检查点 ──► 评测（generation N）
+                          │                    │
+                          │                    ├─ 成功 ──► 结果落库
+                          │                    └─ 失败 ──► eval_status=failed, UNKNOWN
+                          │                                    │
+                          │                       POST /retry-evaluation
+                          │                                    ▼
+                          └──◄── 复用同一 output_digest ◄── 评测（generation N+1）
+```
+
+执行检查点（`execution_checkpoints`，迁移 `011`）：
+
+| 列 | 含义 |
+|---|---|
+| `agent_output` / `output_digest` | 成功响应的规范化输出与其 `canonical_output_digest` |
+| `dataset_input` / `expected_output` | 重放评测所需的输入与期望值 |
+| `binding_provenance` | 生成该输出时使用的 Evaluator Binding 指纹 |
+| `manifest_digest` | 生成该输出时的 Manifest 摘要 |
+| `final_attempt_id` / `trace_id` / `observation_id` / `langfuse_trace_url` | 可追溯引用 |
+| `expires_at` | 保留期，默认 `ARGUS_EXECUTION_CHECKPOINT_TTL_SECONDS=604800`（7 天） |
+
+约束：
+
+- 检查点按 `(item_execution_id, dispatch_generation)` **幂等**：同一代重放只刷新不重复写入。
+- 加载检查点时校验存在性、保留期、`output_digest` 与 Binding 指纹；任一不符即以稳定错误码拒绝
+  （`CHECKPOINT_MISSING` / `EXPIRED` / `CORRUPT` / `OUTPUT_MISSING` / `DISABLED` / `BINDING_MISMATCH`，
+  各带中文原因与恢复提示），此时该用例保持 `UNKNOWN`，**不回退为重新调用 Agent**。
+- **重试不改变策略与 Binding**：`POST /retry-evaluation` 不接受策略 / 版本参数，
+  仍使用已冻结 Manifest；重评时只重新判定缺失或失败的指标，已成功的结果按原 provenance 原样保留
+  （`only_binding_ids` 子集重评 + `summarize_typed_results` 复用 #83 判定真值表），
+  因此重评后的结论与首次评测**同口径**。
+- **独立评测代次与租约**：`evaluation_generation` 单调递增，`evaluation_status` 独立于
+  `execution_status`（`none/evaluating/recovered/failed`）；租约采用
+  `(evaluation_generation, evaluation_lease_token, evaluation_status=RUNNING)` 三元 CAS。
+  旧代次、丢租约或已取消的结果一律标记 `discarded`，**不得**覆盖当前结果、Snapshot 或有效投影。
+- **提交幂等**：重复点击 / 竞争请求下，每个用例至多一次有效重评；已在重评中的返回
+  `already_running`，全部候选不可恢复时返回 409。
+- **执行尝试次数不变**：`execution_attempts` 只由真实 Agent 调用写入；重评仅新增
+  `evaluation_attempts` 审计行（记录 `target_bindings` 与 `reused_output_digest`），
+  因此"Agent 调用次数 = 1"是可验证的不变量。
+- **租约过期可恢复**：`reconciler.reconcile_expired_evaluation_leases()` 将
+  `evaluating` 且租约过期的用例重新入队为 `EVALUATION` 工作（**不**重新调用 Agent）。
+- **不新增 Langfuse 出站任务**：`langfuse_sync_tasks` 以 `(item_id, dispatch_generation, task_type)`
+  唯一；重评**不**创建新出站任务，避免唯一键冲突，其带类型的投影留给 #87 处理。
+  重评不产生第二份 Trace。
+
+状态机（`state_machine.py`）新增 `retry_evaluation` 动作：在 Launch 未取消、无在途执行、
+且存在可恢复用例时即可用——**即使 Launch 已处于终态**也允许，因为重评不改变 Launch 的执行终态。
+
+API：`POST /experiment-launches/{launch_id}/retry-evaluation` →
+`RetryEvaluationResponse`（`submitted` / `already_running` / `blocked[]`（含 `code`/`message`/`hint`）/`message`）。
+用例列表额外返回 `evaluation_status`、`evaluation_generation`、`evaluation_error`、
+`evaluation_reused_output_digest`、`evaluation_recoverable`，Launch 进度返回 `recoverable_evaluation_count`。
+
+Console：Launch 详情新增独立的「重试评测失败 (Retry Evaluation)」按钮（与「重试失败用例」分离），
+用例表新增「评测恢复」列展示 `重评中 / 已恢复 / 重评失败` 徽标与原因，并始终声明
+"复用原 Agent 输出，不会再次调用 Agent"。由于重评期间 Launch 仍处终态，用例轮询额外由
+`evaluation_status === evaluating` 驱动，确保重评结束后界面自动刷新。
+
 ### 8.4 ExperimentItemExecution
 
 表示单个 Dataset Item 的执行状态：

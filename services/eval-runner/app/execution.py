@@ -241,6 +241,31 @@ async def _execute_single_item(
     typed_results: list[Any] = []
     quality_evaluation: dict[str, Any] | None = None
     if execution_status == "succeeded" and agent_output is not None:
+        # Issue #84: persist the recoverable Agent output before evaluating, so a
+        # failed evaluation can be retried later without calling the Agent again.
+        from .execution_checkpoint import write_execution_checkpoint
+
+        try:
+            with db_mgr.get_session() as session:
+                write_execution_checkpoint(
+                    session,
+                    item_execution_id=item_exec_id,
+                    launch_id=launch_id,
+                    dataset_item_id=item_id,
+                    dispatch_generation=1,
+                    output=agent_output,
+                    input_payload=dataset_input,
+                    expected_output=expected_output,
+                    manifest=manifest,
+                    final_attempt_id=last_attempt_id,
+                    trace_id=trace_id,
+                    observation_id=observation_id,
+                    langfuse_trace_url=trace_url,
+                )
+                session.commit()
+        except Exception:  # noqa: BLE001 - recovery metadata must not fail execution
+            pass
+
         # Issue #81: one shared, pre-validated frozen evaluation boundary.
         frozen_result = evaluate_frozen_item(
             manifest, output=agent_output, expected_output=expected_output

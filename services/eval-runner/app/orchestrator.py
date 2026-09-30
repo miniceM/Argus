@@ -385,6 +385,129 @@ class LaunchOrchestrator:
 
         return launch
 
+    def retry_failed_evaluations(self, launch_id: str) -> dict[str, Any]:
+        """Re-judge failed/missing evaluations by reusing stored Agent outputs.
+
+        This never calls the Agent, never creates or advances an execution
+        attempt and never touches ``dispatch_generation``, so the
+        non-idempotent-execution safety boundary is preserved. Submission is
+        idempotent: an item already being re-evaluated is reported as
+        ``already_running`` and never re-dispatched, so a double-click or a
+        competing request produces at most one effective submission.
+        """
+        from .evaluation_recovery import (
+            EVALUATION_RUNNING,
+            RECOVERABLE_EVAL_STATUSES,
+            WORK_TYPE_EVALUATION,
+        )
+        from .execution_checkpoint import CheckpointUnavailableError, load_recoverable_checkpoint
+
+        now = datetime.now(UTC)
+        is_pg = self.db_mgr.engine.dialect.name == "postgresql"
+        dispatch_items: list[tuple[str, int]] = []
+        submitted: list[str] = []
+        already_running: list[str] = []
+        blocked: list[dict[str, Any]] = []
+
+        with self.db_mgr.get_session() as session:
+            launch_stmt = select(ExperimentLaunchRecord).where(ExperimentLaunchRecord.id == launch_id)
+            if is_pg:
+                launch_stmt = launch_stmt.with_for_update()
+            launch = session.scalars(launch_stmt).first()
+            if not launch:
+                raise ValueError(f"Launch '{launch_id}' not found")
+            self._assert_runner_identity(launch)
+
+            if launch.cancel_requested_at or launch.status in ("CANCELLING", "CANCELLED"):
+                raise DomainConflictError("评测任务已取消或正在取消，无法重试评测。")
+
+            # No in-flight execution items may race with a re-evaluation.
+            in_flight = session.scalar(
+                select(func.count(ExperimentItemExecutionRecord.id)).where(
+                    ExperimentItemExecutionRecord.launch_id == launch_id,
+                    ExperimentItemExecutionRecord.execution_status.in_(["running", "retry_wait", "queued"]),
+                )
+            ) or 0
+            if in_flight:
+                raise DomainConflictError("任务尚有未完成用例处于排队、准备或运行中，请稍后重试评测。")
+
+            item_stmt = (
+                select(ExperimentItemExecutionRecord)
+                .where(
+                    ExperimentItemExecutionRecord.launch_id == launch_id,
+                    ExperimentItemExecutionRecord.execution_status == "succeeded",
+                )
+            )
+            if is_pg:
+                item_stmt = item_stmt.with_for_update()
+            candidates = session.scalars(item_stmt).all()
+
+            manifest = launch.manifest or {}
+            for it in candidates:
+                item_id = it.id
+                # Already being re-evaluated: idempotent no-op (double-click).
+                if it.evaluation_status == EVALUATION_RUNNING:
+                    already_running.append(item_id)
+                    continue
+                if (it.eval_status or "").lower() not in RECOVERABLE_EVAL_STATUSES:
+                    continue
+                # Validate the recoverable artifact *before* dispatching, so a
+                # missing/expired/corrupt checkpoint is a clear refusal, not a
+                # silent re-invocation.
+                try:
+                    load_recoverable_checkpoint(
+                        session,
+                        item_execution_id=item_id,
+                        dispatch_generation=it.dispatch_generation,
+                        manifest=manifest,
+                        now=now,
+                    )
+                except CheckpointUnavailableError as exc:
+                    blocked.append(
+                        {
+                            "item_execution_id": item_id,
+                            "dataset_item_id": it.dataset_item_id,
+                            "code": exc.code,
+                            "message": exc.message,
+                            "hint": exc.hint,
+                        }
+                    )
+                    continue
+
+                it.evaluation_generation = (it.evaluation_generation or 0) + 1
+                it.evaluation_status = EVALUATION_RUNNING
+                it.evaluation_error = None
+                it.evaluation_lease_owner = None
+                it.evaluation_lease_token = None
+                it.evaluation_lease_expires_at = None
+                it.evaluation_started_at = now
+                it.evaluation_completed_at = None
+                it.updated_at = now
+                dispatch_items.append((item_id, it.evaluation_generation))
+                submitted.append(item_id)
+
+            if not submitted and not already_running:
+                if blocked:
+                    # Everything is unrecoverable: surface the first reason.
+                    first = blocked[0]
+                    raise DomainConflictError(
+                        f"没有可仅重试评测的用例：{first['message']}"
+                    )
+                raise DomainConflictError("当前评测没有失败或缺失的用例需要重评。")
+
+            session.commit()
+            session.refresh(launch)
+
+        if dispatch_items:
+            self.queue.enqueue_items(dispatch_items, work_type=WORK_TYPE_EVALUATION)
+
+        return {
+            "launch": launch,
+            "submitted": submitted,
+            "already_running": already_running,
+            "blocked": blocked,
+        }
+
     def get_launch_progress(self, launch_id: str) -> dict[str, Any]:
         """Calculates exact item counts, percentage, and allowed actions for the launch."""
         with self.db_mgr.get_session() as session:
@@ -420,11 +543,33 @@ class LaunchOrchestrator:
                 )
             ) or 0
 
+            # Issue #84: a case is eligible for an evaluation-only retry when it
+            # executed successfully, its evaluation failed / is missing, and a
+            # recoverable checkpoint exists for the current generation.
+            from .db_models import ExecutionCheckpointRecord
+            from .evaluation_recovery import RECOVERABLE_EVAL_STATUSES
+
+            recoverable_eval_count = session.scalar(
+                select(func.count(ExperimentItemExecutionRecord.id))
+                .join(
+                    ExecutionCheckpointRecord,
+                    (ExecutionCheckpointRecord.item_execution_id == ExperimentItemExecutionRecord.id)
+                    & (ExecutionCheckpointRecord.dispatch_generation == ExperimentItemExecutionRecord.dispatch_generation),
+                )
+                .where(
+                    ExperimentItemExecutionRecord.launch_id == launch_id,
+                    ExperimentItemExecutionRecord.execution_status == "succeeded",
+                    ExperimentItemExecutionRecord.eval_status.in_(list(RECOVERABLE_EVAL_STATUSES)),
+                )
+            ) or 0
+
             progress = calculate_launch_progress(counts, attempts_count, retries_count)
+            progress["recoverable_evaluation_count"] = int(recoverable_eval_count)
             actions = determine_allowed_actions(
                 launch_status=launch.status,
                 cancel_requested_at=launch.cancel_requested_at,
                 counts=counts,
+                recoverable_eval_count=int(recoverable_eval_count),
             )
             progress["allowed_actions"] = actions["allowed"]
             progress["action_reasons"] = actions["reasons"]

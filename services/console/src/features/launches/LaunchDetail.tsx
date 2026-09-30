@@ -234,6 +234,8 @@ export const LaunchDetail: React.FC = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [showRetryModal, setShowRetryModal] = useState(false);
   const [forceRetry, setForceRetry] = useState(false);
+  // Issue #84: feedback for the evaluation-only retry (submitted / blocked).
+  const [evalRetryNotice, setEvalRetryNotice] = useState<string | null>(null);
 
   useEffect(() => {
     setShowRawManifest(false);
@@ -314,7 +316,17 @@ export const LaunchDetail: React.FC = () => {
       return res.data as ItemExecution[];
     },
     enabled: Boolean(launchId && launch?.id === launchId),
-    refetchInterval: () => {
+    refetchInterval: (query) => {
+      // Issue #84: an evaluation-only retry does not move the Launch out of a
+      // terminal status, so poll while any case is being re-judged. Polling
+      // stops as soon as the recovery settles and the fresh result is shown.
+      const current = query.state.data as ItemExecution[] | undefined;
+      if (
+        Array.isArray(current) &&
+        current.some((i) => (i.evaluation_status || "").toLowerCase() === "evaluating")
+      ) {
+        return 1500;
+      }
       if (
         launch &&
         ACTIVE_LAUNCH_STATUSES.has((launch.status?.toUpperCase() || "") as LaunchStatus)
@@ -403,6 +415,35 @@ export const LaunchDetail: React.FC = () => {
       if (errMsg.toLowerCase().includes("force") || errMsg.toLowerCase().includes("ambiguous")) {
         setShowRetryModal(true);
       }
+    },
+  });
+
+  // 7. Retry Evaluation Mutation (Issue #84): re-judge failed / missing
+  //    evaluations by reusing the stored Agent output. It never calls the
+  //    Agent again, so it is offered independently of "retry failed cases".
+  const retryEvaluationMutation = useMutation({
+    mutationFn: async () => {
+      if (!launchId) return;
+      setActionError(null);
+      setEvalRetryNotice(null);
+      const res = await api.POST("/api/v1/experiment-launches/{launch_id}/retry-evaluation", {
+        params: { path: { launch_id: launchId } },
+      });
+      if (res.error) throw res.error;
+      return res.data;
+    },
+    onSuccess: (data) => {
+      const submitted = data?.submitted?.length ?? 0;
+      const blocked = data?.blocked ?? [];
+      let notice = `已提交 ${submitted} 个用例仅重试评测（复用原 Agent 输出，不会再次调用 Agent）。`;
+      if (blocked.length > 0) {
+        notice += ` ${blocked.length} 个用例因检查点不可用被阻止：${blocked[0].message}`;
+      }
+      setEvalRetryNotice(notice);
+      invalidateAll();
+    },
+    onError: (err) => {
+      setActionError(formatApiError(err));
     },
   });
 
@@ -538,6 +579,19 @@ export const LaunchDetail: React.FC = () => {
                 </Button>
               )}
 
+              {allowedActions.includes("retry_evaluation") && (
+                <Button
+                  variant="secondary"
+                  onClick={() => retryEvaluationMutation.mutate()}
+                  disabled={retryEvaluationMutation.isPending}
+                  className="text-xs"
+                  data-testid="retry-evaluation-button"
+                  title="仅重新评测失败的指标，复用原 Agent 输出，不会再次调用 Agent"
+                >
+                  <span>{retryEvaluationMutation.isPending ? "重评中..." : "重试评测失败 (Retry Evaluation)"}</span>
+                </Button>
+              )}
+
               {launch.langfuse_experiment_url && (
                 <a
                   href={launch.langfuse_experiment_url}
@@ -554,6 +608,16 @@ export const LaunchDetail: React.FC = () => {
           )}
         />
       </div>
+
+      {evalRetryNotice && (
+        <div
+          className="p-3 text-xs bg-pass-subtle border border-pass-border rounded-lg text-pass font-medium"
+          data-testid="retry-evaluation-notice"
+          role="status"
+        >
+          {evalRetryNotice}
+        </div>
+      )}
 
       {actionError && (
         <div className="p-3 text-xs bg-fail-subtle border border-fail-border rounded-lg text-fail font-medium">

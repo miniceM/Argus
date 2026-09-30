@@ -71,7 +71,7 @@ def test_worker_claim_and_strict_lease_fencing(setup_runtime):
     # Worker 1 claims item
     msgs = queue.read_group("worker-test-1", count=1)
     assert len(msgs) == 1
-    msg_id, item_id, gen = msgs[0]
+    msg_id, item_id, gen, _work = msgs[0]
 
     claim_res = worker.claim_item(item_id, gen, lease_seconds=30)
     assert claim_res is not None

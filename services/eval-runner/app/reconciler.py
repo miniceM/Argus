@@ -8,6 +8,7 @@ from sqlalchemy import func, select, update
 
 from .db import DatabaseManager
 from .db_models import (
+    EvaluationAttemptRecord,
     ExecutionAttemptRecord,
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
@@ -386,10 +387,68 @@ class ExecutionReconciler:
 
         return len(reenqueued)
 
+    def reconcile_expired_evaluation_leases(self) -> int:
+        """Re-enqueues evaluation-only recovery whose worker lease expired (#84).
+
+        A crashed evaluation worker leaves the item ``evaluating`` with a stale
+        lease. The stored Agent output is untouched, so recovery simply re-dispatches
+        the same evaluation generation; the fenced claim guarantees at most one
+        effective run and no duplicate Agent call.
+        """
+        from .evaluation_recovery import EVALUATION_RUNNING, WORK_TYPE_EVALUATION
+
+        now = datetime.now(UTC)
+        reenqueue: list[tuple[str, int]] = []
+        recovered = 0
+
+        with self.db_mgr.get_session() as session:
+            is_pg = session.bind.dialect.name == "postgresql"
+            now_sql = func.clock_timestamp() if is_pg else func.now()
+
+            expired = session.scalars(
+                select(ExperimentItemExecutionRecord).where(
+                    ExperimentItemExecutionRecord.evaluation_status == EVALUATION_RUNNING,
+                    ExperimentItemExecutionRecord.evaluation_lease_expires_at.isnot(None),
+                    ExperimentItemExecutionRecord.evaluation_lease_expires_at <= now_sql,
+                )
+            ).all()
+
+            for it in expired:
+                it.evaluation_lease_owner = None
+                it.evaluation_lease_token = None
+                it.evaluation_lease_expires_at = None
+                it.evaluation_error = "EVALUATION_LEASE_EXPIRED: 评测工作进程中断，已重新调度（Agent 输出未变）。"
+                it.updated_at = now
+                # Mark the interrupted attempt as failed so the audit trail is honest.
+                session.execute(
+                    update(EvaluationAttemptRecord)
+                    .where(
+                        EvaluationAttemptRecord.item_execution_id == it.id,
+                        EvaluationAttemptRecord.evaluation_generation == it.evaluation_generation,
+                        EvaluationAttemptRecord.status == "running",
+                    )
+                    .values(
+                        status="failed",
+                        error_type="LEASE_EXPIRED",
+                        error_message="Evaluation worker lease expired; re-dispatched.",
+                        completed_at=now,
+                    )
+                )
+                reenqueue.append((it.id, it.evaluation_generation))
+                recovered += 1
+
+            session.commit()
+
+        if reenqueue:
+            self.queue.enqueue_items(reenqueue, work_type=WORK_TYPE_EVALUATION)
+
+        return recovered
+
     def run_reconcile_cycle(self) -> None:
         """Executes one full pass of all reconciliation recovery actions."""
         self.reconcile_retry_waits()
         self.reconcile_expired_leases()
+        self.reconcile_expired_evaluation_leases()
         self.reconcile_backlog()
         self.reconcile_launch_states()
         self.reconcile_sync_statuses()

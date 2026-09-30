@@ -824,6 +824,49 @@
         }
       }
     },
+    "/api/v1/experiment-launches/{launch_id}/retry-evaluation": {
+      "post": {
+        "tags": [
+          "Experiment Launches"
+        ],
+        "summary": "Retry failed or missing evaluations by reusing stored Agent outputs (Issue #84)",
+        "description": "Re-judge failed / missing evaluations without calling the Agent again.\n\nThe stored Agent output (checkpoint) is reused, the frozen Manifest and\nalready-successful results are preserved, and the Agent invocation /\nexecution attempt counts stay untouched. Submission is idempotent: a\ndouble-click or a competing request yields at most one effective\nre-evaluation per case.",
+        "operationId": "retry_evaluation_launch_api_v1_experiment_launches__launch_id__retry_evaluation_post",
+        "parameters": [
+          {
+            "name": "launch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Launch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetryEvaluationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/experiment-launches/{launch_id}": {
       "get": {
         "tags": [
@@ -3053,6 +3096,46 @@
         "title": "EvaluationResultResponse",
         "description": "One typed, explainable measurement (Issue #82).\n\n``value`` keeps its original JSON type; ``normalized_value`` is populated\nonly by an explicitly frozen rule and may legitimately be null."
       },
+      "EvaluationRetryBlockedItem": {
+        "properties": {
+          "item_execution_id": {
+            "type": "string",
+            "title": "Item Execution Id"
+          },
+          "dataset_item_id": {
+            "type": "string",
+            "title": "Dataset Item Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_execution_id",
+          "dataset_item_id",
+          "code",
+          "message"
+        ],
+        "title": "EvaluationRetryBlockedItem",
+        "description": "One case that cannot be re-judged, with the reason (Issue #84)."
+      },
       "EvaluatorResponse": {
         "properties": {
           "id": {
@@ -3551,6 +3634,43 @@
               }
             ]
           },
+          "evaluation_status": {
+            "type": "string",
+            "title": "Evaluation Status",
+            "default": "none"
+          },
+          "evaluation_generation": {
+            "type": "integer",
+            "title": "Evaluation Generation",
+            "default": 0
+          },
+          "evaluation_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluation Error"
+          },
+          "evaluation_reused_output_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluation Reused Output Digest"
+          },
+          "evaluation_recoverable": {
+            "type": "boolean",
+            "title": "Evaluation Recoverable",
+            "default": false
+          },
           "attempt_count": {
             "type": "integer",
             "title": "Attempt Count",
@@ -3867,6 +3987,11 @@
             },
             "type": "object",
             "title": "Action Reasons"
+          },
+          "recoverable_evaluation_count": {
+            "type": "integer",
+            "title": "Recoverable Evaluation Count",
+            "default": 0
           }
         },
         "type": "object",
@@ -4585,6 +4710,45 @@
         ],
         "title": "QualityRuleRequest",
         "description": "One user-authored judgement rule over a selected metric (Issue #83)."
+      },
+      "RetryEvaluationResponse": {
+        "properties": {
+          "launch": {
+            "$ref": "#/components/schemas/ExperimentLaunchResponse"
+          },
+          "submitted": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Submitted"
+          },
+          "already_running": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Already Running"
+          },
+          "blocked": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationRetryBlockedItem"
+            },
+            "type": "array",
+            "title": "Blocked"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "launch"
+        ],
+        "title": "RetryEvaluationResponse",
+        "description": "Result of an evaluation-only retry submission (Issue #84)."
       },
       "RetryFailedRequest": {
         "properties": {

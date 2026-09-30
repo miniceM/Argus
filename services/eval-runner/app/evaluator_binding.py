@@ -812,6 +812,7 @@ def evaluate_frozen_item(
     registry: Any = None,
     executors: dict[str, EvaluatorExecutor] | None = None,
     quality_policy: dict[str, Any] | None = None,
+    only_binding_ids: set[str] | None = None,
 ) -> FrozenItemEvaluation:
     """The single evaluation entry point for Worker, run and resume paths.
 
@@ -822,9 +823,7 @@ def evaluate_frozen_item(
     from .evaluator_results import (
         build_result,
         failed_result,
-        project_legacy_scores,
     )
-    from .quality_policy import evaluate_quality_policy
 
     registry = registry or default_evaluator_registry
     executors = executors if executors is not None else build_executor_registry(registry)
@@ -849,6 +848,22 @@ def evaluate_frozen_item(
             verification_status=manifest_contract_status(manifest),
         )
 
+    if only_binding_ids is not None:
+        # Issue #84: an evaluation-only retry re-judges only the failed or
+        # missing Bindings. Every binding is still *resolved* above (so an
+        # unrecoverable artifact stays fail-closed), but only the requested
+        # subset is executed here; already-successful results are preserved by
+        # the caller and merged back in.
+        plan = [resolved for resolved in plan if resolved.binding.binding_id in only_binding_ids]
+        if not plan:
+            return FrozenItemEvaluation(
+                scores={},
+                quality_conclusion="unknown",
+                eval_status="skipped",
+                eval_error=None,
+                verification_status=manifest_contract_status(manifest),
+            )
+
     if not plan:
         return FrozenItemEvaluation(
             scores={},
@@ -861,7 +876,6 @@ def evaluate_frozen_item(
     verification_status = manifest_contract_status(manifest)
     evaluators: list[dict[str, Any]] = []
     typed_results: list[Any] = []
-    eval_errors: list[str] = []
 
     for resolved in plan:
         binding = resolved.binding
@@ -890,7 +904,6 @@ def evaluate_frozen_item(
                     manifest_schema_version=manifest_schema_version,
                 )
             )
-            eval_errors.append(f"{binding.evaluator_id}: {exc}")
             continue
         duration_ms = round((time.perf_counter() - started) * 1000, 3)
         typed_results.append(
@@ -904,6 +917,63 @@ def evaluate_frozen_item(
                 raw_value_present=_result_value_present(raw),
             )
         )
+
+    if any(resolved.verification != "VERIFIED" for resolved in plan):
+        verification_status = LEGACY_CONTRACT_STATUS
+
+    return summarize_typed_results(
+        plan,
+        typed_results,
+        manifest=manifest,
+        quality_policy=quality_policy,
+        evaluators=evaluators,
+        verification_status=verification_status,
+    )
+
+
+def _derive_eval_errors(typed_results: list[Any]) -> list[str]:
+    """Exception-driven evaluation failures, re-derived from the typed results.
+
+    A Binding that raised produces a ``failed`` result with
+    ``EVALUATION_FAILED``; contract violations use their own specific codes and
+    are *not* runtime anomalies. Deriving the list (instead of threading a
+    parallel accumulator) keeps a merged, partial re-evaluation consistent with
+    a full one.
+    """
+    errors: list[str] = []
+    for result in typed_results:
+        if (
+            getattr(result, "status", "") != "succeeded"
+            and getattr(result, "error_code", "") == "EVALUATION_FAILED"
+        ):
+            message = getattr(result, "error_message", "") or "评测执行失败"
+            errors.append(f"{getattr(result, 'evaluator_id', '?')}: {message}")
+    return errors
+
+
+def summarize_typed_results(
+    plan: list[ResolvedEvaluator],
+    typed_results: list[Any],
+    *,
+    manifest: dict[str, Any] | None,
+    quality_policy: dict[str, Any] | None = None,
+    evaluators: list[dict[str, Any]] | None = None,
+    verification_status: str | None = None,
+) -> FrozenItemEvaluation:
+    """Turn a complete set of typed results into the recorded verdict.
+
+    This is the single place where the Issue #83 truth table lives. Both the
+    normal first evaluation and an Issue #84 evaluation-only retry (which
+    re-judges a subset and merges it with preserved results) go through here,
+    so a recovered item can never be graded by different rules than a fresh
+    one.
+    """
+    from .evaluator_results import project_legacy_scores
+    from .quality_policy import evaluate_quality_policy
+
+    typed_results = list(typed_results)
+    if verification_status is None:
+        verification_status = manifest_contract_status(manifest)
 
     # Restricted legacy projection: successful numeric results only.
     scores = project_legacy_scores(typed_results)
@@ -935,6 +1005,7 @@ def evaluate_frozen_item(
 
     # An evaluation anomaly is always surfaced, even when it does not change the
     # quality verdict (an optional diagnostic is allowed to fail).
+    eval_errors = _derive_eval_errors(typed_results)
     if eval_errors:
         eval_status = "failed"
         eval_error = "; ".join(eval_errors)
@@ -945,16 +1016,13 @@ def evaluate_frozen_item(
         eval_status = "succeeded"
         eval_error = None
 
-    if any(resolved.verification != "VERIFIED" for resolved in plan):
-        verification_status = LEGACY_CONTRACT_STATUS
-
     return FrozenItemEvaluation(
         scores=scores,
         quality_conclusion=quality_conclusion,
         eval_status=eval_status,
         eval_error=eval_error,
         verification_status=verification_status,
-        evaluators=tuple(evaluators),
+        evaluators=tuple(evaluators or ()),
         typed_results=tuple(typed_results),
         quality_decision=decision,
     )

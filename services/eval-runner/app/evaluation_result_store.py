@@ -127,3 +127,38 @@ def result_to_payload(record: EvaluationResultRecord) -> dict[str, Any]:
             "contract_status": record.contract_status,
         },
     }
+
+
+def result_from_record(record: EvaluationResultRecord) -> Any:
+    """Rebuild a :class:`TypedEvaluationResult` from a persisted row (Issue #84).
+
+    An evaluation-only retry re-judges only the failed / missing Bindings and
+    must keep the results that already succeeded exactly as they were
+    recorded — including their provenance. Rehydrating the stored rows (rather
+    than re-running those evaluators) is what makes "preserve successful
+    results" literally true.
+    """
+    from .evaluator_results import ResultProvenance, TypedEvaluationResult
+
+    provenance = ResultProvenance(
+        binding_id=record.binding_id,
+        evaluator_id=record.evaluator_id,
+        evaluator_version=record.evaluator_version,
+        definition_digest=record.definition_digest,
+        executor_type=record.executor_type,
+        manifest_schema_version=record.manifest_schema_version,
+        contract_status=record.contract_status,
+    )
+    return TypedEvaluationResult(
+        evaluator_id=record.evaluator_id,
+        result_type=record.result_type,
+        status=record.status,
+        provenance=provenance,
+        value=record.value,
+        normalized_value=record.normalized_value,
+        comment=record.comment,
+        evidence=record.evidence,
+        duration_ms=record.duration_ms,
+        error_code=record.error_code,
+        error_message=record.error_message,
+    )

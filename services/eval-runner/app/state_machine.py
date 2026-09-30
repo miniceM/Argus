@@ -138,6 +138,7 @@ def determine_allowed_actions(
     launch_status: str,
     cancel_requested_at: Any,
     counts: dict[str, int],
+    recoverable_eval_count: int = 0,
 ) -> dict[str, Any]:
     st = launch_status.upper()
     c = {k.lower(): v for k, v in counts.items()}
@@ -187,6 +188,25 @@ def determine_allowed_actions(
             reasons["retry_failed"] = "当前评测没有失败或超时的用例"
         else:
             reasons["retry_failed"] = f"当前状态 '{st}' 无法重试失败用例"
+
+    # 4. Retry Evaluation (Issue #84): re-judge failed/missing evaluations by
+    #    reusing the stored Agent output. It is independent of the execution
+    #    retry above and, because it never calls the Agent, it stays available
+    #    even when the Launch itself is in a terminal state (e.g. COMPLETED
+    #    with UNKNOWN quality). It is blocked only while other cases are still
+    #    executing, or while a cancellation is in progress.
+    not_cancelled = not cancel_requested_at and st not in ("CANCELLING", "CANCELLED")
+    if recoverable_eval_count > 0 and not_cancelled and in_flight_count == 0:
+        allowed.append("retry_evaluation")
+    else:
+        if cancel_requested_at or st in ("CANCELLING", "CANCELLED"):
+            reasons["retry_evaluation"] = "评测任务已取消或正在取消"
+        elif in_flight_count > 0:
+            reasons["retry_evaluation"] = "任务尚有未完成用例处于排队、准备或运行中"
+        elif recoverable_eval_count == 0:
+            reasons["retry_evaluation"] = "当前没有失败或缺失的评测需要重评"
+        else:
+            reasons["retry_evaluation"] = f"当前状态 '{st}' 无法重试评测"
 
     return {
         "allowed": allowed,

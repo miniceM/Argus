@@ -615,6 +615,8 @@ class ExperimentLaunchProgressResponse(BaseModel):
     retries: int = 0
     allowed_actions: list[str] = Field(default_factory=list)
     action_reasons: dict[str, str] = Field(default_factory=dict)
+    # Issue #84: how many cases can be re-judged without re-calling the Agent.
+    recoverable_evaluation_count: int = 0
 
 
 class ExperimentLaunchResponse(BaseModel):
@@ -668,6 +670,29 @@ class ExperimentLaunchRunActionResponse(BaseModel):
 
 class RetryFailedRequest(BaseModel):
     force: bool = Field(default=False, description="Force retry even if ambiguous non-idempotent outcomes exist")
+
+
+class EvaluationRetryBlockedItem(BaseModel):
+    """One case that cannot be re-judged, with the reason (Issue #84)."""
+
+    item_execution_id: str
+    dataset_item_id: str
+    code: str
+    message: str
+    hint: str | None = None
+
+
+class RetryEvaluationResponse(BaseModel):
+    """Result of an evaluation-only retry submission (Issue #84)."""
+
+    launch: ExperimentLaunchResponse
+    # Cases whose failed/missing evaluation was dispatched for recovery.
+    submitted: list[str] = Field(default_factory=list)
+    # Cases already being re-evaluated (idempotent double-click / race).
+    already_running: list[str] = Field(default_factory=list)
+    # Cases that cannot be re-judged (missing/expired/corrupt checkpoint, etc.).
+    blocked: list[EvaluationRetryBlockedItem] = Field(default_factory=list)
+    message: str = ""
 
 
 class ExecutionAttemptResponse(BaseModel):
@@ -748,6 +773,18 @@ class ExperimentItemExecutionResponse(BaseModel):
     # before QualityPolicy existed — their verdict stands, it is just not
     # re-explained under a policy they never had.
     quality_evaluation: QualityEvaluationResponse | None = None
+    # Issue #84: the independent evaluation-recovery lifecycle. `eval_status`
+    # stays the measurement outcome; these describe whether a re-evaluation is
+    # idle / running / recovered / failed, and which output digest it reused.
+    evaluation_status: str = "none"
+    evaluation_generation: int = 0
+    evaluation_error: str | None = None
+    evaluation_reused_output_digest: str | None = None
+    # Whether a recoverable Agent output checkpoint exists for this case, so the
+    # Console can explain "reuse the original Agent output" before offering a
+    # re-evaluation. A missing/expired/corrupt checkpoint must block recovery
+    # (and is never silently downgraded to re-invoking the Agent).
+    evaluation_recoverable: bool = False
     attempt_count: int = 0
     final_attempt_http_status: int | None = None
     final_attempt_latency_ms: int | None = None

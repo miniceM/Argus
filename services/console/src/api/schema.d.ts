@@ -161,6 +161,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/experiment-launches/{launch_id}/retry-evaluation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry failed or missing evaluations by reusing stored Agent outputs (Issue #84)
+         * @description Re-judge failed / missing evaluations without calling the Agent again.
+         *
+         *     The stored Agent output (checkpoint) is reused, the frozen Manifest and
+         *     already-successful results are preserved, and the Agent invocation /
+         *     execution attempt counts stay untouched. Submission is idempotent: a
+         *     double-click or a competing request yields at most one effective
+         *     re-evaluation per case.
+         */
+        post: operations["retry_evaluation_launch_api_v1_experiment_launches__launch_id__retry_evaluation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/experiment-launches/{launch_id}": {
         parameters: {
             query?: never;
@@ -999,6 +1025,22 @@ export interface components {
             provenance?: components["schemas"]["EvaluationResultProvenance"] | null;
         };
         /**
+         * EvaluationRetryBlockedItem
+         * @description One case that cannot be re-judged, with the reason (Issue #84).
+         */
+        EvaluationRetryBlockedItem: {
+            /** Item Execution Id */
+            item_execution_id: string;
+            /** Dataset Item Id */
+            dataset_item_id: string;
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Hint */
+            hint?: string | null;
+        };
+        /**
          * EvaluatorResponse
          * @description Catalog entry for one Evaluator, carrying its immutable version list.
          */
@@ -1205,6 +1247,25 @@ export interface components {
             evaluation_results?: components["schemas"]["EvaluationResultResponse"][];
             quality_evaluation?: components["schemas"]["QualityEvaluationResponse"] | null;
             /**
+             * Evaluation Status
+             * @default none
+             */
+            evaluation_status: string;
+            /**
+             * Evaluation Generation
+             * @default 0
+             */
+            evaluation_generation: number;
+            /** Evaluation Error */
+            evaluation_error?: string | null;
+            /** Evaluation Reused Output Digest */
+            evaluation_reused_output_digest?: string | null;
+            /**
+             * Evaluation Recoverable
+             * @default false
+             */
+            evaluation_recoverable: boolean;
+            /**
              * Attempt Count
              * @default 0
              */
@@ -1347,6 +1408,11 @@ export interface components {
             action_reasons?: {
                 [key: string]: string;
             };
+            /**
+             * Recoverable Evaluation Count
+             * @default 0
+             */
+            recoverable_evaluation_count: number;
         };
         /** ExperimentLaunchResponse */
         ExperimentLaunchResponse: {
@@ -1618,6 +1684,24 @@ export interface components {
             critical: boolean;
             /** Note */
             note?: string | null;
+        };
+        /**
+         * RetryEvaluationResponse
+         * @description Result of an evaluation-only retry submission (Issue #84).
+         */
+        RetryEvaluationResponse: {
+            launch: components["schemas"]["ExperimentLaunchResponse"];
+            /** Submitted */
+            submitted?: string[];
+            /** Already Running */
+            already_running?: string[];
+            /** Blocked */
+            blocked?: components["schemas"]["EvaluationRetryBlockedItem"][];
+            /**
+             * Message
+             * @default
+             */
+            message: string;
         };
         /** RetryFailedRequest */
         RetryFailedRequest: {
@@ -2232,6 +2316,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExperimentLaunchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_evaluation_launch_api_v1_experiment_launches__launch_id__retry_evaluation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetryEvaluationResponse"];
                 };
             };
             /** @description Validation Error */

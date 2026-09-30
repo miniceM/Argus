@@ -143,6 +143,22 @@ class ExperimentItemExecutionRecord(Base):
     scores: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     # Issue #83: the frozen policy's per-rule decision for this item.
     quality_evaluation: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Issue #84: an evaluation lifecycle that is fully independent of the
+    # execution attempt. A re-evaluation reuses the stored Agent output, never
+    # creates another ExecutionAttemptRecord and never touches
+    # dispatch_generation, so the non-idempotent execution safety boundary and
+    # the "Agent called once" guarantee are preserved.
+    evaluation_generation: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    evaluation_status: Mapped[str] = mapped_column(String(32), default="none", nullable=False)
+    evaluation_lease_owner: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    evaluation_lease_token: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    evaluation_lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    evaluation_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evaluation_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    evaluation_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The digest of the reused Agent output, so a reviewer can prove the
+    # re-evaluation judged exactly the original response.
+    evaluation_reused_output_digest: Mapped[str | None] = mapped_column(String(128), nullable=True)
     queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     available_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     lease_owner: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -166,6 +182,18 @@ class ExperimentItemExecutionRecord(Base):
         back_populates="item_execution",
         cascade="all, delete-orphan",
         foreign_keys="EvaluationResultRecord.item_execution_id",
+    )
+    execution_checkpoints: Mapped[list[ExecutionCheckpointRecord]] = relationship(
+        "ExecutionCheckpointRecord",
+        back_populates="item_execution",
+        cascade="all, delete-orphan",
+        foreign_keys="ExecutionCheckpointRecord.item_execution_id",
+    )
+    evaluation_attempts: Mapped[list[EvaluationAttemptRecord]] = relationship(
+        "EvaluationAttemptRecord",
+        back_populates="item_execution",
+        cascade="all, delete-orphan",
+        foreign_keys="EvaluationAttemptRecord.item_execution_id",
     )
 
 
@@ -206,6 +234,98 @@ class EvaluationResultRecord(Base):
 
     item_execution: Mapped[ExperimentItemExecutionRecord] = relationship(
         "ExperimentItemExecutionRecord", back_populates="evaluation_results"
+    )
+
+
+class ExecutionCheckpointRecord(Base):
+    """The recoverable Agent output of one successful execution (#84).
+
+    Written after the Agent answered with HTTP 200 and *before* evaluation
+    begins, so a failed evaluation can be retried later without ever calling
+    the Agent again. The stored ``agent_output`` plus ``output_digest`` make
+    the artifact locally verifiable and parsable: recovery never depends on a
+    Langfuse Trace that may never have synced. This is bounded runtime-recovery
+    data (explicit ``expires_at`` retention, only the business response), never
+    a second long-term copy of the full Langfuse trace.
+    """
+
+    __tablename__ = "execution_checkpoints"
+    __table_args__ = (
+        UniqueConstraint(
+            "item_execution_id", "dispatch_generation", name="uq_execution_checkpoints_item_generation"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    item_execution_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("experiment_item_executions.id", ondelete="CASCADE"), nullable=False
+    )
+    launch_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("experiment_launches.id", ondelete="CASCADE"), nullable=False
+    )
+    dataset_item_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    # The execution generation whose Agent call produced this output.
+    dispatch_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    output_digest: Mapped[str] = mapped_column(String(128), nullable=False)
+    agent_output: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    input_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    expected_output: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    # The frozen Binding provenance this output must be judged under.
+    binding_provenance: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    manifest_digest: Mapped[str] = mapped_column(String(128), nullable=False)
+    final_attempt_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    observation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    langfuse_trace_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    item_execution: Mapped[ExperimentItemExecutionRecord] = relationship(
+        "ExperimentItemExecutionRecord", back_populates="execution_checkpoints"
+    )
+
+
+class EvaluationAttemptRecord(Base):
+    """One evaluation-only recovery attempt (#84).
+
+    Deliberately separate from :class:`ExecutionAttemptRecord`: a re-evaluation
+    reuses the stored Agent output and therefore must never create or advance an
+    execution attempt. Keeping its own record makes the recovery auditable and
+    gives late/duplicate attempts a row to be fenced against.
+    """
+
+    __tablename__ = "evaluation_attempts"
+    __table_args__ = (
+        UniqueConstraint(
+            "item_execution_id", "evaluation_generation", name="uq_evaluation_attempts_item_generation"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    item_execution_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("experiment_item_executions.id", ondelete="CASCADE"), nullable=False
+    )
+    launch_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("experiment_launches.id", ondelete="CASCADE"), nullable=False
+    )
+    evaluation_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    # running | succeeded | failed | discarded (superseded by a newer generation)
+    status: Mapped[str] = mapped_column(String(32), default="running", nullable=False)
+    # The binding ids this attempt re-ran; already-successful results are kept.
+    target_bindings: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    reused_output_digest: Mapped[str] = mapped_column(String(128), nullable=False)
+    worker_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    lease_token: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    item_execution: Mapped[ExperimentItemExecutionRecord] = relationship(
+        "ExperimentItemExecutionRecord", back_populates="evaluation_attempts"
     )
 
 

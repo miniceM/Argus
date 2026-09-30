@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -13,6 +13,7 @@ from .db import DatabaseManager
 from .db_models import (
     EvaluationResultRecord,
     ExecutionAttemptRecord,
+    ExecutionCheckpointRecord,
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
 )
@@ -22,6 +23,7 @@ from .evaluators import EvaluatorSelectionError
 from .executor import RemoteAgentExecutor
 from .models import (
     EvaluationResultResponse,
+    EvaluationRetryBlockedItem,
     ExecutionAttemptResponse,
     ExperimentItemExecutionResponse,
     ExperimentLaunchCreateRequest,
@@ -29,6 +31,7 @@ from .models import (
     ExperimentLaunchResponse,
     ExperimentLaunchRunActionResponse,
     ExperimentLaunchRunRequest,
+    RetryEvaluationResponse,
     RetryFailedRequest,
 )
 from .orchestrator import LaunchOrchestrator
@@ -212,6 +215,57 @@ def retry_failed_launch(
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=msg) from exc
 
 
+@router.post(
+    "/experiment-launches/{launch_id}/retry-evaluation",
+    response_model=RetryEvaluationResponse,
+    summary="Retry failed or missing evaluations by reusing stored Agent outputs (Issue #84)",
+)
+def retry_evaluation_launch(
+    launch_id: str,
+    services=Depends(get_services),
+) -> RetryEvaluationResponse:
+    """Re-judge failed / missing evaluations without calling the Agent again.
+
+    The stored Agent output (checkpoint) is reused, the frozen Manifest and
+    already-successful results are preserved, and the Agent invocation /
+    execution attempt counts stay untouched. Submission is idempotent: a
+    double-click or a competing request yields at most one effective
+    re-evaluation per case.
+    """
+    _, _, _, orchestrator = services
+    try:
+        result = orchestrator.retry_failed_evaluations(launch_id)
+    except DomainConflictError as exc:
+        raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        msg = str(exc)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail=msg) from exc
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=msg) from exc
+
+    launch = result["launch"]
+    submitted = result["submitted"]
+    blocked = result["blocked"]
+    already_running = result["already_running"]
+
+    if submitted:
+        message = (
+            f"已提交 {len(submitted)} 个用例仅重试评测（复用原 Agent 输出，不会再次调用 Agent）。"
+        )
+    else:
+        message = "所有候选评测都已在重评中，未产生重复任务。"
+    if blocked:
+        message += f" {len(blocked)} 个用例因检查点不可用被阻止。"
+
+    return RetryEvaluationResponse(
+        launch=_enrich_launch(launch, orchestrator),
+        submitted=submitted,
+        already_running=already_running,
+        blocked=[EvaluationRetryBlockedItem(**item) for item in blocked],
+        message=message,
+    )
+
+
 @router.get(
     "/experiment-launches/{launch_id}",
     response_model=ExperimentLaunchResponse,
@@ -315,10 +369,33 @@ def _query_launch_items(
                 EvaluationResultResponse.model_validate(result_to_payload(row))
             )
 
+        # Issue #84: a case is evaluation-recoverable only when a checkpoint for
+        # its current execution generation exists and is still inside retention.
+        from .execution_checkpoint import checkpoint_retention_enabled
+
+        recoverable_map: dict[str, bool] = {}
+        if checkpoint_retention_enabled():
+            now = datetime.now(UTC)
+            cps = session.scalars(
+                select(ExecutionCheckpointRecord).where(
+                    ExecutionCheckpointRecord.item_execution_id.in_(item_ids)
+                )
+            ).all()
+            for cp in cps:
+                expires = cp.expires_at
+                if expires is not None and expires.tzinfo is None:
+                    expires = expires.replace(tzinfo=UTC)
+                if expires is not None and expires <= now:
+                    continue
+                item = next((x for x in items if x.id == cp.item_execution_id), None)
+                if item is not None and cp.dispatch_generation == item.dispatch_generation:
+                    recoverable_map[cp.item_execution_id] = True
+
         responses = []
         for i in items:
             res = ExperimentItemExecutionResponse.model_validate(i)
             res.evaluation_results = typed_by_item.get(i.id, [])
+            res.evaluation_recoverable = recoverable_map.get(i.id, False)
             res.attempt_count = counts_map.get(i.id, 0)
             fa = final_attempts_map.get(i.final_attempt_id) if i.final_attempt_id else None
             res.final_attempt_http_status = fa.http_status if fa else None

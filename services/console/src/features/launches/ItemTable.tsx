@@ -8,6 +8,7 @@ import { EvaluationResultList } from "./EvaluationResultList";
 import type { QualityEvaluation } from "./qualityDecision";
 import type { EvaluationResult } from "./evaluationResults";
 import { frozenFailureRecovery, isFrozenIdentityFailure } from "./frozenIdentity";
+import { EvaluationRecoveryBadge, recoveryExplanation } from "./evaluationRecovery";
 
 type ItemExecution = import("../../api/schema").components["schemas"]["ExperimentItemExecutionResponse"];
 
@@ -158,6 +159,7 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
                 <th className="px-5 py-3.5">用例标识 (Dataset Item ID)</th>
                 <th className="px-5 py-3.5">执行状态 (Execution)</th>
                 <th className="px-5 py-3.5">质量门禁 (Quality)</th>
+                <th className="px-5 py-3.5">评测恢复 (Evaluation Recovery)</th>
                 <th className="px-5 py-3.5">评测结果 (Evaluation Results)</th>
                 <th className="px-5 py-3.5">最终 HTTP</th>
                 <th className="px-5 py-3.5">最终耗时</th>
@@ -217,6 +219,21 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
                             {ruleSummary(item.quality_evaluation as QualityEvaluation)}
                           </p>
                         )}
+                    </td>
+
+                    {/* Issue #84: evaluation recovery is shown separately from
+                        execution and quality, and always says it reuses the
+                        original Agent output. */}
+                    <td className="px-5 py-3.5">
+                      <EvaluationRecoveryBadge status={item.evaluation_status} />
+                      {recoveryExplanation(item) && (
+                        <p
+                          className="text-micro text-muted-foreground mt-0.5 max-w-56"
+                          data-testid={`evaluation-recovery-${item.dataset_item_id}`}
+                        >
+                          {recoveryExplanation(item)}
+                        </p>
+                      )}
                     </td>
 
                     <td className="px-5 py-3.5">

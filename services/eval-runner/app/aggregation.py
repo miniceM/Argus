@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+import re
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 _COMPARABLE_QUALITY = {"pass", "fail"}
@@ -68,6 +70,71 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
     # Nearest-rank percentile: rank = ceil(p * n), then convert the 1-based rank to an index.
     p95 = latencies[max(0, math.ceil(0.95 * len(latencies)) - 1)] if latencies else None
 
+    cost_rows: list[tuple[Decimal, str, str, str, str]] = []
+    cost_reasons: list[str] = []
+    for item in items:
+        cost = item.get("cost") or {}
+        if not isinstance(cost, dict) or cost.get("complete") is not True:
+            reason = cost.get("unavailable_reason") if isinstance(cost, dict) else None
+            cost_reasons.append(reason or "COST_NOT_RECORDED")
+            continue
+        try:
+            amount = Decimal(str(cost.get("amount")))
+        except (InvalidOperation, TypeError, ValueError):
+            cost_reasons.append("INVALID_COST_EVIDENCE")
+            continue
+        currency = cost.get("currency")
+        source = cost.get("source")
+        scope = cost.get("scope")
+        policy = cost.get("policy_version")
+        if (
+            not amount.is_finite()
+            or amount < 0
+            or not math.isfinite(float(amount))
+            or not isinstance(currency, str)
+            or not re.fullmatch(r"[A-Z]{3}", currency)
+            or not isinstance(source, str)
+            or source not in {"provider_reported", "langfuse", "argus_pricing"}
+            or not all(isinstance(value, str) and value for value in (scope, policy))
+        ):
+            cost_reasons.append("INVALID_COST_EVIDENCE")
+            continue
+        cost_rows.append((amount, currency, source, scope, policy))
+
+    cost_case_count = len(cost_rows)
+    cost_coverage = cost_case_count / total if total else None
+    cost_currencies = {row[1] for row in cost_rows}
+    cost_sources = {row[2] for row in cost_rows}
+    cost_scopes = {row[3] for row in cost_rows}
+    cost_policies = {row[4] for row in cost_rows}
+    cost_reason = None
+    total_cost = cost_per_case = None
+    cost_currency = next(iter(cost_currencies)) if len(cost_currencies) == 1 else None
+    cost_source = next(iter(cost_sources)) if len(cost_sources) == 1 else None
+    cost_scope = next(iter(cost_scopes)) if len(cost_scopes) == 1 else None
+    cost_policy_version = next(iter(cost_policies)) if len(cost_policies) == 1 else None
+    if cost_rows:
+        if len(cost_currencies) != 1:
+            cost_reason = "MIXED_CURRENCIES"
+        elif len(cost_sources) != 1:
+            cost_reason = "COST_SOURCE_MISMATCH"
+        elif len(cost_scopes) != 1:
+            cost_reason = "COST_SCOPE_MISMATCH"
+        elif len(cost_policies) != 1:
+            cost_reason = "COST_POLICY_MISMATCH"
+        else:
+            total_amount = sum((row[0] for row in cost_rows), Decimal(0))
+            mean_amount = total_amount / cost_case_count
+            if math.isfinite(float(total_amount)) and math.isfinite(float(mean_amount)):
+                total_cost = float(total_amount)
+                cost_per_case = float(mean_amount)
+            else:
+                cost_reason = "INVALID_COST_EVIDENCE"
+    elif total:
+        cost_reason = next((reason for reason in cost_reasons if reason != "COST_NOT_RECORDED"), "COST_NOT_RECORDED")
+    if cost_reason is None and total and cost_case_count < total:
+        cost_reason = "PARTIAL_COST_COVERAGE"
+
     return {
         "total_cases": total,
         "evaluated_cases": len(evaluated),
@@ -82,8 +149,16 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
         "score_means": score_means,
         "score_counts": score_counts,
         "p95_latency_ms": p95,
-        "cost_per_case": None,
-        "cost_unavailable_reason": "COST_NOT_RECORDED",
+        "total_cost": total_cost,
+        "cost_per_case": cost_per_case,
+        "cost_currency": cost_currency,
+        "cost_case_count": cost_case_count,
+        "cost_coverage": cost_coverage,
+        "cost_source": cost_source,
+        "cost_scope": cost_scope,
+        "cost_policy_version": cost_policy_version,
+        "cost_partial": bool(total and cost_case_count < total),
+        "cost_unavailable_reason": cost_reason,
     }
 
 

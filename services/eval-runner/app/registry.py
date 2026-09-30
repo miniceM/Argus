@@ -48,6 +48,7 @@ def compute_spec_digest(spec_dict: dict[str, Any]) -> str:
         "protocol",
         "rate_limit_per_minute",
         "request_mapping",
+        "usage_cost_mapping",
         "request_schema",
         "response_schema",
         "timeout_seconds",
@@ -102,6 +103,7 @@ class AgentVersionSpec:
     spec_digest: str = ""
     artifact_ref: str | None = None
     id: str = ""
+    usage_cost_mapping: dict[str, Any] | None = None
 
 
 class AgentRegistry:
@@ -385,12 +387,14 @@ class AgentRegistry:
         environment: str | None = None,
         metadata: dict[str, Any] | None = None,
         trace_propagation: str = "W3C",
+        usage_cost_mapping: dict[str, Any] | None = None,
     ) -> AgentVersionRecord:
         raw_spec = {
             "endpoint": endpoint,
             "protocol": protocol,
             "method": method,
             "request_mapping": request_mapping,
+            "usage_cost_mapping": usage_cost_mapping,
             "request_schema": request_schema,
             "response_schema": response_schema,
             "credential_ref": credential_ref,
@@ -432,6 +436,7 @@ class AgentRegistry:
                 protocol=normalized["protocol"],
                 method=normalized["method"],
                 request_mapping=normalized["request_mapping"],
+                usage_cost_mapping=normalized["usage_cost_mapping"],
                 request_schema=normalized["request_schema"],
                 response_schema=normalized["response_schema"],
                 credential_ref=normalized["credential_ref"],
@@ -494,6 +499,7 @@ class AgentRegistry:
             max_retries=ver.max_retries,
             rate_limit_per_minute=ver.rate_limit_per_minute,
             request_mapping=dict(ver.request_mapping or {}),
+            usage_cost_mapping=dict(ver.usage_cost_mapping or {}) or None,
             max_concurrency=ver.max_concurrency,
             credential_ref=ver.credential_ref,
             is_idempotent=ver.is_idempotent,
@@ -518,6 +524,7 @@ class AgentRegistry:
                         "max_retries": v.max_retries,
                         "rate_limit_per_minute": v.rate_limit_per_minute,
                         "request_mapping": v.request_mapping,
+                        "usage_cost_mapping": v.usage_cost_mapping,
                     }
             result[ag.id] = {
                 "name": ag.name,
@@ -576,6 +583,7 @@ class AgentRegistry:
                         protocol=normalized["protocol"],
                         method=normalized["method"],
                         request_mapping=normalized["request_mapping"],
+                        usage_cost_mapping=normalized["usage_cost_mapping"],
                         request_schema=normalized["request_schema"],
                         response_schema=normalized["response_schema"],
                         credential_ref=normalized["credential_ref"],

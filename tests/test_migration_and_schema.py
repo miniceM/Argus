@@ -211,6 +211,12 @@ def test_002_migration_applied_successfully(tmp_path):
     applied = runner.apply_all()
     assert "001_initial_schema.sql" in applied
     assert "002_final_attempt_fk.sql" in applied
+    assert "008_usage_cost_evidence.sql" in applied
+    with engine.connect() as conn:
+        agent_version_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(agent_versions)")}
+        attempt_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(execution_attempts)")}
+    assert "usage_cost_mapping" in agent_version_columns
+    assert "usage_cost" in attempt_columns
 
 
 def test_002_final_attempt_foreign_key_on_postgresql():

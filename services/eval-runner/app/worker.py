@@ -457,6 +457,7 @@ class ExecutionWorker:
                 max_retries=policy_dict["max_retries"],
                 rate_limit_per_minute=policy_dict["rate_limit_per_minute"],
                 request_mapping=agent_dict["request_mapping"],
+                usage_cost_mapping=agent_dict.get("usage_cost_mapping"),
                 max_concurrency=policy_dict["max_concurrency"],
                 is_idempotent=bool(agent_dict.get("is_idempotent", False)),
                 credential_ref=agent_dict.get("credential_ref"),
@@ -696,6 +697,7 @@ class ExecutionWorker:
                         "latency_ms": inv_res.duration_ms,
                         "trace_context_received": inv_res.trace_context_received,
                         "request_phase": final_phase,
+                        "usage_cost": inv_res.usage_cost,
                     }
 
                     # Check if Launch was cancelled while we were invoking

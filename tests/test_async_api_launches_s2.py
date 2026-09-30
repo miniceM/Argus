@@ -9,7 +9,11 @@ from fastapi.testclient import TestClient
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "services" / "eval-runner"))
 
-from app.db_models import AgentRecord, AgentVersionRecord  # noqa: E402
+from app.db_models import (  # noqa: E402
+    AgentRecord,
+    AgentVersionRecord,
+    ExperimentLaunchRecord,  # noqa: E402
+)
 from app.main import app, db_manager  # noqa: E402
 
 
@@ -163,3 +167,67 @@ def test_async_launch_api_retry_failed():
     retry_force_res = client.post(f"/api/v1/experiment-launches/{launch_id}/retry-failed", json={"force": True})
     assert retry_force_res.status_code == 200, retry_force_res.text
     assert retry_force_res.json()["status"] == "QUEUED"
+
+
+def test_async_lifecycle_survives_link_backfill():
+    """202 semantics, cancellation and recovery stay intact when a link is backfilled
+    after the launch already reached a terminal state."""
+    import sys as _sys
+    from types import SimpleNamespace
+
+    _sys.path[:0] = [str(ROOT / "tests")]
+    from app.db_models import ExperimentItemExecutionRecord, LangfuseSyncTaskRecord
+    from app.langfuse_links import LangfuseLaunchLinkService, LangfuseLinkResolver
+    from fake_langfuse import FakeLangfuseSDK
+
+    client = TestClient(app)
+    res = client.post(
+        "/api/v1/experiment-launches",
+        json={
+            "agent_id": "banking-agent",
+            "agent_version": "v1",
+            "dataset_name": "banking-agent-regression",
+            "name": "Backfill Lifecycle",
+        },
+    )
+    assert res.status_code == 201, res.text
+    launch_id = res.json()["id"]
+
+    run_res = client.post(f"/api/v1/experiment-launches/{launch_id}/run")
+    assert run_res.status_code == 202
+    assert run_res.json()["status"] == "QUEUED"
+
+    with db_manager.get_session() as session:
+        launch = session.get(ExperimentLaunchRecord, launch_id)
+        launch.status = "COMPLETED"
+        launch.langfuse_sync_status = "SYNCED"
+        launch.langfuse_experiment_id = "run-1"
+        launch.langfuse_experiment_url = None
+        item = session.query(ExperimentItemExecutionRecord).filter_by(launch_id=launch_id).first()
+        item.execution_status = "succeeded"
+        item.trace_id = "t" * 32
+        session.add(
+            LangfuseSyncTaskRecord(
+                id="backfill-task",
+                launch_id=launch_id,
+                item_id=item.id,
+                dataset_item_id=item.dataset_item_id,
+                dispatch_generation=item.dispatch_generation,
+                trace_id="t" * 32,
+                dataset_run_name=launch.name,
+                scores_payload={"_dataset_source": "langfuse", "_dataset_run_id": "run-1"},
+                status="SYNCED",
+            )
+        )
+
+    lf = FakeLangfuseSDK(runs={("banking-agent-regression", "Backfill Lifecycle"): SimpleNamespace(id="run-1", dataset_id="ds-real")})
+    service = LangfuseLaunchLinkService(
+        db_manager, LangfuseLinkResolver(lf, "https://cloud.example.com")
+    )
+    assert service.ensure_launch_link(launch_id).status == "UPDATED"
+
+    detail = client.get(f"/api/v1/experiment-launches/{launch_id}").json()
+    assert detail["langfuse_experiment_url"].endswith("/datasets/ds-real/runs/run-1")
+    assert detail["links"]["langfuse_experiment"] == detail["langfuse_experiment_url"]
+    assert detail["status"] == "COMPLETED"
+    assert detail["langfuse_sync_status"] == "SYNCED"

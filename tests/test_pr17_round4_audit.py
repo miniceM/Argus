@@ -17,6 +17,8 @@ from app.db_models import ExperimentLaunchRecord as Launch  # noqa: E402
 from app.db_models import LangfuseSyncTaskRecord as Task  # noqa: E402
 from app.langfuse_sync import LangfuseOutboxSyncer, _invoke_with_timeout, aggregate_launch_sync_status  # noqa: E402
 from app.main import _client  # noqa: E402
+from fake_langfuse import FakeLangfuseSDK, remote_run  # noqa: E402
+from link_helpers import make_service  # noqa: E402
 from sqlalchemy import event  # noqa: E402
 from test_pr17_review_regressions import create_launch_helper  # noqa: E402
 
@@ -57,14 +59,31 @@ def test_partial_failed_finishes_sync(setup_runtime):
     assert aggregate_launch_sync_status(db, lid) == "SYNCED"
 
 
-# 2. 真实 Dataset Run ID 持久化至 Launch
+# 2. 真实 Dataset Run ID 与直达链接同时持久化至 Launch
+DASHBOARD = "https://cloud.langfuse.example.com"
+
+
 def test_remote_run_id_persisted(setup_runtime):
     db, lid = prepare(setup_runtime, source="langfuse")
-    lf = MagicMock()
-    lf.api.dataset_run_items.create.return_value.dataset_run_id = "remote-run-id"
-    assert LangfuseOutboxSyncer(db, lf).process_batch() == 1
     with db.get_session() as s:
-        assert s.get(Launch, lid).langfuse_experiment_id == "remote-run-id"
+        launch = s.get(Launch, lid)
+        launch.dataset_name = "banking-agent-regression"
+        launch.dataset_id = "ds-real"
+    lf = FakeLangfuseSDK(
+        dataset_run_id="run-real",
+        runs={("banking-agent-regression", "audit-run"): remote_run("ds-real", "run-real")},
+    )
+    service = make_service(db, lf, DASHBOARD)
+
+    assert LangfuseOutboxSyncer(db, lf, link_service=service).process_batch() == 1
+    with db.get_session() as s:
+        launch = s.get(Launch, lid)
+        assert launch.langfuse_experiment_id == "run-real"
+        assert launch.langfuse_experiment_url == (
+            f"{DASHBOARD}/project/proj-real/datasets/ds-real/runs/run-real"
+        )
+        assert launch.langfuse_sync_status == "SYNCED"
+        assert launch.langfuse_sync_error is None
 
 
 # 3. 关联调用后租约过期，立即停止发送 scores
@@ -160,6 +179,20 @@ def test_old_generation_run_id_does_not_override_launch(setup_runtime):
     with db.get_session() as s:
         launch = s.get(Launch, lid)
         assert launch.langfuse_experiment_id == "new-run-id-gen2"
+
+    # The derived link must describe the current generation run, never the old one.
+    lf = FakeLangfuseSDK(
+        dataset_run_id="new-run-id-gen2",
+        runs={("ds", "audit-run"): remote_run("ds-real", "new-run-id-gen2")},
+    )
+    service = make_service(db, lf, DASHBOARD)
+    assert service.ensure_launch_link(lid).status == "UPDATED"
+    with db.get_session() as s:
+        launch = s.get(Launch, lid)
+        assert launch.langfuse_experiment_url == (
+            f"{DASHBOARD}/project/proj-real/datasets/ds-real/runs/new-run-id-gen2"
+        )
+        assert "old-run-id-gen1" not in (launch.langfuse_experiment_url or "")
 
 
 # 7. 领取与失败写回只对 attempts 计数一次

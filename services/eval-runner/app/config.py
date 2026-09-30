@@ -2,11 +2,50 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
 logger = logging.getLogger(__name__)
+
+# Invisible characters that are never legitimate in a URL or an API key but survive
+# str.strip(): a UTF-8 BOM (U+FEFF) and zero-width / word-joiner marks. They typically
+# arrive by copy-pasting a value out of an editor, and they break strict parsing in ways
+# that are extremely hard to diagnose (a URL just reports a missing scheme; a credential
+# surfaces as an opaque 401 "Invalid credentials").
+INVISIBLE_CHARS = "\u200b\u200c\u200d\u2060\ufeff"
+
+# Kept as an alias: the name predates the credential sanitizer and reads naturally at
+# URL-specific call sites.
+INVISIBLE_URL_CHARS = INVISIBLE_CHARS
+
+
+def sanitize_langfuse_input(value: str | None) -> str | None:
+    """Strip invisible characters and surrounding whitespace; ``None`` when nothing is left.
+
+    This runs at the configuration boundary only. :func:`validate_langfuse_dashboard_url`
+    stays strict so that stored links are never silently rewritten.
+    """
+    if value is None:
+        return None
+    cleaned = "".join(char for char in value.strip() if char not in INVISIBLE_CHARS)
+    return cleaned.strip() or None
+
+
+def sanitize_langfuse_url_input(value: str | None) -> str | None:
+    """Strip characters that can never appear in a legitimate Langfuse URL."""
+    return sanitize_langfuse_input(value)
+
+
+def sanitize_langfuse_credential_input(value: str | None) -> str | None:
+    """Strip characters that can never appear in a legitimate Langfuse API key.
+
+    The SDK reads ``LANGFUSE_PUBLIC_KEY`` / ``LANGFUSE_SECRET_KEY`` straight from the
+    environment and base64-encodes them into the ``Authorization`` header without any
+    normalization, so a stray BOM or a trailing newline turns every API call into a
+    401. Secrets pasted into GitHub Environment variables commonly carry exactly those.
+    """
+    return sanitize_langfuse_input(value)
 
 
 def validate_langfuse_dashboard_url(value: str | None) -> str | None:
@@ -45,12 +84,34 @@ def validate_langfuse_dashboard_url(value: str | None) -> str | None:
 
 def _load_langfuse_dashboard_url() -> str | None:
     configured = os.getenv("ARGUS_LANGFUSE_DASHBOARD_URL")
-    validated = validate_langfuse_dashboard_url(configured)
-    if configured and configured.strip() and validated is None:
+    sanitized = sanitize_langfuse_url_input(configured)
+    if configured and sanitized != configured.strip():
+        logger.warning(
+            "Stripped invisible characters (BOM/zero-width) from ARGUS_LANGFUSE_DASHBOARD_URL."
+        )
+    validated = validate_langfuse_dashboard_url(sanitized)
+    if sanitized and validated is None:
         logger.warning(
             "Ignoring invalid ARGUS_LANGFUSE_DASHBOARD_URL; expected an absolute HTTP(S) URL without credentials, query, or fragment."
         )
     return validated
+
+
+def _load_langfuse_base_url() -> str:
+    """Langfuse API base URL used by the SDK and tracing exporters.
+
+    The SDK performs no normalization of this value, so invisible characters here
+    surface as opaque transport errors instead of configuration errors.
+    """
+    default = "http://langfuse-web:3000"
+    configured = os.getenv("LANGFUSE_BASE_URL")
+    sanitized = sanitize_langfuse_url_input(configured)
+    if configured and sanitized != configured.strip():
+        logger.warning(
+            "Stripped invisible characters (BOM/zero-width) from LANGFUSE_BASE_URL; "
+            "otherwise every Langfuse SDK call fails with a missing-scheme error."
+        )
+    return sanitized or default
 
 
 def find_path(configured_path: str | Path, *subpaths: str) -> Path:
@@ -73,7 +134,7 @@ class Settings:
     database_url: str | None = os.getenv("DATABASE_URL")
     argus_db_mode: str = os.getenv("ARGUS_DB_MODE", "prod")
     argus_auto_import_yaml: bool = os.getenv("ARGUS_AUTO_IMPORT_YAML", "true").lower() in ("true", "1", "yes")
-    langfuse_base_url: str = os.getenv("LANGFUSE_BASE_URL", "http://langfuse-web:3000")
+    langfuse_base_url: str = field(default_factory=_load_langfuse_base_url)
     argus_langfuse_dashboard_url: str | None = _load_langfuse_dashboard_url()
     agent_registry_path: str = os.getenv("AGENT_REGISTRY_PATH", "/app/config/agents.yaml")
     dataset_seed_path: str = os.getenv("DATASET_SEED_PATH", "/app/data/dataset.json")

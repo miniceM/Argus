@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import exists, func, or_, select, update
 
 from .db import DatabaseManager
 from .db_models import (
     ExecutionAttemptRecord,
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
+    LangfuseSyncTaskRecord,
 )
+from .langfuse_links import UPDATED
 from .langfuse_sync import aggregate_launch_sync_status
 from .limiter import DistributedAgentLimiter
 from .metrics import runtime_metrics
@@ -37,6 +40,10 @@ class ExecutionReconciler:
         self.queue = queue
         self.limiter = limiter
         self._lf_provider = langfuse_client
+        # Link backfill scheduling state (in-process only; no migration required).
+        self._link_backoff: dict[str, tuple[float, str]] = {}
+        self._link_backoff_delays: dict[str, int] = {}
+        self._link_cursor: str | None = None
 
     @property
     def langfuse_client(self) -> Any | None:
@@ -411,6 +418,114 @@ class ExecutionReconciler:
                 updated += 1
             except Exception:
                 pass
+        return updated
+
+    # -- Langfuse link backfill -------------------------------------------
+    _LINK_BACKOFF_STEPS = (5.0, 10.0, 20.0, 40.0, 60.0)
+    _LINK_BACKOFF_MAX_ENTRIES = 1024
+
+    def _link_candidate_ids(self, after_id: str | None, limit: int) -> list[str]:
+        """Terminal launches with a persisted run id, or with a current-generation SYNCED
+        task carrying run evidence, and no link yet. Keyset paginated by primary key."""
+        current_gen_task = (
+            select(LangfuseSyncTaskRecord.id)
+            .join(
+                ExperimentItemExecutionRecord,
+                ExperimentItemExecutionRecord.id == LangfuseSyncTaskRecord.item_id,
+            )
+            .where(
+                LangfuseSyncTaskRecord.launch_id == ExperimentLaunchRecord.id,
+                LangfuseSyncTaskRecord.dispatch_generation
+                == ExperimentItemExecutionRecord.dispatch_generation,
+                LangfuseSyncTaskRecord.status == "SYNCED",
+            )
+        )
+        stmt = (
+            select(ExperimentLaunchRecord.id)
+            .where(
+                ExperimentLaunchRecord.status.in_(TERMINAL_LAUNCH_STATUSES),
+                ExperimentLaunchRecord.langfuse_experiment_url.is_(None),
+                or_(
+                    ExperimentLaunchRecord.langfuse_experiment_id.is_not(None),
+                    exists(current_gen_task),
+                ),
+            )
+            .order_by(ExperimentLaunchRecord.id.asc())
+            .limit(limit)
+        )
+        if after_id:
+            stmt = stmt.where(ExperimentLaunchRecord.id > after_id)
+        with self.db_mgr.get_session() as session:
+            return [str(x) for x in session.scalars(stmt).all()]
+
+    def _link_note_failure(self, launch_id: str, signature: str, now: float) -> None:
+        """Escalating 5/10/20/40/60s backoff bound to the current evidence signature."""
+        previous = self._link_backoff.get(launch_id)
+        used = 0
+        if previous is not None and previous[1] == signature:
+            used = self._link_backoff_delays.get(launch_id, 0)
+        delay = self._LINK_BACKOFF_STEPS[min(used, len(self._LINK_BACKOFF_STEPS) - 1)]
+        self._link_backoff_delays[launch_id] = used + 1
+        self._link_backoff[launch_id] = (now + delay, signature)
+        while len(self._link_backoff) > self._LINK_BACKOFF_MAX_ENTRIES:
+            # Evict from both maps: leaving the delay counter behind would grow
+            # `_link_backoff_delays` without bound.
+            evicted = next(iter(self._link_backoff))
+            self._link_backoff.pop(evicted)
+            self._link_backoff_delays.pop(evicted, None)
+
+    def _link_clear(self, launch_id: str) -> None:
+        self._link_backoff.pop(launch_id, None)
+        self._link_backoff_delays.pop(launch_id, None)
+
+    def reconcile_langfuse_links(
+        self,
+        link_service: Any | None = None,
+        *,
+        batch_size: int = 10,
+        budget_seconds: float = 10.0,
+    ) -> int:
+        """Backfills missing Langfuse links for terminal launches. Runs outside the blocking
+        execution recovery cycle and never modifies sync facts, tasks, traces or scores."""
+        if link_service is None:
+            return 0
+
+        deadline = time.monotonic() + float(budget_seconds)
+        cursor = self._link_cursor
+        candidate_ids = self._link_candidate_ids(cursor, batch_size)
+        if not candidate_ids and cursor is not None:
+            # Exhausted this pass: wrap so later launches are never starved.
+            self._link_cursor = None
+            candidate_ids = self._link_candidate_ids(None, batch_size)
+
+        updated = 0
+        for launch_id in candidate_ids:
+            now = time.monotonic()
+            entry = self._link_backoff.get(launch_id)
+            if entry is not None and entry[0] > now:
+                continue
+            # The budget bounds the whole pass. Gating it on `updated > 0` let a batch
+            # where every lookup fails run all sequential remote calls, each with its
+            # own timeout, far beyond the advertised budget.
+            if time.monotonic() >= deadline:
+                break
+            try:
+                result = link_service.ensure_launch_link(launch_id)
+            except Exception:
+                self._link_note_failure(launch_id, "error", time.monotonic())
+                continue
+            status = getattr(result, "status", None)
+            if status == UPDATED:
+                updated += 1
+                self._link_clear(launch_id)
+            elif status == "UNCHANGED":
+                self._link_clear(launch_id)
+            else:
+                self._link_note_failure(
+                    launch_id, f"{status}:{getattr(result, 'run_id', None)}", time.monotonic()
+                )
+
+        self._link_cursor = candidate_ids[-1] if len(candidate_ids) >= batch_size else None
         return updated
 
     def reconcile_launch_states(self) -> int:

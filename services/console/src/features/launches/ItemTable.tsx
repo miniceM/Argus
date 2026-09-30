@@ -5,6 +5,7 @@ import { QualityBadge } from "../../components/QualityBadge";
 import { Button, Panel } from "../../components/ui/Primitives";
 import { AttemptDrawer } from "./AttemptDrawer";
 import { EvaluationResultList } from "./EvaluationResultList";
+import type { QualityEvaluation } from "./qualityDecision";
 import type { EvaluationResult } from "./evaluationResults";
 import { frozenFailureRecovery, isFrozenIdentityFailure } from "./frozenIdentity";
 
@@ -14,12 +15,31 @@ interface ItemTableProps {
   items: ItemExecution[];
 }
 
+/**
+ * Issue #83 — a one-line reason for the row: which rules decided it, and
+ * whether the cause was a real violation or missing evidence.
+ */
+const ruleSummary = (evaluation: QualityEvaluation): string => {
+  const rules = evaluation.rules ?? [];
+  if (rules.length === 0) return "无逐条判定记录";
+  const conclusion = (evaluation.conclusion || "unknown").toLowerCase();
+  const named = (rule: { evaluator_id: string; required?: boolean }) =>
+    `${rule.evaluator_id}${rule.required === false ? "（可选）" : ""}`;
+  if (conclusion === "unknown") {
+    const missing = rules.filter((r) => (r.conclusion || "").toLowerCase() === "unknown");
+    return `证据不足：${missing.map(named).join("、") || "必要规则"}`;
+  }
+  const violated = rules.filter((r) => (r.conclusion || "").toLowerCase() === "fail");
+  return `违反规则：${violated.map(named).join("、")}`;
+};
+
 export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
   const [selectedItem, setSelectedItem] = useState<{
     id: string;
     caseId: string;
     evaluationResults?: EvaluationResult[] | null;
     traceUrl?: string | null;
+    qualityEvaluation?: QualityEvaluation | null;
   } | null>(null);
   const [filterQuality, setFilterQuality] = useState<string>("ALL");
 
@@ -28,6 +48,7 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
     const st = item.execution_status?.toLowerCase();
     if (filterQuality === "PASS") return q === "pass";
     if (filterQuality === "FAIL") return q === "fail";
+    if (filterQuality === "UNKNOWN") return q === "unknown";
     if (filterQuality === "FAILED") return st === "failed" || st === "timed_out";
     if (filterQuality === "RETRY_WAIT") return st === "retry_wait";
     if (filterQuality === "CANCELLED") return st === "cancelled";
@@ -80,6 +101,17 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
             className="min-h-7 px-2.5 py-1 text-xs"
           >
             未通过 ({items.filter((i) => i.quality_conclusion?.toLowerCase() === "fail").length})
+          </Button>
+          {/* Issue #83: 证据不足 is its own bucket. Hiding it inside 未通过 would
+              turn "we could not tell" into "the agent failed the requirement". */}
+          <Button
+            type="button"
+            variant={filterQuality === "UNKNOWN" ? "primary" : "secondary"}
+            aria-pressed={filterQuality === "UNKNOWN"}
+            onClick={() => setFilterQuality("UNKNOWN")}
+            className="min-h-7 px-2.5 py-1 text-xs"
+          >
+            证据不足 ({items.filter((i) => (i.quality_conclusion || "unknown").toLowerCase() === "unknown").length})
           </Button>
           {failedCount > 0 && (
             <Button
@@ -174,6 +206,17 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
 
                     <td className="px-5 py-3.5">
                       <QualityBadge quality={item.quality_conclusion} />
+                      {/* Issue #83: name the cause in the row itself, so a
+                          证据不足 case is never read as a plain 不通过. */}
+                      {item.quality_evaluation &&
+                        (item.quality_conclusion || "unknown").toLowerCase() !== "pass" && (
+                          <p
+                            className="text-micro text-muted-foreground mt-0.5 max-w-56"
+                            data-testid={`quality-summary-${item.dataset_item_id}`}
+                          >
+                            {ruleSummary(item.quality_evaluation as QualityEvaluation)}
+                          </p>
+                        )}
                     </td>
 
                     <td className="px-5 py-3.5">
@@ -233,6 +276,7 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
                           evaluationResults:
                             (item.evaluation_results as EvaluationResult[] | undefined) ?? null,
                           traceUrl: item.langfuse_trace_url ?? null,
+                          qualityEvaluation: (item.quality_evaluation as QualityEvaluation | undefined) ?? null,
                         })
                         }
                         className="min-h-7 px-2.5 py-1 text-xs font-mono"
@@ -254,6 +298,7 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
                           evaluationResults:
                             (item.evaluation_results as EvaluationResult[] | undefined) ?? null,
                           traceUrl: item.langfuse_trace_url ?? null,
+                          qualityEvaluation: (item.quality_evaluation as QualityEvaluation | undefined) ?? null,
                         })
                         }
                         className="min-h-7 px-2 text-xs"
@@ -277,6 +322,7 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
         caseId={selectedItem?.caseId || null}
         evaluationResults={selectedItem?.evaluationResults}
         traceUrl={selectedItem?.traceUrl}
+        qualityEvaluation={selectedItem?.qualityEvaluation}
       />
     </div>
   );

@@ -25,12 +25,19 @@ test.describe("Real API Acceptance E2E (Zero Mock)", () => {
     await page.goto("/launches/new");
     await expect(page.getByRole("heading", { name: /发起新评测任务/ })).toBeVisible();
 
-    // Verify real Evaluators loaded from GET /api/v1/evaluators
-    await expect(page.getByText("intent_match", { exact: true })).toBeVisible();
-    await expect(page.getByText("run_pass_rate", { exact: true })).toBeVisible();
-    await expect(page.getByRole("radio", { name: /逐项诊断/ })).toBeChecked();
-    await expect(page.getByRole("radio", { name: /复合结论/ })).toBeEnabled();
+    // Verify real Evaluators loaded from GET /api/v1/evaluators. The metric id
+    // also appears on its quality rule, so scope to the catalog.
+    const catalog = page.getByTestId("evaluator-catalog");
+    await expect(catalog.getByText("intent_match", { exact: true })).toBeVisible();
+    await expect(catalog.getByText("run_pass_rate", { exact: true })).toBeVisible();
+    // Issue #83: no composite conclusion mode, and a policy is configured here.
+    await expect(page.getByRole("radio", { name: /逐项诊断/ })).toHaveCount(0);
+    await expect(page.getByRole("radio", { name: /复合结论/ })).toHaveCount(0);
     await expect(page.getByText("已选 4 项")).toBeVisible();
+    await expect(page.getByTestId("quality-policy-editor")).toBeVisible();
+    for (const id of ["escalation_match", "intent_match", "pii_safe", "required_tool_match"]) {
+      await expect(page.getByTestId(`quality-rule-${id}`)).toBeVisible();
+    }
 
     // Critical Invariant: run_pass_rate (run scope) must be disabled and not selected!
     await expect(page.getByText(/派生运行指标，不能作为用例指标选择/).first()).toBeVisible();
@@ -39,8 +46,9 @@ test.describe("Real API Acceptance E2E (Zero Mock)", () => {
     const customName = `real-e2e-${Date.now()}`;
     await page.getByPlaceholder("例如：release-v1.0-benchmark").fill(customName);
 
-    // Concurrency adjustment
-    await page.getByRole("spinbutton").fill("2");
+    // Concurrency adjustment. #83 adds one numeric rule input per metric, so
+    // the concurrency spinner is addressed by its own label.
+    await page.getByLabel("最大并发执行数 (Concurrency)").fill("2");
 
     // 4. Submit Launch Creation to Real Backend (POST /api/v1/experiment-launches)
     await page.getByRole("button", { name: /创建评测任务/ }).click();
@@ -65,7 +73,7 @@ test.describe("Real API Acceptance E2E (Zero Mock)", () => {
     await expect(page.getByText("intent_match").first()).toBeVisible();
     await expect(page.getByText("3. 评测门禁指标 (4)")).toBeVisible();
     for (const id of ["escalation_match", "intent_match", "pii_safe", "required_tool_match"]) {
-      await expect(page.getByText(id, { exact: true })).toBeVisible();
+      await expect(page.getByText(id, { exact: true }).first()).toBeVisible();
     }
     await expect(page.getByText("overall_pass", { exact: true })).toHaveCount(0);
 

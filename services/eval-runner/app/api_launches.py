@@ -20,7 +20,6 @@ from .evaluation_result_store import persist_typed_results, result_to_payload
 from .evaluator_binding import evaluate_frozen_item
 from .evaluators import EvaluatorSelectionError
 from .executor import RemoteAgentExecutor
-from .quality_policy import QualityPolicyError
 from .models import (
     EvaluationResultResponse,
     ExecutionAttemptResponse,
@@ -33,6 +32,7 @@ from .models import (
     RetryFailedRequest,
 )
 from .orchestrator import LaunchOrchestrator
+from .quality_policy import QualityPolicyError
 from .registry import AgentRegistry, AgentVersionSpec, map_request
 from .state_machine import DomainConflictError
 

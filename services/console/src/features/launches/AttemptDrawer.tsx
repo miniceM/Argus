@@ -7,6 +7,7 @@ import { formatApiError } from "../../api/errors";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { SideDrawer } from "../../components/ui/Overlay";
 import { EvaluationResultPanel } from "./EvaluationResultList";
+import { QualityRulePanel, type QualityEvaluation } from "./qualityDecision";
 import type { EvaluationResult } from "./evaluationResults";
 
 type ExecutionAttempt = import("../../api/schema").components["schemas"]["ExecutionAttemptResponse"];
@@ -19,6 +20,8 @@ interface AttemptDrawerProps {
   /** Issue #82: the typed results of this case, rendered above the timeline. */
   evaluationResults?: EvaluationResult[] | null;
   traceUrl?: string | null;
+  /** Issue #83: the per-rule reasons behind this case's quality conclusion. */
+  qualityEvaluation?: QualityEvaluation | null;
 }
 
 export const AttemptDrawer: React.FC<AttemptDrawerProps> = ({
@@ -28,6 +31,7 @@ export const AttemptDrawer: React.FC<AttemptDrawerProps> = ({
   caseId,
   evaluationResults,
   traceUrl,
+  qualityEvaluation,
 }) => {
   const { data: attempts, isLoading, error } = useQuery<ExecutionAttempt[]>({
     queryKey: queryKeys.launches.attempts(itemExecutionId || ""),
@@ -69,6 +73,10 @@ export const AttemptDrawer: React.FC<AttemptDrawerProps> = ({
       icon={<Layers aria-hidden="true" className="w-4 h-4 text-primary" />}
     >
       <div className="p-6 space-y-6">
+          {/* Issue #83: why this case concluded PASS / FAIL / UNKNOWN. */}
+          <div className="ui-panel p-4" data-testid="quality-decision-panel">
+            <QualityRulePanel evaluation={qualityEvaluation} />
+          </div>
           <EvaluationResultPanel results={evaluationResults} traceUrl={traceUrl} />
           {isLoading && <LoadingState message="正在加载 Attempt 历史调用记录..." />}
           {error && <ErrorState message={formatApiError(error)} />}

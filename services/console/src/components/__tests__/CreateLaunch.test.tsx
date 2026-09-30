@@ -115,21 +115,28 @@ describe("CreateLaunch Evaluator selection", () => {
     renderCreateLaunch();
 
     await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
-    expect(screen.getByRole("radio", { name: /逐项诊断/ })).toBeChecked();
-    expect(screen.getByRole("radio", { name: /复合结论/ })).not.toBeChecked();
     for (const id of baselineIds) {
-      expect(screen.getByRole("checkbox", { name: new RegExp(id) })).toBeChecked();
+      expect(screen.getByTestId(`evaluator-toggle-${id}`)).toBeChecked();
     }
-    expect(screen.getByRole("radio", { name: /复合结论/ })).not.toBeChecked();
-    expect(screen.getByRole("checkbox", { name: /run_pass_rate/ })).toBeDisabled();
+    expect(screen.getByTestId("evaluator-toggle-run_pass_rate")).toBeDisabled();
     expect(screen.getByText(/执行成功不等于质量通过/)).toBeInTheDocument();
+  });
+
+  // Issue #83: creating a Launch no longer depends on the composite overall_pass
+  // metric, so there is no composite mode to switch to any more.
+  it("offers no composite conclusion mode and hides the composite metric", async () => {
+    renderCreateLaunch();
+    await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
+
+    expect(screen.queryByRole("radio", { name: /复合结论/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /overall_pass/ })).not.toBeInTheDocument();
   });
 
   it("toggles an evaluator with Enter without submitting the launch form", async () => {
     renderCreateLaunch();
     await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
 
-    const checkbox = screen.getByRole("checkbox", { name: /escalation_match/ });
+    const checkbox = screen.getByTestId("evaluator-toggle-escalation_match");
     fireEvent.keyDown(checkbox, { key: "Enter", code: "Enter" });
 
     expect(checkbox).not.toBeChecked();
@@ -146,20 +153,19 @@ describe("CreateLaunch Evaluator selection", () => {
     expect(api.POST).not.toHaveBeenCalled();
   });
 
-  it("switches exclusively between diagnostic and composite results", async () => {
+  it("keeps each diagnostic metric independently selectable", async () => {
     renderCreateLaunch();
     await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("radio", { name: /复合结论/ }));
-    expect(screen.getByText("已选 1 项")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /复合结论/ })).toBeChecked();
     for (const id of baselineIds) {
-      expect(screen.queryByRole("checkbox", { name: id })).not.toBeInTheDocument();
+      expect(screen.getByTestId(`evaluator-toggle-${id}`)).toBeInTheDocument();
     }
 
-    fireEvent.click(screen.getByRole("radio", { name: /逐项诊断/ }));
+    fireEvent.click(screen.getByTestId("evaluator-toggle-intent_match"));
+    expect(screen.getByText("已选 3 项")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("evaluator-toggle-intent_match"));
     expect(screen.getByText("已选 4 项")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /复合结论/ })).not.toBeChecked();
   });
 
   it("preserves an empty selection and blocks submission instead of selecting everything again", async () => {
@@ -167,7 +173,7 @@ describe("CreateLaunch Evaluator selection", () => {
     await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
 
     for (const id of baselineIds) {
-      fireEvent.click(screen.getByRole("checkbox", { name: new RegExp(id) }));
+      fireEvent.click(screen.getByTestId(`evaluator-toggle-${id}`));
     }
     await waitFor(() => expect(screen.getByText("已选 0 项")).toBeInTheDocument());
     expect(screen.getByText("已选 0 项")).toBeInTheDocument();
@@ -177,13 +183,14 @@ describe("CreateLaunch Evaluator selection", () => {
     expect(api.POST).not.toHaveBeenCalled();
   });
 
-  it("submits only overall_pass in composite mode", async () => {
+  it("submits the confirmed quality policy rules, never the composite metric", async () => {
     vi.mocked(api.POST).mockResolvedValue({ data: { id: "launch-created-1", status: "PENDING" } } as never);
     renderCreateLaunch();
     await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("radio", { name: /复合结论/ }));
-    fireEvent.click(screen.getByRole("button", { name: /创建评测任务/ }));
+    const submit = screen.getByRole("button", { name: /创建评测任务/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
 
     await waitFor(() => {
       expect(api.POST).toHaveBeenCalledWith("/api/v1/experiment-launches", {
@@ -191,7 +198,20 @@ describe("CreateLaunch Evaluator selection", () => {
           agent_id: "agent-1",
           agent_version: "v1",
           // Issue #80: the exact user-confirmed version is submitted.
-          evaluator_selections: [{ id: "overall_pass", version: "1.0.0" }],
+          evaluator_selections: baselineIds.map((id) => ({ id, version: "1.0.0" })),
+          // Issue #83: one explicit rule per selected metric, all required.
+          quality_policy: {
+            rules: baselineIds.map((id) => ({
+              evaluator_id: id,
+              operator: ">=",
+              threshold: 1,
+              expected_value: null,
+              result_type: "numeric",
+              required: true,
+              critical: false,
+              note: null,
+            })),
+          },
         }),
       });
     });
@@ -202,7 +222,7 @@ describe("CreateLaunch Evaluator selection", () => {
     renderCreateLaunch();
     await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /intent_match/ }));
+    fireEvent.click(screen.getByTestId("evaluator-toggle-intent_match"));
     fireEvent.click(screen.getByRole("button", { name: /创建评测任务/ }));
 
     await waitFor(() => {
@@ -238,15 +258,15 @@ describe("CreateLaunch Evaluator selection", () => {
     renderCreateLaunch();
 
     await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
-    expect(screen.getByRole("checkbox", { name: /new_quality_check/ })).not.toBeChecked();
+    expect(screen.getByTestId("evaluator-toggle-new_quality_check")).not.toBeChecked();
   });
 
   it("requires re-selection when a selected evaluator disappears from a refreshed catalog", async () => {
     const { queryClient } = renderCreateLaunch();
     await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("radio", { name: /复合结论/ }));
 
-    queryClient.setQueryData(queryKeys.evaluators.list(), evaluators.filter((e) => e.id !== "overall_pass"));
+    // The pinned metric disappears from a refreshed catalog.
+    queryClient.setQueryData(queryKeys.evaluators.list(), evaluators.filter((e) => e.id !== "escalation_match"));
 
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent("当前评测指标版本不可用")
@@ -255,7 +275,9 @@ describe("CreateLaunch Evaluator selection", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "重新选择当前可用的默认指标版本" }));
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
-    expect(screen.getByText("已选 4 项")).toBeInTheDocument();
+    // Recovery re-seeds from the refreshed catalog, which no longer offers the
+    // vanished metric; nothing is silently resurrected.
+    expect(screen.getByText("已选 3 项")).toBeInTheDocument();
   });
 });
 
@@ -363,9 +385,9 @@ describe("CreateLaunch exact Evaluator version selection (Issue #80)", () => {
     renderCreateLaunch();
 
     await waitFor(() => expect(screen.getByText("不可用于发布评测")).toBeInTheDocument());
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "该版本由 Langfuse 在线执行，无法作为发布评测证据。"
-    );
+    expect(
+      screen.getByText("该版本由 Langfuse 在线执行，无法作为发布评测证据。"),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /创建评测任务/ })).toBeDisabled();
     expect(api.POST).not.toHaveBeenCalled();
   });
@@ -383,8 +405,184 @@ describe("CreateLaunch exact Evaluator version selection (Issue #80)", () => {
     ]);
 
     await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent("版本 1.0.0 已不在当前目录中")
+      expect(screen.getByText(/版本 1\.0\.0 已不在当前目录中/)).toBeInTheDocument()
     );
     expect(screen.getByRole("button", { name: /创建评测任务/ })).toBeDisabled();
+  });
+});
+
+describe("CreateLaunch quality policy editor (Issue #83)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupApiMocks();
+  });
+  afterEach(() => cleanup());
+
+  it("seeds one rule per selected metric from the frozen direction and threshold", async () => {
+    renderCreateLaunch();
+    await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
+
+    const editor = await screen.findByTestId("quality-policy-editor");
+    for (const id of baselineIds) {
+      expect(screen.getByTestId(`quality-rule-${id}`)).toBeInTheDocument();
+    }
+    expect(editor).toBeInTheDocument();
+    // The fixture direction is higher_is_better with threshold 1.0.
+    expect(screen.getByLabelText("intent_match 判定运算符")).toHaveValue(">=");
+    expect(screen.getByLabelText("intent_match 阈值")).toHaveValue(1);
+  });
+
+  it("blocks submission and explains a rule whose threshold was cleared", async () => {
+    vi.mocked(api.POST).mockResolvedValue({ data: { id: "launch-x", status: "PENDING" } } as never);
+    renderCreateLaunch();
+    await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
+    await screen.findByTestId("quality-policy-editor");
+
+    fireEvent.change(screen.getByLabelText("intent_match 阈值"), { target: { value: "" } });
+
+    expect(await screen.findByText(/数值规则必须填写一个有限数值阈值/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /创建评测任务/ })).toBeDisabled();
+    expect(api.POST).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-numeric threshold before sending the request", async () => {
+    renderCreateLaunch();
+    await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
+    await screen.findByTestId("quality-policy-editor");
+
+    fireEvent.change(screen.getByLabelText("pii_safe 阈值"), { target: { value: "abc" } });
+
+    expect(await screen.findByText(/数值规则必须填写一个有限数值阈值/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /创建评测任务/ })).toBeDisabled();
+  });
+
+  it("submits a lowered threshold as the confirmed policy", async () => {
+    vi.mocked(api.POST).mockResolvedValue({ data: { id: "launch-y", status: "PENDING" } } as never);
+    renderCreateLaunch();
+    await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
+    await screen.findByTestId("quality-policy-editor");
+
+    fireEvent.change(screen.getByLabelText("escalation_match 阈值"), { target: { value: "0.9" } });
+
+    const submit = screen.getByRole("button", { name: /创建评测任务/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledWith("/api/v1/experiment-launches", {
+        body: expect.objectContaining({
+          quality_policy: {
+            rules: expect.arrayContaining([
+              expect.objectContaining({ evaluator_id: "escalation_match", operator: ">=", threshold: 0.9 }),
+            ]),
+          },
+        }),
+      });
+    });
+  });
+
+  // Dropping a metric from the policy must also drop it from the submitted
+  // rules, otherwise the server would reject the unknown evaluator reference.
+  it("drops the rule of a deselected metric", async () => {
+    vi.mocked(api.POST).mockResolvedValue({ data: { id: "launch-z", status: "PENDING" } } as never);
+    renderCreateLaunch();
+    await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
+    await screen.findByTestId("quality-policy-editor");
+
+    fireEvent.click(screen.getByTestId("evaluator-toggle-intent_match"));
+    await waitFor(() => expect(screen.queryByTestId("quality-rule-intent_match")).not.toBeInTheDocument());
+
+    const submit = screen.getByRole("button", { name: /创建评测任务/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(api.POST).toHaveBeenCalled());
+    const [, request] = vi.mocked(api.POST).mock.calls[0] as [string, { body: { quality_policy: { rules: Array<{ evaluator_id: string }> } } }];
+    expect(request.body.quality_policy.rules.map((rule) => rule.evaluator_id)).not.toContain("intent_match");
+    expect(request.body.quality_policy.rules.map((rule) => rule.evaluator_id)).toEqual([
+      "escalation_match",
+      "pii_safe",
+      "required_tool_match",
+    ]);
+  });
+
+  it("refuses to decide quality when every rule is optional", async () => {
+    renderCreateLaunch();
+    await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
+    await screen.findByTestId("quality-policy-editor");
+
+    for (const id of baselineIds) {
+      fireEvent.click(screen.getByTestId(`quality-rule-required-${id}`));
+    }
+
+    expect(
+      await screen.findByText(/质量策略至少需要一条参与判定的必要规则/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /创建评测任务/ })).toBeDisabled();
+  });
+
+  it("shows text metrics as evidence only, never as a rule", async () => {
+    vi.mocked(api.GET).mockImplementation((path: string) => {
+      if (path === "/api/v1/evaluators") {
+        return Promise.resolve({
+          data: [
+            itemEvaluator("intent_match", "intent diagnostic"),
+            itemEvaluator("transcript", "free text", {
+              default_selected: true,
+              result_type: "text",
+              versions: [version("1.0.0", { result_type: "text" })],
+            }),
+          ],
+        }) as never;
+      }
+      if (path === "/api/v1/agents") {
+        return Promise.resolve({ data: [{ id: "agent-1", name: "Agent One" }] }) as never;
+      }
+      if (path === "/api/v1/agent-versions") {
+        return Promise.resolve({ data: [{ id: "ver-1", agent_id: "agent-1", version: "v1", is_active: true }] }) as never;
+      }
+      return Promise.resolve({ data: [] }) as never;
+    });
+    renderCreateLaunch();
+    await waitFor(() => expect(screen.getByText("已选 2 项")).toBeInTheDocument());
+
+    expect(await screen.findByText(/该指标返回文本，只能作为证据展示/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("transcript 判定运算符")).not.toBeInTheDocument();
+    // A text metric can never be the only rule, so the form stays blocked.
+    fireEvent.click(screen.getByTestId("evaluator-toggle-intent_match"));
+    await waitFor(() =>
+      expect(screen.getByText(/质量策略至少需要一条参与判定的必要规则/)).toBeInTheDocument(),
+    );
+  });
+
+  it("requires an explicit typed match for a boolean metric", async () => {
+    vi.mocked(api.GET).mockImplementation((path: string) => {
+      if (path === "/api/v1/evaluators") {
+        return Promise.resolve({
+          data: [
+            itemEvaluator("pii_safe", "boolean diagnostic", {
+              result_type: "boolean",
+              versions: [version("1.0.0", { result_type: "boolean" })],
+            }),
+          ],
+        }) as never;
+      }
+      if (path === "/api/v1/agents") {
+        return Promise.resolve({ data: [{ id: "agent-1", name: "Agent One" }] }) as never;
+      }
+      if (path === "/api/v1/agent-versions") {
+        return Promise.resolve({ data: [{ id: "ver-1", agent_id: "agent-1", version: "v1", is_active: true }] }) as never;
+      }
+      return Promise.resolve({ data: [] }) as never;
+    });
+    renderCreateLaunch();
+    await waitFor(() => expect(screen.getByText("已选 1 项")).toBeInTheDocument());
+
+    // The seeded boolean rule has no value yet, so the policy is not decidable.
+    expect(await screen.findByText(/布尔规则必须显式选择期望取值/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /创建评测任务/ })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("pii_safe 期望取值"), { target: { value: "true" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: /创建评测任务/ })).toBeEnabled());
   });
 });

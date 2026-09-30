@@ -480,11 +480,20 @@ describe("Issue #45 quality pass rate wording", () => {
     renderDetail(launch, items);
 
     const metric = await screen.findByTestId("quality-pass-rate");
-    expect(metric).toHaveTextContent("质量通过率 (Quality Pass Rate)");
-    expect(metric).toHaveTextContent("统计范围：全部用例");
-    expect(metric).toHaveTextContent("2");
-    expect(metric).toHaveTextContent("6");
-    expect(metric).toHaveTextContent("(33.3%)");
+    // Issue #83: the top cell reports the three-way decision split, not a
+    // single ratio that would let a 100% case hide the UNKNOWN ones.
+    expect(metric).toHaveTextContent("质量判定汇总 (Quality Decision Summary)");
+    expect(metric).toHaveTextContent("PASS 2");
+    expect(metric).toHaveTextContent("FAIL 4");
+    expect(metric).toHaveTextContent("UNKNOWN 0");
+    expect(metric).toHaveTextContent("已判定通过率：33.3%");
+    expect(metric).toHaveTextContent("判定覆盖率：100.0%");
+
+    // The all-cases ratio keeps its own denominator and says so.
+    const allCases = await screen.findByTestId("quality-all-cases-ratio");
+    expect(allCases).toHaveTextContent("2 / 6");
+    expect(allCases).toHaveTextContent("(33.3%)");
+    expect(allCases).toHaveTextContent("含 UNKNOWN");
 
     // Execution and quality conclusions stay separate, never derived from the ratio.
     // The launch header renders above the per-item table, so the first badge of
@@ -503,11 +512,13 @@ describe("Issue #45 quality pass rate wording", () => {
     // The ambiguous legacy label is gone.
     expect(screen.queryByText("用例通过率 (Pass Rate)")).not.toBeInTheDocument();
 
-    // The denominator rules are stated in always-visible help text.
+    // The denominator rules are stated in always-visible help text, for both
+    // the decided rate and the all-cases ratio (Issue #83).
     const help = screen.getByTestId("quality-pass-rate-help");
-    expect(help).toHaveTextContent("分母为当前返回的全部用例数");
-    expect(help).toHaveTextContent("仍计入分母，但不计入分子");
-    expect(help).toHaveTextContent("不代表质量结论为 FAIL");
+    expect(help).toHaveTextContent("PASS / FAIL / UNKNOWN");
+    expect(help).toHaveTextContent("UNKNOWN 表示证据不足");
+    expect(help).toHaveTextContent("分母只含有明确结论的用例");
+    expect(help).toHaveTextContent("分母包含全部用例");
     expect(help).toHaveTextContent("不是执行成功率");
   });
 
@@ -541,12 +552,19 @@ describe("Issue #45 quality pass rate wording", () => {
 
     renderDetail(launch, items);
 
+    // 1 PASS + 1 FAIL are decided; the two UNKNOWN items have no verdict, so
+    // they leave the decided denominator but stay visible as UNKNOWN 2. The
+    // all-cases ratio still counts them: 1/4 = 25.0%.
     const metric = await screen.findByTestId("quality-pass-rate");
-    // 1 of 4: the two UNKNOWN items stay in the denominator, which is what the
-    // top-of-page metric has always meant. The comparable-cohort pass_rate in
-    // the comparison report is a different, narrower denominator.
-    expect(metric).toHaveTextContent("(25.0%)");
-    expect(metric).toHaveTextContent("统计范围：全部用例");
+    expect(metric).toHaveTextContent("PASS 1");
+    expect(metric).toHaveTextContent("FAIL 1");
+    expect(metric).toHaveTextContent("UNKNOWN 2");
+    expect(metric).toHaveTextContent("已判定通过率：50.0%");
+    expect(metric).toHaveTextContent("判定覆盖率：50.0%");
+
+    const allCases = await screen.findByTestId("quality-all-cases-ratio");
+    expect(allCases).toHaveTextContent("1 / 4");
+    expect(allCases).toHaveTextContent("(25.0%)");
   });
 
   it("renders 0/N and keeps the quality conclusion UNKNOWN when every item is UNKNOWN", async () => {
@@ -579,9 +597,15 @@ describe("Issue #45 quality pass rate wording", () => {
 
     renderDetail(launch, items);
 
+    // Nothing was decided, so the decided pass rate has no denominator at all
+    // and renders as "—" instead of a fabricated 0%.
     const metric = await screen.findByTestId("quality-pass-rate");
-    expect(metric).toHaveTextContent("(0.0%)");
-    expect(metric).toHaveTextContent("统计范围：全部用例");
+    expect(metric).toHaveTextContent("UNKNOWN 3");
+    expect(screen.getByTestId("decided-pass-rate")).toHaveTextContent("—");
+
+    const allCases = await screen.findByTestId("quality-all-cases-ratio");
+    expect(allCases).toHaveTextContent("0 / 3");
+    expect(allCases).toHaveTextContent("(0.0%)");
     // The badge is not rewritten into FAIL just because the numerator is zero.
     expect(screen.getAllByTestId("quality-badge")[0]).toHaveTextContent("UNKNOWN");
   });
@@ -616,9 +640,17 @@ describe("Issue #45 quality pass rate wording", () => {
 
     renderDetail(launch, items);
 
+    // Three of the four items are PASS once case-folded: 3 PASS + 1 FAIL, so
+    // the decided rate is 3/4 = 75.0% and coverage is 100%.
     const metric = await screen.findByTestId("quality-pass-rate");
-    // Three of the four items are PASS once case-folded: 3/4 = 75.0%.
-    expect(metric).toHaveTextContent("(75.0%)");
+    expect(metric).toHaveTextContent("PASS 3");
+    expect(metric).toHaveTextContent("FAIL 1");
+    expect(metric).toHaveTextContent("UNKNOWN 0");
+    expect(metric).toHaveTextContent("已判定通过率：75.0%");
+
+    const allCases = await screen.findByTestId("quality-all-cases-ratio");
+    expect(allCases).toHaveTextContent("3 / 4");
+    expect(allCases).toHaveTextContent("(75.0%)");
   });
 
   it("keeps cancelled, timed-out and skipped items in the denominator", async () => {
@@ -651,9 +683,15 @@ describe("Issue #45 quality pass rate wording", () => {
 
     renderDetail(launch, items);
 
+    // Each terminal execution state that never reached a comparable quality
+    // verdict is reported as UNKNOWN, and still consumes all-cases denominator.
     const metric = await screen.findByTestId("quality-pass-rate");
-    expect(metric).toHaveTextContent("(25.0%)");
-    expect(metric).toHaveTextContent("统计范围：全部用例");
+    expect(metric).toHaveTextContent("UNKNOWN 2");
+    expect(metric).toHaveTextContent("判定覆盖率：50.0%");
+
+    const allCases = await screen.findByTestId("quality-all-cases-ratio");
+    expect(allCases).toHaveTextContent("1 / 4");
+    expect(allCases).toHaveTextContent("(25.0%)");
   });
 
   it("renders an explicit empty state instead of a fabricated ratio when no items exist", async () => {
@@ -681,9 +719,15 @@ describe("Issue #45 quality pass rate wording", () => {
     renderDetail(launch, []);
 
     const metric = await screen.findByTestId("quality-pass-rate");
-    expect(metric).toHaveTextContent("尚未统计");
     expect(metric).not.toHaveTextContent("NaN");
     expect(metric).not.toHaveTextContent("Infinity");
+    // Nothing decided yet: both ratios render an explicit placeholder.
+    expect(screen.getByTestId("decided-pass-rate")).toHaveTextContent("—");
+    expect(screen.getByTestId("decision-coverage")).toHaveTextContent("—");
+
+    const allCases = await screen.findByTestId("quality-all-cases-ratio");
+    expect(allCases).toHaveTextContent("尚未统计");
+    expect(allCases).not.toHaveTextContent("NaN");
   });
 
   it("keeps the unavailable state when the Items request fails", async () => {

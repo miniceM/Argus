@@ -390,6 +390,57 @@ Manifest 的 `evaluators[]` 在 schema 1.2 起不再是「id + version」，而�
 
 内置确定性 Provider（非默认选择，不影响 Demo 基线）覆盖其余类型：`answer_present`（boolean）、`resolution_bucket`（有序 categorical）、`answer_excerpt`（text）。
 
+#### 8.3.3 独立质量策略（QualityPolicy）
+
+质量结论**不再**由内建复合指标 `overall_pass` 决定。创建 Launch 时用户逐指标确认一条 `QualityRule`，整组规则作为不可变策略冻结进 Manifest：
+
+```json
+{
+  "quality_policy": {
+    "policy_id": "custom",
+    "version": "1.0",
+    "schema_version": "1.0",
+    "unknown_handling": "unknown_not_releasable",
+    "policy_digest": "sha256:…",
+    "rules": [
+      { "evaluator_id": "intent_match", "operator": ">=", "threshold": 0.8, "result_type": "numeric", "required": true, "critical": false },
+      { "evaluator_id": "call_cost",   "operator": "<=", "threshold": 0.2, "result_type": "numeric", "required": true, "critical": false },
+      { "evaluator_id": "pii_safe",    "operator": "==", "expected_value": true, "result_type": "boolean", "required": true, "critical": true }
+    ]
+  }
+}
+```
+
+规则语义（服务端 `quality_policy.py` 为唯一事实来源，Console 侧 `qualityPolicy.ts` 为同构镜像）：
+
+| result_type | 允许运算符 | 取值 | 缺失时 |
+|---|---|---|---|
+| `numeric` | `>=` / `<=` | `threshold`（有限数值） | 证据不足 |
+| `boolean` | `==` | `expected_value`（**显式** `true` / `false`） | 证据不足 |
+| `categorical` | `==` | `expected_value`（须落在冻结 `category_values`） | 证据不足 |
+| `text` | 无 | — | 只能作为证据，永不参与判定 |
+
+结论真值表（`evaluate_quality_policy`）：
+
+```text
+任一必要规则证据不足（缺失 / failed / skipped / 无结果）
+    → UNKNOWN           # 证据不足优先，已知违规仍逐条记录
+否则任一必要规则违规
+    → FAIL
+否则
+    → PASS
+```
+
+约束（与 Issue #83 验收对应）：
+
+- **不通过 ≠ 证据不足**：Agent 执行失败、评测未产出、必要指标缺失一律 `UNKNOWN`，不记为 `FAIL`。
+- 非法规则在**创建时**即拒绝（`QUALITY_POLICY_*` 稳定错误码 + 中文恢复提示），Launch 不可能冻结出无法判定的策略。
+- **可选诊断规则**违规不改变整体结论，只在明细中呈现，便于定位。
+- 每条用例持久化 `quality_evaluation`（`QualityDecision`），含逐条 `RuleEvaluation`（期望条件、实测值、结论、`reason_code`、自然语言 `explanation`）。
+- Manifest 同时写入 `measurement_digest`：**只**覆盖测量口径（指标版本、结果类型、契约），不含阈值与判定方向，因此**只改策略不会让测量摘要漂移**（供 #86 分层摘要使用）。
+- 历史 Manifest 未冻结策略时回落到 `legacy_quality_policy`（复现 #83 之前的 `>=` 阈值语义），并在 `decided_by` 标记 `LEGACY_MANIFEST_POLICY`；Console 显示为"历史契约"，不展示空的规则列表。
+- Console 顶部不再输出单一"质量通过率"，改为 **PASS / FAIL / UNKNOWN 三个计数** + `已判定通过率 = PASS/(PASS+FAIL)` + `判定覆盖率 = (PASS+FAIL)/total`；分母为 0 时渲染 `—` 而非伪造 0%。全用例 PASS 占比单独展示并标注分母含 UNKNOWN。
+
 ### 8.4 ExperimentItemExecution
 
 表示单个 Dataset Item 的执行状态：
@@ -851,6 +902,11 @@ Release Gate 必须同时考虑：
 - Judge uncertainty。
 
 不能仅比较平均分。
+
+门禁判定必须 **fail-closed**（§8.3.3）：`unknown_handling` 默认为 `unknown_not_releasable`，
+因此**证据不足的用例一律阻止发布**，不会被折算成"通过"或被平均分稀释。
+`已判定通过率` 的分母只含有明确结论的用例，必须与 `UNKNOWN` 数量一起呈现；
+只看通过率而不看 UNKNOWN 数量的门禁是无效的。
 
 ---
 

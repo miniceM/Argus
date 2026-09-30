@@ -189,7 +189,7 @@ test.describe("Issue #80: exact Evaluator version and release eligibility", () =
 
     await expect(page.getByText("已选 4 项")).toBeVisible();
     for (const id of ["escalation_match", "intent_match", "pii_safe", "required_tool_match"]) {
-      await expect(page.getByRole("checkbox", { name: new RegExp(id) })).toBeChecked();
+      await expect(page.getByTestId(`evaluator-toggle-${id}`)).toBeChecked();
     }
   });
 });

@@ -197,25 +197,24 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     await page.goto("/launches/new");
     await expect(page.getByRole("heading", { name: "发起新评测任务" })).toBeVisible();
 
-    // Verify Evaluators selection and scope restriction
-    await expect(page.getByText("intent_match", { exact: true })).toBeVisible();
-    await expect(page.getByText("pii_safe", { exact: true })).toBeVisible();
-    await expect(page.getByText("run_pass_rate", { exact: true })).toBeVisible();
+    // Verify Evaluators selection and scope restriction. #83: the metric id now
+    // appears both on its card and on its quality rule, so scope the assertion
+    // to the catalog rather than to the whole page.
+    const catalog = page.getByTestId("evaluator-catalog");
+    await expect(catalog.getByText("intent_match", { exact: true })).toBeVisible();
+    await expect(catalog.getByText("pii_safe", { exact: true })).toBeVisible();
+    await expect(catalog.getByText("run_pass_rate", { exact: true })).toBeVisible();
     await expect(page.getByText(/派生运行指标，不能作为用例指标选择/)).toBeVisible();
-    await expect(page.getByRole("radio", { name: /逐项诊断/ })).toBeChecked();
-    await expect(page.getByRole("radio", { name: /复合结论/ })).not.toBeChecked();
-
-    // Switching modes is exclusive; returning to diagnostics restores its defaults.
-    await page.getByRole("radio", { name: /复合结论/ }).check();
-    await expect(page.getByRole("radio", { name: /复合结论/ })).toBeChecked();
-    await page.getByRole("radio", { name: /逐项诊断/ }).check();
+    // #83 removes the composite conclusion mode from the create flow entirely.
+    await expect(page.getByRole("radio", { name: /逐项诊断/ })).toHaveCount(0);
+    await expect(page.getByRole("radio", { name: /复合结论/ })).toHaveCount(0);
     await expect(page.getByText("已选 4 项")).toBeVisible();
 
-    // Keyboard users can reach and operate native evaluator checkboxes without submitting.
-    const diagnosticMode = page.getByRole("radio", { name: /逐项诊断/ });
-    await diagnosticMode.focus();
-    await page.keyboard.press("Tab");
-    const firstEvaluator = page.getByRole("checkbox", { name: /escalation_match/ });
+    // Keyboard users can reach and operate native evaluator checkboxes without
+    // submitting. #83 removed the diagnostic/composite radio that used to sit
+    // before them, so focus starts from the first metric checkbox.
+    const firstEvaluator = page.getByTestId("evaluator-toggle-escalation_match");
+    await firstEvaluator.focus();
     await expect(firstEvaluator).toBeFocused();
     await expect(firstEvaluator).toHaveCSS("outline-style", "solid");
 
@@ -230,16 +229,16 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     };
 
     for (const id of ["escalation_match", "intent_match", "pii_safe", "required_tool_match"]) {
-      const checkbox = page.getByRole("checkbox", { name: new RegExp(id) });
+      const checkbox = page.getByTestId(`evaluator-toggle-${id}`);
       await expect(checkbox).toBeFocused();
       if (id === "required_tool_match") break;
       await page.keyboard.press("Tab");
       await expect(page.getByLabel(`${id} 版本`)).toBeFocused();
-      await tabUntilFocused(page.getByRole("checkbox", { name: new RegExp(DIAGNOSTIC_IDS[DIAGNOSTIC_IDS.indexOf(id) + 1]) }));
+      await tabUntilFocused(page.getByTestId(`evaluator-toggle-${DIAGNOSTIC_IDS[DIAGNOSTIC_IDS.indexOf(id) + 1]}`));
     }
 
     // Toggle the last diagnostic so keyboard testing doesn't alter the initial request order.
-    const lastEvaluator = page.getByRole("checkbox", { name: /required_tool_match/ });
+    const lastEvaluator = page.getByTestId("evaluator-toggle-required_tool_match");
     await page.keyboard.press("Space");
     await expect(lastEvaluator).not.toBeChecked();
     await expect(page.getByText("已选 3 项")).toBeVisible();
@@ -250,8 +249,10 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     await expect(page.getByText("已选 4 项")).toBeVisible();
     expect(interceptedCreationPayload).toBeNull();
 
-    const concurrencyInput = page.getByRole("spinbutton");
-    await tabUntilFocused(concurrencyInput, 6);
+    // #83 adds one numeric threshold input per metric, so the concurrency
+    // spinner is addressed by its own accessible name.
+    const concurrencyInput = page.getByLabel("最大并发执行数 (Concurrency)");
+    await tabUntilFocused(concurrencyInput, 24);
     await expect(concurrencyInput).toBeFocused();
 
     // Adjust Concurrency
@@ -281,7 +282,7 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     await expect(page.getByRole("heading", { name: launchId })).toBeVisible();
     await expect(page.getByText("3. 评测门禁指标 (4)")).toBeVisible();
     for (const id of ["escalation_match", "intent_match", "pii_safe", "required_tool_match"]) {
-      await expect(page.getByText(id, { exact: true })).toBeVisible();
+      await expect(page.getByText(id, { exact: true }).first()).toBeVisible();
     }
     await expect(page.getByText("overall_pass", { exact: true })).toHaveCount(0);
 

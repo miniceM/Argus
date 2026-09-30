@@ -8,23 +8,44 @@ from urllib.parse import urlsplit
 
 logger = logging.getLogger(__name__)
 
-# Invisible characters that are never legitimate in a URL but survive str.strip():
-# a UTF-8 BOM (U+FEFF) and zero-width / word-joiner marks. They typically arrive by
-# copy-pasting a value out of an editor, and they break strict URL parsing in ways
-# that are extremely hard to diagnose (an SDK call just reports a missing scheme).
-INVISIBLE_URL_CHARS = "\u200b\u200c\u200d\u2060\ufeff"
+# Invisible characters that are never legitimate in a URL or an API key but survive
+# str.strip(): a UTF-8 BOM (U+FEFF) and zero-width / word-joiner marks. They typically
+# arrive by copy-pasting a value out of an editor, and they break strict parsing in ways
+# that are extremely hard to diagnose (a URL just reports a missing scheme; a credential
+# surfaces as an opaque 401 "Invalid credentials").
+INVISIBLE_CHARS = "\u200b\u200c\u200d\u2060\ufeff"
+
+# Kept as an alias: the name predates the credential sanitizer and reads naturally at
+# URL-specific call sites.
+INVISIBLE_URL_CHARS = INVISIBLE_CHARS
 
 
-def sanitize_langfuse_url_input(value: str | None) -> str | None:
-    """Strip characters that can never appear in a legitimate Langfuse URL.
+def sanitize_langfuse_input(value: str | None) -> str | None:
+    """Strip invisible characters and surrounding whitespace; ``None`` when nothing is left.
 
     This runs at the configuration boundary only. :func:`validate_langfuse_dashboard_url`
     stays strict so that stored links are never silently rewritten.
     """
     if value is None:
         return None
-    cleaned = "".join(char for char in value.strip() if char not in INVISIBLE_URL_CHARS)
+    cleaned = "".join(char for char in value.strip() if char not in INVISIBLE_CHARS)
     return cleaned.strip() or None
+
+
+def sanitize_langfuse_url_input(value: str | None) -> str | None:
+    """Strip characters that can never appear in a legitimate Langfuse URL."""
+    return sanitize_langfuse_input(value)
+
+
+def sanitize_langfuse_credential_input(value: str | None) -> str | None:
+    """Strip characters that can never appear in a legitimate Langfuse API key.
+
+    The SDK reads ``LANGFUSE_PUBLIC_KEY`` / ``LANGFUSE_SECRET_KEY`` straight from the
+    environment and base64-encodes them into the ``Authorization`` header without any
+    normalization, so a stray BOM or a trailing newline turns every API call into a
+    401. Secrets pasted into GitHub Environment variables commonly carry exactly those.
+    """
+    return sanitize_langfuse_input(value)
 
 
 def validate_langfuse_dashboard_url(value: str | None) -> str | None:

@@ -118,3 +118,159 @@ def test_genuinely_invalid_url_is_still_rejected(monkeypatch, reloaded_config):
     reloaded = importlib.reload(reloaded_config)
     assert reloaded.settings.langfuse_base_url == "jp.cloud.langfuse.com"
     assert reloaded.settings.argus_langfuse_dashboard_url is None
+
+
+# --- 凭据净化（CI run 2 的 401 Invalid credentials）-------------------------
+#
+# CI 的 Compose 版本会清理 env_file 值中的不可见字符，容器因此始终正常；
+# 宿主验证脚本用 Python 解析同一个文件，拿到的是原始值。run 1 证明端点需要净化，
+# run 2 进一步证明凭据同样需要净化——否则 base64 后的 Authorization 头无效，
+# Langfuse 返回 401 "Invalid credentials. Confirm that you've configured the correct host"。
+
+PUBLIC_KEY = "pk-lf-test"
+SECRET_KEY = "sk-lf-test"
+
+
+def test_credential_sanitizer_strips_invisible_and_stray_whitespace():
+    from app.config import sanitize_langfuse_credential_input
+
+    assert sanitize_langfuse_credential_input(PUBLIC_KEY) == PUBLIC_KEY
+    assert sanitize_langfuse_credential_input(f"{BOM}{PUBLIC_KEY}") == PUBLIC_KEY
+    assert sanitize_langfuse_credential_input(f"{ZWSP}{PUBLIC_KEY}{WJ}") == PUBLIC_KEY
+    # GitHub Secret 常带结尾换行，同样会让 base64 后的 Authorization 失效
+    assert sanitize_langfuse_credential_input(f"{PUBLIC_KEY}\n") == PUBLIC_KEY
+    assert sanitize_langfuse_credential_input(f"  {BOM}{PUBLIC_KEY} \r\n") == PUBLIC_KEY
+
+
+def test_credential_sanitizer_rejects_empty_result():
+    from app.config import sanitize_langfuse_credential_input
+
+    assert sanitize_langfuse_credential_input(None) is None
+    assert sanitize_langfuse_credential_input(f"{BOM}\n") is None
+
+
+def _load_verification_script():
+    """按路径加载 scripts/verify-async-langfuse-link.py（文件名含连字符，非合法模块名）。"""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "verify_async_langfuse_link", ROOT / "scripts" / "verify-async-langfuse-link.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_verification_script_exports_sanitized_credentials(monkeypatch):
+    """脚本解析出的凭据必须写回 os.environ，否则 SDK 仍读到原始 Secret。"""
+    script = _load_verification_script()
+
+    # shell 环境仍是原始 Secret（与 CI 中 GitHub Secret 一致，带不可见字符）
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", f"{BOM}{PUBLIC_KEY}")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", f"{SECRET_KEY}\n")
+    # .env.cloud 是容器实际使用的配置，同样含不可见字符
+    env_file_values = {
+        "LANGFUSE_PUBLIC_KEY": f"{BOM}{PUBLIC_KEY}",
+        "LANGFUSE_SECRET_KEY": f"{SECRET_KEY}\n",
+    }
+
+    script._apply_langfuse_credentials(env_file_values)
+
+    assert os.environ["LANGFUSE_PUBLIC_KEY"] == PUBLIC_KEY
+    assert os.environ["LANGFUSE_SECRET_KEY"] == SECRET_KEY
+
+
+def test_verification_script_prefers_env_file_credentials(monkeypatch):
+    """凭据以 .env.cloud 为准：必须验证并使用容器实际拿到的值。"""
+    script = _load_verification_script()
+
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", f"{BOM}{PUBLIC_KEY}-from-shell")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", f"{SECRET_KEY}-from-shell")
+    env_file_values = {
+        "LANGFUSE_PUBLIC_KEY": PUBLIC_KEY,
+        "LANGFUSE_SECRET_KEY": SECRET_KEY,
+    }
+
+    script._apply_langfuse_credentials(env_file_values)
+
+    assert os.environ["LANGFUSE_PUBLIC_KEY"] == PUBLIC_KEY
+    assert os.environ["LANGFUSE_SECRET_KEY"] == SECRET_KEY
+
+
+def test_sdk_client_uses_sanitized_credentials(monkeypatch):
+    """端到端复现 run 2：净化后的凭据必须真正进入 SDK 使用的 Basic 认证材料。"""
+    from base64 import b64decode
+
+    from langfuse import get_client
+    from langfuse._utils.request import LangfuseClient
+
+    script = _load_verification_script()
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", f"{BOM}{PUBLIC_KEY}")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", f"{SECRET_KEY}\n")
+    monkeypatch.setenv("LANGFUSE_BASE_URL", CLEAN)
+
+    script._apply_langfuse_credentials({})
+
+    resources = get_client()._resources
+    assert resources.public_key == PUBLIC_KEY
+    assert resources.secret_key == SECRET_KEY
+
+    # SDK 最终把 "<public>:<secret>" base64 后放进 Authorization 头
+    http_client = LangfuseClient(
+        public_key=resources.public_key,
+        secret_key=resources.secret_key,
+        base_url=CLEAN,
+        version="test",
+        timeout=1,
+        session=None,
+    )
+    auth_header = http_client.generate_headers()["Authorization"]
+    assert b64decode(auth_header.removeprefix("Basic ")).decode("utf-8") == (
+        f"{PUBLIC_KEY}:{SECRET_KEY}"
+    )
+
+
+def test_env_file_parser_tolerates_leading_bom(tmp_path):
+    """人工编辑的 .env.cloud 可能整体带 BOM，必须落在第一个变量名而非其值上。"""
+    script = _load_verification_script()
+
+    env_file = tmp_path / ".env.cloud"
+    env_file.write_bytes(
+        f"{BOM}LANGFUSE_PUBLIC_KEY={PUBLIC_KEY}\nLANGFUSE_SECRET_KEY={SECRET_KEY}\n".encode()
+    )
+
+    values = script._read_env_file(env_file)
+
+    assert values == {
+        "LANGFUSE_PUBLIC_KEY": PUBLIC_KEY,
+        "LANGFUSE_SECRET_KEY": SECRET_KEY,
+    }
+
+
+def test_preflight_reports_rejected_credentials_without_leaking_them(monkeypatch, capsys):
+    """凭据被拒时必须立刻失败，并指向不可见字符/空白，而不是抛出 opaque 的 401。"""
+    script = _load_verification_script()
+
+    class _FakeApi:
+        @staticmethod
+        def get(**_kwargs):
+            raise RuntimeError(
+                "headers: {...}, status_code: 401, body: {'message': 'Invalid credentials.'}"
+            )
+
+    class _FakeClient:
+        api = type("_Api", (), {"projects": _FakeApi})()
+
+    monkeypatch.setattr("langfuse.get_client", lambda: _FakeClient())
+
+    with pytest.raises(SystemExit) as excinfo:
+        script._preflight_langfuse_auth()
+
+    assert excinfo.value.code == 1
+    message = capsys.readouterr().err
+    assert "rejected the configured credentials" in message
+    assert "401" in message
+    assert "U+FEFF" in message
+    # 诊断信息不得回显任何凭据内容
+    assert PUBLIC_KEY not in message
+    assert SECRET_KEY not in message

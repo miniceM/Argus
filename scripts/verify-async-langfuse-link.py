@@ -46,7 +46,9 @@ def _read_env_file(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     if not path.is_file():
         return values
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
+    # utf-8-sig: a hand-edited env file can start with a BOM, which would otherwise
+    # corrupt the first variable *name* instead of its value.
+    for raw_line in path.read_text(encoding="utf-8-sig").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -74,10 +76,40 @@ def _require_env(name: str, env_file_values: dict[str, str] | None = None) -> st
 
 
 def _describe_invisible_chars(value: str) -> list[str]:
-    """Report stripped code points without echoing the (possibly sensitive) URL."""
-    from app.config import INVISIBLE_URL_CHARS
+    """Report stripped code points without echoing the (possibly sensitive) value."""
+    from app.config import INVISIBLE_CHARS
 
-    return sorted({f"U+{ord(char):04X}" for char in value if char in INVISIBLE_URL_CHARS})
+    return sorted({f"U+{ord(char):04X}" for char in value if char in INVISIBLE_CHARS})
+
+
+def _apply_langfuse_credentials(env_file_values: dict[str, str] | None = None) -> None:
+    """Resolve the API keys and publish the sanitized values to ``os.environ``.
+
+    Two things make this necessary rather than cosmetic:
+
+    * the SDK reads ``LANGFUSE_PUBLIC_KEY`` / ``LANGFUSE_SECRET_KEY`` from the process
+      environment and never normalizes them, so a stray BOM or a trailing newline from a
+      GitHub Secret becomes part of the base64 ``Authorization`` payload and every call
+      fails with 401 "Invalid credentials";
+    * validating a value is not the same as using it. The Langfuse client is built from
+      ``os.environ``, so a resolved-but-unpublished key would leave the SDK authenticating
+      with the raw shell value while this script reported the file value as verified.
+
+    Only the key names and the removed code points are ever printed.
+    """
+    from app.config import sanitize_langfuse_credential_input
+
+    for name in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"):
+        raw = _require_env(name, env_file_values)
+        sanitized = sanitize_langfuse_credential_input(raw)
+        removed = _describe_invisible_chars(raw)
+        if raw != raw.strip():
+            removed = removed + ["SURROUNDING_WHITESPACE"]
+        if removed:
+            print(f"Sanitized {name}: removed {sorted(set(removed))}")
+        if not sanitized:
+            _fail(f"{name} is empty after removing {sorted(set(removed))}")
+        os.environ[name] = sanitized
 
 
 def _configure_environment(db_path: Path, dashboard_url: str) -> None:
@@ -122,6 +154,39 @@ def _normalize_langfuse_endpoint(dashboard_url: str) -> str:
     os.environ["LANGFUSE_BASE_URL"] = normalized
     os.environ["ARGUS_LANGFUSE_DASHBOARD_URL"] = normalized
     return normalized
+
+
+def _preflight_langfuse_auth() -> str:
+    """Confirm the credentials work before starting the slow verification.
+
+    Without this probe a rejected credential only surfaces minutes later as an opaque
+    ``401 Invalid credentials`` in the middle of a launch-creation traceback, which is
+    exactly the diagnostic dead end that made the invisible-character regression hard
+    to attribute. The Langfuse SDK base64-encodes ``<public>:<secret>`` verbatim, so the
+    message points at the realistic causes instead of guessing.
+    """
+    import re
+
+    from langfuse import get_client
+
+    try:
+        projects = get_client().api.projects.get(
+            request_options={"timeout_in_seconds": 5, "max_retries": 0}
+        ).data
+    except Exception as exc:  # noqa: BLE001 - re-reported as verification evidence
+        status = re.search(r"status_code[:=]\s*(\d{3})", str(exc))
+        suffix = f", HTTP {status.group(1)}" if status else ""
+        _fail(
+            f"Langfuse rejected the configured credentials{suffix} before the verification "
+            "started. The SDK reads LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY verbatim from "
+            "the environment: check .env.cloud and the langfuse-e2e environment for stray "
+            "invisible characters (U+FEFF BOM, zero-width) or surrounding whitespace, and "
+            "confirm the key belongs to the configured host."
+        )
+
+    if len(projects) != 1:
+        _fail(f"expected exactly one project for the configured key, got {len(projects)}")
+    return str(projects[0].id)
 
 
 def _register_agent_and_version(client: Any, agent_endpoint: str) -> tuple[str, str]:
@@ -297,8 +362,7 @@ def main() -> int:
     args = parser.parse_args()
 
     env_file_values = _read_env_file(Path(os.getenv("ARGUS_CLOUD_ENV_FILE", ".env.cloud")))
-    _require_env("LANGFUSE_PUBLIC_KEY", env_file_values)
-    _require_env("LANGFUSE_SECRET_KEY", env_file_values)
+    _apply_langfuse_credentials(env_file_values)
     base_url_raw = _require_env("LANGFUSE_BASE_URL", env_file_values)
     # Cloud E2E connects directly to the managed API host, which is also the UI origin.
     dashboard_url = (
@@ -317,6 +381,7 @@ def main() -> int:
         # Importing app.config sanitizes the endpoint for its own settings; mirror the
         # result into the environment the Langfuse SDK reads.
         _normalize_langfuse_endpoint(dashboard_url)
+        _preflight_langfuse_auth()
 
         import app.main as main_module
         from app.db import MigrationRunner

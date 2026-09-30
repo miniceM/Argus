@@ -7,6 +7,7 @@ import { queryKeys } from "../../api/query-keys";
 import { formatApiError } from "../../api/errors";
 import { Button, Panel } from "../../components/ui/Primitives";
 import { ComparisonCaseDrawer } from "./ComparisonCaseDrawer";
+import { LangfuseSyncPanel } from "./langfuseSyncStatus";
 
 type GeneratedRunSummary = import("../../api/schema").components["schemas"]["RunSummaryResponse"];
 type GeneratedComparison = import("../../api/schema").components["schemas"]["ComparisonResponse"];
@@ -474,7 +475,10 @@ export const ComparisonReport: React.FC<{
           ) : comparisonSummary && (
             <p className="rounded border border-border p-3 text-xs text-muted-foreground">无可比样本，质量差异未计算。</p>
           )}
-          {comparability && !comparability.comparable && (
+          {summaryQuery.data?.langfuse_sync && (
+          <LangfuseSyncPanel sync={summaryQuery.data.langfuse_sync} />
+        )}
+        {comparability && !comparability.comparable && (
           <div
             data-testid="comparison-comparability-banner"
             role="status"

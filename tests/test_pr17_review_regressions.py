@@ -310,13 +310,17 @@ def test_outbox_processing_lease_expiry_reclaim(setup_runtime):
         trace_id="trace-123",
         observation_id="obs-123",
     )
-    mock_lf.api.scores.create.assert_called_once_with(
-        id=f"score:{item_id}:gen1:accuracy",
-        name="accuracy",
-        value=1.0,
-        trace_id="trace-123",
-        observation_id="obs-123",
-    )
+    # Issue #87: every projection carries its frozen provenance, so a Langfuse
+    # score can be traced back to the snapshot, policy and binding that made it.
+    score_kwargs = mock_lf.api.scores.create.call_args.kwargs
+    assert score_kwargs["id"] == f"score:{item_id}:gen1:accuracy"
+    assert score_kwargs["name"] == "accuracy"
+    assert score_kwargs["value"] == 1.0
+    assert score_kwargs["trace_id"] == "trace-123"
+    assert score_kwargs["observation_id"] == "obs-123"
+    assert score_kwargs["metadata"]["source"] == "ARGUS_FROZEN_SNAPSHOT"
+    assert "snapshot_id" in score_kwargs["metadata"]
+    assert "policy_digest" in score_kwargs["metadata"]
 
 
 # 13. Finalize CAS requires active_attempt_id and Attempt status RUNNING

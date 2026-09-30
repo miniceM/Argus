@@ -360,6 +360,19 @@ class ExecutionWorker:
                 payload_scores = dict(scores or {})
                 if dataset_source:
                     payload_scores["_dataset_source"] = dataset_source
+                # Issue #87: the Langfuse projection reads the *typed* frozen
+                # results, so a text or unordered category is reported as not
+                # applicable instead of being coerced into a number. Keys
+                # starting with "_" are never uploaded as scores.
+                if typed_results:
+                    payload_scores["_typed_results"] = [
+                        result.to_payload() for result in typed_results
+                    ]
+                # The frozen policy identity travels with the projection so a
+                # Langfuse score can be traced back to the decision rules used.
+                launch_row = session.get(ExperimentLaunchRecord, launch_id)
+                frozen_policy = (launch_row.manifest or {}).get("quality_policy") or {}
+                payload_scores["_policy_digest"] = frozen_policy.get("policy_digest")
                 outbox_task = LangfuseSyncTaskRecord(
                     id=task_id,
                     launch_id=launch_id,

@@ -42,6 +42,13 @@ const summaryFor = (snapshotId: string, launchId = "candidate-launch") => ({
     cost_per_case: null,
   },
   langfuse_score_sync_status: "SYNCED",
+  // Issue #87: quality result and sync state are separate facts, and the two
+  // sync scopes never hide each other.
+  langfuse_sync: {
+    overall: "SYNCED",
+    item_trace: { status: "SYNCED", reason: null, task_count: 3, failed_count: 0, pending_count: 0 },
+    run_score: { status: "SYNCED", reason: null, task_count: 1, failed_count: 0, pending_count: 0 },
+  },
 });
 
 const metrics = (overrides: Record<string, unknown> = {}) => ({
@@ -821,5 +828,48 @@ describe("ComparisonReport comparability (Issue #86)", () => {
     await screen.findByTestId("comparison-comparability-banner");
     expect(screen.getByTestId("comparison-diagnostic-label")).toHaveTextContent("仅供诊断");
     expect(screen.getByTestId("comparison-item-basis-DIAGNOSTIC_ONLY")).toBeInTheDocument();
+  });
+});
+
+describe("ComparisonReport Langfuse sync state (Issue #87)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.history.replaceState({}, "", "/launches/candidate-launch");
+    (api.POST as any).mockResolvedValue({ data: { revision: 4 } });
+    (api.GET as any).mockImplementation((path: string, options: any) => {
+      const launchId = options.params.path.launch_id;
+      if (path.endsWith("/summary")) {
+        return Promise.resolve({ data: summaryFor("candidate-snapshot", launchId) });
+      }
+      if (path.includes("/baselines")) {
+        return Promise.resolve({ error: {}, response: { status: 404 } });
+      }
+      if (path.endsWith("/comparison")) {
+        return Promise.resolve({ data: comparisonPage("candidate-snapshot", "case-1", null, launchId) });
+      }
+      return Promise.resolve({ data: null });
+    });
+  });
+
+  it("shows the two sync scopes separately from the quality conclusion", async () => {
+    render(
+      <MemoryRouter initialEntries={["/launches/candidate-launch"]}>
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<ComparisonReportRoute launchStatus="COMPLETED" />} />
+          </Routes>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    // The report rewrites the URL with the resolved snapshot, which remounts
+    // the panel, so every assertion waits for the live DOM.
+    await screen.findByTestId("langfuse-sync-item-trace");
+    await waitFor(() => {
+      expect(screen.getByTestId("langfuse-sync-item-trace")).toHaveTextContent("Item / Trace");
+      expect(screen.getByTestId("langfuse-sync-run-score")).toHaveTextContent("Run Score");
+      // The quality conclusion is untouched by the sync state.
+      expect(screen.getByTestId("langfuse-sync-disclaimer")).toHaveTextContent("不会改变");
+    });
   });
 });

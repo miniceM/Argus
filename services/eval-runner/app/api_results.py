@@ -16,6 +16,8 @@ from .models import (
     ComparisonDiagnostic,
     ComparisonFormalVerdict,
     ComparisonResponse,
+    LangfuseSyncScopeResponse,
+    LangfuseSyncStatusResponse,
     ResultSnapshotDetailResponse,
     ResultSnapshotListResponse,
     ResultSnapshotRevisionResponse,
@@ -36,6 +38,22 @@ def _db_manager():
     from .main import db_manager
 
     return db_manager
+
+
+
+def _sync_status(launch_id: str) -> LangfuseSyncStatusResponse:
+    """Per-scope Langfuse sync state, read independently of the result."""
+    from .langfuse_sync import launch_sync_breakdown
+
+    try:
+        breakdown = launch_sync_breakdown(_db_manager(), launch_id)
+    except Exception:  # pragma: no cover - sync state is never fatal to a report
+        return LangfuseSyncStatusResponse(
+            overall="UNKNOWN",
+            item_trace=LangfuseSyncScopeResponse(status="UNKNOWN", reason="同步状态不可用。"),
+            run_score=LangfuseSyncScopeResponse(status="UNKNOWN", reason="同步状态不可用。"),
+        )
+    return LangfuseSyncStatusResponse(**breakdown.to_payload())
 
 
 def _versions(manifest: dict[str, Any]) -> dict[str, Any]:
@@ -119,6 +137,7 @@ def get_run_summary(
             versions=_versions(snapshot.manifest),
             summary=snapshot.summary,
             langfuse_score_sync_status=score_sync_status,
+            langfuse_sync=_sync_status(launch_id),
         )
 
 

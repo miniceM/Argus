@@ -18,6 +18,12 @@ from .db_models import (
     ExperimentLaunchRecord,
     LangfuseSyncTaskRecord,
 )
+from .langfuse_projection import (
+    CombinedSyncState,
+    combine_scope_states,
+    project_typed_result,
+    scope_state_from_tasks,
+)
 from .state_machine import TERMINAL_LAUNCH_STATUSES
 
 logger = logging.getLogger("argus.langfuse_sync")
@@ -208,6 +214,97 @@ def _invoke_with_timeout(fn: Callable[..., Any], *args: Any, timeout: float, **k
         raise err_box[0]
     return res_box[0]
 
+
+
+
+def launch_sync_breakdown(db_mgr: DatabaseManager, launch_id: str, *, max_attempts: int = 5) -> CombinedSyncState:
+    """Read-only, per-scope sync state for one Launch (Issue #87).
+
+    Item/Trace projection and the Run Score outbox are separate scopes with
+    separate failure modes, so the UI must be able to say which one is behind
+    instead of collapsing them into a single "SYNCED".
+    """
+    from .db_models import LangfuseRunScoreTaskRecord
+
+    with db_mgr.get_session() as session:
+        item_rows = session.scalars(
+            select(LangfuseSyncTaskRecord).where(LangfuseSyncTaskRecord.launch_id == launch_id)
+        ).all()
+        run_rows = session.scalars(
+            select(LangfuseRunScoreTaskRecord).where(LangfuseRunScoreTaskRecord.launch_id == launch_id)
+        ).all()
+        item_tasks = [
+            {"status": row.status, "attempts": row.attempts, "last_error": row.last_error}
+            for row in item_rows
+        ]
+        run_tasks = [
+            {"status": row.status, "attempts": row.attempts, "last_error": row.last_error}
+            for row in run_rows
+        ]
+
+    return combine_scope_states(
+        item_trace=scope_state_from_tasks(item_tasks, max_attempts=max_attempts),
+        run_score=scope_state_from_tasks(run_tasks, max_attempts=max_attempts),
+    )
+
+
+def _project_scores(
+    payload: dict[str, Any],
+    *,
+    scores: dict[str, Any],
+    snapshot_id: str | None,
+    revision: int | None,
+    policy_digest: str | None,
+) -> list[Any]:
+    """Turn one frozen result into the Langfuse scores it can honestly produce.
+
+    Typed results are authoritative. A pre-#82 outbox payload without them falls
+    back to the legacy numeric ``scores`` map so historical launches still sync.
+    """
+    item_id = str(payload.get("item_id") or "")
+    generation = int(payload.get("dispatch_generation") or 1)
+    typed = scores.get("_typed_results")
+
+    if isinstance(typed, list) and typed:
+        projected = []
+        for entry in typed:
+            if not isinstance(entry, dict):
+                continue
+            provenance = entry.get("provenance") or {}
+            score = project_typed_result(
+                entry,
+                item_id=item_id,
+                generation=generation,
+                snapshot_id=snapshot_id,
+                revision=revision,
+                policy_digest=policy_digest,
+                definition_digest=provenance.get("definition_digest"),
+                attempt=payload.get("attempts"),
+            )
+            if score.applicable:
+                projected.append(score)
+        return projected
+
+    projected = []
+    for evaluator_id, value in scores.items():
+        if evaluator_id.startswith("_"):
+            continue
+        projected.append(
+            project_typed_result(
+                {
+                    "evaluator_id": evaluator_id,
+                    "result_type": "numeric",
+                    "status": "succeeded",
+                    "value": value,
+                },
+                item_id=item_id,
+                generation=generation,
+                snapshot_id=snapshot_id,
+                revision=revision,
+                policy_digest=policy_digest,
+            )
+        )
+    return [score for score in projected if score.applicable]
 
 
 class LangfuseOutboxSyncer:
@@ -444,6 +541,24 @@ class LangfuseOutboxSyncer:
             logger.exception("Failed to aggregate launch sync status for launch %s: %s", launch_id, exc)
         return True
 
+    def _resolve_snapshot_provenance(self, launch_id: str) -> tuple[str | None, int | None]:
+        """The frozen snapshot and revision this projection belongs to.
+
+        Read-only: a missing snapshot (still running, or never frozen) simply
+        yields no provenance and never blocks the projection itself.
+        """
+        try:
+            from .result_snapshots import latest_result_snapshot
+
+            with self.db_mgr.get_session() as session:
+                snapshot = latest_result_snapshot(session, launch_id)
+                if snapshot is None:
+                    return None, None
+                return snapshot.id, snapshot.revision
+        except Exception as exc:  # pragma: no cover - provenance is best effort
+            logger.warning("Could not resolve snapshot provenance for launch %s: %s", launch_id, exc)
+            return None, None
+
     def process_single_task(self, task_id: str, claim_token: str, payload: dict[str, Any]) -> bool:
         """Executes remote HTTP sync calls outside of DB transactions, renews lease during execution,
         and strongly verifies responses with post-lock instantaneous clock CAS.
@@ -465,6 +580,7 @@ class LangfuseOutboxSyncer:
         else:
             scores = payload.get("scores_payload", {})
             dataset_source = scores.get("_dataset_source")
+            snapshot_id, revision = self._resolve_snapshot_provenance(payload["launch_id"])
 
             stop_hb = threading.Event()
             lease_lost = threading.Event()
@@ -575,21 +691,31 @@ class LangfuseOutboxSyncer:
                     logger.warning("Syncer %s failed to renew lease on task %s after linking, aborting scores", self.syncer_id, task_id)
                     return False
 
-                # 2. Score creations with stable versioned ID
-                clean_scores = {k: v for k, v in scores.items() if not k.startswith("_")}
-                for ev_id, score_val in clean_scores.items():
+                # 2. Score creations with stable versioned ID (Issue #87)
+                # Typed results are projected with their real semantics; a type
+                # Langfuse cannot represent is recorded as NOT_APPLICABLE and is
+                # never written as a number.
+                projected = _project_scores(
+                    payload,
+                    scores=scores,
+                    snapshot_id=snapshot_id,
+                    revision=revision,
+                    policy_digest=scores.get("_policy_digest"),
+                )
+                for projected_score in projected:
                     if _is_timeout_or_lost():
                         logger.warning("Syncer %s lost lease or timed out on task %s before score upload, aborting", self.syncer_id, task_id)
                         return False
-                    stable_score_id = f"score:{payload['item_id']}:gen{payload['dispatch_generation']}:{ev_id}"
                     _invoke_with_timeout(
                         lf.api.scores.create,
                         timeout=_remaining_timeout(),
-                        id=stable_score_id,
-                        name=ev_id,
-                        value=float(score_val),
+                        id=projected_score.score_id,
+                        name=projected_score.evaluator_id,
+                        value=projected_score.value,
                         trace_id=payload["trace_id"],
                         observation_id=payload.get("observation_id"),
+                        comment=projected_score.comment,
+                        metadata=projected_score.evidence,
                     )
                     if _is_timeout_or_lost():
                         logger.warning("Syncer %s lost lease or timed out on task %s during score upload, aborting", self.syncer_id, task_id)

@@ -629,6 +629,58 @@ Console：Comparison Report 顶部新增「正式比较」结论块；不可比�
 两侧版本、digest 摘要，并给出可执行建议（"使用相同质量策略重新评测"），
 不覆盖旧 Snapshot。Case 表在该状态下逐行标注「仅诊断」。
 
+#### 8.3.7 Langfuse 单向投影与独立同步状态（Issue #87）
+
+**边界**：Argus Snapshot 是发布结果的权威来源，Langfuse 是**单向分析投影**。
+投影只读冻结结果，**不回读在线 Score 改写本地质量结论或比较**。Langfuse 不可用时，
+Snapshot 内容、`source_result_digest`、质量结论与后续 Gate 消费的证据全部不变。
+
+**Typed 投影映射**（`langfuse_projection.py`）。Langfuse Score 是数值型，
+因此每种 typed 结果都有明确的、可解释的处理：
+
+| 结果 | 处理 | 说明 |
+|---|---|---|
+| `numeric` | 直接写入数值 | 唯一的直接映射 |
+| `boolean` | 写入 1 / 0 | `evidence.original_value` 保留原始布尔，`0` 不会被误读为"测得 0" |
+| `categorical` + 冻结归一化 | 写入映射后的数值 | **有序值仅按冻结映射比较** |
+| `categorical` 无映射 | `NOT_APPLICABLE` | `CATEGORY_HAS_NO_FROZEN_NUMERIC_MAPPING` |
+| `text` | `NOT_APPLICABLE` | `TEXT_RESULT_NOT_SUPPORTED_AS_NUMERIC_SCORE`，原文保留在 evidence |
+| 非 succeeded | `NOT_APPLICABLE` | `EVALUATION_RESULT_NOT_SUCCEEDED` |
+
+**绝不**把 text 或无序 category 强转 0 / float，也**绝不**因此宣称已同步。
+
+**投影 provenance**：每条 Score 携带 `metadata`，含 `source=ARGUS_FROZEN_SNAPSHOT`、
+`snapshot_id`、`revision`、`policy_digest`、`definition_digest`、`attempt` 与
+`binding_id` / `contract_status`，可回溯到产生它的冻结结果与判定规则。
+
+**稳定幂等键**：`score:{item_id}:gen{dispatch_generation}:{evaluator_id}`。
+键同时覆盖**逻辑结果身份**（item + evaluator）与**评测 revision**（dispatch generation）：
+
+- 同一 revision 重复投递 → 同一条 Score（Langfuse upsert，不产生重复）；
+- 重评产生新 generation → 新 Score，**旧 revision 的投影保留**；
+- lease 失效被其它 Worker 接管时，claim_token + lease CAS 保证不会重复有效提交；
+  超时退出的 Worker 主动放弃写回，等 lease 过期后由下一次 reclaim 接手。
+
+**两个同步范围独立报告**（`langfuse_sync`）。Item/Trace 投影与 Run Score Outbox
+是两套独立的失败面，因此分别报告：
+
+```text
+langfuse_sync: {
+  overall:       SYNCED | PENDING | FAILED | RETRY_EXHAUSTED | NOT_APPLICABLE,
+  item_trace:    { status, reason, task_count, failed_count, pending_count },
+  run_score:     { status, reason, task_count, failed_count, pending_count },
+}
+```
+
+`overall` 取两者中**更差**的状态（`RETRY_EXHAUSTED > FAILED > PENDING > SYNCED > NOT_APPLICABLE`）。
+因此 Item/Trace 已同步而 Run Score 失败时**不会**显示为 SYNCED，UI 必须点名落后的范围。
+`RETRY_EXHAUSTED` 与 `FAILED` 区分开：前者不会自行恢复。全部任务 SKIPPED 或无任务时
+收敛为 `NOT_APPLICABLE`，不会永久停留在"同步中"。
+
+Console：Comparison Report 新增「Langfuse 同步」面板，逐范围显示状态徽标与文本原因，
+并显式声明"同步失败不会改变上方质量结论、结果修订或 digest"。同步状态与执行、质量结论
+分区展示，互不冒充。
+
 ### 8.4 ExperimentItemExecution
 
 表示单个 Dataset Item 的执行状态：

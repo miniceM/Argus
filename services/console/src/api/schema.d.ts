@@ -1673,6 +1673,41 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /**
+         * LangfuseSyncScopeResponse
+         * @description One independently reportable Langfuse sync scope.
+         */
+        LangfuseSyncScopeResponse: {
+            /** Status */
+            status: string;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Task Count
+             * @default 0
+             */
+            task_count: number;
+            /**
+             * Failed Count
+             * @default 0
+             */
+            failed_count: number;
+            /**
+             * Pending Count
+             * @default 0
+             */
+            pending_count: number;
+        };
+        /**
+         * LangfuseSyncStatusResponse
+         * @description Sync state that never lets one scope hide a broken one (Issue #87).
+         */
+        LangfuseSyncStatusResponse: {
+            /** Overall */
+            overall: string;
+            item_trace: components["schemas"]["LangfuseSyncScopeResponse"];
+            run_score: components["schemas"]["LangfuseSyncScopeResponse"];
+        };
         /** OutputSideResponse */
         OutputSideResponse: {
             /**
@@ -2015,6 +2050,7 @@ export interface components {
              * @default PENDING
              */
             langfuse_score_sync_status: string;
+            langfuse_sync?: components["schemas"]["LangfuseSyncStatusResponse"] | null;
         };
         /** SystemInfoResponse */
         SystemInfoResponse: {

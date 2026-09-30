@@ -4674,6 +4674,68 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "LangfuseSyncScopeResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "task_count": {
+            "type": "integer",
+            "title": "Task Count",
+            "default": 0
+          },
+          "failed_count": {
+            "type": "integer",
+            "title": "Failed Count",
+            "default": 0
+          },
+          "pending_count": {
+            "type": "integer",
+            "title": "Pending Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "LangfuseSyncScopeResponse",
+        "description": "One independently reportable Langfuse sync scope."
+      },
+      "LangfuseSyncStatusResponse": {
+        "properties": {
+          "overall": {
+            "type": "string",
+            "title": "Overall"
+          },
+          "item_trace": {
+            "$ref": "#/components/schemas/LangfuseSyncScopeResponse"
+          },
+          "run_score": {
+            "$ref": "#/components/schemas/LangfuseSyncScopeResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "overall",
+          "item_trace",
+          "run_score"
+        ],
+        "title": "LangfuseSyncStatusResponse",
+        "description": "Sync state that never lets one scope hide a broken one (Issue #87)."
+      },
       "OutputSideResponse": {
         "properties": {
           "output_status": {
@@ -5441,6 +5503,16 @@
             "type": "string",
             "title": "Langfuse Score Sync Status",
             "default": "PENDING"
+          },
+          "langfuse_sync": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LangfuseSyncStatusResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

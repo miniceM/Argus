@@ -590,6 +590,10 @@ class RunSummaryResponse(BaseModel):
     versions: dict[str, Any]
     summary: RunCostSummaryResponse
     langfuse_score_sync_status: str = "PENDING"
+    # Issue #87: quality results and sync state are separate facts. A Langfuse
+    # outage never changes the Snapshot, its digest or the quality conclusion,
+    # and the two sync scopes are reported independently.
+    langfuse_sync: LangfuseSyncStatusResponse | None = None
 
 
 class ResultSnapshotRevisionResponse(BaseModel):
@@ -631,6 +635,24 @@ class ResultSnapshotDetailResponse(BaseModel):
     versions: dict[str, Any]
     summary: RunCostSummaryResponse
     items: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class LangfuseSyncScopeResponse(BaseModel):
+    """One independently reportable Langfuse sync scope."""
+
+    status: str
+    reason: str | None = None
+    task_count: int = 0
+    failed_count: int = 0
+    pending_count: int = 0
+
+
+class LangfuseSyncStatusResponse(BaseModel):
+    """Sync state that never lets one scope hide a broken one (Issue #87)."""
+
+    overall: str
+    item_trace: LangfuseSyncScopeResponse
+    run_score: LangfuseSyncScopeResponse
 
 
 class ComparisonContractDimension(BaseModel):

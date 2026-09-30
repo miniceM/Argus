@@ -2,7 +2,7 @@ fastapi>=0.141.1,<0.142
 uvicorn[standard]>=0.54.0,<0.55
 httpx>=0.28.1,<0.29
 PyYAML>=6.0.3,<7
-pydantic>=2.12,<3
+pydantic>=2.13.5,<3
 langfuse==4.15.3
 opentelemetry-api>=1.45.0,<2
 sqlalchemy>=2.0,<3

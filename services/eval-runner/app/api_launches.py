@@ -21,8 +21,8 @@ from .evaluator_binding import evaluate_frozen_item
 from .evaluators import EvaluatorSelectionError
 from .executor import RemoteAgentExecutor
 from .models import (
-    ExecutionAttemptResponse,
     EvaluationResultResponse,
+    ExecutionAttemptResponse,
     ExperimentItemExecutionResponse,
     ExperimentLaunchCreateRequest,
     ExperimentLaunchProgressResponse,

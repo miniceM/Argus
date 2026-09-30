@@ -8,7 +8,8 @@ item execution stays a restricted numeric projection only, so a re-evaluation
 from __future__ import annotations
 
 import uuid
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session

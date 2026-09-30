@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -28,11 +27,8 @@ if str(ROOT / "services" / "eval-runner") not in sys.path:
     sys.path.insert(0, str(ROOT / "services" / "eval-runner"))
 
 from app.aggregation import aggregate_run  # noqa: E402
-from app.db_models import (  # noqa: E402
-    EvaluationResultRecord,
-    ExperimentItemExecutionRecord as Item,
-    ExperimentLaunchRecord as Launch,
-)
+from app.db_models import ExperimentItemExecutionRecord as Item  # noqa: E402
+from app.db_models import ExperimentLaunchRecord as Launch  # noqa: E402
 from app.evaluation_result_store import (  # noqa: E402
     load_typed_results,
     persist_typed_results,
@@ -900,9 +896,8 @@ def test_snapshot_preserves_typed_results(setup_runtime):
 def test_item_api_exposes_typed_results(setup_runtime, monkeypatch):
     import uuid
 
-    from fastapi.testclient import TestClient
-
     from app import main
+    from fastapi.testclient import TestClient
 
     db_mgr, *_ = setup_runtime
     registry = typed_registry()
@@ -948,7 +943,6 @@ def test_item_api_exposes_typed_results(setup_runtime, monkeypatch):
             session, item_execution_id=item.id, launch_id=launch_id, results=result.typed_results
         )
         session.commit()
-        item_id = item.id
 
     monkeypatch.setattr(main, "db_manager", db_mgr)
     client = TestClient(main.app)

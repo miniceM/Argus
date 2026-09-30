@@ -159,7 +159,7 @@ class ExperimentItemExecutionRecord(Base):
         cascade="all, delete-orphan",
         foreign_keys="ExecutionAttemptRecord.item_execution_id",
     )
-    evaluation_results: Mapped[list["EvaluationResultRecord"]] = relationship(
+    evaluation_results: Mapped[list[EvaluationResultRecord]] = relationship(
         "EvaluationResultRecord",
         back_populates="item_execution",
         cascade="all, delete-orphan",

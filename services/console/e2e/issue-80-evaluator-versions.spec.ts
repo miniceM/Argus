@@ -167,7 +167,14 @@ test.describe("Issue #80: exact Evaluator version and release eligibility", () =
     await mockCreatePage(page, () => [onlineOnly], payloads);
     await page.goto("/launches/new");
 
+    // The reason is visible on the card before the user commits to it.
     await expect(page.getByText("不可用于发布评测").first()).toBeVisible();
+    await expect(
+      page.getByText("该版本由 Langfuse 在线执行，不由 Argus 冻结执行，无法作为发布评测证据。"),
+    ).toBeVisible();
+
+    // Selecting it surfaces the blocking reason and prevents creation.
+    await page.getByRole("checkbox", { name: /online_tone_rule/ }).check();
     await expect(page.getByRole("alert")).toContainText(
       "该版本由 Langfuse 在线执行，不由 Argus 冻结执行，无法作为发布评测证据。",
     );

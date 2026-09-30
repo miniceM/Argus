@@ -571,7 +571,7 @@ export const CreateLaunch: React.FC = () => {
                 return (
                   <div
                     key={ev.id}
-                    className={`p-3 rounded-lg border text-xs transition-colors flex items-start gap-3 ${
+                    className={`p-3 rounded-lg border text-xs transition-colors flex flex-col gap-2 ${
                       !isItemScope
                         ? "bg-surface-muted/70 border-border text-muted-foreground opacity-60"
                         : isSelected
@@ -580,7 +580,7 @@ export const CreateLaunch: React.FC = () => {
                     }`}
                   >
                     <label
-                      className={`flex items-start gap-3 min-w-0 flex-1 ${
+                      className={`flex items-start gap-3 w-full min-w-0 ${
                         isItemScope ? "cursor-pointer" : "cursor-not-allowed"
                       }`}
                       aria-disabled={!isItemScope}
@@ -625,7 +625,7 @@ export const CreateLaunch: React.FC = () => {
                       </span>
                     </label>
                     {isItemScope && (
-                      <div className="w-full shrink-0 space-y-1.5 pl-6">
+                      <div className="w-full space-y-1.5 pl-6">
                         <label className="flex items-center gap-1.5 text-micro text-muted-foreground">
                           <span>版本</span>
                           <select

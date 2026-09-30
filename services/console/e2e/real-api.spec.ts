@@ -33,7 +33,7 @@ test.describe("Real API Acceptance E2E (Zero Mock)", () => {
     await expect(page.getByText("已选 4 项")).toBeVisible();
 
     // Critical Invariant: run_pass_rate (run scope) must be disabled and not selected!
-    await expect(page.getByText(/聚合指标，暂不支持在单次 Launch 中直接运行/).first()).toBeVisible();
+    await expect(page.getByText(/派生运行指标，不能作为用例指标选择/).first()).toBeVisible();
 
     // Fill custom Launch Name
     const customName = `real-e2e-${Date.now()}`;

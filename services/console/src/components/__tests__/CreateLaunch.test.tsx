@@ -296,7 +296,10 @@ describe("CreateLaunch exact Evaluator version selection (Issue #80)", () => {
 
     // The catalog default is 1.0.0; the user explicitly moves to 2.0.0.
     fireEvent.change(screen.getByLabelText("intent_match 版本"), { target: { value: "2.0.0" } });
-    fireEvent.click(screen.getByRole("button", { name: /创建评测任务/ }));
+
+    const submit = screen.getByRole("button", { name: /创建评测任务/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
 
     await waitFor(() => {
       expect(api.POST).toHaveBeenCalledWith("/api/v1/experiment-launches", {

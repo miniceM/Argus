@@ -1,5 +1,5 @@
-import { test, expect } from "@playwright/test";
-import { buildEvaluatorCatalog } from "./fixtures/evaluators";
+import { test, expect, type Locator } from "@playwright/test";
+import { buildEvaluatorCatalog, DIAGNOSTIC_IDS } from "./fixtures/evaluators";
 
 test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Attempt Drawer", () => {
   test("creates launch, runs evaluation, verifies decoupled dual badges and lazy attempts", async ({ page }) => {
@@ -201,7 +201,7 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     await expect(page.getByText("intent_match", { exact: true })).toBeVisible();
     await expect(page.getByText("pii_safe", { exact: true })).toBeVisible();
     await expect(page.getByText("run_pass_rate", { exact: true })).toBeVisible();
-    await expect(page.getByText(/聚合指标，暂不支持在单次 Launch 中直接运行/)).toBeVisible();
+    await expect(page.getByText(/派生运行指标，不能作为用例指标选择/)).toBeVisible();
     await expect(page.getByRole("radio", { name: /逐项诊断/ })).toBeChecked();
     await expect(page.getByRole("radio", { name: /复合结论/ })).not.toBeChecked();
 
@@ -219,10 +219,23 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     await expect(firstEvaluator).toBeFocused();
     await expect(firstEvaluator).toHaveCSS("outline-style", "solid");
 
+    // Each selected card also exposes its exact version selector and contract disclosure right
+    // after the checkbox (#80), so the keyboard path must reach every stop without a mouse.
+    const tabUntilFocused = async (target: Locator, maxTabs = 4) => {
+      for (let i = 0; i < maxTabs; i += 1) {
+        if (await target.evaluate((el) => el === document.activeElement)) return;
+        await page.keyboard.press("Tab");
+      }
+      await expect(target).toBeFocused();
+    };
+
     for (const id of ["escalation_match", "intent_match", "pii_safe", "required_tool_match"]) {
       const checkbox = page.getByRole("checkbox", { name: new RegExp(id) });
       await expect(checkbox).toBeFocused();
-      if (id !== "required_tool_match") await page.keyboard.press("Tab");
+      if (id === "required_tool_match") break;
+      await page.keyboard.press("Tab");
+      await expect(page.getByLabel(`${id} 版本`)).toBeFocused();
+      await tabUntilFocused(page.getByRole("checkbox", { name: new RegExp(DIAGNOSTIC_IDS[DIAGNOSTIC_IDS.indexOf(id) + 1]) }));
     }
 
     // Toggle the last diagnostic so keyboard testing doesn't alter the initial request order.
@@ -238,7 +251,7 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     expect(interceptedCreationPayload).toBeNull();
 
     const concurrencyInput = page.getByRole("spinbutton");
-    await page.keyboard.press("Tab");
+    await tabUntilFocused(concurrencyInput, 6);
     await expect(concurrencyInput).toBeFocused();
 
     // Adjust Concurrency
@@ -249,13 +262,17 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
 
     // Verify Creation Payload Contract: must NOT include run_pass_rate, dataset_version undefined when latest
     expect(interceptedCreationPayload).not.toBeNull();
-    expect(interceptedCreationPayload.evaluator_ids).toEqual([
-      "escalation_match",
-      "intent_match",
-      "pii_safe",
-      "required_tool_match",
+    expect(interceptedCreationPayload.evaluator_selections).toEqual([
+      { id: "escalation_match", version: "1.0.0" },
+      { id: "intent_match", version: "1.0.0" },
+      { id: "pii_safe", version: "1.0.0" },
+      { id: "required_tool_match", version: "1.0.0" },
     ]);
-    expect(interceptedCreationPayload.evaluator_ids).not.toContain("run_pass_rate");
+    expect(
+      interceptedCreationPayload.evaluator_selections.map((s: { id: string }) => s.id),
+    ).not.toContain("run_pass_rate");
+    // The legacy id-only contract must never be sent: it would silently drift to a newer default.
+    expect(interceptedCreationPayload.evaluator_ids).toBeUndefined();
     expect(interceptedCreationPayload.dataset_version).toBeUndefined();
     expect(interceptedCreationPayload.max_concurrency).toBe(2);
 

@@ -135,6 +135,50 @@ def test_failure_triggers_backoff_and_is_isolated(setup_runtime):
     assert set(flaky.calls) - set(first_round) == set()
 
 
+def test_budget_is_enforced_even_when_no_launch_is_updated(setup_runtime):
+    """所有候选都失败时预算同样必须生效。
+
+    旧实现只在 ``updated > 0`` 时检查 deadline，因此"全部不可用"的一批候选会
+    顺序做完所有远端查询（每次自带 2 秒超时），远超声明的 10 秒预算。
+    """
+    import time as time_module
+
+    reconciler = setup_runtime[5]
+    for _ in range(6):
+        seed_terminal_launch(setup_runtime)
+
+    sleep_per_call = 0.05
+
+    class UnavailableService:
+        def __init__(self):
+            self.calls: list[str] = []
+
+        def ensure_launch_link(self, launch_id):
+            self.calls.append(launch_id)
+            time_module.sleep(sleep_per_call)
+            return SimpleNamespace(status="UNAVAILABLE", run_id=None)
+
+    service = UnavailableService()
+    assert reconciler.reconcile_langfuse_links(service, budget_seconds=0.12) == 0
+    # 必须提前放弃，而不是把整批候选的远端查询都跑完
+    assert len(service.calls) < 6
+    assert len(service.calls) > 0
+
+
+def test_backoff_eviction_bounds_both_dictionaries(setup_runtime):
+    """退避表淘汰时必须同步淘汰延迟计数，否则字典无界增长。"""
+    _db, reconciler = setup_runtime[0], setup_runtime[5]
+    cap = reconciler._LINK_BACKOFF_MAX_ENTRIES
+
+    for i in range(cap + 50):
+        reconciler._link_note_failure(f"launch-{i:05d}", "UNAVAILABLE:None", 0.0)
+
+    assert len(reconciler._link_backoff) == cap
+    assert len(reconciler._link_backoff_delays) == cap
+    oldest = {f"launch-{i:05d}" for i in range(50)}
+    assert oldest.isdisjoint(reconciler._link_backoff_delays)
+
+
 def test_backoff_signature_change_resets_delay(setup_runtime):
     db, reconciler = setup_runtime[0], setup_runtime[5]
     lid, _ = seed_terminal_launch(setup_runtime)

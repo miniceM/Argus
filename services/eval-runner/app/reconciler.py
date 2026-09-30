@@ -468,7 +468,11 @@ class ExecutionReconciler:
         self._link_backoff_delays[launch_id] = used + 1
         self._link_backoff[launch_id] = (now + delay, signature)
         while len(self._link_backoff) > self._LINK_BACKOFF_MAX_ENTRIES:
-            self._link_backoff.pop(next(iter(self._link_backoff)))
+            # Evict from both maps: leaving the delay counter behind would grow
+            # `_link_backoff_delays` without bound.
+            evicted = next(iter(self._link_backoff))
+            self._link_backoff.pop(evicted)
+            self._link_backoff_delays.pop(evicted, None)
 
     def _link_clear(self, launch_id: str) -> None:
         self._link_backoff.pop(launch_id, None)
@@ -500,7 +504,10 @@ class ExecutionReconciler:
             entry = self._link_backoff.get(launch_id)
             if entry is not None and entry[0] > now:
                 continue
-            if updated > 0 and time.monotonic() >= deadline:
+            # The budget bounds the whole pass. Gating it on `updated > 0` let a batch
+            # where every lookup fails run all sequential remote calls, each with its
+            # own timeout, far beyond the advertised budget.
+            if time.monotonic() >= deadline:
                 break
             try:
                 result = link_service.ensure_launch_link(launch_id)

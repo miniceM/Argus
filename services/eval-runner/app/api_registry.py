@@ -204,6 +204,7 @@ def create_agent_version(
             protocol=payload.protocol,
             method=payload.method,
             request_mapping=payload.request_mapping,
+            usage_cost_mapping=payload.usage_cost_mapping.model_dump() if payload.usage_cost_mapping else None,
             request_schema=payload.request_schema,
             response_schema=payload.response_schema,
             credential_ref=payload.credential_ref,

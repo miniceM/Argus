@@ -19,7 +19,10 @@ type FrozenVersions = {
   environment?: string;
 };
 type RunSummary = Omit<GeneratedRunSummary, "versions"> & { versions: FrozenVersions };
-type RunMetrics = {
+type GeneratedRunMetrics = GeneratedRunSummary["summary"];
+type CostReason = NonNullable<GeneratedRunMetrics["cost_unavailable_reason"]>
+  | NonNullable<GeneratedComparison["summary"]["cost_comparison"]["reason"]>;
+type RunMetrics = GeneratedRunMetrics & {
   pass_rate?: number | null;
   evaluation_coverage?: number | null;
   critical_failure_count?: number | null;
@@ -27,17 +30,14 @@ type RunMetrics = {
   execution_error_rate?: number | null;
   evaluator_error_count?: number | null;
   p95_latency_ms?: number | null;
-  cost_per_case?: number | null;
   score_means?: Record<string, number | null>;
   total_cases?: number;
   evaluated_cases?: number;
 };
-type ComparisonSummary = {
-  candidate?: RunMetrics;
-  baseline?: RunMetrics | null;
-  comparable_case_count?: number;
-  classification_counts?: Record<string, number>;
-  comparable_cohort?: { baseline: RunMetrics; candidate: RunMetrics } | null;
+type ComparisonSummary = GeneratedComparison["summary"] & {
+  candidate: RunMetrics;
+  baseline: RunMetrics | null;
+  comparable_cohort: { baseline: RunMetrics; candidate: RunMetrics } | null;
 };
 type ComparisonItem = {
   dataset_item_id?: string | null;
@@ -51,11 +51,9 @@ type ComparisonItem = {
   baseline_experiment_url?: string | null;
   candidate_experiment_url?: string | null;
 };
-type Comparison = Omit<GeneratedComparison, "versions" | "summary" | "items" | "classification_counts"> & {
+type Comparison = Omit<GeneratedComparison, "versions" | "items"> & {
   versions: { baseline: FrozenVersions | null; candidate: FrozenVersions };
-  summary: ComparisonSummary;
   items: ComparisonItem[];
-  classification_counts: Record<string, number>;
   next_cursor?: number | null;
 };
 
@@ -71,6 +69,39 @@ type ReportViewState = {
 const percent = (value: number | null | undefined) => value == null ? "—" : `${(value * 100).toFixed(1)}%`;
 const number = (value: number | null | undefined, suffix = "") => value == null ? "—" : `${value.toFixed(2)}${suffix}`;
 const count = (value: number | null | undefined) => value == null ? "—" : String(value);
+const money = (value: number | null | undefined, currency: string | null | undefined) => {
+  if (value == null || !currency) return "—";
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: 10,
+    }).format(value);
+  } catch {
+    return `${currency} ${value.toFixed(10)}`;
+  }
+};
+const signedMoney = (value: number | null | undefined, currency: string | null | undefined) => {
+  if (value == null) return "—";
+  return `${value > 0 ? "+" : value < 0 ? "-" : ""}${money(Math.abs(value), currency)}`;
+};
+const costCoverage = (metrics: RunMetrics | null | undefined) => {
+  if (metrics?.cost_coverage == null) return "—";
+  const covered = metrics.cost_case_count ?? 0;
+  const total = metrics.total_cases == null ? "?" : String(metrics.total_cases);
+  return `${covered}/${total} (${percent(metrics.cost_coverage)})`;
+};
+const costReasonText: Record<CostReason, string> = {
+  BASELINE_NOT_BOUND: "尚未绑定 Baseline，暂不能计算成本差值。",
+  COST_NOT_RECORDED: "未记录成本的 Case 不按 0 计入。",
+  INVALID_COST_EVIDENCE: "存在无效成本证据，成本暂不可比较。",
+  INCOMPLETE_ATTEMPT_COST: "至少一个 Retry Attempt 缺少成本证据，完整 Case 成本不可用。",
+  MIXED_CURRENCIES: "存在多种币种，不会直接相加。",
+  COST_CURRENCY_MISMATCH: "Baseline 与 Candidate 币种不同，不会直接比较。",
+  COST_SCOPE_MISMATCH: "Baseline 与 Candidate 成本测量范围不同。",
+  COST_POLICY_MISMATCH: "Baseline 与 Candidate 成本统计策略版本不同。",
+  COST_SOURCE_MISMATCH: "Baseline 与 Candidate 成本来源不同。",
+  PARTIAL_COST_COVERAGE: "覆盖不完整；Cost / Case 仅按有效覆盖展示，差值不计算。",
+  NO_COMPARABLE_CASES: "没有共同可比 Case，成本差值未计算。",
+};
 const signedDelta = (before: number | null | undefined, after: number | null | undefined, digits = 2, suffix = "") => {
   if (before == null || after == null) return "—";
   const delta = after - before;
@@ -237,10 +268,18 @@ export const ComparisonReport: React.FC<{
     ...Object.keys(cohort?.candidate.score_means ?? {}),
   ])).sort();
   const aggregateRows = cohort ? [
-    { label: "Pass Rate", baseline: percent(cohort.baseline.pass_rate), candidate: percent(cohort.candidate.pass_rate), delta: percentagePointDelta(cohort.baseline.pass_rate, cohort.candidate.pass_rate) },
+    { label: "质量通过率 (Quality Pass Rate)", baseline: percent(cohort.baseline.pass_rate), candidate: percent(cohort.candidate.pass_rate), delta: percentagePointDelta(cohort.baseline.pass_rate, cohort.candidate.pass_rate) },
     { label: "Critical Failure Cases", baseline: number(cohort.baseline.critical_failure_count), candidate: number(cohort.candidate.critical_failure_count), delta: signedDelta(cohort.baseline.critical_failure_count, cohort.candidate.critical_failure_count) },
     { label: "P95 Latency", baseline: number(cohort.baseline.p95_latency_ms, " ms"), candidate: number(cohort.candidate.p95_latency_ms, " ms"), delta: signedDelta(cohort.baseline.p95_latency_ms, cohort.candidate.p95_latency_ms, 2, " ms") },
-    { label: "Cost / Case", baseline: number(cohort.baseline.cost_per_case), candidate: number(cohort.candidate.cost_per_case), delta: signedDelta(cohort.baseline.cost_per_case, cohort.candidate.cost_per_case) },
+    {
+      label: "Cost / Case",
+      baseline: money(cohort.baseline.cost_per_case, cohort.baseline.cost_currency),
+      candidate: money(cohort.candidate.cost_per_case, cohort.candidate.cost_currency),
+      delta: comparisonSummary?.cost_comparison?.status === "COMPARABLE"
+        ? signedMoney(comparisonSummary.cost_comparison.delta, comparisonSummary.cost_comparison.currency)
+        : "—",
+    },
+    { label: "Cost Coverage", baseline: costCoverage(cohort.baseline), candidate: costCoverage(cohort.candidate), delta: percentagePointDelta(cohort.baseline.cost_coverage, cohort.candidate.cost_coverage) },
     ...evaluatorIds.map((id) => ({
       label: `Score · ${id}`,
       baseline: number(cohort.baseline.score_means?.[id]),
@@ -255,7 +294,14 @@ export const ComparisonReport: React.FC<{
     { label: "Execution Errors", baseline: number(fullRunBaseline?.execution_error_count), candidate: number(fullRunCandidate.execution_error_count), delta: signedDelta(fullRunBaseline?.execution_error_count, fullRunCandidate.execution_error_count) },
     { label: "Execution Error Rate", baseline: percent(fullRunBaseline?.execution_error_rate), candidate: percent(fullRunCandidate.execution_error_rate), delta: percentagePointDelta(fullRunBaseline?.execution_error_rate, fullRunCandidate.execution_error_rate) },
     { label: "Evaluator Errors", baseline: number(fullRunBaseline?.evaluator_error_count), candidate: number(fullRunCandidate.evaluator_error_count), delta: signedDelta(fullRunBaseline?.evaluator_error_count, fullRunCandidate.evaluator_error_count) },
+    { label: "Run Cost / Case", baseline: money(fullRunBaseline?.cost_per_case, fullRunBaseline?.cost_currency), candidate: money(fullRunCandidate.cost_per_case, fullRunCandidate.cost_currency), delta: "—" },
+    { label: "Run Cost Coverage", baseline: costCoverage(fullRunBaseline), candidate: costCoverage(fullRunCandidate), delta: "—" },
   ] : [];
+  const costExplanations = [
+    { label: "全量 Baseline", reason: fullRunBaseline?.cost_unavailable_reason },
+    { label: "全量 Candidate", reason: fullRunCandidate?.cost_unavailable_reason },
+    { label: "共同可比 Case", reason: comparisonSummary?.cost_comparison?.reason },
+  ].filter((entry): entry is { label: string; reason: CostReason } => entry.reason != null);
 
   if (!canReadResults) return null;
 
@@ -310,6 +356,15 @@ export const ComparisonReport: React.FC<{
           {cohort ? (
             <div className="space-y-1">
             <h3 className="text-xs font-semibold text-foreground">共同可比样本质量（{comparisonSummary?.comparable_case_count ?? 0} 个 Case）</h3>
+            {/* This ratio uses a different denominator from the all-cases quality
+                ratio in the Launch detail header. Name the cohort and the
+                "evaluable" rule so the two are never read as one metric. */}
+            <p
+              data-testid="comparable-quality-pass-rate-help"
+              className="pb-1 text-micro text-muted-foreground"
+            >
+              质量通过率说明：仅统计双方共同可比样本。质量通过率为质量 PASS 数 / 有效已评测数；有效已评测要求执行成功、评测成功且质量结论为 PASS 或 FAIL。不可比或无有效质量结论的用例不参与该比例，请结合全量运行健康指标查看评测覆盖率与错误数。
+            </p>
             <div className="overflow-x-auto rounded-lg border border-border">
               <table aria-label="Baseline 与 Candidate 聚合指标对比" className="min-w-full divide-y divide-border text-left text-xs">
                 <thead className="bg-canvas text-muted-foreground">
@@ -330,6 +385,15 @@ export const ComparisonReport: React.FC<{
             </div>
           ) : comparisonSummary && (
             <p className="rounded border border-border p-3 text-xs text-muted-foreground">无可比样本，质量差异未计算。</p>
+          )}
+          {costExplanations.length > 0 && (
+            <p role="status" className="rounded border border-border p-3 text-xs text-muted-foreground">
+              {costExplanations.map(({ label, reason }) => (
+                <span key={label} className="block">
+                  {label} 成本说明：{costReasonText[reason] ?? reason}
+                </span>
+              ))}
+            </p>
           )}
         </div>
       )}
@@ -393,7 +457,7 @@ export const ComparisonReport: React.FC<{
             </div>
           )}
           <p className="text-micro text-muted-foreground">
-            只在同一 Dataset、相同 Case 内容与 Evaluator 契约上分类；全量运行健康与共同样本质量分别统计。Case 输出按当前固定 Snapshot 延迟读取；不可用指标显示为 —，不会按 0 参与比较。
+            只在同一 Dataset、相同 Case 内容与 Evaluator 契约上分类；全量运行健康与共同样本质量分别统计。成本差值仅对共同可比 Case 且双方完整覆盖、币种与口径兼容时计算；部分覆盖仅表示已有证据 Case 的均值，缺失成本不会按 0 计入。Case 输出按当前固定 Snapshot 延迟读取；历史页面使用冻结 Snapshot，不可用指标显示为 —。
           </p>
         </>
       )}

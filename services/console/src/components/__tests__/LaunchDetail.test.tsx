@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
@@ -387,5 +387,333 @@ describe("LaunchDetail Frozen Manifest Structured Audit View", () => {
 
     expect(covered).toBe(total);
     expect(segments.some((el) => el.getAttribute("data-segment") === "queued")).toBe(true);
+  });
+});
+
+describe("Issue #45 quality pass rate wording", () => {
+  const buildLaunch = (id: string, overrides: Record<string, unknown> = {}) => ({
+    id,
+    name: "Quality Wording Launch",
+    status: "COMPLETED",
+    quality_conclusion: "fail",
+    dataset_name: "banking-regression",
+    dataset_version: "2026-09-20T00:00:00Z",
+    agent_id: "banking-agent",
+    agent_version: "v2",
+    langfuse_sync_status: "SYNCED",
+    created_at: "2026-09-20T00:00:00Z",
+    started_at: "2026-09-20T00:00:01Z",
+    completed_at: "2026-09-20T00:00:05Z",
+    manifest: { schema_version: "1.0", dataset: { items_count: 6 } },
+    progress: {
+      total: 6,
+      pending: 0,
+      queued: 0,
+      running: 0,
+      retry_wait: 0,
+      succeeded: 6,
+      failed: 0,
+      timed_out: 0,
+      cancelled: 0,
+      completed: 6,
+      percentage: 100,
+      attempts: 6,
+      retries: 0,
+      allowed_actions: [],
+    },
+    ...overrides,
+  });
+
+  const buildItems = (launchId: string, specs: Array<Record<string, unknown>>) =>
+    specs.map((spec, index) => ({
+      id: `item-${index}`,
+      launch_id: launchId,
+      dataset_item_id: `case-${index}`,
+      execution_status: "SUCCEEDED",
+      eval_status: "SUCCEEDED",
+      quality_conclusion: "UNKNOWN",
+      scores: {},
+      attempt_count: 1,
+      started_at: "2026-09-20T00:00:01Z",
+      ...spec,
+    }));
+
+  const renderDetail = (launch: Record<string, unknown>, items: Array<Record<string, unknown>>) => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path.includes("/items")) return Promise.resolve({ data: items });
+      // The results endpoints share the launches prefix; answer them first so
+      // the comparison panel never receives a Launch payload.
+      if (path.includes("/summary") || path.includes("/comparison") || path.includes("/baselines")) {
+        return Promise.resolve({ data: null });
+      }
+      if (path.includes("/api/v1/experiment-launches")) return Promise.resolve({ data: launch });
+      return Promise.resolve({ data: null });
+    });
+
+    return render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[`/launches/${launch.id}`]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<LaunchDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+  };
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("labels the top metric as quality pass rate and keeps it separate from execution results", async () => {
+    const launch = buildLaunch("launch-quality-001");
+    const items = buildItems(launch.id, [
+      { quality_conclusion: "pass" },
+      { quality_conclusion: "pass" },
+      { quality_conclusion: "fail" },
+      { quality_conclusion: "fail" },
+      { quality_conclusion: "fail" },
+      { quality_conclusion: "fail" },
+    ]);
+
+    renderDetail(launch, items);
+
+    const metric = await screen.findByTestId("quality-pass-rate");
+    expect(metric).toHaveTextContent("质量通过率 (Quality Pass Rate)");
+    expect(metric).toHaveTextContent("统计范围：全部用例");
+    expect(metric).toHaveTextContent("2");
+    expect(metric).toHaveTextContent("6");
+    expect(metric).toHaveTextContent("(33.3%)");
+
+    // Execution and quality conclusions stay separate, never derived from the ratio.
+    // The launch header renders above the per-item table, so the first badge of
+    // each kind is the launch-level conclusion rather than an item's.
+    expect(screen.getAllByTestId("status-badge")[0]).toHaveTextContent("COMPLETED");
+    expect(screen.getAllByTestId("quality-badge")[0]).toHaveTextContent("FAIL");
+
+    // Execution progress still reports 6/6 successes.
+    await waitFor(() => {
+      expect(screen.getByText("实时执行进度看板")).toBeInTheDocument();
+    });
+    const successCard = document.querySelector('[data-card="pass"]');
+    expect(successCard).not.toBeNull();
+    expect(successCard).toHaveTextContent("6");
+
+    // The ambiguous legacy label is gone.
+    expect(screen.queryByText("用例通过率 (Pass Rate)")).not.toBeInTheDocument();
+
+    // The denominator rules are stated in always-visible help text.
+    const help = screen.getByTestId("quality-pass-rate-help");
+    expect(help).toHaveTextContent("分母为当前返回的全部用例数");
+    expect(help).toHaveTextContent("仍计入分母，但不计入分子");
+    expect(help).toHaveTextContent("不代表质量结论为 FAIL");
+    expect(help).toHaveTextContent("不是执行成功率");
+  });
+
+  it("keeps execution failures, evaluator errors and UNKNOWN items in the top denominator", async () => {
+    const launch = buildLaunch("launch-quality-002", {
+      progress: {
+        total: 4,
+        pending: 0,
+        queued: 0,
+        running: 0,
+        retry_wait: 0,
+        // Must mirror the four items below: three executed successfully
+        // (one of which then failed in the evaluator) and one failed outright.
+        succeeded: 3,
+        failed: 1,
+        timed_out: 0,
+        cancelled: 0,
+        completed: 4,
+        percentage: 100,
+        attempts: 4,
+        retries: 0,
+        allowed_actions: [],
+      },
+    });
+    const items = buildItems(launch.id, [
+      { quality_conclusion: "pass" },
+      { quality_conclusion: "fail" },
+      { execution_status: "FAILED", eval_status: "SKIPPED", quality_conclusion: "unknown" },
+      { execution_status: "SUCCEEDED", eval_status: "FAILED", quality_conclusion: "unknown" },
+    ]);
+
+    renderDetail(launch, items);
+
+    const metric = await screen.findByTestId("quality-pass-rate");
+    // 1 of 4: the two UNKNOWN items stay in the denominator, which is what the
+    // top-of-page metric has always meant. The comparable-cohort pass_rate in
+    // the comparison report is a different, narrower denominator.
+    expect(metric).toHaveTextContent("(25.0%)");
+    expect(metric).toHaveTextContent("统计范围：全部用例");
+  });
+
+  it("renders 0/N and keeps the quality conclusion UNKNOWN when every item is UNKNOWN", async () => {
+    // A zero numerator is not a FAIL verdict. The badge must keep reporting the
+    // Launch-level conclusion, and the ratio must stay a real 0/N.
+    const launch = buildLaunch("launch-quality-005", {
+      quality_conclusion: "unknown",
+      progress: {
+        total: 3,
+        pending: 0,
+        queued: 0,
+        running: 0,
+        retry_wait: 0,
+        succeeded: 0,
+        failed: 1,
+        timed_out: 1,
+        cancelled: 1,
+        completed: 3,
+        percentage: 0,
+        attempts: 3,
+        retries: 0,
+        allowed_actions: [],
+      },
+    });
+    const items = buildItems(launch.id, [
+      { execution_status: "FAILED", eval_status: "SKIPPED", quality_conclusion: "unknown" },
+      { execution_status: "TIMED_OUT", eval_status: "SKIPPED", quality_conclusion: "unknown" },
+      { execution_status: "CANCELLED", eval_status: "SKIPPED", quality_conclusion: "unknown" },
+    ]);
+
+    renderDetail(launch, items);
+
+    const metric = await screen.findByTestId("quality-pass-rate");
+    expect(metric).toHaveTextContent("(0.0%)");
+    expect(metric).toHaveTextContent("统计范围：全部用例");
+    // The badge is not rewritten into FAIL just because the numerator is zero.
+    expect(screen.getAllByTestId("quality-badge")[0]).toHaveTextContent("UNKNOWN");
+  });
+
+  it("counts mixed-case quality conclusions without double counting or dropping any", async () => {
+    // The production comparison lowercases quality_conclusion. Uppercase API
+    // values must therefore land in the numerator exactly once each.
+    const launch = buildLaunch("launch-quality-006", {
+      progress: {
+        total: 4,
+        pending: 0,
+        queued: 0,
+        running: 0,
+        retry_wait: 0,
+        succeeded: 4,
+        failed: 0,
+        timed_out: 0,
+        cancelled: 0,
+        completed: 4,
+        percentage: 100,
+        attempts: 4,
+        retries: 0,
+        allowed_actions: [],
+      },
+    });
+    const items = buildItems(launch.id, [
+      { quality_conclusion: "PASS" },
+      { quality_conclusion: "pass" },
+      { quality_conclusion: "PASS" },
+      { quality_conclusion: "Fail" },
+    ]);
+
+    renderDetail(launch, items);
+
+    const metric = await screen.findByTestId("quality-pass-rate");
+    // Three of the four items are PASS once case-folded: 3/4 = 75.0%.
+    expect(metric).toHaveTextContent("(75.0%)");
+  });
+
+  it("keeps cancelled, timed-out and skipped items in the denominator", async () => {
+    // Each terminal execution state that never reached a comparable quality
+    // verdict must still consume denominator space.
+    const launch = buildLaunch("launch-quality-007", {
+      progress: {
+        total: 4,
+        pending: 0,
+        queued: 0,
+        running: 0,
+        retry_wait: 0,
+        succeeded: 1,
+        failed: 1,
+        timed_out: 1,
+        cancelled: 1,
+        completed: 4,
+        percentage: 100,
+        attempts: 4,
+        retries: 0,
+        allowed_actions: [],
+      },
+    });
+    const items = buildItems(launch.id, [
+      { quality_conclusion: "pass" },
+      { quality_conclusion: "fail" },
+      { execution_status: "CANCELLED", eval_status: "SKIPPED", quality_conclusion: "unknown" },
+      { execution_status: "TIMED_OUT", eval_status: "SKIPPED", quality_conclusion: "unknown" },
+    ]);
+
+    renderDetail(launch, items);
+
+    const metric = await screen.findByTestId("quality-pass-rate");
+    expect(metric).toHaveTextContent("(25.0%)");
+    expect(metric).toHaveTextContent("统计范围：全部用例");
+  });
+
+  it("renders an explicit empty state instead of a fabricated ratio when no items exist", async () => {
+    const launch = buildLaunch("launch-quality-003", {
+      status: "PENDING",
+      quality_conclusion: "unknown",
+      progress: {
+        total: 0,
+        pending: 0,
+        queued: 0,
+        running: 0,
+        retry_wait: 0,
+        succeeded: 0,
+        failed: 0,
+        timed_out: 0,
+        cancelled: 0,
+        completed: 0,
+        percentage: 0,
+        attempts: 0,
+        retries: 0,
+        allowed_actions: ["run"],
+      },
+    });
+
+    renderDetail(launch, []);
+
+    const metric = await screen.findByTestId("quality-pass-rate");
+    expect(metric).toHaveTextContent("尚未统计");
+    expect(metric).not.toHaveTextContent("NaN");
+    expect(metric).not.toHaveTextContent("Infinity");
+  });
+
+  it("keeps the unavailable state when the Items request fails", async () => {
+    const launch = buildLaunch("launch-quality-004");
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path.includes("/items")) {
+        return Promise.resolve({ error: { message: "boom" } });
+      }
+      if (path.includes("/summary") || path.includes("/comparison") || path.includes("/baselines")) {
+        return Promise.resolve({ data: null });
+      }
+      if (path.includes("/api/v1/experiment-launches")) return Promise.resolve({ data: launch });
+      return Promise.resolve({ data: null });
+    });
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[`/launches/${launch.id}`]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<LaunchDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const metric = await screen.findByTestId("quality-pass-rate");
+    await waitFor(() => {
+      expect(metric).toHaveTextContent("暂不可用");
+    });
+    expect(metric).not.toHaveTextContent("(0.0%)");
   });
 });

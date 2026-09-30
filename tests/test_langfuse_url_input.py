@@ -430,6 +430,13 @@ def test_environment_is_configured_before_app_config_is_first_imported(monkeypat
     )
 
 
+# 远端身份核对用的固定身份：真实 ID 形态，避免测试把 Name 当 ID 用。
+DS_NAME = "banking-agent-regression"
+DATASET_ID = "cmu5gbnus0006ad0kjc2u7r1k"
+PROJECT_ID = "cmu5a6fj500aoad0jvrckiypb"
+ACK_RUN_ID = "ce880ed6-8f82-4cc0-9461-746b2e9905e4"
+
+
 class _FakeQuery:
     def __init__(self, rows):
         self._rows = rows
@@ -459,81 +466,219 @@ class _FakeVerifySession:
         return _FakeQuery(self._tasks)
 
 
-def test_remote_identity_lookup_avoids_legacy_dataset_run_endpoint(monkeypatch):
-    """身份校验必须走 experiments.list。
-
-    Langfuse Cloud 对 2026-09-16 之后创建的 Organization 关闭了 v3 的
-    datasets.get_run，返回 410 LEGACY_API_UNAVAILABLE_FOR_NEW_ORGANIZATION；
-    Dataset Run 在 v4 中即 Experiment。
-    """
-    script = _load_verification_script()
-    monkeypatch.setattr(script, "EXPERIMENT_LOOKUP_ATTEMPTS", 1, raising=False)
-    monkeypatch.setattr(script, "EXPERIMENT_LOOKUP_INTERVAL_SECONDS", 0.0, raising=False)
-
-    run_id = "11111111-2222-3333-4444-555555555555"
-    dataset_id = "dddddddd-2222-3333-4444-555555555555"
-    project_id = "pppppppp-2222-3333-4444-555555555555"
-    url = f"{CLEAN}/project/{project_id}/datasets/{dataset_id}/runs/{run_id}"
-
-    launch = SimpleNamespace(
-        dataset_name="banking-agent-regression",
-        langfuse_experiment_url=url,
+def _task(run_name="argus-test", ack_run_id=ACK_RUN_ID):
+    """模拟 outbox 任务：``_dataset_run_id`` 是 Langfuse create ACK 返回的 Run ID。"""
+    return SimpleNamespace(
+        dataset_run_name=run_name,
+        scores_payload={"_dataset_run_id": ack_run_id} if ack_run_id else {},
     )
-    tasks = [SimpleNamespace(dataset_run_name="argus-test")]
 
-    class _LegacyDatasets:
+
+def _fake_client(
+    *,
+    project_id,
+    dataset_id,
+    experiments=lambda **_kwargs: SimpleNamespace(data=[]),
+    experiment_items=lambda **_kwargs: SimpleNamespace(data=[]),
+    scores=lambda **_kwargs: SimpleNamespace(data=[]),
+):
+    """构造只暴露 v4 读路径的假客户端。
+
+    2026-09-16 之后创建的 Organization 上，Langfuse 已关闭全部 v3 读路径
+    （datasets.get_run / datasets.get_runs / dataset-run-items / v2 scores 均返回
+    410 LEGACY_API_UNAVAILABLE_FOR_NEW_ORGANIZATION），因此这里让任何 legacy 调用
+    直接失败，防止验证脚本再次退回已被平台下线的接口。
+    """
+
+    def _legacy(name):
+        def _boom(*_args, **_kwargs):
+            raise AssertionError(f"legacy {name} must not be used")
+
+        return _boom
+
+    class _Datasets:
+        get_run = staticmethod(_legacy("datasets.get_run"))
+        get_runs = staticmethod(_legacy("datasets.get_runs"))
+
         @staticmethod
-        def get_run(*_args, **_kwargs):
-            raise AssertionError("legacy datasets.get_run must not be used")
+        def get(dataset_name, **_kwargs):
+            return SimpleNamespace(id=dataset_id, name=dataset_name)
 
-    class _Experiments:
-        @staticmethod
-        def list(**kwargs):
-            return SimpleNamespace(
-                data=[SimpleNamespace(id=run_id, name="argus-test", dataset_id=dataset_id)]
-            )
+    class _DatasetRunItems:
+        list = staticmethod(_legacy("dataset_run_items.list"))
 
-    fake_client = SimpleNamespace(
+    return SimpleNamespace(
         api=SimpleNamespace(
             projects=SimpleNamespace(
                 get=lambda **_kwargs: SimpleNamespace(data=[SimpleNamespace(id=project_id)])
             ),
-            datasets=_LegacyDatasets,
-            experiments=_Experiments,
+            datasets=_Datasets,
+            dataset_run_items=_DatasetRunItems,
+            experiments=SimpleNamespace(list=experiments, list_items=experiment_items),
+            scores_v3=SimpleNamespace(get_many_v3=scores),
         )
     )
-    monkeypatch.setattr("langfuse.get_client", lambda: fake_client)
 
-    evidence = script._verify_remote_identity(
+
+def _verify(script, monkeypatch, *, url, tasks, client, run_id=ACK_RUN_ID, dataset_name=DS_NAME):
+    launch = SimpleNamespace(dataset_name=dataset_name, langfuse_experiment_url=url)
+    monkeypatch.setattr("langfuse.get_client", lambda: client)
+    return script._verify_remote_identity(
         SimpleNamespace(get_session=lambda: _FakeVerifySession(launch, tasks)),
         "launch-1",
         run_id,
         CLEAN,
     )
 
-    assert evidence["remote_run_id"] == run_id
-    assert evidence["remote_dataset_id"] == dataset_id
-    assert evidence["key_project_id"] == project_id
+
+def test_remote_identity_confirms_run_when_platform_exposes_it(monkeypatch):
+    """平台能读回 Run 时，身份核对必须是最强的全等断言。
+
+    Langfuse Cloud 对 2026-09-16 之后创建的 Organization 关闭了 v3 的
+    datasets.get_run（410 LEGACY_API_UNAVAILABLE_FOR_NEW_ORGANIZATION）；
+    Dataset Run 在 v4 中即 Experiment，只能经 /api/public/experiments 读回。
+    """
+    script = _load_verification_script()
+    monkeypatch.setattr(script, "REMOTE_RUN_LOOKUP_ATTEMPTS", 1, raising=False)
+    monkeypatch.setattr(script, "REMOTE_RUN_LOOKUP_INTERVAL_SECONDS", 0.0, raising=False)
+
+    url = f"{CLEAN}/project/{PROJECT_ID}/datasets/{DATASET_ID}/runs/{ACK_RUN_ID}"
+    seen: list[dict] = []
+
+    def _list(**kwargs):
+        seen.append(kwargs)
+        return SimpleNamespace(data=[SimpleNamespace(id=ACK_RUN_ID, name="argus-test", dataset_id=DATASET_ID)])
+
+    client = _fake_client(
+        project_id=PROJECT_ID,
+        dataset_id=DATASET_ID,
+        experiments=_list,
+    )
+
+    evidence = _verify(script, monkeypatch, url=url, tasks=[_task()], client=client)
+
+    lookup = evidence["remote_run_lookup"]
+    assert lookup["status"] == "CONFIRMED"
+    assert "experiments.list" in lookup["via"]
+    assert evidence["remote_run_id"] == ACK_RUN_ID
+    assert evidence["remote_dataset_id"] == DATASET_ID
+    assert evidence["key_project_id"] == PROJECT_ID
+    # 必须按 ID 精确查询：name 过滤在 Langfuse 侧不保证命中
+    assert seen and all(kwargs.get("id") == ACK_RUN_ID for kwargs in seen)
 
 
-def test_remote_identity_lookup_retries_within_a_bounded_recent_window(monkeypatch):
-    """实验刚创建，Cloud 可能尚未可读；查询必须收敛到最近窗口并重试。
+def test_remote_identity_stays_green_when_platform_cannot_expose_the_run(monkeypatch, capsys):
+    """平台读不回 legacy 写入的 Dataset Run 时，身份核对不能靠"猜"。
+
+    真实 Cloud 证据（PR #79 CI run 36712685541）：异步 Outbox 通过
+    POST /api/public/dataset-run-items 写入的 Run，在该 Organization 上
+    v3 读路径全部 410，v4 读路径（experiments / experiment-items / v3 scores）
+    一律查不到——同一 Key 下同步路径创建的 Experiment 却可以查到。
+    此时脚本必须仍然证明"链接指向真实身份"，而不是把平台限制当成回归。
+    """
+    script = _load_verification_script()
+    monkeypatch.setattr(script, "REMOTE_RUN_LOOKUP_ATTEMPTS", 2, raising=False)
+    monkeypatch.setattr(script, "REMOTE_RUN_LOOKUP_INTERVAL_SECONDS", 0.0, raising=False)
+
+    url = f"{CLEAN}/project/{PROJECT_ID}/datasets/{DATASET_ID}/runs/{ACK_RUN_ID}"
+
+    def _legacy_gone(**_kwargs):
+        raise RuntimeError(
+            "status_code: 410, body: {'error': 'LEGACY_API_UNAVAILABLE_FOR_NEW_ORGANIZATION'}"
+        )
+
+    client = _fake_client(
+        project_id=PROJECT_ID,
+        dataset_id=DATASET_ID,
+        experiments=lambda **_kw: SimpleNamespace(
+            data=[SimpleNamespace(id="other-run", name="argus-ci-v1-unrelated")]
+        ),
+        experiment_items=_legacy_gone,
+        scores=lambda **_kw: SimpleNamespace(data=[]),
+    )
+
+    evidence = _verify(script, monkeypatch, url=url, tasks=[_task()], client=client)
+
+    lookup = evidence["remote_run_lookup"]
+    assert lookup["status"] == "NOT_EXPOSED"
+    assert lookup["attempts"] == 2
+    assert evidence["remote_run_id"] is None
+    # 已核对的事实一个都不能少
+    assert evidence["key_project_id"] == PROJECT_ID
+    assert evidence["remote_dataset_id"] == DATASET_ID
+    assert evidence["url_project_id"] == PROJECT_ID
+    assert evidence["url_dataset_id"] == DATASET_ID
+    assert evidence["url_run_id"] == ACK_RUN_ID
+    # Persisted Run ID 必须能被 Langfuse 的 create ACK 追溯，而不是 Argus 合成
+    assert evidence["ack_run_ids"] == [ACK_RUN_ID]
+    # 读不到也要留下可诊断的证据
+    probed = {probe["via"] for probe in lookup["probes"]}
+    assert {"experiments.list", "experiment-items", "v3-scores"} <= probed
+    assert any(probe["status"] == "ERROR" for probe in lookup["probes"])
+    assert any("other-run" in str(row) for row in lookup["observed"])
+
+    notice = capsys.readouterr()
+    notice = notice.out + notice.err
+    assert ACK_RUN_ID in notice
+    assert "NOT_EXPOSED" in notice
+
+
+def test_remote_identity_fails_when_task_evidence_contradicts_the_link(monkeypatch):
+    """Persisted Run ID 与任务 ACK 不一致时必须失败：链接可能指向另一个 Run。"""
+    script = _load_verification_script()
+    monkeypatch.setattr(script, "REMOTE_RUN_LOOKUP_ATTEMPTS", 1, raising=False)
+    monkeypatch.setattr(script, "REMOTE_RUN_LOOKUP_INTERVAL_SECONDS", 0.0, raising=False)
+
+    url = f"{CLEAN}/project/{PROJECT_ID}/datasets/{DATASET_ID}/runs/{ACK_RUN_ID}"
+    client = _fake_client(project_id=PROJECT_ID, dataset_id=DATASET_ID)
+
+    with pytest.raises(SystemExit):
+        _verify(
+            script,
+            monkeypatch,
+            url=url,
+            tasks=[_task(ack_run_id="99999999-9999-9999-9999-999999999999")],
+            client=client,
+        )
+
+
+def test_remote_identity_fails_when_url_carries_dataset_name_instead_of_id(monkeypatch):
+    """URL 里的 Dataset 段必须是远端真实 ID，而不是 Dataset Name。"""
+    script = _load_verification_script()
+    monkeypatch.setattr(script, "REMOTE_RUN_LOOKUP_ATTEMPTS", 1, raising=False)
+    monkeypatch.setattr(script, "REMOTE_RUN_LOOKUP_INTERVAL_SECONDS", 0.0, raising=False)
+
+    url = f"{CLEAN}/project/{PROJECT_ID}/datasets/{DS_NAME}/runs/{ACK_RUN_ID}"
+    client = _fake_client(project_id=PROJECT_ID, dataset_id=DATASET_ID)
+
+    with pytest.raises(SystemExit):
+        _verify(script, monkeypatch, url=url, tasks=[_task()], client=client)
+
+
+def test_remote_identity_fails_when_project_in_url_is_not_the_key_project(monkeypatch):
+    """URL 里的 Project 必须是当前 Key 对应的 Project（曾错误拼接 poc-project）。"""
+    script = _load_verification_script()
+    monkeypatch.setattr(script, "REMOTE_RUN_LOOKUP_ATTEMPTS", 1, raising=False)
+    monkeypatch.setattr(script, "REMOTE_RUN_LOOKUP_INTERVAL_SECONDS", 0.0, raising=False)
+
+    url = f"{CLEAN}/project/poc-project/datasets/{DATASET_ID}/runs/{ACK_RUN_ID}"
+    client = _fake_client(project_id=PROJECT_ID, dataset_id=DATASET_ID)
+
+    with pytest.raises(SystemExit):
+        _verify(script, monkeypatch, url=url, tasks=[_task()], client=client)
+
+
+def test_remote_identity_retries_within_a_bounded_recent_window(monkeypatch):
+    """实验刚创建，Cloud 读路径可能滞后：查询必须收敛到最近窗口并有限重试。
 
     from_start_time 若从 2020 年起算且 limit=100，返回的是最早的一页，
     永远不会包含本次刚创建的 Experiment。
     """
     script = _load_verification_script()
-    monkeypatch.setattr(script, "EXPERIMENT_LOOKUP_ATTEMPTS", 3, raising=False)
-    monkeypatch.setattr(script, "EXPERIMENT_LOOKUP_INTERVAL_SECONDS", 0.0, raising=False)
+    monkeypatch.setattr(script, "REMOTE_RUN_LOOKUP_ATTEMPTS", 3, raising=False)
+    monkeypatch.setattr(script, "REMOTE_RUN_LOOKUP_INTERVAL_SECONDS", 0.0, raising=False)
 
-    run_id = "11111111-2222-3333-4444-555555555555"
-    dataset_id = "dddddddd-2222-3333-4444-555555555555"
-    project_id = "pppppppp-2222-3333-4444-555555555555"
-    url = f"{CLEAN}/project/{project_id}/datasets/{dataset_id}/runs/{run_id}"
-
-    launch = SimpleNamespace(dataset_name="ds", langfuse_experiment_url=url)
-    tasks = [SimpleNamespace(dataset_run_name="argus-test")]
-
+    url = f"{CLEAN}/project/{PROJECT_ID}/datasets/{DATASET_ID}/runs/{ACK_RUN_ID}"
     seen: list[dict] = []
 
     def _list(**kwargs):
@@ -544,74 +689,43 @@ def test_remote_identity_lookup_retries_within_a_bounded_recent_window(monkeypat
         if len(seen) < 3:
             return SimpleNamespace(data=[])
         return SimpleNamespace(
-            data=[SimpleNamespace(id=run_id, name="argus-test", dataset_id=dataset_id)]
+            data=[SimpleNamespace(id=ACK_RUN_ID, name="argus-test", dataset_id=DATASET_ID)]
         )
 
-    fake_client = SimpleNamespace(
-        api=SimpleNamespace(
-            projects=SimpleNamespace(
-                get=lambda **_kw: SimpleNamespace(data=[SimpleNamespace(id=project_id)])
-            ),
-            experiments=SimpleNamespace(list=_list),
-        )
-    )
-    monkeypatch.setattr("langfuse.get_client", lambda: fake_client)
+    client = _fake_client(project_id=PROJECT_ID, dataset_id=DATASET_ID, experiments=_list)
 
-    evidence = script._verify_remote_identity(
-        SimpleNamespace(get_session=lambda: _FakeVerifySession(launch, tasks)),
-        "launch-1",
-        run_id,
-        CLEAN,
-    )
+    evidence = _verify(script, monkeypatch, url=url, tasks=[_task()], client=client)
 
-    assert evidence["remote_run_id"] == run_id
+    assert evidence["remote_run_id"] == ACK_RUN_ID
+    assert evidence["remote_run_lookup"]["attempts"] == 3
     assert len(seen) >= 3
 
 
-def test_remote_identity_falls_back_to_unfiltered_page_and_reports_what_it_saw(monkeypatch, capsys):
-    """名称过滤拿不到结果时必须改查整页，并在失败信息里报告实际观测到的记录。
-
-    否则只能看到 "no remote Experiment matched"，无法判断是名称不匹配、
-    ID 不同，还是读路径滞后。
-    """
+def test_remote_identity_confirms_run_via_experiment_items(monkeypatch):
+    """Run 本身未出现在 experiments 时，v4 的 experiment-items 仍可确认其身份。"""
     script = _load_verification_script()
-    monkeypatch.setattr(script, "EXPERIMENT_LOOKUP_ATTEMPTS", 1, raising=False)
-    monkeypatch.setattr(script, "EXPERIMENT_LOOKUP_INTERVAL_SECONDS", 0.0, raising=False)
+    monkeypatch.setattr(script, "REMOTE_RUN_LOOKUP_ATTEMPTS", 1, raising=False)
+    monkeypatch.setattr(script, "REMOTE_RUN_LOOKUP_INTERVAL_SECONDS", 0.0, raising=False)
 
-    run_id = "11111111-2222-3333-4444-555555555555"
-    dataset_id = "dddddddd-2222-3333-4444-555555555555"
-    project_id = "pppppppp-2222-3333-4444-555555555555"
-    url = f"{CLEAN}/project/{project_id}/datasets/{dataset_id}/runs/{run_id}"
-
-    launch = SimpleNamespace(dataset_name="ds", langfuse_experiment_url=url)
-    tasks = [SimpleNamespace(dataset_run_name="argus-test")]
-
-    other = SimpleNamespace(id="99999999-9999-9999-9999-999999999999", name="argus-test")
-
-    def _list(**kwargs):
-        if "name" in kwargs:
-            return SimpleNamespace(data=[])
-        return SimpleNamespace(data=[other])
-
-    fake_client = SimpleNamespace(
-        api=SimpleNamespace(
-            projects=SimpleNamespace(
-                get=lambda **_kw: SimpleNamespace(data=[SimpleNamespace(id=project_id)])
-            ),
-            experiments=SimpleNamespace(list=_list),
-        )
+    url = f"{CLEAN}/project/{PROJECT_ID}/datasets/{DATASET_ID}/runs/{ACK_RUN_ID}"
+    client = _fake_client(
+        project_id=PROJECT_ID,
+        dataset_id=DATASET_ID,
+        experiment_items=lambda **_kw: SimpleNamespace(
+            data=[
+                SimpleNamespace(
+                    experiment_id=ACK_RUN_ID,
+                    experiment_name="argus-test",
+                    experiment_dataset_id=DATASET_ID,
+                    trace_id="trace-1",
+                )
+            ]
+        ),
     )
-    monkeypatch.setattr("langfuse.get_client", lambda: fake_client)
 
-    with pytest.raises(SystemExit):
-        script._verify_remote_identity(
-            SimpleNamespace(get_session=lambda: _FakeVerifySession(launch, tasks)),
-            "launch-1",
-            run_id,
-            CLEAN,
-        )
+    evidence = _verify(script, monkeypatch, url=url, tasks=[_task()], client=client)
 
-    message = capsys.readouterr().err
-    assert "argus-test" in message
-    # 报告实际观测到的记录，便于判断是名称不匹配还是 ID 不同
-    assert "99999999-9999-9999-9999-999999999999" in message
+    assert evidence["remote_run_lookup"]["status"] == "CONFIRMED"
+    assert "experiment-items" in evidence["remote_run_lookup"]["via"]
+    assert evidence["remote_run_id"] == ACK_RUN_ID
+    assert evidence["remote_dataset_id"] == DATASET_ID

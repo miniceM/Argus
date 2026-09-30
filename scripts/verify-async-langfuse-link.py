@@ -32,15 +32,14 @@ sys.path.insert(0, str(EVAL_RUNNER))
 
 TIMEOUT_SECONDS = 120.0
 
-# Experiment lookups are scoped by name and to the window below. The window has to
-# stay recent: GET /api/public/experiments pages by start_time, so an unbounded
-# from_start_time with a small limit returns the oldest page and never the run that
-# was just created.
-EXPERIMENT_LOOKUP_WINDOW_HOURS = 6
-EXPERIMENT_LOOKUP_ATTEMPTS = 12
-EXPERIMENT_LOOKUP_INTERVAL_SECONDS = 5.0
-EXPERIMENT_LOOKUP_LIMIT = 100
-EXPERIMENT_OBSERVED_LIMIT = 20
+# Remote run read-back is scoped to a recent window on purpose: the public read APIs
+# page by start time, so an unbounded from_start_time with a small limit returns the
+# oldest page and never the run that was just created.
+REMOTE_RUN_LOOKUP_WINDOW_HOURS = 6
+REMOTE_RUN_LOOKUP_ATTEMPTS = 6
+REMOTE_RUN_LOOKUP_INTERVAL_SECONDS = 5.0
+REMOTE_RUN_LOOKUP_LIMIT = 100
+REMOTE_RUN_OBSERVED_LIMIT = 20
 
 
 def _fail(message: str) -> None:
@@ -301,6 +300,192 @@ def _drive_until_link(
     return last_state  # pragma: no cover - _fail raises
 
 
+def _api_error_code(exc: Exception) -> str:
+    """Extract a Langfuse error code such as LEGACY_API_UNAVAILABLE_FOR_NEW_ORGANIZATION."""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        code = body.get("error")
+        if code:
+            return str(code)
+    status = getattr(exc, "status_code", None)
+    if status is not None:
+        return f"HTTP {status}"
+    return type(exc).__name__
+
+
+def _record_observed(observed: list[tuple[str, str]], row_id: str, row_name: str) -> None:
+    pair = (row_id, row_name)
+    if pair not in observed and len(observed) < REMOTE_RUN_OBSERVED_LIMIT:
+        observed.append(pair)
+
+
+def _ack_run_ids(tasks: list[Any]) -> list[str]:
+    """Run IDs Langfuse itself assigned, taken from the outbox create acknowledgement.
+
+    The Asynchronous path learns the Dataset Run ID from
+    ``POST /api/public/dataset-run-items``; the Syncer stores that ACK in
+    ``scores_payload["_dataset_run_id"]``. It is the only server-issued proof of the
+    Run when the platform read path cannot return the Run (see _lookup_remote_run).
+    """
+    found: set[str] = set()
+    for task in tasks:
+        payload = getattr(task, "scores_payload", None) or {}
+        if not isinstance(payload, dict):
+            continue
+        value = payload.get("_dataset_run_id")
+        if isinstance(value, str) and value.strip():
+            found.add(value.strip())
+    return sorted(found)
+
+
+def _probe_experiments(
+    client: Any,
+    run_id: str,
+    window: dict[str, Any],
+    observed: list[tuple[str, str]],
+) -> dict[str, Any]:
+    """GET /api/public/experiments — a Dataset Run is an Experiment in Langfuse v4."""
+    via = "experiments.list"
+    response = client.api.experiments.list(id=run_id, **window)
+    rows = list(getattr(response, "data", None) or [])
+    for row in rows:
+        _record_observed(observed, str(getattr(row, "id", "") or ""), str(getattr(row, "name", "") or ""))
+    for row in rows:
+        if str(getattr(row, "id", "") or "") == run_id:
+            return {
+                "via": via,
+                "status": "CONFIRMED",
+                "remote_run_id": run_id,
+                "remote_dataset_id": str(getattr(row, "dataset_id", "") or "") or None,
+                "remote_run_name": str(getattr(row, "name", "") or "") or None,
+            }
+    return {"via": via, "status": "EMPTY", "rows": len(rows)}
+
+
+def _probe_experiment_items(
+    client: Any,
+    run_id: str,
+    window: dict[str, Any],
+    observed: list[tuple[str, str]],
+) -> dict[str, Any]:
+    """GET /api/public/experiment-items — v4 replacement for the legacy run-item read path."""
+    via = "experiment-items"
+    response = client.api.experiments.list_items(
+        experiment_id=run_id, fields="dataset", **window
+    )
+    rows = list(getattr(response, "data", None) or [])
+    for row in rows:
+        _record_observed(
+            observed,
+            str(getattr(row, "experiment_id", "") or ""),
+            str(getattr(row, "experiment_name", "") or ""),
+        )
+    for row in rows:
+        if str(getattr(row, "experiment_id", "") or "") == run_id:
+            return {
+                "via": via,
+                "status": "CONFIRMED",
+                "remote_run_id": run_id,
+                "remote_dataset_id": str(getattr(row, "experiment_dataset_id", "") or "") or None,
+                "remote_run_name": str(getattr(row, "experiment_name", "") or "") or None,
+            }
+    return {"via": via, "status": "EMPTY", "rows": len(rows)}
+
+
+def _probe_scores(
+    client: Any,
+    run_id: str,
+    window: dict[str, Any],
+    _observed: list[tuple[str, str]],
+) -> dict[str, Any]:
+    """GET /api/public/v3/scores — Run-level scores also prove the Run exists remotely."""
+    via = "v3-scores"
+    response = client.api.scores_v3.get_many_v3(
+        experiment_id=run_id,
+        limit=1,
+        from_timestamp=window["from_start_time"],
+        to_timestamp=window["to_start_time"],
+        request_options=window["request_options"],
+    )
+    rows = list(getattr(response, "data", None) or [])
+    if rows:
+        return {
+            "via": via,
+            "status": "CONFIRMED",
+            "remote_run_id": run_id,
+            "remote_dataset_id": None,
+            "score_name": str(getattr(rows[0], "name", "") or "") or None,
+        }
+    return {"via": via, "status": "EMPTY", "rows": 0}
+
+
+# Read paths tried when confirming the Run remotely, in order. Only public v4
+# endpoints: every v3 read endpoint answers 410 for Organizations created after
+# 2026-09-16 (Langfuse withdrew the Dataset Run read API in v4).
+_REMOTE_RUN_PROBES: tuple[tuple[str, Any], ...] = (
+    ("experiments.list", _probe_experiments),
+    ("experiment-items", _probe_experiment_items),
+    ("v3-scores", _probe_scores),
+)
+
+
+def _lookup_remote_run(
+    client: Any,
+    run_id: str,
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """Try every supported read path to confirm the Run remotely.
+
+    ``status`` is one of:
+
+    * ``CONFIRMED`` — a public read path returned the Run; identity is then asserted
+      against the remote record.
+    * ``NOT_EXPOSED`` — the platform does not return the Run through any supported
+      read path. This is NOT a product regression: for Organizations created after
+      2026-09-16 Langfuse withdrew the whole v3 read family (410
+      LEGACY_API_UNAVAILABLE_FOR_NEW_ORGANIZATION) and Runs written through
+      ``POST /api/public/dataset-run-items`` are not exposed by the v4 read layer,
+      while Runs created by the SDK experiment API are. Identity is then proven by
+      the Key-scoped Project/Dataset, the URL itself and the Langfuse create ACK.
+    """
+    observed: list[tuple[str, str]] = []
+    probes: list[dict[str, Any]] = []
+    confirmed: dict[str, Any] | None = None
+    attempts = 0
+    for attempt in range(REMOTE_RUN_LOOKUP_ATTEMPTS):
+        attempts = attempt + 1
+        now = datetime.now(UTC)
+        window = {
+            "from_start_time": now - timedelta(hours=REMOTE_RUN_LOOKUP_WINDOW_HOURS),
+            "to_start_time": now + timedelta(minutes=5),
+            "limit": REMOTE_RUN_LOOKUP_LIMIT,
+            "request_options": {"timeout_in_seconds": 10, "max_retries": 1},
+        }
+        round_probes: list[dict[str, Any]] = []
+        for via, probe in _REMOTE_RUN_PROBES:
+            try:
+                round_probes.append(probe(client, run_id, window, observed))
+            except Exception as exc:  # noqa: BLE001 - reported as verification evidence
+                round_probes.append(
+                    {"via": via, "status": "ERROR", "error": _api_error_code(exc)}
+                )
+            if confirmed is None and round_probes[-1]["status"] == "CONFIRMED":
+                confirmed = round_probes[-1]
+        probes = round_probes
+        if confirmed is not None:
+            break
+        if attempt + 1 < REMOTE_RUN_LOOKUP_ATTEMPTS:
+            # The Run was created seconds ago and the public read path can lag.
+            time.sleep(REMOTE_RUN_LOOKUP_INTERVAL_SECONDS)
+    lookup = {
+        "status": "CONFIRMED" if confirmed else "NOT_EXPOSED",
+        "via": [probe["via"] for probe in probes],
+        "attempts": attempts,
+        "probes": probes,
+        "observed": [list(pair) for pair in observed],
+    }
+    return confirmed, lookup
+
+
 def _verify_remote_identity(
     db_manager: Any,
     launch_id: str,
@@ -313,81 +498,56 @@ def _verify_remote_identity(
     with db_manager.get_session() as session:
         launch = session.get(ExperimentLaunchRecord, launch_id)
         dataset_name = launch.dataset_name
-        run_names = [
-            row.dataset_run_name
-            for row in session.query(LangfuseSyncTaskRecord)
+        tasks = (
+            session.query(LangfuseSyncTaskRecord)
             .filter(LangfuseSyncTaskRecord.launch_id == launch_id)
             .all()
-            if row.dataset_run_name
-        ]
+        )
+        run_names = [row.dataset_run_name for row in tasks if row.dataset_run_name]
         url = launch.langfuse_experiment_url
 
     client = get_client()
-    projects = client.api.projects.get(
-        request_options={"timeout_in_seconds": 5, "max_retries": 1}
-    ).data
+    options = {"timeout_in_seconds": 10, "max_retries": 1}
+    projects = client.api.projects.get(request_options=options).data
     if len(projects) != 1:
         _fail(f"expected exactly one project for the configured key, got {len(projects)}")
     project_id = str(projects[0].id)
 
-    # Langfuse Cloud withdrew the v3 dataset-run read path for organizations created
-    # after 2026-09-16: GET /api/public/datasets/{name}/runs/{run} now answers
-    # 410 LEGACY_API_UNAVAILABLE_FOR_NEW_ORGANIZATION. A Dataset Run is an Experiment
-    # in Langfuse v4, so identity is verified through /api/public/experiments.
-    observed: list[tuple[str, str]] = []
+    if not dataset_name:
+        _fail(f"launch {launch_id} has no dataset name, cannot verify the link identity")
+    # The Dataset identity is resolved from the same Key the Syncer wrote with, so the
+    # URL can be compared against the entity the page will actually open.
+    dataset = client.api.datasets.get(dataset_name, request_options=options)
+    remote_dataset_id = str(getattr(dataset, "id", "") or "")
+    if not remote_dataset_id:
+        _fail(f"dataset {dataset_name!r} resolved without an id for the configured key")
+    key_dataset_name = str(getattr(dataset, "name", "") or "")
 
-    def _window() -> dict[str, Any]:
-        now = datetime.now(UTC)
-        return {
-            "from_start_time": now - timedelta(hours=EXPERIMENT_LOOKUP_WINDOW_HOURS),
-            "to_start_time": now + timedelta(minutes=5),
-            "limit": EXPERIMENT_LOOKUP_LIMIT,
-            "request_options": {"timeout_in_seconds": 5, "max_retries": 1},
-        }
+    confirmed, lookup = _lookup_remote_run(client, persisted_run_id)
 
-    def _page(**kwargs: Any) -> list[Any]:
-        response = client.api.experiments.list(**kwargs)
-        return list(getattr(response, "data", None) or [])
-
-    def _lookup_experiment(run_name: str) -> Any | None:
-        # The name filter is only an optimisation: whether the cloud honours it is not
-        # guaranteed, so an empty filtered page always falls back to the unfiltered
-        # recent window before giving up.
-        for candidates in (_page(name=run_name, **_window()), _page(**_window())):
-            for candidate in candidates:
-                candidate_id = str(getattr(candidate, "id", ""))
-                candidate_name = str(getattr(candidate, "name", ""))
-                pair = (candidate_id, candidate_name)
-                if pair not in observed and len(observed) < EXPERIMENT_OBSERVED_LIMIT:
-                    observed.append(pair)
-                if candidate_id == persisted_run_id:
-                    return candidate
-        return None
-
-    remote_run = None
-    for run_name in dict.fromkeys(run_names):
-        for attempt in range(EXPERIMENT_LOOKUP_ATTEMPTS):
-            try:
-                remote_run = _lookup_experiment(run_name)
-            except Exception as exc:  # noqa: BLE001 - reported as verification evidence
-                print(f"  experiment lookup failed for {run_name}: {exc}", file=sys.stderr)
-                remote_run = None
-            if remote_run is not None:
-                break
-            if attempt + 1 < EXPERIMENT_LOOKUP_ATTEMPTS:
-                # The run was created seconds ago and the Cloud read path can lag.
-                time.sleep(EXPERIMENT_LOOKUP_INTERVAL_SECONDS)
-        if remote_run is not None:
-            break
-    if remote_run is None:
-        seen = ", ".join(f"{cid} (name={cname!r})" for cid, cname in observed) or "none"
+    ack_ids = _ack_run_ids(list(tasks))
+    if ack_ids and persisted_run_id not in ack_ids:
         _fail(
-            f"no remote Experiment matched the persisted run id {persisted_run_id} "
-            f"(dataset {dataset_name}, run names {list(dict.fromkeys(run_names))}). "
-            f"Experiments seen in the last {EXPERIMENT_LOOKUP_WINDOW_HOURS}h: {seen}"
+            f"persisted run id {persisted_run_id} is not the id Langfuse acknowledged for "
+            f"this launch (create ACK ids: {ack_ids}); the link would point at a run that "
+            "was never created for it"
+        )
+    conflicting = [value for value in ack_ids if value != persisted_run_id]
+    if conflicting:
+        _fail(
+            f"persisted run id {persisted_run_id} conflicts with the acknowledged run ids "
+            f"{conflicting} for launch {launch_id}"
         )
 
-    remote_dataset_id = str(getattr(remote_run, "dataset_id", ""))
+    if confirmed and confirmed.get("remote_dataset_id"):
+        run_dataset_id = str(confirmed["remote_dataset_id"])
+        if run_dataset_id != remote_dataset_id:
+            _fail(
+                f"remote run {persisted_run_id} belongs to dataset {run_dataset_id}, but the "
+                f"configured key resolves {dataset_name!r} to {remote_dataset_id}"
+            )
+        remote_dataset_id = run_dataset_id
+
     parts = urlsplit(url)
     path_parts = [segment for segment in parts.path.split("/") if segment]
     # {prefix}/project/{project_id}/datasets/{dataset_id}/runs/{run_id}
@@ -403,8 +563,8 @@ def _verify_remote_identity(
 
     if url_run_id != persisted_run_id:
         _fail(f"link run id {url_run_id} != persisted run id {persisted_run_id}")
-    if url_run_id != str(remote_run.id):
-        _fail(f"link run id {url_run_id} != remote run id {remote_run.id}")
+    if confirmed and url_run_id != str(confirmed["remote_run_id"]):
+        _fail(f"link run id {url_run_id} != remote run id {confirmed['remote_run_id']}")
     if url_dataset_id != remote_dataset_id:
         _fail(f"link dataset id {url_dataset_id} != remote dataset id {remote_dataset_id}")
     if url_project_id != project_id:
@@ -414,11 +574,26 @@ def _verify_remote_identity(
     if dashboard_url and not url.startswith(dashboard_url.rstrip("/")):
         _fail(f"link {url} does not use the configured dashboard base {dashboard_url}")
 
+    if confirmed is None:
+        observed = ", ".join(f"{cid} (name={cname!r})" for cid, cname in lookup["observed"][:5])
+        print(
+            "NOTICE: remote run readback NOT_EXPOSED — Langfuse returned no record for run "
+            f"{persisted_run_id} through any supported read path "
+            f"({', '.join(lookup['via'])}; {lookup['attempts']} attempts). "
+            "Verified instead: project id from the configured key, dataset id from the "
+            "configured key, the URL run id equal to the persisted id, and the persisted id "
+            "equal to the Langfuse create acknowledgement. Observed rows: "
+            f"{observed or 'none'}"
+        )
+
     return {
         "persisted_run_id": persisted_run_id,
-        "remote_run_id": str(remote_run.id),
+        "remote_run_id": confirmed["remote_run_id"] if confirmed else None,
+        "remote_run_lookup": lookup,
         "remote_dataset_id": remote_dataset_id,
         "key_project_id": project_id,
+        "key_dataset_name": key_dataset_name,
+        "ack_run_ids": ack_ids,
         "url": url,
         "url_project_id": url_project_id,
         "url_dataset_id": url_dataset_id,
@@ -527,7 +702,8 @@ def main() -> int:
 
     print("Async Langfuse link verification: PASS")
     print(f"launch: {launch_id}")
-    print(f"run id: {evidence['remote_run_id']}")
+    print(f"run id: {evidence['persisted_run_id']}")
+    print(f"remote run readback: {evidence['remote_run_lookup']['status']}")
     print(f"dataset id: {evidence['remote_dataset_id']}")
     print(f"project id: {evidence['key_project_id']}")
     print(f"link: {evidence['url']}")

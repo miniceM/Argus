@@ -555,9 +555,17 @@ export const LaunchDetail: React.FC = () => {
           )}
         </div>
 
-        <div>
-          <span className="text-xs font-medium text-muted-foreground block mb-1.5">
-            用例通过率 (Pass Rate)
+        {/* Two different ratios share the word "pass" on this page. This cell is
+            the live all-cases quality ratio; the comparison panel below reports
+            a narrower comparable-cohort ratio. The label and the footnote name
+            the denominator so neither can be read as execution success. */}
+        <div data-testid="quality-pass-rate">
+          <span
+            id="quality-pass-rate-label"
+            aria-describedby="quality-pass-rate-help"
+            className="text-xs font-medium text-muted-foreground block mb-1.5"
+          >
+            质量通过率 (Quality Pass Rate)
           </span>
           <span className="text-base font-bold font-mono text-foreground">
             {itemsError ? (
@@ -575,6 +583,9 @@ export const LaunchDetail: React.FC = () => {
               <span className="text-xs text-muted-foreground">尚未统计</span>
             )}
           </span>
+          <span className="block mt-1 text-micro text-muted-foreground">
+            统计范围：全部用例
+          </span>
         </div>
 
         <div>
@@ -584,6 +595,14 @@ export const LaunchDetail: React.FC = () => {
           <span className="text-sm font-semibold font-mono text-foreground">{durationText}</span>
         </div>
       </Panel>
+
+      <p
+        id="quality-pass-rate-help"
+        data-testid="quality-pass-rate-help"
+        className="text-micro text-muted-foreground"
+      >
+        质量通过率说明：分子为质量结论 PASS 的用例数，分母为当前返回的全部用例数。执行失败、超时、取消、评测跳过或不可评测的用例仍计入分母，但不计入分子，不代表质量结论为 FAIL。该比例不是执行成功率。
+      </p>
 
       {/* Real-time Progress Board */}
       {progress && progress.total > 0 && (

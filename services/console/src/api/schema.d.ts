@@ -634,6 +634,7 @@ export interface components {
             request_mapping?: {
                 [key: string]: string;
             };
+            usage_cost_mapping?: components["schemas"]["UsageCostMapping"] | null;
             /** Request Schema */
             request_schema?: {
                 [key: string]: unknown;
@@ -723,6 +724,7 @@ export interface components {
             request_mapping: {
                 [key: string]: unknown;
             };
+            usage_cost_mapping?: components["schemas"]["UsageCostMapping"] | null;
             /** Request Schema */
             request_schema?: {
                 [key: string]: unknown;
@@ -803,6 +805,13 @@ export interface components {
             /** Items Upserted */
             items_upserted: number;
         };
+        /** ComparableCohortResponse */
+        ComparableCohortResponse: {
+            baseline: components["schemas"]["RunCostSummaryResponse"];
+            candidate: components["schemas"]["RunCostSummaryResponse"];
+        } & {
+            [key: string]: unknown;
+        };
         /** ComparisonCaseOutputResponse */
         ComparisonCaseOutputResponse: {
             /** Launch Id */
@@ -834,10 +843,7 @@ export interface components {
             versions: {
                 [key: string]: unknown;
             };
-            /** Summary */
-            summary: {
-                [key: string]: unknown;
-            };
+            summary: components["schemas"]["ComparisonSummaryResponse"];
             /** Classification Counts */
             classification_counts: {
                 [key: string]: number;
@@ -849,6 +855,65 @@ export interface components {
             /** Next Cursor */
             next_cursor?: number | null;
         };
+        /** ComparisonSummaryResponse */
+        ComparisonSummaryResponse: {
+            candidate: components["schemas"]["RunCostSummaryResponse"];
+            baseline: components["schemas"]["RunCostSummaryResponse"] | null;
+            /** Comparable Case Count */
+            comparable_case_count: number;
+            /** Classification Counts */
+            classification_counts: {
+                [key: string]: number;
+            };
+            comparable_cohort: components["schemas"]["ComparableCohortResponse"] | null;
+            cost_comparison: components["schemas"]["CostComparisonResponse"];
+            /** Pass Rate Delta */
+            pass_rate_delta: number | null;
+            /** Score Mean Deltas */
+            score_mean_deltas: {
+                [key: string]: number;
+            };
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * CostComparisonReason
+         * @enum {string}
+         */
+        CostComparisonReason: "COST_NOT_RECORDED" | "INVALID_COST_EVIDENCE" | "INCOMPLETE_ATTEMPT_COST" | "MIXED_CURRENCIES" | "COST_SOURCE_MISMATCH" | "COST_SCOPE_MISMATCH" | "COST_POLICY_MISMATCH" | "PARTIAL_COST_COVERAGE" | "COST_CURRENCY_MISMATCH" | "BASELINE_NOT_BOUND" | "NO_COMPARABLE_CASES";
+        /** CostComparisonResponse */
+        CostComparisonResponse: {
+            status: components["schemas"]["CostComparisonStatus"];
+            reason: components["schemas"]["CostComparisonReason"] | null;
+            /**
+             * Cohort
+             * @constant
+             */
+            cohort: "quality_comparable_cases";
+            /** Case Count */
+            case_count: number;
+            /** Currency */
+            currency: string | null;
+            /** Baseline Cost Per Case */
+            baseline_cost_per_case: number | null;
+            /** Candidate Cost Per Case */
+            candidate_cost_per_case: number | null;
+            /** Delta */
+            delta: number | null;
+            /** Baseline Coverage */
+            baseline_coverage: number | null;
+            /** Candidate Coverage */
+            candidate_coverage: number | null;
+            /** Policy Version */
+            policy_version: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * CostComparisonStatus
+         * @enum {string}
+         */
+        CostComparisonStatus: "COMPARABLE" | "NOT_COMPARABLE";
         /** DomainErrorResponse */
         DomainErrorResponse: {
             /**
@@ -1268,6 +1333,38 @@ export interface components {
              */
             force: boolean;
         };
+        /**
+         * RunCostSummaryResponse
+         * @description Typed cost portion of a frozen run summary; retain other metrics for compatibility.
+         */
+        RunCostSummaryResponse: {
+            /** Total Cost */
+            total_cost?: number | null;
+            /** Cost Per Case */
+            cost_per_case?: number | null;
+            /** Cost Currency */
+            cost_currency?: string | null;
+            /** Cost Case Count */
+            cost_case_count?: number | null;
+            /** Cost Coverage */
+            cost_coverage?: number | null;
+            /** Cost Source */
+            cost_source?: string | null;
+            /** Cost Scope */
+            cost_scope?: string | null;
+            /** Cost Policy Version */
+            cost_policy_version?: string | null;
+            /** Cost Partial */
+            cost_partial?: boolean | null;
+            cost_unavailable_reason?: components["schemas"]["RunCostUnavailableReason"] | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * RunCostUnavailableReason
+         * @enum {string}
+         */
+        RunCostUnavailableReason: "COST_NOT_RECORDED" | "INVALID_COST_EVIDENCE" | "INCOMPLETE_ATTEMPT_COST" | "MIXED_CURRENCIES" | "COST_SOURCE_MISMATCH" | "COST_SCOPE_MISMATCH" | "COST_POLICY_MISMATCH" | "PARTIAL_COST_COVERAGE";
         /** RunSummaryResponse */
         RunSummaryResponse: {
             /** Launch Id */
@@ -1287,10 +1384,7 @@ export interface components {
             versions: {
                 [key: string]: unknown;
             };
-            /** Summary */
-            summary: {
-                [key: string]: unknown;
-            };
+            summary: components["schemas"]["RunCostSummaryResponse"];
             /**
              * Langfuse Score Sync Status
              * @default PENDING
@@ -1312,6 +1406,33 @@ export interface components {
             environment: string;
             /** Langfuse Dashboard Url */
             langfuse_dashboard_url?: string | null;
+        };
+        /**
+         * UsageCostMapping
+         * @description Explicit dot-path mapping for usage and invocation-total cost in a JSON response.
+         */
+        UsageCostMapping: {
+            /** Input Tokens Path */
+            input_tokens_path?: string | null;
+            /** Output Tokens Path */
+            output_tokens_path?: string | null;
+            /** Total Tokens Path */
+            total_tokens_path?: string | null;
+            /** Amount Path */
+            amount_path?: string | null;
+            /** Currency Path */
+            currency_path?: string | null;
+            /**
+             * Source
+             * @default provider_reported
+             * @constant
+             */
+            source: "provider_reported";
+            /**
+             * Measurement Scope
+             * @constant
+             */
+            measurement_scope: "agent_invocation_total";
         };
         /** ValidationError */
         ValidationError: {

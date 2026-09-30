@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "services" / "eval-runner"))
 
 from app.baselines import BaselineConflictError, get_baseline, set_baseline  # noqa: E402
-from app.db_models import ExperimentItemExecutionRecord, ExperimentLaunchRecord  # noqa: E402
+from app.db_models import ExecutionAttemptRecord, ExperimentItemExecutionRecord, ExperimentLaunchRecord  # noqa: E402
 from app.result_snapshots import create_result_snapshot, latest_result_snapshot  # noqa: E402
 
 
@@ -245,3 +245,69 @@ def test_reconciler_materializes_terminal_result_snapshot_once(setup_runtime):
                 LangfuseRunScoreTaskRecord.launch_id == launch_id
             )
         ) == 1
+
+
+def test_snapshot_freezes_launch_case_retry_cost_across_generations_and_preserves_history(setup_runtime):
+    db_mgr, _, _, _, _, _ = setup_runtime
+    launch_id = _create_completed_launch(db_mgr)
+
+    with db_mgr.get_session() as session:
+        items = list(session.query(ExperimentItemExecutionRecord)
+                     .filter_by(launch_id=launch_id).order_by(ExperimentItemExecutionRecord.dataset_item_id))
+        first = items[0]
+        attempts = [
+            ExecutionAttemptRecord(
+                id="attempt-old-generation", item_execution_id=first.id, attempt_no=0,
+                status="COMPLETED", dispatch_generation=0, latency_ms=10,
+                usage_cost={"usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+                            "cost": {"amount": "0.002", "currency": "USD", "source": "provider_reported",
+                                     "measurement_scope": "agent_invocation_total", "unavailable_reason": None}},
+            ),
+            ExecutionAttemptRecord(
+                id="attempt-retry-1", item_execution_id=first.id, attempt_no=1,
+                status="FAILED", dispatch_generation=1, latency_ms=10,
+                usage_cost={"usage": {"input_tokens": 2, "output_tokens": 1, "total_tokens": 3},
+                            "cost": {"amount": "0.003", "currency": "USD", "source": "provider_reported",
+                                     "measurement_scope": "agent_invocation_total", "unavailable_reason": None}},
+            ),
+            ExecutionAttemptRecord(
+                id="attempt-retry-2", item_execution_id=first.id, attempt_no=2,
+                status="COMPLETED", dispatch_generation=1, latency_ms=20,
+                usage_cost={"usage": {"input_tokens": 4, "output_tokens": 2, "total_tokens": 6},
+                            "cost": {"amount": "0.007", "currency": "USD", "source": "provider_reported",
+                                     "measurement_scope": "agent_invocation_total", "unavailable_reason": None}},
+            ),
+        ]
+        session.add_all(attempts)
+        session.flush()
+        first.final_attempt_id = "attempt-retry-2"
+        session.commit()
+
+    with db_mgr.get_session() as session:
+        launch = session.get(ExperimentLaunchRecord, launch_id)
+        snapshot = create_result_snapshot(session, launch)
+        session.commit()
+        snapshot_id = snapshot.id
+        first_item = next(item for item in snapshot.items if item["dataset_item_id"] == "case-1")
+        assert first_item["cost"]["amount"] == "0.012"
+        assert first_item["cost"]["complete"] is True
+        assert first_item["cost_evidence"]["attempt_count"] == 3
+        assert first_item["usage"]["total_tokens"] == 11
+        assert snapshot.summary["total_cost"] == 0.012
+        assert snapshot.summary["cost_per_case"] == 0.012
+        assert snapshot.summary["cost_coverage"] == 0.5
+
+    with db_mgr.get_session() as session:
+        retry = session.get(ExecutionAttemptRecord, "attempt-retry-2")
+        retry.usage_cost["cost"]["amount"] = "0.020"
+        retry.usage_cost = dict(retry.usage_cost)
+        session.commit()
+        launch = session.get(ExperimentLaunchRecord, launch_id)
+        new_snapshot = create_result_snapshot(session, launch)
+        session.commit()
+        old_snapshot = session.get(type(new_snapshot), snapshot_id)
+        assert new_snapshot.revision == 2
+        assert new_snapshot.summary["total_cost"] == 0.025
+        assert old_snapshot.summary["total_cost"] == 0.012
+        old_first = next(item for item in old_snapshot.items if item["dataset_item_id"] == "case-1")
+        assert old_first["cost"]["amount"] == "0.012"

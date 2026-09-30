@@ -203,7 +203,12 @@ def _register_agent_and_version(client: Any, agent_endpoint: str) -> tuple[str, 
             "endpoint": agent_endpoint,
             "protocol": "HTTP_JSON",
             "method": "POST",
-            "request_mapping": {"input": "text"},
+            # 必须与 config/agents.yaml 的 banking-agent 形状一致：
+            # map_request 会把 Dataset item 包成 {"input": item_input} 再解析点路径。
+            "request_mapping": {
+                "messages": "input.messages",
+                "customer_id": "input.customer_id",
+            },
             "timeout_seconds": 30,
             "max_retries": 1,
             "max_concurrency": 4,

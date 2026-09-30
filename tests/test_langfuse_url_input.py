@@ -274,3 +274,36 @@ def test_preflight_reports_rejected_credentials_without_leaking_them(monkeypatch
     # 诊断信息不得回显任何凭据内容
     assert PUBLIC_KEY not in message
     assert SECRET_KEY not in message
+
+
+def test_registered_agent_version_maps_every_real_dataset_item():
+    """脚本注册的 request_mapping 必须能映射真实 Dataset item。
+
+    Cloud E2E 曾用 `{"input": "text"}` 注册 Agent，而 Langfuse 数据集 item 的输入是
+    `{"messages": [...], "customer_id": ...}`，Worker 在 map_request 处直接 KeyError。
+    这里对 data/dataset.json 的每条 item 真实调用 map_request，防止再次写错形状。
+    """
+    import json
+
+    from app.registry import map_request
+
+    script = _load_verification_script()
+    captured: dict = {}
+
+    class _FakeResponse:
+        status_code = 201
+        text = ""
+
+    class _FakeClient:
+        def post(self, path, json=None, **_kwargs):
+            captured[path] = json
+            return _FakeResponse()
+
+    script._register_agent_and_version(_FakeClient(), "http://agent/invoke")
+
+    mapping = captured["/api/v1/agent-versions"]["request_mapping"]
+    seed = json.loads((ROOT / "data" / "dataset.json").read_text(encoding="utf-8"))
+    for item in seed["items"]:
+        payload = map_request(item["input"], mapping)
+        assert payload["messages"] == item["input"]["messages"]
+        assert payload["customer_id"] == item["input"]["customer_id"]

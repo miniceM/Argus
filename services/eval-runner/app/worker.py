@@ -16,7 +16,7 @@ from app.db_models import (  # noqa: E402
 from app.execution import get_langfuse_client_safe  # noqa: E402
 
 from .db import DatabaseManager
-from .evaluators import default_evaluator_registry, evaluate_item_quality
+from .evaluator_binding import EvaluatorBindingError, evaluate_frozen_item, resolve_execution_plan
 from .executor import RemoteAgentExecutor
 from .limiter import DistributedAgentLimiter
 from .metrics import runtime_metrics
@@ -426,6 +426,26 @@ class ExecutionWorker:
                 dataset_input = matched.get("input", {})
                 expected_output = matched.get("expected_output", {})
 
+                # Issue #81: validate the frozen Evaluator identity before dispatching
+                # an item, so an unrecoverable artifact never reaches the Agent.
+                try:
+                    resolve_execution_plan(manifest)
+                except EvaluatorBindingError as binding_exc:
+                    # Fence the item exactly like a Runner identity mismatch: the
+                    # frozen implementation cannot be honored, so no Agent call and
+                    # no score may be produced (Issue #81).
+                    finalized = self.finalize_item(
+                        item_id=item_id,
+                        generation=generation,
+                        lease_token=token,
+                        status="FAILED",
+                        eval_status="skipped",
+                        quality_conclusion="unknown",
+                        execution_error=binding_exc.code,
+                    )
+                    self.queue.ack(message_id)
+                    return finalized
+
                 identity_error = validate_runner_identity(manifest.get("runner"), self.runner_identity)
                 if identity_error:
                     # Fence the claimed item as a pre-execution failure. No Attempt or Agent call is created.
@@ -718,29 +738,19 @@ class ExecutionWorker:
                             return False
 
                         # Successful execution -> evaluate quality (ASYNC offloaded via asyncio.to_thread)
-                        item_eval_specs = [
-                            ev for ev in manifest.get("evaluators", [])
-                            if ev.get("scope", "item") == "item"
-                        ]
-
                         def _do_evaluation():
-                            scores: dict[str, float] = {}
-                            eval_st = "succeeded" if item_eval_specs else "skipped"
-                            qual_conc = "unknown"
-                            eval_err = None
-                            try:
-                                for ev in item_eval_specs:
-                                    ev_fn = default_evaluator_registry.get_evaluator_fn(ev["id"], ev.get("version"))
-                                    ev_res = ev_fn(output=inv_res.body, expected_output=expected_output)
-                                    scores[ev["id"]] = float(getattr(ev_res, "value", 0.0))
-                                if item_eval_specs:
-                                    qual_conc = evaluate_item_quality(
-                                        scores, item_eval_specs, manifest.get("quality_policy")
-                                    )
-                            except Exception as exc:
-                                eval_st = "failed"
-                                eval_err = str(exc)
-                            return scores, eval_st, qual_conc, eval_err
+                            # Issue #81: shared frozen evaluation boundary; no per-id lookup.
+                            result = evaluate_frozen_item(
+                                manifest,
+                                output=inv_res.body,
+                                expected_output=expected_output,
+                            )
+                            return (
+                                result.scores,
+                                result.eval_status,
+                                result.quality_conclusion,
+                                result.eval_error,
+                            )
 
                         scores_dict, eval_status, quality_conclusion, eval_error = await asyncio.to_thread(_do_evaluation)
 

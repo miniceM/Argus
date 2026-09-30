@@ -53,7 +53,7 @@ test.describe("Real API Acceptance E2E (Zero Mock)", () => {
     await expect(page.getByTestId("langfuse-sync-badge")).toBeVisible();
 
     // 6. Verify 4-Dimension Frozen Manifest rendered from real backend database
-    await expect(page.getByTestId("manifest-schema-version")).toContainText("Schema v1.1");
+    await expect(page.getByTestId("manifest-schema-version")).toContainText("Schema v1.2");
 
     // Dimension 1: Agent snapshot (banking-agent)
     await expect(page.getByText("banking-agent").first()).toBeVisible();
@@ -68,6 +68,12 @@ test.describe("Real API Acceptance E2E (Zero Mock)", () => {
       await expect(page.getByText(id, { exact: true })).toBeVisible();
     }
     await expect(page.getByText("overall_pass", { exact: true })).toHaveCount(0);
+
+    // Dimension 3b: Issue #81 frozen execution identity, produced by the real backend.
+    await expect(page.getByTestId("binding-verification-intent_match")).toHaveText("已冻结校验");
+    await page.getByText("查看冻结摘要与制品标识").first().click();
+    await expect(page.getByText(/^sha256:[0-9a-f]{64}$/).first()).toBeVisible();
+    await expect(page.getByText("builtin:intent_match@1.0.0")).toBeVisible();
 
     // Dimension 4: Runner and Concurrency
     await expect(page.getByTestId("runner-version")).toBeVisible();

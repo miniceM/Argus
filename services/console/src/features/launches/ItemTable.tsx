@@ -4,6 +4,7 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { QualityBadge } from "../../components/QualityBadge";
 import { Button, Panel } from "../../components/ui/Primitives";
 import { AttemptDrawer } from "./AttemptDrawer";
+import { frozenFailureRecovery, isFrozenIdentityFailure } from "./frozenIdentity";
 
 type ItemExecution = import("../../api/schema").components["schemas"]["ExperimentItemExecutionResponse"];
 
@@ -146,6 +147,16 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
                       {errorText && (
                         <p className="text-micro text-fail font-normal truncate max-w-xs mt-0.5" title={errorText}>
                           {errorText}
+                        </p>
+                      )}
+                      {/* Issue #81: a frozen-identity failure names the stable error
+                          code and the recovery path, instead of only a raw string. */}
+                      {isFrozenIdentityFailure(errorText) && (
+                        <p
+                          className="text-micro text-timeout font-normal max-w-sm mt-0.5"
+                          data-testid={`frozen-recovery-${item.dataset_item_id}`}
+                        >
+                          {frozenFailureRecovery(errorText)}
                         </p>
                       )}
                     </td>

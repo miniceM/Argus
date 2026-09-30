@@ -48,7 +48,7 @@ def test_launch_manifest_snapshot_freeze(tmp_path):
     assert launch.id is not None
     assert launch.status == "PENDING"
     manifest = launch.manifest
-    assert manifest["schema_version"] == "1.1"
+    assert manifest["schema_version"] == "1.2"
     assert manifest["agent"]["agent_id"] == "banking-agent"
     assert manifest["agent"]["version"] == "v1"
     assert manifest["agent"]["endpoint"] == "http://demo-agent-v1:8080/invoke"

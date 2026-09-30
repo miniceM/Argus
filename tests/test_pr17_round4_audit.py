@@ -287,7 +287,9 @@ def test_parent_observation_scope_covers_evaluator(setup_runtime):
             "rate_limit_per_minute": 60,
         },
         "dataset": {"items": [{"id": "0", "input": {}}]},
-        "evaluators": [{"id": "intent_match", "scope": "item"}],
+        # Issue #81: the frozen binding always records an explicit version; a
+        # Manifest without one can no longer be executed (no silent latest).
+        "evaluators": [{"id": "intent_match", "version": "1.0.0", "scope": "item"}],
     }
     launch = orch.create_launch("test-agent", "v1", "ds", "v1", "review-eval", manifest)
     orch.start_launch(launch.id)
@@ -351,18 +353,19 @@ def test_parent_observation_scope_covers_evaluator(setup_runtime):
 
                 lim.release_concurrency_permit = spy_release
 
-                # Spy on default_evaluator_registry
-                from app.evaluators import default_evaluator_registry
+                # Spy on the shared frozen Evaluator boundary (Issue #81 moved
+                # evaluation off the per-id registry lookup onto EvaluatorExecutor).
+                from app.evaluator_binding import BuiltinPythonExecutor
 
-                orig_get = default_evaluator_registry.get_evaluator_fn
+                orig_execute = BuiltinPythonExecutor.execute
 
-                def spy_get_fn(*args, **kwargs):
+                def spy_execute(self, *args, **kwargs):
                     nonlocal parent_obs_active_during_eval
                     if getattr(mock_parent_obs, "is_active", False):
                         parent_obs_active_during_eval = True
-                    return orig_get(*args, **kwargs)
+                    return orig_execute(self, *args, **kwargs)
 
-                default_evaluator_registry.get_evaluator_fn = spy_get_fn
+                BuiltinPythonExecutor.execute = spy_execute
 
                 res = await w.execute_item_message(*msg)
                 assert res is True

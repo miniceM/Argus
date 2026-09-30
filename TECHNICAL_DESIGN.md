@@ -337,6 +337,37 @@ Langfuse 原生对象不需要复制。企业侧只新增少量对象。
 }
 ```
 
+#### 8.3.1 冻结的 Evaluator 执行身份（Manifest schema 1.2）
+
+Manifest 的 `evaluators[]` 在 schema 1.2 起不再是「id + version」，而是**冻结绑定**（`EvaluatorBinding`）：创建时冻结、执行前再次校验，保证「同一配置 = 同一实现 = 同一结果」。
+
+```json
+{
+  "id": "intent_match",
+  "version": "1.0.0",
+  "binding_id": "bind_9f2c...",
+  "definition_digest": "sha256:...",
+  "implementation_ref": "builtin:intent_match@1.0.0",
+  "executor_type": "builtin_python",
+  "implementation_artifact": {
+    "kind": "python_source",
+    "locator": "app.evaluators:intent_match",
+    "digest": "sha256:..."
+  },
+  "runner": {"runner_version": "0.1.0", "build_id": "..."},
+  "binding_digest": "sha256:...",
+  "contract_status": "FROZEN_VERIFIED",
+  "verification_status": "RECORDED"
+}
+```
+
+约束：
+
+- `binding_digest` 由影响结果的字段规范化后计算（`sort_keys` 序列化），字段顺序不影响摘要，任一影响结果的变化都会改变摘要。
+- 实现制品摘要必须来自**构建产物**（内置 Python 为实现源码 + 固定 `implementation_ref` + 版本化依赖的 SHA-256），不接受可变 tag 或任意环境变量字符串。
+- 执行/恢复前统一经 `EvaluatorExecutor` 的 resolve / validate / execute 边界；版本缺失、制品不可解析、摘要不匹配或执行器不支持时**明确失败**（`EVALUATOR_VERSION_UNAVAILABLE` / `EVALUATOR_ARTIFACT_UNRESOLVABLE` / `EVALUATOR_ARTIFACT_DIGEST_MISMATCH` / `EVALUATOR_BINDING_DIGEST_MISMATCH` / `EVALUATOR_EXECUTOR_UNSUPPORTED`），质量结论保持 `UNKNOWN`，**不回退到其他版本**。
+- schema 1.0 / 1.1 的历史 Manifest 显式读取并标记 `HISTORICAL_CONTRACT_UNRECORDED`（「历史契约未记录」）：仍可执行，但不宣称满足新的冻结资格。
+
 ### 8.4 ExperimentItemExecution
 
 表示单个 Dataset Item 的执行状态：

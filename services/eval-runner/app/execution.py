@@ -18,7 +18,12 @@ from .db_models import (
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
 )
-from .evaluators import default_evaluator_registry, evaluate_item_quality
+from .evaluator_binding import (
+    EvaluatorBindingError,
+    evaluate_frozen_item,
+    resolve_execution_plan,
+    resolve_langfuse_evaluators,
+)
 from .executor import AttemptAuthorizationError, RemoteAgentExecutor
 from .manifest import acquire_launch_execution
 from .registry import AgentRegistry, AgentVersionSpec, map_request
@@ -233,30 +238,14 @@ async def _execute_single_item(
         quality_conclusion = "unknown"
 
     if execution_status == "succeeded" and agent_output is not None:
-        item_eval_specs = [
-            ev_spec for ev_spec in manifest.get("evaluators", [])
-            if ev_spec.get("scope", "item") == "item"
-        ]
-        if not item_eval_specs:
-            eval_status = "skipped"
-            quality_conclusion = "unknown"
-        else:
-            try:
-                for ev_spec in item_eval_specs:
-                    ev_id = ev_spec["id"]
-                    ev_fn = default_evaluator_registry.get_evaluator_fn(ev_id, ev_spec.get("version"))
-                    ev_res = ev_fn(output=agent_output, expected_output=expected_output)
-                    scores_dict[ev_id] = float(getattr(ev_res, "value", 0.0))
-
-                quality_conclusion = evaluate_item_quality(
-                    scores_dict,
-                    item_eval_specs,
-                    manifest.get("quality_policy"),
-                )
-            except Exception as exc:
-                eval_status = "failed"
-                eval_error = str(exc)
-                quality_conclusion = "unknown"
+        # Issue #81: one shared, pre-validated frozen evaluation boundary.
+        frozen_result = evaluate_frozen_item(
+            manifest, output=agent_output, expected_output=expected_output
+        )
+        eval_status = frozen_result.eval_status
+        eval_error = frozen_result.eval_error
+        scores_dict = frozen_result.scores
+        quality_conclusion = frozen_result.quality_conclusion
 
     completed_at = datetime.utcnow()
     with db_mgr.get_session() as session:
@@ -358,6 +347,15 @@ class LaunchExecutionService:
             )
             if identity_error:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=identity_error)
+            # Issue #81: refuse to start when the frozen Evaluator identity can no
+            # longer be honored (Issue #81: never fall back to another version).
+            try:
+                resolve_execution_plan(preflight_launch.manifest)
+            except EvaluatorBindingError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=exc.to_payload(),
+                ) from exc
 
         # 1. Acquire atomic execution lock
         acquired = acquire_launch_execution(self.db_manager, launch_id)
@@ -456,17 +454,11 @@ class LaunchExecutionService:
 
             # 4. Run items with Langfuse experiment if dataset is available
             if lf and lf_dataset and hasattr(lf_dataset, "run_experiment"):
-                frozen_eval_specs = manifest.get("evaluators", [])
-                frozen_item_evaluators = [
-                    default_evaluator_registry.get_evaluator_fn(ev["id"], ev.get("version"))
-                    for ev in frozen_eval_specs
-                    if ev.get("scope", "item") == "item"
-                ]
-                frozen_run_evaluators = [
-                    default_evaluator_registry.get_evaluator_fn(ev["id"], ev.get("version"))
-                    for ev in frozen_eval_specs
-                    if ev.get("scope") == "run"
-                ]
+                # Issue #81: Langfuse runs the *same* validated frozen implementations
+                # the item path uses; no per-evaluator lookup, no latest fallback.
+                frozen_item_evaluators, frozen_run_evaluators = resolve_langfuse_evaluators(
+                    manifest
+                )
 
                 async def remote_task(*, item: Any, **_: Any) -> dict[str, Any]:
                     item_id = str(getattr(item, "id", ""))

@@ -29,6 +29,8 @@ import { ACTIVE_LAUNCH_STATUSES, LaunchStatus } from "./LaunchesList";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { Button, PageHeader, Panel, buttonClassName } from "../../components/ui/Primitives";
 import { Modal } from "../../components/ui/Overlay";
+import { Badge } from "../../components/Badge";
+import { bindingVerification } from "./frozenIdentity";
 
 type LaunchResponse = import("../../api/schema").components["schemas"]["ExperimentLaunchResponse"];
 type ItemExecution = import("../../api/schema").components["schemas"]["ExperimentItemExecutionResponse"];
@@ -76,6 +78,24 @@ interface ManifestData {
     type?: string;
     scope?: string;
     threshold?: number;
+    // Issue #81: frozen execution identity. Older Manifests simply omit them and
+    // are reported as "历史契约未记录" instead of being treated as verified.
+    binding_id?: string;
+    binding_digest?: string;
+    binding_schema_version?: string;
+    definition_digest?: string;
+    content_digest?: string;
+    implementation_ref?: string | null;
+    executor_type?: string;
+    contract_status?: string;
+    verification_status?: string;
+    implementation_artifact?: {
+      kind?: string;
+      locator?: string;
+      digest?: string;
+      runtime?: string;
+    } | null;
+    runner?: { runner_version?: string; build_id?: string; mapping_engine_version?: string };
   }>;
   execution_policy?: {
     timeout_seconds?: number;
@@ -757,19 +777,68 @@ export const LaunchDetail: React.FC = () => {
               <Zap className="w-4 h-4 text-timeout" />
               <span>3. 评测门禁指标 ({manifestEvaluators.length})</span>
             </div>
-            <div className="flex flex-wrap gap-1">
+            <ul className="space-y-1.5">
               {manifestEvaluators.map((ev) => {
-                const evalId = ev.id || ev.name;
+                const evalId = ev.id || ev.name || "unknown";
+                const verification = bindingVerification(ev);
                 return (
-                  <span
+                  <li
                     key={evalId}
-                    className="px-2 py-0.5 rounded text-micro font-mono bg-surface border border-border text-foreground-secondary"
+                    className="px-2 py-1.5 rounded border border-border bg-surface space-y-1"
                   >
-                    {evalId}
-                  </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-micro font-semibold text-foreground">{evalId}</span>
+                      <span className="font-mono text-micro text-muted-foreground">
+                        {ev.version ? `v${ev.version}` : "历史契约未记录版本"}
+                      </span>
+                      {ev.implementation_ref && (
+                        <span className="truncate font-mono text-micro text-muted-foreground" title={ev.implementation_ref}>
+                          {ev.implementation_ref}
+                        </span>
+                      )}
+                      <Badge tone={verification.tone} data-testid={`binding-verification-${evalId}`}>
+                        {verification.label}
+                      </Badge>
+                    </div>
+                    {(ev.binding_digest || ev.definition_digest || ev.implementation_artifact?.digest) && (
+                      <details className="text-micro text-muted-foreground">
+                        <summary className="cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-focus rounded-sm">
+                          查看冻结摘要与制品标识
+                        </summary>
+                        <dl className="mt-1 space-y-0.5 font-mono break-all">
+                          <div>
+                            <dt className="inline text-muted-foreground">Binding: </dt>
+                            <dd className="inline">{ev.binding_id ?? "历史契约未记录"}</dd>
+                          </div>
+                          <div>
+                            <dt className="inline text-muted-foreground">Binding Digest: </dt>
+                            <dd className="inline">{ev.binding_digest ?? "历史契约未记录"}</dd>
+                          </div>
+                          <div>
+                            <dt className="inline text-muted-foreground">Definition Digest: </dt>
+                            <dd className="inline">{ev.definition_digest ?? ev.content_digest ?? "历史契约未记录"}</dd>
+                          </div>
+                          <div>
+                            <dt className="inline text-muted-foreground">Artifact: </dt>
+                            <dd className="inline">
+                              {ev.implementation_artifact?.digest ?? "历史契约未记录"}
+                              {ev.implementation_artifact?.locator ? ` (${ev.implementation_artifact.locator})` : ""}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="inline text-muted-foreground">Executor: </dt>
+                            <dd className="inline">{ev.executor_type ?? "历史契约未记录"}</dd>
+                          </div>
+                        </dl>
+                      </details>
+                    )}
+                  </li>
                 );
               })}
-            </div>
+            </ul>
+            <p className="text-micro text-muted-foreground">
+              冻结身份在创建时校验、执行前再次校验；版本或制品不可用时评测会明确停止并保持 UNKNOWN，不会改用其他版本。
+            </p>
           </div>
 
           {/* Dimension 4: Execution Policy & Runner */}

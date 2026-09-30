@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from .dataset import DatasetResolver
 from .db import DatabaseManager
 from .db_models import ExperimentLaunchRecord
+from .evaluator_binding import MANIFEST_BINDING_SCHEMA_VERSION, freeze_binding
 from .evaluators import EvaluatorSelectionError, default_evaluator_registry
 from .registry import AgentRegistry
 from .runner_identity import current_runner_identity, validate_runner_identity
@@ -121,6 +122,19 @@ class LaunchService:
         ]
         eval_specs.sort(key=lambda spec: spec["id"])
 
+        # ---- Issue #81: freeze the *execution identity*, not only id/version ----
+        # A Launch is only reproducible when the implementation artifact and the
+        # Runner identity that produced it are recorded and re-verified later.
+        eval_specs = [
+            freeze_binding(
+                default_evaluator_registry.definition(spec["id"]),
+                default_evaluator_registry.version(spec["id"], spec["version"]),
+                runner_identity=runner_identity.model_dump(),
+                composed_of=default_evaluator_registry.definition(spec["id"]).composed_of,
+            ).to_payload()
+            for spec in eval_specs
+        ]
+
 
         # Request payload for idempotency checking (calculated upfront)
         payload_data = {
@@ -187,7 +201,7 @@ class LaunchService:
 
         # Build 4D Manifest snapshot
         manifest = {
-            "schema_version": "1.1",
+            "schema_version": MANIFEST_BINDING_SCHEMA_VERSION,
             "dataset": resolved_snapshot,
             "comparison": {
                 "environment": normalized_environment,

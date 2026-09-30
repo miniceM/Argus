@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .aggregation import aggregate_run
+from .costs import aggregate_attempt_costs
 from .db_models import (
     ExecutionAttemptRecord,
     ExperimentItemExecutionRecord,
@@ -45,10 +46,14 @@ def build_result_items(
         str(item.get("id")): item for item in (launch.manifest.get("dataset", {}).get("items") or [])
     }
     attempt_by_id = {attempt.id: attempt for attempt in attempts}
+    attempts_by_item: dict[str, list[ExecutionAttemptRecord]] = {}
+    for attempt in attempts:
+        attempts_by_item.setdefault(attempt.item_execution_id, []).append(attempt)
     result: list[dict[str, Any]] = []
     for item in sorted(items, key=lambda record: record.dataset_item_id):
         dataset_item = manifest_items.get(item.dataset_item_id)
         attempt = attempt_by_id.get(item.final_attempt_id or "")
+        cost_result = aggregate_attempt_costs(attempts_by_item.get(item.id, []))
         item_content = None if dataset_item is None else {
             "input": dataset_item.get("input"),
             "expected_output": dataset_item.get("expected_output"),
@@ -62,6 +67,9 @@ def build_result_items(
             "quality_conclusion": item.quality_conclusion.lower(),
             "scores": _safe_scores(item.scores),
             "latency_ms": attempt.latency_ms if attempt else None,
+            "usage": cost_result["usage"],
+            "cost": cost_result["cost"],
+            "cost_evidence": cost_result["cost_evidence"],
             "final_attempt_id": item.final_attempt_id,
             "dispatch_generation": item.dispatch_generation,
             "trace_id": item.trace_id,
@@ -98,10 +106,12 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
     if any(item.execution_status.lower() in {"pending", "queued", "running", "retry_wait"} for item in items):
         return None
 
-    attempt_ids = [item.final_attempt_id for item in items if item.final_attempt_id]
+    item_execution_ids = [item.id for item in items]
     attempts = list(session.scalars(
-        select(ExecutionAttemptRecord).where(ExecutionAttemptRecord.id.in_(attempt_ids))
-    ).all()) if attempt_ids else []
+        select(ExecutionAttemptRecord)
+        .where(ExecutionAttemptRecord.item_execution_id.in_(item_execution_ids))
+        .order_by(ExecutionAttemptRecord.item_execution_id, ExecutionAttemptRecord.dispatch_generation, ExecutionAttemptRecord.attempt_no)
+    ).all()) if item_execution_ids else []
     result_items = build_result_items(launch, items, attempts)
     source_digest = _canonical_digest(result_items)
     existing = session.scalars(select(RunResultSnapshotRecord).where(

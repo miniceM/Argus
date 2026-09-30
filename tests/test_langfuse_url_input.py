@@ -393,3 +393,37 @@ def test_drive_until_link_surfaces_link_backfill_reason(capsys):
     output = capsys.readouterr()
     assert "DATASET_ID_CONFLICT" in (output.out + output.err)
     assert link_service.calls >= 1
+
+
+def test_environment_is_configured_before_app_config_is_first_imported(monkeypatch):
+    """app.config 必须在环境变量设置完成之后才被首次导入。
+
+    ``app/config.py`` 在模块导入期就执行 ``settings = Settings()``，而
+    ``Settings.argus_langfuse_dashboard_url`` 是普通默认值，只在构造时求值一次。
+    ``main.py`` 直接 ``from .config import settings`` 取这个已固化的对象，因此若
+    凭据净化先触发了 ``import app.config``，LangfuseLinkResolver 会拿到
+    dashboard_base=None，补链永远返回 DASHBOARD_UNCONFIGURED。
+    """
+    script = _load_verification_script()
+    calls: list[str] = []
+
+    def _stop(name: str):
+        def _inner(*_args, **_kwargs):
+            calls.append(name)
+            raise RuntimeError("stop")
+
+        return _inner
+
+    monkeypatch.setenv("LANGFUSE_BASE_URL", CLEAN)
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", PUBLIC_KEY)
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", SECRET_KEY)
+    monkeypatch.setattr(sys, "argv", ["verify-async-langfuse-link.py"])
+    monkeypatch.setattr(script, "_configure_environment", _stop("_configure_environment"))
+    monkeypatch.setattr(script, "_apply_langfuse_credentials", _stop("_apply_langfuse_credentials"))
+
+    with pytest.raises(RuntimeError):
+        script.main()
+
+    assert calls[0] == "_configure_environment", (
+        "必须在设置环境变量之后才允许导入 app.config，实际调用顺序为 " + repr(calls)
+    )

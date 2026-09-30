@@ -385,7 +385,11 @@ def main() -> int:
     args = parser.parse_args()
 
     env_file_values = _read_env_file(Path(os.getenv("ARGUS_CLOUD_ENV_FILE", ".env.cloud")))
-    _apply_langfuse_credentials(env_file_values)
+    # NOTE: nothing below may import ``app.config`` before ``_configure_environment``
+    # has run. ``app/config.py`` builds ``settings = Settings()`` at import time and
+    # ``main.py`` binds that object, so a premature import permanently freezes
+    # ARGUS_LANGFUSE_DASHBOARD_URL as None and every link backfill degrades to
+    # DASHBOARD_UNCONFIGURED.
     base_url_raw = _require_env("LANGFUSE_BASE_URL", env_file_values)
     # Cloud E2E connects directly to the managed API host, which is also the UI origin.
     dashboard_url = (
@@ -401,6 +405,8 @@ def main() -> int:
         db_path = Path(tmpdir) / "async_link_verify.db"
         _configure_environment(db_path, dashboard_url)
 
+        # Environment first, app.config import second (see the note in main()).
+        _apply_langfuse_credentials(env_file_values)
         # Importing app.config sanitizes the endpoint for its own settings; mirror the
         # result into the environment the Langfuse SDK reads.
         _normalize_langfuse_endpoint(dashboard_url)

@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Engine, create_engine, event, text
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 Base = declarative_base()
@@ -120,8 +120,19 @@ class DatabaseManager:
 
         self.engine = create_engine(db_url, connect_args=connect_args, **engine_kwargs)
         if db_url.startswith("sqlite"):
-            with self.engine.connect() as conn:
-                conn.execute(text("PRAGMA foreign_keys = ON;"))
+            # SQLite scopes `foreign_keys` to a single connection and defaults it to
+            # OFF, so a one-off PRAGMA on a pooled connection leaves every later
+            # connection unenforced. That silently weakens the delete/create
+            # concurrency invariants which PostgreSQL enforces through real
+            # foreign keys, and let an orphaned launch slip through. Enforce it on
+            # every new DBAPI connection instead.
+            @event.listens_for(self.engine, "connect")
+            def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record):  # pragma: no cover - driver hook
+                cursor = dbapi_connection.cursor()
+                try:
+                    cursor.execute("PRAGMA foreign_keys = ON;")
+                finally:
+                    cursor.close()
 
         self.session_factory = sessionmaker(
             autocommit=False, autoflush=False, expire_on_commit=False, bind=self.engine

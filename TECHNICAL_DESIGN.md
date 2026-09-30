@@ -368,6 +368,28 @@ Manifest 的 `evaluators[]` 在 schema 1.2 起不再是「id + version」，而�
 - 执行/恢复前统一经 `EvaluatorExecutor` 的 resolve / validate / execute 边界；版本缺失、制品不可解析、摘要不匹配或执行器不支持时**明确失败**（`EVALUATOR_VERSION_UNAVAILABLE` / `EVALUATOR_ARTIFACT_UNRESOLVABLE` / `EVALUATOR_ARTIFACT_DIGEST_MISMATCH` / `EVALUATOR_BINDING_DIGEST_MISMATCH` / `EVALUATOR_EXECUTOR_UNSUPPORTED`），质量结论保持 `UNKNOWN`，**不回退到其他版本**。
 - schema 1.0 / 1.1 的历史 Manifest 显式读取并标记 `HISTORICAL_CONTRACT_UNRECORDED`（「历史契约未记录」）：仍可执行，但不宣称满足新的冻结资格。
 
+#### 8.3.2 类型化评测结果（EvaluationResult）
+
+`ExperimentItemExecution.scores` 只是**受限 numeric 投影**，不是事实来源。事实来源是 `evaluation_results` 表中每条类型化、可解释的结果：每个被选中的冻结 Binding 恰好产出一条。
+
+支持的 `result_type`：`boolean` / `numeric` / `categorical` / `text`。每条结果记录：
+
+- `status`：`succeeded` / `failed` / `skipped` / `no_result`；
+- `value`：保留原始 JSON 类型（布尔就是布尔，文本就是文本），**不强制转 float**；
+- `normalized_value`：可空，**仅**由冻结契约里的显式规则生成（`boolean` → 1/0；**有序** category → 冻结序数；`numeric` 为其自身）。文本与无序分类永不做数值化；
+- `provenance`：`binding_id` / `definition_digest` / `manifest_schema_version` / `contract_status` 等冻结来源；来源不匹配即不作为有效发布测量；
+- `duration_ms`、`evidence`、`error_code` / `error_message`。
+
+约束（与 Issue #82 验收对应）：
+
+- 真实 numeric `0` 就是 `0`；**缺失 / NaN / Infinity / 类型不符 / 失败 / 跳过**各自保留独立状态与原因，**绝不补 0**（`EVALUATION_VALUE_MISSING` / `EVALUATION_VALUE_NOT_FINITE` / `EVALUATION_TYPE_MISMATCH` / `EVALUATION_CATEGORY_NOT_ALLOWED` / `EVALUATION_FAILED` / `EVALUATION_SKIPPED`）。
+- 单个 Binding 失败**不丢弃**其他已成功的结果；失败时质量结论保持 `UNKNOWN`（fail-closed，§5.4）。
+- categorical 必须落在冻结的 `category_values` 枚举内；boolean 不隐式当数字。
+- 历史 numeric `scores` 经**显式 legacy adapter** 读取，provenance 标记 `LEGACY_SCORES_ADAPTER`（unknown），不做任何非数值补造。
+- 运行汇总的均值**只**统计 succeeded numeric，并报告有效样本数；文本 / 分类 / 布尔不进入均值（`score_means` 为 null、`score_counts` 为 0）。
+
+内置确定性 Provider（非默认选择，不影响 Demo 基线）覆盖其余类型：`answer_present`（boolean）、`resolution_bucket`（有序 categorical）、`answer_excerpt`（text）。
+
 ### 8.4 ExperimentItemExecution
 
 表示单个 Dataset Item 的执行状态：

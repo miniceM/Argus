@@ -19,6 +19,55 @@ def _item_evaluator_specs(specs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [spec for spec in specs if spec.get("scope", "item") == "item"]
 
 
+def _numeric_value_from_typed(result: dict[str, Any]) -> float | None:
+    """The aggregatable number of one typed result, or None.
+
+    Only a *succeeded numeric* result contributes. Booleans, categories, text,
+    failures, skips and missing values are excluded by construction so they can
+    never drag a mean toward zero (Issue #82).
+    """
+    if str(result.get("status", "")).lower() != "succeeded":
+        return None
+    if str(result.get("result_type", "")).lower() != "numeric":
+        return None
+    return _finite_number(result.get("value"))
+
+
+def _item_numeric_values(item: dict[str, Any]) -> dict[str, float]:
+    """Numeric measurement per evaluator for one item.
+
+    Typed results are authoritative when present; historical items that only
+    carry the legacy ``scores`` map fall back to it.
+    """
+    typed = item.get("evaluation_results")
+    if isinstance(typed, list) and typed:
+        values: dict[str, float] = {}
+        for result in typed:
+            if not isinstance(result, dict):
+                continue
+            value = _numeric_value_from_typed(result)
+            if value is not None:
+                values[str(result.get("evaluator_id"))] = value
+        return values
+    scores = item.get("scores") or {}
+    return {
+        str(key): number
+        for key, raw in scores.items()
+        if (number := _finite_number(raw)) is not None
+    }
+
+
+def _item_result_types(item: dict[str, Any]) -> dict[str, str]:
+    """Declared result type per evaluator, used to label non-aggregatable metrics."""
+    types: dict[str, str] = {}
+    typed = item.get("evaluation_results")
+    if isinstance(typed, list):
+        for result in typed:
+            if isinstance(result, dict) and result.get("evaluator_id"):
+                types[str(result["evaluator_id"])] = str(result.get("result_type") or "unknown")
+    return types
+
+
 def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, Any]]) -> dict[str, Any]:
     """Build deterministic run-level metrics without conflating execution and quality failures."""
     evaluator_specs = _item_evaluator_specs(evaluator_specs)
@@ -43,13 +92,20 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
     score_values: dict[str, list[float]] = {str(spec["id"]): [] for spec in evaluator_specs}
     critical_failed_cases: set[str] = set()
     spec_by_id = {str(spec["id"]): spec for spec in evaluator_specs}
+    result_types: dict[str, str] = {
+        str(spec["id"]): str(spec.get("result_type") or "numeric") for spec in evaluator_specs
+    }
     for item in items:
         if str(item.get("execution_status", "")).lower() != "succeeded" or str(item.get("eval_status", "")).lower() != "succeeded":
             continue
-        scores = item.get("scores") or {}
+        numeric_values = _item_numeric_values(item)
+        item_types = _item_result_types(item)
         case_id = str(item.get("dataset_item_id", item.get("id", "")))
         for evaluator_id, spec in spec_by_id.items():
-            value = _finite_number(scores.get(evaluator_id))
+            # The observed typed result type is more precise than the spec.
+            if evaluator_id in item_types:
+                result_types[evaluator_id] = item_types[evaluator_id]
+            value = numeric_values.get(evaluator_id)
             if value is not None:
                 score_values[evaluator_id].append(value)
             if spec.get("critical") and (value is None or value < float(spec.get("threshold", 1.0))):
@@ -59,7 +115,12 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
         evaluator_id: sum(values) / len(values) if values else None
         for evaluator_id, values in score_values.items()
     }
+    # Valid sample count per evaluator: how many items actually contributed a
+    # number. A non-aggregatable type (text / category / boolean) always shows 0.
     score_counts = {evaluator_id: len(values) for evaluator_id, values in score_values.items()}
+    result_type_by_evaluator = {
+        evaluator_id: result_types.get(evaluator_id, "numeric") for evaluator_id in score_values
+    }
 
     latencies = sorted(
         latency
@@ -148,6 +209,9 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
         "critical_failure_count": len(critical_failed_cases),
         "score_means": score_means,
         "score_counts": score_counts,
+        # Issue #82: lets the Console explain *why* a metric has no mean
+        # (text / category / boolean are not aggregatable).
+        "score_result_types": result_type_by_evaluator,
         "p95_latency_ms": p95,
         "total_cost": total_cost,
         "cost_per_case": cost_per_case,

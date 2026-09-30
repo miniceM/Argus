@@ -945,6 +945,60 @@ export interface components {
             active_launch_count?: number | null;
         };
         /**
+         * EvaluationResultProvenance
+         * @description Frozen evidence source of one typed result (Issue #82).
+         */
+        EvaluationResultProvenance: {
+            /** Binding Id */
+            binding_id?: string | null;
+            /** Evaluator Id */
+            evaluator_id?: string | null;
+            /** Evaluator Version */
+            evaluator_version?: string | null;
+            /** Definition Digest */
+            definition_digest?: string | null;
+            /** Executor Type */
+            executor_type?: string | null;
+            /** Manifest Schema Version */
+            manifest_schema_version?: string | null;
+            /** Contract Status */
+            contract_status?: string | null;
+        };
+        /**
+         * EvaluationResultResponse
+         * @description One typed, explainable measurement (Issue #82).
+         *
+         *     ``value`` keeps its original JSON type; ``normalized_value`` is populated
+         *     only by an explicitly frozen rule and may legitimately be null.
+         */
+        EvaluationResultResponse: {
+            /** Evaluator Id */
+            evaluator_id: string;
+            /** Evaluator Version */
+            evaluator_version?: string | null;
+            /** Result Type */
+            result_type: string;
+            /** Status */
+            status: string;
+            /** Value */
+            value?: unknown | null;
+            /** Normalized Value */
+            normalized_value?: number | null;
+            /** Comment */
+            comment?: string | null;
+            /** Evidence */
+            evidence?: {
+                [key: string]: unknown;
+            } | null;
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /** Error Code */
+            error_code?: string | null;
+            /** Error Message */
+            error_message?: string | null;
+            provenance?: components["schemas"]["EvaluationResultProvenance"] | null;
+        };
+        /**
          * EvaluatorResponse
          * @description Catalog entry for one Evaluator, carrying its immutable version list.
          */
@@ -1139,12 +1193,16 @@ export interface components {
             trace_id?: string | null;
             /** Observation Id */
             observation_id?: string | null;
+            /** Langfuse Trace Url */
+            langfuse_trace_url?: string | null;
             /** Final Attempt Id */
             final_attempt_id?: string | null;
             /** Scores */
             scores?: {
                 [key: string]: unknown;
             } | null;
+            /** Evaluation Results */
+            evaluation_results?: components["schemas"]["EvaluationResultResponse"][];
             /**
              * Attempt Count
              * @default 0

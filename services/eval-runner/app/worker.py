@@ -16,6 +16,7 @@ from app.db_models import (  # noqa: E402
 from app.execution import get_langfuse_client_safe  # noqa: E402
 
 from .db import DatabaseManager
+from .evaluation_result_store import persist_typed_results
 from .evaluator_binding import EvaluatorBindingError, evaluate_frozen_item, resolve_execution_plan
 from .executor import RemoteAgentExecutor
 from .limiter import DistributedAgentLimiter
@@ -236,6 +237,7 @@ class ExecutionWorker:
         current_attempt_id: str | None = None,
         attempt_updates: dict[str, Any] | None = None,
         scores: dict[str, Any] | None = None,
+        typed_results: list[Any] | None = None,
         execution_error: str | None = None,
         eval_error: str | None = None,
         retry_available_at: datetime | None = None,
@@ -328,6 +330,18 @@ class ExecutionWorker:
                 if res_att.rowcount != 1:
                     session.rollback()
                     return False
+
+            # Phase 3.5: persist the authoritative typed results (Issue #82).
+            # This runs in the same transaction as the item update, so a
+            # committed item always has its typed evidence, and an empty
+            # result set never blanks previously stored measurements.
+            if launch_id and typed_results:
+                persist_typed_results(
+                    session,
+                    item_execution_id=item_id,
+                    launch_id=launch_id,
+                    results=typed_results,
+                )
 
             # Phase 4: Atomic insertion of Langfuse Outbox task if applicable
             if (
@@ -750,9 +764,16 @@ class ExecutionWorker:
                                 result.eval_status,
                                 result.quality_conclusion,
                                 result.eval_error,
+                                result.typed_results,
                             )
 
-                        scores_dict, eval_status, quality_conclusion, eval_error = await asyncio.to_thread(_do_evaluation)
+                        (
+                            scores_dict,
+                            eval_status,
+                            quality_conclusion,
+                            eval_error,
+                            typed_results,
+                        ) = await asyncio.to_thread(_do_evaluation)
 
                         if lease_lost.is_set():
                             # Lost lease ownership during evaluation -> discard results
@@ -768,6 +789,7 @@ class ExecutionWorker:
                             current_attempt_id=current_attempt_id,
                             attempt_updates=att_updates,
                             scores=scores_dict,
+                            typed_results=list(typed_results),
                             eval_error=eval_error,
                             trace_id=trace_id,
                             trace_url=trace_url,

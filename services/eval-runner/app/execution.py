@@ -18,6 +18,7 @@ from .db_models import (
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
 )
+from .evaluation_result_store import persist_typed_results
 from .evaluator_binding import (
     EvaluatorBindingError,
     evaluate_frozen_item,
@@ -237,6 +238,7 @@ async def _execute_single_item(
         eval_status = "skipped"
         quality_conclusion = "unknown"
 
+    typed_results: list[Any] = []
     if execution_status == "succeeded" and agent_output is not None:
         # Issue #81: one shared, pre-validated frozen evaluation boundary.
         frozen_result = evaluate_frozen_item(
@@ -246,6 +248,7 @@ async def _execute_single_item(
         eval_error = frozen_result.eval_error
         scores_dict = frozen_result.scores
         quality_conclusion = frozen_result.quality_conclusion
+        typed_results = list(frozen_result.typed_results)
 
     completed_at = datetime.utcnow()
     with db_mgr.get_session() as session:
@@ -273,6 +276,13 @@ async def _execute_single_item(
             )
             .values(**values_to_update)
         )
+        if typed_results:
+            persist_typed_results(
+                session,
+                item_execution_id=item_exec_id,
+                launch_id=launch_id,
+                results=typed_results,
+            )
         session.commit()
 
 

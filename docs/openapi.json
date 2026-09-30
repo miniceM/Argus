@@ -2848,6 +2848,211 @@
         ],
         "title": "DomainErrorResponse"
       },
+      "EvaluationResultProvenance": {
+        "properties": {
+          "binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "evaluator_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluator Id"
+          },
+          "evaluator_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluator Version"
+          },
+          "definition_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Definition Digest"
+          },
+          "executor_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Executor Type"
+          },
+          "manifest_schema_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Schema Version"
+          },
+          "contract_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Status"
+          }
+        },
+        "type": "object",
+        "title": "EvaluationResultProvenance",
+        "description": "Frozen evidence source of one typed result (Issue #82)."
+      },
+      "EvaluationResultResponse": {
+        "properties": {
+          "evaluator_id": {
+            "type": "string",
+            "title": "Evaluator Id"
+          },
+          "evaluator_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluator Version"
+          },
+          "result_type": {
+            "type": "string",
+            "title": "Result Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "normalized_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalized Value"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvaluationResultProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "evaluator_id",
+          "result_type",
+          "status"
+        ],
+        "title": "EvaluationResultResponse",
+        "description": "One typed, explainable measurement (Issue #82).\n\n``value`` keeps its original JSON type; ``normalized_value`` is populated\nonly by an explicitly frozen rule and may legitimately be null."
+      },
       "EvaluatorResponse": {
         "properties": {
           "id": {
@@ -3295,6 +3500,17 @@
             ],
             "title": "Observation Id"
           },
+          "langfuse_trace_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Trace Url"
+          },
           "final_attempt_id": {
             "anyOf": [
               {
@@ -3317,6 +3533,13 @@
               }
             ],
             "title": "Scores"
+          },
+          "evaluation_results": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationResultResponse"
+            },
+            "type": "array",
+            "title": "Evaluation Results"
           },
           "attempt_count": {
             "type": "integer",

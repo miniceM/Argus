@@ -619,6 +619,43 @@ class ExecutionAttemptResponse(BaseModel):
     completed_at: datetime | None = None
 
 
+class EvaluationResultProvenance(BaseModel):
+    """Frozen evidence source of one typed result (Issue #82)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    binding_id: str | None = None
+    evaluator_id: str | None = None
+    evaluator_version: str | None = None
+    definition_digest: str | None = None
+    executor_type: str | None = None
+    manifest_schema_version: str | None = None
+    contract_status: str | None = None
+
+
+class EvaluationResultResponse(BaseModel):
+    """One typed, explainable measurement (Issue #82).
+
+    ``value`` keeps its original JSON type; ``normalized_value`` is populated
+    only by an explicitly frozen rule and may legitimately be null.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    evaluator_id: str
+    evaluator_version: str | None = None
+    result_type: str
+    status: str
+    value: Any | None = None
+    normalized_value: float | None = None
+    comment: str | None = None
+    evidence: dict[str, Any] | None = None
+    duration_ms: float | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    provenance: EvaluationResultProvenance | None = None
+
+
 class ExperimentItemExecutionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -632,8 +669,12 @@ class ExperimentItemExecutionResponse(BaseModel):
     eval_error: str | None = None
     trace_id: str | None = None
     observation_id: str | None = None
+    # Issue #82: the Console links a result to its Langfuse trace.
+    langfuse_trace_url: str | None = None
     final_attempt_id: str | None = None
     scores: dict[str, Any] | None = None
+    # Issue #82: authoritative typed results; `scores` is only a projection.
+    evaluation_results: list[EvaluationResultResponse] = Field(default_factory=list)
     attempt_count: int = 0
     final_attempt_http_status: int | None = None
     final_attempt_latency_ms: int | None = None

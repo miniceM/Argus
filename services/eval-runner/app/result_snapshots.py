@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from .aggregation import aggregate_run
 from .costs import aggregate_attempt_costs
 from .db_models import (
+    EvaluationResultRecord,
     ExecutionAttemptRecord,
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
@@ -41,6 +42,7 @@ def build_result_items(
     launch: ExperimentLaunchRecord,
     items: list[ExperimentItemExecutionRecord],
     attempts: list[ExecutionAttemptRecord],
+    typed_results: dict[str, list[dict[str, Any]]] | None = None,
 ) -> list[dict[str, Any]]:
     manifest_items = {
         str(item.get("id")): item for item in (launch.manifest.get("dataset", {}).get("items") or [])
@@ -66,6 +68,9 @@ def build_result_items(
             "eval_status": item.eval_status.lower(),
             "quality_conclusion": item.quality_conclusion.lower(),
             "scores": _safe_scores(item.scores),
+            # Issue #82: the typed results are the authoritative record; the
+            # `scores` map above is only the restricted numeric projection.
+            "evaluation_results": list((typed_results or {}).get(item.id) or []),
             "latency_ms": attempt.latency_ms if attempt else None,
             "usage": cost_result["usage"],
             "cost": cost_result["cost"],
@@ -112,7 +117,57 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
         .where(ExecutionAttemptRecord.item_execution_id.in_(item_execution_ids))
         .order_by(ExecutionAttemptRecord.item_execution_id, ExecutionAttemptRecord.dispatch_generation, ExecutionAttemptRecord.attempt_no)
     ).all()) if item_execution_ids else []
-    result_items = build_result_items(launch, items, attempts)
+    # Issue #82: carry the typed results into the immutable snapshot so a
+    # boolean / categorical / text measurement round-trips with its type.
+    typed_by_item: dict[str, list[dict[str, Any]]] = {}
+    if item_execution_ids:
+        typed_rows = session.execute(
+            select(
+                EvaluationResultRecord.item_execution_id,
+                EvaluationResultRecord.evaluator_id,
+                EvaluationResultRecord.evaluator_version,
+                EvaluationResultRecord.result_type,
+                EvaluationResultRecord.status,
+                EvaluationResultRecord.value,
+                EvaluationResultRecord.normalized_value,
+                EvaluationResultRecord.comment,
+                EvaluationResultRecord.evidence,
+                EvaluationResultRecord.duration_ms,
+                EvaluationResultRecord.error_code,
+                EvaluationResultRecord.error_message,
+                EvaluationResultRecord.binding_id,
+                EvaluationResultRecord.definition_digest,
+                EvaluationResultRecord.executor_type,
+                EvaluationResultRecord.manifest_schema_version,
+                EvaluationResultRecord.contract_status,
+            )
+            .where(EvaluationResultRecord.item_execution_id.in_(item_execution_ids))
+            .order_by(EvaluationResultRecord.item_execution_id, EvaluationResultRecord.evaluator_id)
+        ).all()
+        for row in typed_rows:
+            typed_by_item.setdefault(row[0], []).append({
+                "evaluator_id": row[1],
+                "evaluator_version": row[2],
+                "result_type": row[3],
+                "status": row[4],
+                "value": row[5],
+                "normalized_value": row[6],
+                "comment": row[7],
+                "evidence": row[8],
+                "duration_ms": row[9],
+                "error_code": row[10],
+                "error_message": row[11],
+                "provenance": {
+                    "binding_id": row[12],
+                    "evaluator_id": row[1],
+                    "evaluator_version": row[2],
+                    "definition_digest": row[13],
+                    "executor_type": row[14],
+                    "manifest_schema_version": row[15],
+                    "contract_status": row[16],
+                },
+            })
+    result_items = build_result_items(launch, items, attempts, typed_by_item)
     source_digest = _canonical_digest(result_items)
     existing = session.scalars(select(RunResultSnapshotRecord).where(
         RunResultSnapshotRecord.launch_id == launch.id,

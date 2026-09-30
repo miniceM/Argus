@@ -159,6 +159,52 @@ class ExperimentItemExecutionRecord(Base):
         cascade="all, delete-orphan",
         foreign_keys="ExecutionAttemptRecord.item_execution_id",
     )
+    evaluation_results: Mapped[list["EvaluationResultRecord"]] = relationship(
+        "EvaluationResultRecord",
+        back_populates="item_execution",
+        cascade="all, delete-orphan",
+        foreign_keys="EvaluationResultRecord.item_execution_id",
+    )
+
+
+class EvaluationResultRecord(Base):
+    """One typed, explainable measurement produced by one frozen Binding (#82)."""
+
+    __tablename__ = "evaluation_results"
+    __table_args__ = (
+        UniqueConstraint("item_execution_id", "evaluator_id", name="uq_evaluation_results_item_evaluator"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    item_execution_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("experiment_item_executions.id", ondelete="CASCADE"), nullable=False
+    )
+    launch_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("experiment_launches.id", ondelete="CASCADE"), nullable=False
+    )
+    evaluator_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    evaluator_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    result_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    # `value` is JSON so a boolean, a number, a category string and free text all
+    # round-trip with their original type — never coerced to float.
+    value: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    normalized_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    duration_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    binding_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    definition_digest: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    executor_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    manifest_schema_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    contract_status: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    item_execution: Mapped[ExperimentItemExecutionRecord] = relationship(
+        "ExperimentItemExecutionRecord", back_populates="evaluation_results"
+    )
 
 
 class ExecutionAttemptRecord(Base):

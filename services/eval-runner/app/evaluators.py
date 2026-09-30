@@ -100,6 +100,85 @@ def run_pass_rate(*, item_results: list[Any], **_: Any) -> Evaluation:
     return Evaluation(name="overall_pass_rate", value=rate, comment=f"{sum(1 for v in values if v == 1.0)}/{len(values)} cases passed")
 
 
+# --- Deterministic typed providers (Issue #82) ---------------------------
+# These exist so boolean / categorical / text results can be exercised
+# end-to-end without an LLM. They are pure functions of the same
+# (output, expected_output) pair the numeric diagnostics already use.
+
+_TONE_BUCKETS = ("blocked", "review", "resolved")
+
+
+def answer_present(*, output: Any, expected_output: Any, **_: Any) -> Evaluation:
+    """Boolean provider: did the Agent actually return an answer?"""
+    answer = (output or {}).get("answer")
+    present = isinstance(answer, str) and bool(answer.strip())
+    return Evaluation(
+        name="answer_present",
+        value=present,
+        comment="返回了非空回答" if present else "未返回非空回答",
+        data_type="BOOLEAN",
+    )
+
+
+def resolution_bucket(*, output: Any, expected_output: Any, **_: Any) -> Evaluation:
+    """Categorical provider with a frozen, *ordered* enum.
+
+    The bucket is derived deterministically from the structured response so the
+    categorical round-trip (and its ordered normalization) can be verified
+    without any model call.
+    """
+    output = output or {}
+    if output.get("escalated"):
+        bucket = "review"
+    elif isinstance(output.get("answer"), str) and output.get("answer").strip():
+        bucket = "resolved"
+    else:
+        bucket = "blocked"
+    return Evaluation(
+        name="resolution_bucket",
+        value=bucket,
+        comment=f"resolution_bucket={bucket}",
+        data_type="CATEGORICAL",
+    )
+
+
+def answer_excerpt(*, output: Any, expected_output: Any, **_: Any) -> Evaluation:
+    """Text provider: a short, human-readable explanation of the response."""
+    output = output or {}
+    intent = output.get("intent")
+    escalated = bool(output.get("escalated"))
+    tools = sorted(
+        call.get("name") for call in (output.get("tool_calls") or []) if isinstance(call, dict)
+    )
+    excerpt = f"意图={intent}；升级={escalated}；工具={','.join(tools) if tools else '无'}"
+    return Evaluation(name="answer_excerpt", value=excerpt, comment=excerpt, data_type="TEXT")
+
+
+def raising_evaluator(*, output: Any, expected_output: Any, **_: Any) -> Evaluation:
+    """Always-failing provider used to prove a failure never fabricates a 0."""
+    raise RuntimeError("确定性测试 Provider：模拟评测执行异常")
+
+
+def missing_value_evaluator(*, output: Any, expected_output: Any, **_: Any) -> Evaluation:
+    """Returns a successful Evaluation carrying no value at all."""
+    return Evaluation(name="missing_value_evaluator", value=None, comment="未产出结果值")
+
+
+def non_finite_evaluator(*, output: Any, expected_output: Any, **_: Any) -> Evaluation:
+    """Returns NaN, which must be rejected rather than averaged."""
+    return Evaluation(name="non_finite_evaluator", value=float("nan"), comment="NaN")
+
+
+def type_mismatch_evaluator(*, output: Any, expected_output: Any, **_: Any) -> Evaluation:
+    """Returns a string for a numeric contract, which must fail the contract."""
+    return Evaluation(name="type_mismatch_evaluator", value="not-a-number", comment="类型不符")
+
+
+def out_of_range_category(*, output: Any, expected_output: Any, **_: Any) -> Evaluation:
+    """Returns a categorical value outside the frozen enum."""
+    return Evaluation(name="out_of_range_category", value="unknown_bucket", comment="枚举外取值")
+
+
 ITEM_EVALUATORS = [intent_match, required_tool_match, pii_safe, escalation_match, overall_pass]
 RUN_EVALUATORS = [run_pass_rate]
 
@@ -703,6 +782,100 @@ def _register_builtin_evaluators(registry: EvaluatorRegistry) -> EvaluatorRegist
     ]
 
     for definition, version in diagnostics:
+        registry.register_definition(definition)
+        registry.register_version(version)
+
+    # Issue #82: deterministic typed providers. None are ``default_selected``,
+    # so the Demo regression baseline (v1 2/6, v2 6/6) is untouched; they are
+    # opt-in so a Launch can be configured to demonstrate each result type.
+    typed_providers = [
+        (
+            EvaluatorDefinition(
+                id="answer_present",
+                name="是否返回回答（布尔）",
+                display_description="确定性布尔指标：判断 Agent 是否返回了非空回答。",
+                definition_source="ARGUS_BUILTIN",
+                execution_owner="ARGUS",
+                default_version="1.0.0",
+                default_selected=False,
+            ),
+            EvaluatorVersion(
+                evaluator_id="answer_present",
+                version="1.0.0",
+                result_type="boolean",
+                scope="item",
+                threshold=1.0,
+                direction="higher_is_better",
+                critical=False,
+                implementation_ref="builtin:answer_present@1.0.0",
+                executor_type="builtin_python",
+                input_contract=_builtin_input_contract({"intent": {"type": "string"}}),
+                output_contract={"type": "boolean", "description": "是否返回非空回答"},
+                param_schema=_EMPTY_PARAM_SCHEMA,
+                fn=answer_present,
+            ),
+        ),
+        (
+            EvaluatorDefinition(
+                id="resolution_bucket",
+                name="处置分桶（有序分类）",
+                display_description="确定性分类指标：按是否升级、是否作答给出处置分桶。",
+                definition_source="ARGUS_BUILTIN",
+                execution_owner="ARGUS",
+                default_version="1.0.0",
+                default_selected=False,
+            ),
+            EvaluatorVersion(
+                evaluator_id="resolution_bucket",
+                version="1.0.0",
+                result_type="categorical",
+                scope="item",
+                threshold=1.0,
+                direction="higher_is_better",
+                critical=False,
+                implementation_ref="builtin:resolution_bucket@1.0.0",
+                executor_type="builtin_python",
+                input_contract=_builtin_input_contract({"intent": {"type": "string"}}),
+                output_contract={
+                    "type": "string",
+                    "enum": list(_TONE_BUCKETS),
+                    "description": "处置分桶（有序）",
+                },
+                param_schema=_EMPTY_PARAM_SCHEMA,
+                category_values=_TONE_BUCKETS,
+                ordered_category_values=_TONE_BUCKETS,
+                fn=resolution_bucket,
+            ),
+        ),
+        (
+            EvaluatorDefinition(
+                id="answer_excerpt",
+                name="回答摘要（文本）",
+                display_description="确定性文本指标：输出意图、升级与工具的可读摘要。",
+                definition_source="ARGUS_BUILTIN",
+                execution_owner="ARGUS",
+                default_version="1.0.0",
+                default_selected=False,
+            ),
+            EvaluatorVersion(
+                evaluator_id="answer_excerpt",
+                version="1.0.0",
+                result_type="text",
+                scope="item",
+                threshold=1.0,
+                direction="higher_is_better",
+                critical=False,
+                implementation_ref="builtin:answer_excerpt@1.0.0",
+                executor_type="builtin_python",
+                input_contract=_builtin_input_contract({"intent": {"type": "string"}}),
+                output_contract={"type": "string", "description": "可读摘要文本"},
+                param_schema=_EMPTY_PARAM_SCHEMA,
+                fn=answer_excerpt,
+            ),
+        ),
+    ]
+
+    for definition, version in typed_providers:
         registry.register_definition(definition)
         registry.register_version(version)
 

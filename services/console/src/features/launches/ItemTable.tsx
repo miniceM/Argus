@@ -4,6 +4,8 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { QualityBadge } from "../../components/QualityBadge";
 import { Button, Panel } from "../../components/ui/Primitives";
 import { AttemptDrawer } from "./AttemptDrawer";
+import { EvaluationResultList } from "./EvaluationResultList";
+import type { EvaluationResult } from "./evaluationResults";
 import { frozenFailureRecovery, isFrozenIdentityFailure } from "./frozenIdentity";
 
 type ItemExecution = import("../../api/schema").components["schemas"]["ExperimentItemExecutionResponse"];
@@ -13,7 +15,12 @@ interface ItemTableProps {
 }
 
 export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
-  const [selectedItem, setSelectedItem] = useState<{ id: string; caseId: string } | null>(null);
+  const [selectedItem, setSelectedItem] = useState<{
+    id: string;
+    caseId: string;
+    evaluationResults?: EvaluationResult[] | null;
+    traceUrl?: string | null;
+  } | null>(null);
   const [filterQuality, setFilterQuality] = useState<string>("ALL");
 
   const filteredItems = items.filter((item) => {
@@ -119,7 +126,7 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
                 <th className="px-5 py-3.5">用例标识 (Dataset Item ID)</th>
                 <th className="px-5 py-3.5">执行状态 (Execution)</th>
                 <th className="px-5 py-3.5">质量门禁 (Quality)</th>
-                <th className="px-5 py-3.5">评测得分 (Scores)</th>
+                <th className="px-5 py-3.5">评测结果 (Evaluation Results)</th>
                 <th className="px-5 py-3.5">最终 HTTP</th>
                 <th className="px-5 py-3.5">最终耗时</th>
                 <th className="px-5 py-3.5">尝试次数 (Attempts)</th>
@@ -170,30 +177,19 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
                     </td>
 
                     <td className="px-5 py-3.5">
-                      {item.scores && Object.keys(item.scores).length > 0 ? (
-                        <div className="flex flex-wrap gap-1.5">
-                          {Object.entries(item.scores).map(([k, v]) => (
-                            <span
-                              key={k}
-                              className="inline-flex items-center px-2 py-0.5 rounded text-micro font-mono bg-surface-muted text-foreground-secondary border border-border"
-                            >
-                              <span className="text-muted-foreground mr-1">{k}:</span>
-                              <span
-                                className={`font-semibold ${
-                                  Number(v) >= 1
-                                    ? "text-pass-strong"
-                                    : Number(v) > 0
-                                    ? "text-timeout"
-                                    : "text-fail"
-                                }`}
-                              >
-                                {typeof v === "number" ? v.toFixed(2) : String(v)}
-                              </span>
-                            </span>
-                          ))}
-                        </div>
+                      {item.evaluation_results && item.evaluation_results.length > 0 ? (
+                        <EvaluationResultList results={item.evaluation_results} />
+                      ) : item.scores && Object.keys(item.scores).length > 0 ? (
+                        <EvaluationResultList
+                          results={Object.entries(item.scores).map(([id, value]) => ({
+                            evaluator_id: id,
+                            result_type: "numeric",
+                            status: "succeeded",
+                            value,
+                          }))}
+                        />
                       ) : (
-                        <span className="text-xs text-muted-foreground font-mono">-</span>
+                        <span className="text-xs text-muted-foreground font-mono">—</span>
                       )}
                     </td>
 
@@ -231,7 +227,13 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
                         type="button"
                         variant="secondary"
                         onClick={() =>
-                          setSelectedItem({ id: item.id, caseId: item.dataset_item_id })
+                          setSelectedItem({
+                          id: item.id,
+                          caseId: item.dataset_item_id,
+                          evaluationResults:
+                            (item.evaluation_results as EvaluationResult[] | undefined) ?? null,
+                          traceUrl: item.langfuse_trace_url ?? null,
+                        })
                         }
                         className="min-h-7 px-2.5 py-1 text-xs font-mono"
                         title="查看 Attempt 调用历史"
@@ -246,7 +248,13 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
                         type="button"
                         variant="quiet"
                         onClick={() =>
-                          setSelectedItem({ id: item.id, caseId: item.dataset_item_id })
+                          setSelectedItem({
+                          id: item.id,
+                          caseId: item.dataset_item_id,
+                          evaluationResults:
+                            (item.evaluation_results as EvaluationResult[] | undefined) ?? null,
+                          traceUrl: item.langfuse_trace_url ?? null,
+                        })
                         }
                         className="min-h-7 px-2 text-xs"
                       >
@@ -267,6 +275,8 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
         onClose={() => setSelectedItem(null)}
         itemExecutionId={selectedItem?.id || null}
         caseId={selectedItem?.caseId || null}
+        evaluationResults={selectedItem?.evaluationResults}
+        traceUrl={selectedItem?.traceUrl}
       />
     </div>
   );

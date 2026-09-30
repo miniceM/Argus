@@ -11,15 +11,18 @@ from sqlalchemy import func, select
 
 from .db import DatabaseManager
 from .db_models import (
+    EvaluationResultRecord,
     ExecutionAttemptRecord,
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
 )
+from .evaluation_result_store import persist_typed_results, result_to_payload
 from .evaluator_binding import evaluate_frozen_item
 from .evaluators import EvaluatorSelectionError
 from .executor import RemoteAgentExecutor
 from .models import (
     ExecutionAttemptResponse,
+    EvaluationResultResponse,
     ExperimentItemExecutionResponse,
     ExperimentLaunchCreateRequest,
     ExperimentLaunchProgressResponse,
@@ -287,9 +290,22 @@ def _query_launch_items(
             for fa in final_attempts:
                 final_attempts_map[fa.id] = fa
 
+        # Issue #82: load every typed result for these items in one query.
+        typed_by_item: dict[str, list[EvaluationResultResponse]] = {}
+        typed_rows = session.scalars(
+            select(EvaluationResultRecord)
+            .where(EvaluationResultRecord.item_execution_id.in_(item_ids))
+            .order_by(EvaluationResultRecord.item_execution_id, EvaluationResultRecord.evaluator_id)
+        ).all()
+        for row in typed_rows:
+            typed_by_item.setdefault(row.item_execution_id, []).append(
+                EvaluationResultResponse.model_validate(result_to_payload(row))
+            )
+
         responses = []
         for i in items:
             res = ExperimentItemExecutionResponse.model_validate(i)
+            res.evaluation_results = typed_by_item.get(i.id, [])
             res.attempt_count = counts_map.get(i.id, 0)
             fa = final_attempts_map.get(i.final_attempt_id) if i.final_attempt_id else None
             res.final_attempt_http_status = fa.http_status if fa else None
@@ -485,6 +501,7 @@ async def _execute_single_item(
         eval_status = "skipped"
         quality_conclusion = "fail"
 
+    typed_results: list[Any] = []
     if execution_status == "succeeded" and agent_output is not None:
         # Issue #81: same frozen boundary as the Worker and synchronous run paths.
         frozen_result = evaluate_frozen_item(
@@ -494,6 +511,7 @@ async def _execute_single_item(
         eval_error = frozen_result.eval_error
         scores_dict = frozen_result.scores
         quality_conclusion = frozen_result.quality_conclusion
+        typed_results = list(frozen_result.typed_results)
 
 
     completed_at = datetime.utcnow()
@@ -513,6 +531,13 @@ async def _execute_single_item(
                     raise ValueError(f"Attempt '{last_attempt_id}' does not belong to item '{item_exec_id}'")
                 rec.final_attempt_id = last_attempt_id
             rec.completed_at = completed_at
+            if typed_results:
+                persist_typed_results(
+                    session,
+                    item_execution_id=item_exec_id,
+                    launch_id=rec.launch_id,
+                    results=typed_results,
+                )
 
     return {
         "dataset_item_id": item_id,

@@ -21,6 +21,7 @@ import inspect
 import json
 import re
 import textwrap
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
@@ -223,6 +224,10 @@ class EvaluatorBinding:
     implementation_ref: str | None
     executor_type: str
     artifact: ImplementationArtifact | None
+    # Issue #82 typed-result contract: the enum a categorical result must obey,
+    # and the *only* source allowed to produce a normalized numeric value.
+    category_values: tuple[str, ...] | None = None
+    normalization_rule: dict[str, Any] | None = None
     runner: dict[str, Any] = field(default_factory=dict)
     composed_of: tuple[str, ...] = ()
     contract_status: str = FROZEN_CONTRACT_STATUS
@@ -242,6 +247,8 @@ class EvaluatorBinding:
             "input_contract": self.input_contract,
             "output_contract": self.output_contract,
             "params": self.params,
+            "category_values": list(self.category_values) if self.category_values else None,
+            "normalization_rule": self.normalization_rule,
             "definition_digest": self.definition_digest,
             "content_digest": self.definition_digest.split(":", 1)[-1],
             "implementation_ref": self.implementation_ref,
@@ -275,6 +282,9 @@ class EvaluatorBinding:
             "content_digest": self.definition_digest.split(":", 1)[-1],
             "input_contract": self.input_contract,
             "output_contract": self.output_contract,
+            # Issue #82 typed-result contract
+            "category_values": list(self.category_values) if self.category_values else None,
+            "normalization_rule": self.normalization_rule,
             "definition_digest": self.definition_digest,
             "implementation_ref": self.implementation_ref,
             "executor_type": self.executor_type,
@@ -328,6 +338,16 @@ class EvaluatorBinding:
             input_contract=dict(payload.get("input_contract") or {}),
             output_contract=dict(payload.get("output_contract") or {}),
             params=dict(payload.get("params") or {}),
+            category_values=(
+                tuple(str(v) for v in (payload.get("category_values") or ()))
+                if payload.get("category_values")
+                else None
+            ),
+            normalization_rule=(
+                dict(payload["normalization_rule"])
+                if isinstance(payload.get("normalization_rule"), dict)
+                else None
+            ),
             definition_digest=normalize_digest(definition_digest),
             implementation_ref=payload.get("implementation_ref"),
             executor_type=str(payload.get("executor_type") or "builtin_python"),
@@ -340,6 +360,31 @@ class EvaluatorBinding:
                 str(r) for r in (payload.get("eligibility_reasons") or [])
             ),
         )
+
+
+def normalization_rule_for(version: EvaluatorVersion) -> dict[str, Any] | None:
+    """Derive the *only* normalization rule a frozen version authorises.
+
+    A normalized number may exist only when the contract explicitly says how to
+    map the typed value onto a number:
+
+    * ``numeric`` is already its own normalized form (handled by the caller).
+    * ``boolean`` maps true/false to 1/0 — an explicit, auditable rule.
+    * ``categorical`` maps only when an *ordered* enum was frozen; an unordered
+      category is never numericized.
+    * ``text`` is never numericized.
+    """
+    if version.result_type == "boolean":
+        return {"kind": "boolean", "true_value": 1.0, "false_value": 0.0}
+    if version.result_type == "categorical" and version.ordered_category_values:
+        return {
+            "kind": "ordered_category",
+            "mapping": {
+                str(value): float(index)
+                for index, value in enumerate(version.ordered_category_values)
+            },
+        }
+    return None
 
 
 def freeze_binding(
@@ -414,6 +459,8 @@ def freeze_binding(
         implementation_ref=version.implementation_ref,
         executor_type=version.executor_type,
         artifact=artifact,
+        category_values=version.category_values,
+        normalization_rule=normalization_rule_for(version),
         runner=dict(runner_identity),
         composed_of=dependencies,
         contract_status=FROZEN_CONTRACT_STATUS,
@@ -667,7 +714,12 @@ def resolve_execution_plan(
 
 @dataclass(frozen=True)
 class FrozenItemEvaluation:
-    """Result of evaluating one item through the frozen execution identity."""
+    """Result of evaluating one item through the frozen execution identity.
+
+    ``typed_results`` is the authoritative record (Issue #82): every selected
+    Binding contributes exactly one explainable result. ``scores`` is only the
+    restricted numeric projection kept for backwards compatibility.
+    """
 
     scores: dict[str, float]
     quality_conclusion: str
@@ -675,6 +727,21 @@ class FrozenItemEvaluation:
     eval_error: str | None
     verification_status: str
     evaluators: tuple[dict[str, Any], ...] = ()
+    typed_results: tuple[Any, ...] = ()
+
+    @property
+    def failed_result_count(self) -> int:
+        return sum(1 for result in self.typed_results if getattr(result, "status", "") != "succeeded")
+
+
+def _result_value_present(result: Any) -> bool:
+    """Whether the Evaluator actually produced a value (``None`` means missing).
+
+    A succeeded Evaluation with a missing value is invalid; it becomes an
+    explicit ``no_result`` instead of a fabricated zero.
+    """
+    value = getattr(result, "value", None)
+    return value is not None
 
 
 def evaluate_frozen_item(
@@ -686,12 +753,23 @@ def evaluate_frozen_item(
     executors: dict[str, EvaluatorExecutor] | None = None,
     quality_policy: dict[str, Any] | None = None,
 ) -> FrozenItemEvaluation:
-    """The single evaluation entry point for Worker, run and resume paths."""
+    """The single evaluation entry point for Worker, run and resume paths.
+
+    Every selected Binding produces its own typed result. One Binding failing
+    never discards the results that already succeeded, and a missing / NaN /
+    mistyped value is reported with its own reason rather than coerced to zero.
+    """
+    from .evaluator_results import (
+        build_result,
+        failed_result,
+        project_legacy_scores,
+    )
     from .evaluators import evaluate_item_quality
 
     registry = registry or default_evaluator_registry
     executors = executors if executors is not None else build_executor_registry(registry)
     manifest = manifest or {}
+    manifest_schema_version = str(manifest.get("schema_version") or "") or None
 
     plan: list[ResolvedEvaluator] = []
     try:
@@ -720,38 +798,83 @@ def evaluate_frozen_item(
             verification_status=manifest_contract_status(manifest),
         )
 
-    scores: dict[str, float] = {}
-    evaluators: list[dict[str, Any]] = []
     verification_status = manifest_contract_status(manifest)
-    try:
-        for resolved in plan:
-            executor = executor_for(resolved.binding, executors)
-            result = executor.execute(
+    evaluators: list[dict[str, Any]] = []
+    typed_results: list[Any] = []
+    eval_errors: list[str] = []
+
+    for resolved in plan:
+        binding = resolved.binding
+        evaluators.append(
+            {
+                "id": binding.evaluator_id,
+                "version": binding.version,
+                "binding_id": binding.binding_id,
+                "verification": resolved.verification,
+            }
+        )
+        executor = executor_for(binding, executors)
+        started = time.perf_counter()
+        try:
+            raw = executor.execute(
                 resolved.implementation, output=output, expected_output=expected_output
             )
-            scores[resolved.binding.evaluator_id] = float(getattr(result, "value", 0.0))
-            evaluators.append(
-                {
-                    "id": resolved.binding.evaluator_id,
-                    "version": resolved.binding.version,
-                    "binding_id": resolved.binding.binding_id,
-                    "verification": resolved.verification,
-                }
+        except Exception as exc:  # noqa: BLE001 - one Binding must not kill the rest
+            duration_ms = round((time.perf_counter() - started) * 1000, 3)
+            typed_results.append(
+                failed_result(
+                    binding,
+                    error_code="EVALUATION_FAILED",
+                    error_message=str(exc),
+                    duration_ms=duration_ms,
+                    manifest_schema_version=manifest_schema_version,
+                )
             )
-        quality_conclusion = evaluate_item_quality(
-            scores,
-            [resolved.binding.to_payload() for resolved in plan],
-            manifest.get("quality_policy") or quality_policy,
+            eval_errors.append(f"{binding.evaluator_id}: {exc}")
+            continue
+        duration_ms = round((time.perf_counter() - started) * 1000, 3)
+        typed_results.append(
+            build_result(
+                binding,
+                getattr(raw, "value", None),
+                comment=getattr(raw, "comment", None),
+                evidence=_result_evidence(raw),
+                duration_ms=duration_ms,
+                manifest_schema_version=manifest_schema_version,
+                raw_value_present=_result_value_present(raw),
+            )
         )
-    except Exception as exc:  # noqa: BLE001 - evaluators must never crash a Worker
-        return FrozenItemEvaluation(
-            scores=scores,
-            quality_conclusion="unknown",
-            eval_status="failed",
-            eval_error=str(exc),
-            verification_status=verification_status,
-            evaluators=tuple(evaluators),
-        )
+
+    # Restricted legacy projection: successful numeric results only.
+    scores = project_legacy_scores(typed_results)
+
+    if any(getattr(result, "status", "") != "succeeded" for result in typed_results):
+        # Fail closed / unknown-safe (AGENTS.md §5.4): a Binding that failed,
+        # was skipped or produced no value cannot yield a quality conclusion.
+        quality_conclusion = "unknown"
+        eval_status = "failed" if eval_errors else "succeeded"
+        eval_error = "; ".join(eval_errors) if eval_errors else None
+    else:
+        # Issue #82 scope: the threshold gate is defined over *numeric* results
+        # only. Non-numeric typed results (boolean / categorical / text) are
+        # recorded and shown, but their policy decision is #83's job — they
+        # must not silently flip a conclusion to fail via a missing score, nor
+        # fabricate a pass from nothing.
+        numeric_specs = [
+            resolved.binding.to_payload()
+            for resolved in plan
+            if resolved.binding.result_type == "numeric"
+        ]
+        if numeric_specs:
+            quality_conclusion = evaluate_item_quality(
+                scores,
+                numeric_specs,
+                manifest.get("quality_policy") or quality_policy,
+            )
+        else:
+            quality_conclusion = "unknown"
+        eval_status = "succeeded"
+        eval_error = None
 
     if any(resolved.verification != "VERIFIED" for resolved in plan):
         verification_status = LEGACY_CONTRACT_STATUS
@@ -759,11 +882,20 @@ def evaluate_frozen_item(
     return FrozenItemEvaluation(
         scores=scores,
         quality_conclusion=quality_conclusion,
-        eval_status="succeeded",
-        eval_error=None,
+        eval_status=eval_status,
+        eval_error=eval_error,
         verification_status=verification_status,
         evaluators=tuple(evaluators),
+        typed_results=tuple(typed_results),
     )
+
+
+def _result_evidence(raw: Any) -> dict[str, Any] | None:
+    """Capture evaluator-provided evidence (metadata) when present."""
+    metadata = getattr(raw, "metadata", None)
+    if isinstance(metadata, dict) and metadata:
+        return {str(k): v for k, v in metadata.items()}
+    return None
 
 
 def _resolve_one(

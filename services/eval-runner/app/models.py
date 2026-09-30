@@ -476,6 +476,11 @@ class BaselineResponse(BaseModel):
     environment: str
     result_snapshot_id: str
     revision: int
+    # Issue #85: the binding revision above is the *pointer* revision. The
+    # result revision below is the frozen report it points at. Both are
+    # returned explicitly so a success response never leaves "latest" implied.
+    result_revision: int = 0
+    result_evidence_state: str = "COMPLETE"
     updated_by: str | None = None
     updated_at: datetime
     launch_id: str
@@ -574,9 +579,58 @@ class RunSummaryResponse(BaseModel):
     revision: int
     created_at: datetime
     manifest_digest: str
+    # Issue #85: the digest of the frozen items themselves (typed results plus
+    # their provenance), so a shared link identifies exactly these results.
+    source_result_digest: str = ""
+    # Issue #85: this revision's own evidence verdict. COMPLETE means it may be
+    # used as formal release / Baseline evidence; DIAGNOSTIC means it only
+    # explains a failure.
+    evidence_state: str = "COMPLETE"
+    evidence_reasons: list[str] = Field(default_factory=list)
     versions: dict[str, Any]
     summary: RunCostSummaryResponse
     langfuse_score_sync_status: str = "PENDING"
+
+
+class ResultSnapshotRevisionResponse(BaseModel):
+    """One frozen revision of a Launch (Issue #85)."""
+
+    snapshot_id: str
+    revision: int
+    created_at: datetime
+    source_result_digest: str
+    manifest_digest: str
+    evidence_state: str
+    evidence_reasons: list[str] = Field(default_factory=list)
+    total_cases: int = 0
+    quality_pass_count: int = 0
+    quality_fail_count: int = 0
+    quality_unknown_count: int = 0
+    is_latest: bool = False
+
+
+class ResultSnapshotListResponse(BaseModel):
+    launch_id: str
+    latest_snapshot_id: str | None = None
+    latest_revision: int | None = None
+    revisions: list[ResultSnapshotRevisionResponse] = Field(default_factory=list)
+
+
+class ResultSnapshotDetailResponse(BaseModel):
+    """The immutable contents of one revision, addressed by its own id."""
+
+    launch_id: str
+    snapshot_id: str
+    revision: int
+    created_at: datetime
+    source_result_digest: str
+    manifest_digest: str
+    evidence_state: str
+    evidence_reasons: list[str] = Field(default_factory=list)
+    releasable: bool = False
+    versions: dict[str, Any]
+    summary: RunCostSummaryResponse
+    items: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ComparisonResponse(BaseModel):

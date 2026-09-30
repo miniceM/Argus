@@ -348,6 +348,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/experiment-launches/{launch_id}/result-snapshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List every frozen result revision of a Launch (Issue #85)
+         * @description Every revision ever frozen for this Launch, newest first.
+         *
+         *     Issue #85: a re-evaluation creates a new revision and never rewrites an old
+         *     one, so the history is the unit a user browses and shares.
+         */
+        get: operations["list_launch_result_snapshots_api_v1_experiment_launches__launch_id__result_snapshots_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one immutable result revision by its own id (Issue #85)
+         * @description The shareable, fixed view: this id always returns these exact results.
+         *
+         *     Nothing here falls back to "latest", so a shared link cannot drift when the
+         *     Launch is re-evaluated and a newer revision is frozen.
+         */
+        get: operations["get_launch_result_snapshot_api_v1_experiment_launches__launch_id__result_snapshots__snapshot_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/experiment-launches/{launch_id}/comparison": {
         parameters: {
             query?: never;
@@ -809,6 +855,16 @@ export interface components {
             result_snapshot_id: string;
             /** Revision */
             revision: number;
+            /**
+             * Result Revision
+             * @default 0
+             */
+            result_revision: number;
+            /**
+             * Result Evidence State
+             * @default COMPLETE
+             */
+            result_evidence_state: string;
             /** Updated By */
             updated_by?: string | null;
             /**
@@ -1686,6 +1742,104 @@ export interface components {
             note?: string | null;
         };
         /**
+         * ResultSnapshotDetailResponse
+         * @description The immutable contents of one revision, addressed by its own id.
+         */
+        ResultSnapshotDetailResponse: {
+            /** Launch Id */
+            launch_id: string;
+            /** Snapshot Id */
+            snapshot_id: string;
+            /** Revision */
+            revision: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Source Result Digest */
+            source_result_digest: string;
+            /** Manifest Digest */
+            manifest_digest: string;
+            /** Evidence State */
+            evidence_state: string;
+            /** Evidence Reasons */
+            evidence_reasons?: string[];
+            /**
+             * Releasable
+             * @default false
+             */
+            releasable: boolean;
+            /** Versions */
+            versions: {
+                [key: string]: unknown;
+            };
+            summary: components["schemas"]["RunCostSummaryResponse"];
+            /** Items */
+            items?: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** ResultSnapshotListResponse */
+        ResultSnapshotListResponse: {
+            /** Launch Id */
+            launch_id: string;
+            /** Latest Snapshot Id */
+            latest_snapshot_id?: string | null;
+            /** Latest Revision */
+            latest_revision?: number | null;
+            /** Revisions */
+            revisions?: components["schemas"]["ResultSnapshotRevisionResponse"][];
+        };
+        /**
+         * ResultSnapshotRevisionResponse
+         * @description One frozen revision of a Launch (Issue #85).
+         */
+        ResultSnapshotRevisionResponse: {
+            /** Snapshot Id */
+            snapshot_id: string;
+            /** Revision */
+            revision: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Source Result Digest */
+            source_result_digest: string;
+            /** Manifest Digest */
+            manifest_digest: string;
+            /** Evidence State */
+            evidence_state: string;
+            /** Evidence Reasons */
+            evidence_reasons?: string[];
+            /**
+             * Total Cases
+             * @default 0
+             */
+            total_cases: number;
+            /**
+             * Quality Pass Count
+             * @default 0
+             */
+            quality_pass_count: number;
+            /**
+             * Quality Fail Count
+             * @default 0
+             */
+            quality_fail_count: number;
+            /**
+             * Quality Unknown Count
+             * @default 0
+             */
+            quality_unknown_count: number;
+            /**
+             * Is Latest
+             * @default false
+             */
+            is_latest: boolean;
+        };
+        /**
          * RetryEvaluationResponse
          * @description Result of an evaluation-only retry submission (Issue #84).
          */
@@ -1759,6 +1913,18 @@ export interface components {
             created_at: string;
             /** Manifest Digest */
             manifest_digest: string;
+            /**
+             * Source Result Digest
+             * @default
+             */
+            source_result_digest: string;
+            /**
+             * Evidence State
+             * @default COMPLETE
+             */
+            evidence_state: string;
+            /** Evidence Reasons */
+            evidence_reasons?: string[];
             /** Versions */
             versions: {
                 [key: string]: unknown;
@@ -2673,6 +2839,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunSummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_launch_result_snapshots_api_v1_experiment_launches__launch_id__result_snapshots_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultSnapshotListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_launch_result_snapshot_api_v1_experiment_launches__launch_id__result_snapshots__snapshot_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+                snapshot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultSnapshotDetailResponse"];
                 };
             };
             /** @description Validation Error */

@@ -252,6 +252,7 @@ export const ComparisonReport: React.FC<{
     },
   });
 
+  const activeBaseline = activeBaselineQuery.data ?? null;
   const metrics = summaryQuery.data?.summary;
   const comparison = comparisonQuery.data?.pages[0];
   const comparisonSummary = comparison?.summary as ComparisonSummary | undefined;
@@ -312,24 +313,45 @@ export const ComparisonReport: React.FC<{
           <h2 className="text-base font-bold text-foreground">Regression Summary / Baseline Comparison</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             结果修订 {summaryQuery.data?.revision ?? "…"} · Snapshot: {snapshotId ?? "解析中"} · Environment: {environment} · Langfuse Run Score: {summaryQuery.data?.langfuse_score_sync_status ?? "加载中"}
+            {summaryQuery.data && (
+              <span className="ml-2" data-testid="summary-evidence-state">
+                证据 {summaryQuery.data.evidence_state === "COMPLETE" ? "完整" : "诊断"}
+              </span>
+            )}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {snapshotId && <Button variant="secondary" className="text-xs" onClick={showLatestSnapshot}>查看最新修订</Button>}
-        {launchStatus === "COMPLETED" && summaryQuery.data && (
+        {summaryQuery.data?.evidence_state === "COMPLETE" ? (
           <Button
             variant="secondary"
             className="text-xs"
             onClick={() => setBaselineMutation.mutate()}
             disabled={setBaselineMutation.isPending}
+            title="将当前固定版本设为该环境的 Baseline"
           >
             <ShieldCheck className="h-3.5 w-3.5" />
             {setBaselineMutation.isPending ? "绑定中…" : "设为当前环境 Baseline"}
           </Button>
-        )}
+        ) : summaryQuery.data ? (
+          <span
+            className="text-xs text-muted-foreground"
+            data-testid="baseline-ineligible-hint"
+            title={summaryQuery.data.evidence_reasons?.join("; ") ?? ""}
+          >
+            当前版本证据不足，不可设为 Baseline
+          </span>
+        ) : null}
         </div>
       </div>
 
+      {activeBaseline && (
+        <p className="text-xs text-muted-foreground" data-testid="baseline-revision-line">
+          当前 Baseline：结果修订 Revision {activeBaseline.result_revision} · 绑定修订 {activeBaseline.revision} ·
+          Snapshot {activeBaseline.result_snapshot_id?.slice(0, 8)}… · 证据{" "}
+          {activeBaseline.result_evidence_state === "COMPLETE" ? "完整" : "诊断"}
+        </p>
+      )}
       {setBaselineMutation.error && <p role="alert" className="text-xs text-fail">{formatApiError(setBaselineMutation.error)}</p>}
       {summaryQuery.error && <p role="alert" className="text-xs text-fail">{formatApiError(summaryQuery.error)}</p>}
       {comparisonQuery.error && <p role="alert" className="text-xs text-fail">{formatApiError(comparisonQuery.error)}</p>}

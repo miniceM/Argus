@@ -9,9 +9,20 @@ from sqlalchemy import select
 from .aggregation import aggregate_run, compare_case_results
 from .costs import compare_costs
 from .db_models import ExperimentLaunchRecord, RunResultSnapshotRecord
-from .models import ComparisonResponse, RunSummaryResponse
+from .models import (
+    ComparisonResponse,
+    ResultSnapshotDetailResponse,
+    ResultSnapshotListResponse,
+    ResultSnapshotRevisionResponse,
+    RunSummaryResponse,
+)
 from .result_outputs import ComparisonCaseOutputResponse, fetch_observation_output
-from .result_snapshots import create_result_snapshot, latest_result_snapshot
+from .result_snapshots import (
+    EVIDENCE_COMPLETE,
+    create_result_snapshot,
+    latest_result_snapshot,
+    list_result_snapshots,
+)
 
 router = APIRouter(prefix="/api/v1/experiment-launches", tags=["Evaluation Results"])
 
@@ -97,9 +108,94 @@ def get_run_summary(
             revision=snapshot.revision,
             created_at=snapshot.created_at,
             manifest_digest=snapshot.manifest_digest,
+            source_result_digest=snapshot.source_result_digest,
+            evidence_state=(snapshot.evidence_state or EVIDENCE_COMPLETE).upper(),
+            evidence_reasons=list(snapshot.evidence_reasons or []),
             versions=_versions(snapshot.manifest),
             summary=snapshot.summary,
             langfuse_score_sync_status=score_sync_status,
+        )
+
+
+def _revision_row(snapshot: RunResultSnapshotRecord, is_latest: bool) -> ResultSnapshotRevisionResponse:
+    summary = snapshot.summary or {}
+    return ResultSnapshotRevisionResponse(
+        snapshot_id=snapshot.id,
+        revision=snapshot.revision,
+        created_at=snapshot.created_at,
+        source_result_digest=snapshot.source_result_digest,
+        manifest_digest=snapshot.manifest_digest,
+        evidence_state=(snapshot.evidence_state or EVIDENCE_COMPLETE).upper(),
+        evidence_reasons=list(snapshot.evidence_reasons or []),
+        total_cases=int(summary.get("total_cases", 0) or 0),
+        quality_pass_count=int(summary.get("quality_pass_count", 0) or 0),
+        quality_fail_count=int(summary.get("quality_fail_count", 0) or 0),
+        quality_unknown_count=int(summary.get("quality_unknown_count", 0) or 0),
+        is_latest=is_latest,
+    )
+
+
+@router.get(
+    "/{launch_id}/result-snapshots",
+    response_model=ResultSnapshotListResponse,
+    summary="List every frozen result revision of a Launch (Issue #85)",
+)
+def list_launch_result_snapshots(launch_id: str) -> ResultSnapshotListResponse:
+    """Every revision ever frozen for this Launch, newest first.
+
+    Issue #85: a re-evaluation creates a new revision and never rewrites an old
+    one, so the history is the unit a user browses and shares.
+    """
+    with _db_manager().get_session() as session:
+        if session.get(ExperimentLaunchRecord, launch_id) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Launch '{launch_id}' not found")
+        snapshots = list_result_snapshots(session, launch_id)
+        return ResultSnapshotListResponse(
+            launch_id=launch_id,
+            latest_snapshot_id=snapshots[0].id if snapshots else None,
+            latest_revision=snapshots[0].revision if snapshots else None,
+            revisions=[_revision_row(snap, index == 0) for index, snap in enumerate(snapshots)],
+        )
+
+
+@router.get(
+    "/{launch_id}/result-snapshots/{snapshot_id}",
+    response_model=ResultSnapshotDetailResponse,
+    summary="Read one immutable result revision by its own id (Issue #85)",
+)
+def get_launch_result_snapshot(launch_id: str, snapshot_id: str) -> ResultSnapshotDetailResponse:
+    """The shareable, fixed view: this id always returns these exact results.
+
+    Nothing here falls back to "latest", so a shared link cannot drift when the
+    Launch is re-evaluated and a newer revision is frozen.
+    """
+    with _db_manager().get_session() as session:
+        launch = session.get(ExperimentLaunchRecord, launch_id)
+        if not launch:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Launch '{launch_id}' not found")
+        snapshot = session.scalars(
+            select(RunResultSnapshotRecord).where(
+                RunResultSnapshotRecord.id == snapshot_id,
+                RunResultSnapshotRecord.launch_id == launch_id,
+            )
+        ).first()
+        if snapshot is None:
+            # Do not reveal whether an ID exists under another Launch.
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Result snapshot not found")
+        evidence_state = (snapshot.evidence_state or EVIDENCE_COMPLETE).upper()
+        return ResultSnapshotDetailResponse(
+            launch_id=launch_id,
+            snapshot_id=snapshot.id,
+            revision=snapshot.revision,
+            created_at=snapshot.created_at,
+            source_result_digest=snapshot.source_result_digest,
+            manifest_digest=snapshot.manifest_digest,
+            evidence_state=evidence_state,
+            evidence_reasons=list(snapshot.evidence_reasons or []),
+            releasable=evidence_state == EVIDENCE_COMPLETE,
+            versions=_versions(snapshot.manifest),
+            summary=snapshot.summary,
+            items=list(snapshot.items or []),
         )
 
 

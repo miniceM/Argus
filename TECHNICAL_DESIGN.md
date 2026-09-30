@@ -506,6 +506,74 @@ Console：Launch 详情新增独立的「重试评测失败 (Retry Evaluation)�
 "复用原 Agent 输出，不会再次调用 Agent"。由于重评期间 Launch 仍处终态，用例轮询额外由
 `evaluation_status === evaluating` 驱动，确保重评结束后界面自动刷新。
 
+#### 8.3.5 固定结果修订与 Baseline 版本（Issue #85）
+
+用户分享或选为 Baseline 的是**某一个固定修订**，之后的重评不会改变它。
+
+#### 证据完整性（Evidence Completeness）
+
+Issue #84 的"仅重试评测"让 Launch 在重评期间仍处于终态，因此"Launch 已结束"不再等于
+"评测已结束"。每个 Snapshot 在冻结时**用自己的用例结果**给出证据结论：
+
+| evidence_state | 含义 | 可否作正式 Baseline / 发布依据 |
+|---|---|---|
+| `COMPLETE` | 每个用例都执行成功、评测成功且质量结论为 PASS/FAIL | ✅ |
+| `DIAGNOSTIC` | 存在执行失败、评测失败或 UNKNOWN | ❌ 仅用于解释失败 |
+
+`evidence_reasons` 给出具体原因（如 `1/6 个用例评测失败或未产出结果`）。
+
+冻结门槛（`create_result_snapshot`）：
+
+- Launch 处于终态，且**所有用例执行状态已结算**（无 pending/queued/running/retry_wait）；
+- **并且**没有任何用例处于 `evaluation_status = evaluating`——评测仍在进行时，
+  绝不生成声称完整的报告；
+- 失败终态（`PARTIAL_FAILED` / `FAILED`）允许生成 `DIAGNOSTIC` 快照，用于解释失败。
+
+#### 修订不可变性与摘要口径
+
+- Snapshot 写入后**只增不改**：重复冻结相同结果按
+  `(launch_id, source_result_digest)` 幂等返回既有行，不产生重复修订。
+- `source_result_digest` = 规范化 `result_items` 的 SHA-256，覆盖**类型化结果及其
+  provenance**（binding_id / definition_digest / executor_type / contract_status）、
+  质量判定、状态、耗时与 Trace 引用——不只是旧的 numeric `scores`。
+  因此**仅 provenance 变化**（例如换了冻结 Binding）也会产生新修订。
+- 重评改变结果 → 新摘要 → 新修订；旧修订的 `items` / `summary` / digest **逐字节不变**。
+
+#### Baseline 资格只看快照自身
+
+`validate_baseline_snapshot` **刻意不读取 Launch 的当前状态**：
+
+- Launch 之后进入执行重试或评测恢复，**不得**追溯性地使已捕获的 Baseline 失效；
+- 活动中的 Launch 状态**不能**充当历史证据；
+- 资格判据全部来自快照自身：`evidence_state == COMPLETE`，且汇总中
+  `execution_error_count` / `evaluator_error_count` / `quality_unknown_count` 均为 0，
+  且 `evaluated_cases == total_cases > 0`。
+
+历史快照没有 `evidence_state`（迁移 `012` 之前）时按 `COMPLETE` 处理并回落到同样的完整性
+检查——#85 禁止为旧行补造它从未携带的证据。
+
+并发写入仍由 `expected_revision` CAS 保护，冲突返回 409，不静默覆盖。
+Candidate 在创建时冻结 `baseline_snapshot_id` 与 `baseline_binding_revision`，
+之后切换 Baseline 不影响既有 Candidate。
+
+#### API
+
+```text
+GET /experiment-launches/{launch_id}/result-snapshots          # 修订列表（最新在前）
+GET /experiment-launches/{launch_id}/result-snapshots/{id}     # 固定修订详情（可分享）
+GET /experiment-launches/{launch_id}/summary?snapshot_id=...   # 按修订读取汇总
+```
+
+固定修订详情**从不回落到 latest**，并返回 `evidence_state` / `evidence_reasons` /
+`releasable`。Baseline 响应同时给出 `revision`（绑定指针修订）与 `result_revision`
+（冻结结果修订），成功响应不留下"latest"的歧义。
+
+Console：Launch 详情新增「结果报告 (Result Snapshot)」面板，显示当前修订号、Snapshot id、
+冻结时间、结果摘要、证据徽标与原因，并提供历史修订切换；所选修订写入 URL 查询参数
+`snapshot_id`，因此分享链接固定。查看历史修订时会提示"已有更新的 Revision N"。
+「设为当前环境 Baseline」按钮的可用性改由**该修订的证据状态**决定，
+诊断版本显示"当前版本证据不足，不可设为 Baseline"并说明原因。
+
 ### 8.4 ExperimentItemExecution
 
 表示单个 Dataset Item 的执行状态：

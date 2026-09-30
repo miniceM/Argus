@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";
 import { LaunchDetail } from "../../features/launches/LaunchDetail";
 import { api } from "../../api/client";
 
@@ -11,6 +11,12 @@ vi.mock("../../api/client", () => ({
     POST: vi.fn(),
   },
 }));
+
+// Exposes the current route so a test can assert a shared link was written.
+const LocationDisplay = () => {
+  const location = useLocation();
+  return <output data-testid="router-location">{location.pathname}{location.search}</output>;
+};
 
 describe("LaunchDetail Frozen Manifest Structured Audit View", () => {
   const queryClient = new QueryClient({
@@ -946,5 +952,107 @@ describe("Issue #84 evaluation-only retry UI", () => {
 
     const notice = await screen.findByTestId("retry-evaluation-notice");
     expect(notice).toHaveTextContent("检查点已过期");
+  });
+});
+
+describe("Issue #85 fixed result revision in the Launch detail route", () => {
+  const revision = (over: Record<string, unknown> = {}) => ({
+    snapshot_id: "snap-2",
+    revision: 2,
+    created_at: "2026-09-30T00:00:00Z",
+    source_result_digest: "aaaaaaaabbbbbbbb",
+    manifest_digest: "manifest-digest",
+    evidence_state: "COMPLETE",
+    evidence_reasons: [],
+    total_cases: 6,
+    quality_pass_count: 6,
+    quality_fail_count: 0,
+    quality_unknown_count: 0,
+    is_latest: true,
+    ...over,
+  });
+
+  const launch = {
+    id: "launch-85",
+    name: "Snapshot Launch",
+    status: "COMPLETED",
+    quality_conclusion: "pass",
+    dataset_name: "golden",
+    dataset_version: "v1",
+    agent_id: "test-agent",
+    agent_version: "v2",
+    langfuse_sync_status: "SYNCED",
+    created_at: "2026-09-30T00:00:00Z",
+    manifest: { schema_version: "1.2", dataset: { items_count: 6 } },
+    allowed_actions: [],
+    progress: { total: 6, completed: 6, allowed_actions: [] },
+  };
+
+  const renderAt = (route: string) => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path.endsWith("/result-snapshots")) {
+        return Promise.resolve({
+          data: {
+            launch_id: "launch-85",
+            latest_snapshot_id: "snap-2",
+            latest_revision: 2,
+            revisions: [
+              revision(),
+              revision({
+                snapshot_id: "snap-1",
+                revision: 1,
+                is_latest: false,
+                source_result_digest: "1111111122222222",
+              }),
+            ],
+          },
+        });
+      }
+      if (path.includes("/result-snapshots/")) return Promise.resolve({ data: null });
+      if (path.includes("/items")) return Promise.resolve({ data: [] });
+      if (path.includes("/summary") || path.includes("/comparison") || path.includes("/baselines")) {
+        return Promise.resolve({ data: null });
+      }
+      if (path.includes("/api/v1/experiment-launches")) return Promise.resolve({ data: launch });
+      return Promise.resolve({ data: null });
+    });
+
+    return render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[route]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<LaunchDetail />} />
+          </Routes>
+          <LocationDisplay />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  };
+
+  afterEach(() => vi.clearAllMocks());
+
+  it("shows the latest revision and no 'newer available' hint by default", async () => {
+    renderAt("/launches/launch-85");
+    expect(await screen.findByTestId("snapshot-revision")).toHaveTextContent("Revision 2");
+    expect(screen.queryByTestId("snapshot-newer-available")).not.toBeInTheDocument();
+  });
+
+  it("honours a shared ?snapshot_id link and warns that a newer revision exists", async () => {
+    renderAt("/launches/launch-85?snapshot_id=snap-1");
+    expect(await screen.findByTestId("snapshot-revision")).toHaveTextContent("Revision 1");
+    expect(screen.getByTestId("snapshot-newer-available")).toHaveTextContent("已有更新的 Revision 2");
+    // The share link reflects the pinned revision, not the newest one.
+    expect(screen.getByTestId("snapshot-share-url")).toHaveTextContent("snapshot_id=snap-1");
+  });
+
+  it("writes the chosen revision into the URL so the view can be shared", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    renderAt("/launches/launch-85");
+    const older = await screen.findByTestId("snapshot-revision-1");
+    fireEvent.click(older);
+    await waitFor(() => {
+      expect(screen.getByTestId("router-location")).toHaveTextContent("snapshot_id=snap-1");
+    });
   });
 });

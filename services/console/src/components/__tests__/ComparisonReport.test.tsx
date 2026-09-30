@@ -18,6 +18,10 @@ const summaryFor = (snapshotId: string, launchId = "candidate-launch") => ({
   revision: snapshotId.endsWith("new") ? 2 : 1,
   created_at: "2026-09-28T00:00:00Z",
   manifest_digest: "manifest-digest",
+  // Issue #85: a report states its own evidence completeness.
+  source_result_digest: "source-result-digest",
+  evidence_state: "COMPLETE",
+  evidence_reasons: [],
   versions: {
     agent: { id: "banking-agent", version: "2.4.0" },
     dataset: { name: "banking-golden", version: "2026-09" },
@@ -526,5 +530,104 @@ describe("ComparisonReport", () => {
       ))).toBe(true);
     });
     expect(screen.queryByRole("dialog", { name: "Case 双侧结果" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ComparisonReport Issue #85 Baseline version visibility", () => {
+  beforeEach(() => {
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path.includes("/baselines")) {
+        return Promise.resolve({
+          data: {
+            agent_id: "banking-agent",
+            environment: "production",
+            result_snapshot_id: "baseline-snapshot",
+            // The binding revision is the pointer; the result revision is the
+            // frozen report it points at. Both must be visible.
+            revision: 3,
+            result_revision: 1,
+            result_evidence_state: "COMPLETE",
+            updated_by: "alice",
+            updated_at: "2026-09-29T00:00:00Z",
+            launch_id: "baseline-launch",
+            agent_version: "2.4.0",
+            dataset_name: "banking-golden",
+            summary: {},
+          },
+        });
+      }
+      if (path.endsWith("/summary")) return Promise.resolve({ data: summaryFor("candidate-snapshot") });
+      if (path.includes("/comparison")) return Promise.resolve({ data: { items: [], next_cursor: null, classification_counts: {} } });
+      return Promise.resolve({ data: null });
+    });
+  });
+
+  it("names both the result revision and the binding revision of the current Baseline", async () => {
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter initialEntries={["/launches/candidate-launch?snapshot_id=candidate-snapshot"]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<ComparisonReportRoute launchStatus="COMPLETED" />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const line = await screen.findByTestId("baseline-revision-line");
+    expect(line).toHaveTextContent("结果修订 Revision 1");
+    expect(line).toHaveTextContent("绑定修订 3");
+    expect(line).toHaveTextContent("Snapshot baseline…");
+  });
+
+  it("still offers the Baseline action for a COMPLETE revision even when the Launch is no longer COMPLETED", async () => {
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter initialEntries={["/launches/candidate-launch?snapshot_id=candidate-snapshot"]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<ComparisonReportRoute launchStatus="RUNNING" />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // Issue #85: eligibility is the snapshot's own evidence, not the Launch's
+    // current status, so a recovered/retried Launch keeps the offer.
+    expect(await screen.findByRole("button", { name: "设为当前环境 Baseline" })).toBeInTheDocument();
+  });
+
+  it("withholds the Baseline action and explains why for a diagnostic revision", async () => {
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path.endsWith("/summary")) {
+        return Promise.resolve({
+          data: {
+            ...summaryFor("candidate-snapshot"),
+            evidence_state: "DIAGNOSTIC",
+            evidence_reasons: ["1/6 个用例评测失败或未产出结果"],
+          },
+        });
+      }
+      if (path.includes("/comparison")) {
+        return Promise.resolve({ data: { items: [], next_cursor: null, classification_counts: {} } });
+      }
+      return Promise.resolve({ data: null });
+    });
+
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter initialEntries={["/launches/candidate-launch?snapshot_id=candidate-snapshot"]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<ComparisonReportRoute launchStatus="COMPLETED" />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("summary-evidence-state")).toHaveTextContent("诊断");
+    });
+    expect(screen.queryByRole("button", { name: "设为当前环境 Baseline" })).not.toBeInTheDocument();
+    const hint = screen.getByTestId("baseline-ineligible-hint");
+    expect(hint).toHaveTextContent("当前版本证据不足，不可设为 Baseline");
+    expect(hint).toHaveAttribute("title", expect.stringContaining("评测失败"));
   });
 });

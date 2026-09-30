@@ -1442,6 +1442,101 @@
         }
       }
     },
+    "/api/v1/experiment-launches/{launch_id}/result-snapshots": {
+      "get": {
+        "tags": [
+          "Evaluation Results"
+        ],
+        "summary": "List every frozen result revision of a Launch (Issue #85)",
+        "description": "Every revision ever frozen for this Launch, newest first.\n\nIssue #85: a re-evaluation creates a new revision and never rewrites an old\none, so the history is the unit a user browses and shares.",
+        "operationId": "list_launch_result_snapshots_api_v1_experiment_launches__launch_id__result_snapshots_get",
+        "parameters": [
+          {
+            "name": "launch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Launch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultSnapshotListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}": {
+      "get": {
+        "tags": [
+          "Evaluation Results"
+        ],
+        "summary": "Read one immutable result revision by its own id (Issue #85)",
+        "description": "The shareable, fixed view: this id always returns these exact results.\n\nNothing here falls back to \"latest\", so a shared link cannot drift when the\nLaunch is re-evaluated and a newer revision is frozen.",
+        "operationId": "get_launch_result_snapshot_api_v1_experiment_launches__launch_id__result_snapshots__snapshot_id__get",
+        "parameters": [
+          {
+            "name": "launch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Launch Id"
+            }
+          },
+          {
+            "name": "snapshot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Snapshot Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultSnapshotDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/experiment-launches/{launch_id}/comparison": {
       "get": {
         "tags": [
@@ -2389,6 +2484,16 @@
           "revision": {
             "type": "integer",
             "title": "Revision"
+          },
+          "result_revision": {
+            "type": "integer",
+            "title": "Result Revision",
+            "default": 0
+          },
+          "result_evidence_state": {
+            "type": "string",
+            "title": "Result Evidence State",
+            "default": "COMPLETE"
           },
           "updated_by": {
             "anyOf": [
@@ -4711,6 +4816,195 @@
         "title": "QualityRuleRequest",
         "description": "One user-authored judgement rule over a selected metric (Issue #83)."
       },
+      "ResultSnapshotDetailResponse": {
+        "properties": {
+          "launch_id": {
+            "type": "string",
+            "title": "Launch Id"
+          },
+          "snapshot_id": {
+            "type": "string",
+            "title": "Snapshot Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "source_result_digest": {
+            "type": "string",
+            "title": "Source Result Digest"
+          },
+          "manifest_digest": {
+            "type": "string",
+            "title": "Manifest Digest"
+          },
+          "evidence_state": {
+            "type": "string",
+            "title": "Evidence State"
+          },
+          "evidence_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Reasons"
+          },
+          "releasable": {
+            "type": "boolean",
+            "title": "Releasable",
+            "default": false
+          },
+          "versions": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Versions"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/RunCostSummaryResponse"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "launch_id",
+          "snapshot_id",
+          "revision",
+          "created_at",
+          "source_result_digest",
+          "manifest_digest",
+          "evidence_state",
+          "versions",
+          "summary"
+        ],
+        "title": "ResultSnapshotDetailResponse",
+        "description": "The immutable contents of one revision, addressed by its own id."
+      },
+      "ResultSnapshotListResponse": {
+        "properties": {
+          "launch_id": {
+            "type": "string",
+            "title": "Launch Id"
+          },
+          "latest_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Snapshot Id"
+          },
+          "latest_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Revision"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/ResultSnapshotRevisionResponse"
+            },
+            "type": "array",
+            "title": "Revisions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "launch_id"
+        ],
+        "title": "ResultSnapshotListResponse"
+      },
+      "ResultSnapshotRevisionResponse": {
+        "properties": {
+          "snapshot_id": {
+            "type": "string",
+            "title": "Snapshot Id"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "source_result_digest": {
+            "type": "string",
+            "title": "Source Result Digest"
+          },
+          "manifest_digest": {
+            "type": "string",
+            "title": "Manifest Digest"
+          },
+          "evidence_state": {
+            "type": "string",
+            "title": "Evidence State"
+          },
+          "evidence_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Reasons"
+          },
+          "total_cases": {
+            "type": "integer",
+            "title": "Total Cases",
+            "default": 0
+          },
+          "quality_pass_count": {
+            "type": "integer",
+            "title": "Quality Pass Count",
+            "default": 0
+          },
+          "quality_fail_count": {
+            "type": "integer",
+            "title": "Quality Fail Count",
+            "default": 0
+          },
+          "quality_unknown_count": {
+            "type": "integer",
+            "title": "Quality Unknown Count",
+            "default": 0
+          },
+          "is_latest": {
+            "type": "boolean",
+            "title": "Is Latest",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "snapshot_id",
+          "revision",
+          "created_at",
+          "source_result_digest",
+          "manifest_digest",
+          "evidence_state"
+        ],
+        "title": "ResultSnapshotRevisionResponse",
+        "description": "One frozen revision of a Launch (Issue #85)."
+      },
       "RetryEvaluationResponse": {
         "properties": {
           "launch": {
@@ -4915,6 +5209,23 @@
           "manifest_digest": {
             "type": "string",
             "title": "Manifest Digest"
+          },
+          "source_result_digest": {
+            "type": "string",
+            "title": "Source Result Digest",
+            "default": ""
+          },
+          "evidence_state": {
+            "type": "string",
+            "title": "Evidence State",
+            "default": "COMPLETE"
+          },
+          "evidence_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Reasons"
           },
           "versions": {
             "additionalProperties": true,

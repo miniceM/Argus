@@ -90,6 +90,62 @@ def build_result_items(
     return result
 
 
+EVIDENCE_COMPLETE = "COMPLETE"
+EVIDENCE_DIAGNOSTIC = "DIAGNOSTIC"
+
+# Item execution states that mean "this case has not settled yet".
+_UNSETTLED_EXECUTION = {"pending", "queued", "running", "retry_wait"}
+
+
+def evaluate_snapshot_evidence(items: list[dict[str, Any]]) -> tuple[str, list[str]]:
+    """Classify a frozen result set by its own evidence, not by Launch status.
+
+    Issue #85: an evaluation-only retry (#84) leaves the Launch terminal while
+    cases are still being re-judged, so "the Launch finished" no longer implies
+    "the evaluation finished". A snapshot is COMPLETE only when every case
+    executed, was evaluated and reached a decided quality verdict; anything else
+    is a DIAGNOSTIC snapshot that may explain a failure but may never be used
+    as formal release evidence.
+    """
+    if not items:
+        return EVIDENCE_DIAGNOSTIC, ["快照没有任何用例结果 (snapshot contains no case results)"]
+
+    reasons: list[str] = []
+    execution_failed = [i for i in items if str(i.get("execution_status", "")).lower() != "succeeded"]
+    evaluation_failed = [
+        i
+        for i in items
+        if str(i.get("execution_status", "")).lower() == "succeeded"
+        and str(i.get("eval_status", "")).lower() != "succeeded"
+    ]
+    unknown_quality = [
+        i
+        for i in items
+        if str(i.get("execution_status", "")).lower() == "succeeded"
+        and str(i.get("eval_status", "")).lower() == "succeeded"
+        and str(i.get("quality_conclusion", "")).lower() != "pass"
+        and str(i.get("quality_conclusion", "")).lower() != "fail"
+    ]
+
+    if execution_failed:
+        reasons.append(
+            f"{len(execution_failed)}/{len(items)} 个用例执行失败，证据不完整"
+            f" ({len(execution_failed)}/{len(items)} cases failed execution)"
+        )
+    if evaluation_failed:
+        reasons.append(
+            f"{len(evaluation_failed)}/{len(items)} 个用例评测失败或未产出结果"
+            f" ({len(evaluation_failed)}/{len(items)} cases have no usable evaluation result)"
+        )
+    if unknown_quality:
+        reasons.append(
+            f"{len(unknown_quality)}/{len(items)} 个用例质量结论为 UNKNOWN（证据不足）"
+            f" ({len(unknown_quality)}/{len(items)} cases are UNKNOWN)"
+        )
+    return (EVIDENCE_COMPLETE if not reasons else EVIDENCE_DIAGNOSTIC), reasons
+
+
+
 def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> RunResultSnapshotRecord | None:
     """Idempotently freeze a terminal launch result; caller owns the surrounding DB transaction."""
     if session.get_bind().dialect.name == "postgresql":
@@ -111,7 +167,13 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
         .where(ExperimentItemExecutionRecord.launch_id == launch.id)
         .order_by(ExperimentItemExecutionRecord.dataset_item_id)
     ).all())
-    if any(item.execution_status.lower() in {"pending", "queued", "running", "retry_wait"} for item in items):
+    if any(item.execution_status.lower() in _UNSETTLED_EXECUTION for item in items):
+        return None
+    # Issue #85: an evaluation-only retry keeps the Launch terminal (Issue
+    # #84), so the execution states above are no longer sufficient. Never
+    # freeze a report that claims complete evidence while a re-judgement is
+    # still running.
+    if any(str(item.evaluation_status or "").lower() == "evaluating" for item in items):
         return None
 
     item_execution_ids = [item.id for item in items]
@@ -171,6 +233,7 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
                 },
             })
     result_items = build_result_items(launch, items, attempts, typed_by_item)
+    evidence_state, evidence_reasons = evaluate_snapshot_evidence(result_items)
     source_digest = _canonical_digest(result_items)
     existing = session.scalars(select(RunResultSnapshotRecord).where(
         RunResultSnapshotRecord.launch_id == launch.id,
@@ -195,6 +258,8 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
         summary=summary,
         items=result_items,
         created_at=datetime.utcnow(),
+        evidence_state=evidence_state,
+        evidence_reasons=evidence_reasons,
     )
     session.add(snapshot)
     session.flush()
@@ -217,6 +282,15 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
         next_retry_at=datetime.utcnow(),
     ))
     return snapshot
+
+
+def list_result_snapshots(session: Session, launch_id: str) -> list[RunResultSnapshotRecord]:
+    """Every frozen revision of a Launch, newest first (Issue #85)."""
+    return list(session.scalars(
+        select(RunResultSnapshotRecord)
+        .where(RunResultSnapshotRecord.launch_id == launch_id)
+        .order_by(RunResultSnapshotRecord.revision.desc())
+    ).all())
 
 
 def latest_result_snapshot(session: Session, launch_id: str) -> RunResultSnapshotRecord | None:

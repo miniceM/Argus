@@ -413,6 +413,12 @@ class RunResultSnapshotRecord(Base):
     summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     items: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    # Issue #85: the snapshot states its own evidence completeness so Baseline
+    # eligibility and the UI never depend on the Launch's current status.
+    evidence_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="COMPLETE", server_default="COMPLETE"
+    )
+    evidence_reasons: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
 
 class BaselineBindingRecord(Base):

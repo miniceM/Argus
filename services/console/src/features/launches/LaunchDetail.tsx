@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
@@ -32,6 +32,7 @@ import { Button, PageHeader, Panel, buttonClassName } from "../../components/ui/
 import { Modal } from "../../components/ui/Overlay";
 import { Badge } from "../../components/Badge";
 import { bindingVerification } from "./frozenIdentity";
+import { ResultSnapshotPanel } from "./resultSnapshot";
 
 type LaunchResponse = import("../../api/schema").components["schemas"]["ExperimentLaunchResponse"];
 type ItemExecution = import("../../api/schema").components["schemas"]["ExperimentItemExecutionResponse"];
@@ -236,6 +237,27 @@ export const LaunchDetail: React.FC = () => {
   const [forceRetry, setForceRetry] = useState(false);
   // Issue #84: feedback for the evaluation-only retry (submitted / blocked).
   const [evalRetryNotice, setEvalRetryNotice] = useState<string | null>(null);
+
+  // Issue #85: which frozen revision the user is looking at. It is carried in
+  // the query string so the link can be shared and always resolves to the same
+  // report, and so the historical view survives a reload.
+  const [searchParams, setSearchParams] = useSearchParams();
+  // The same `snapshot_id` parameter ComparisonReport already uses, so one
+  // shared URL pins the report, the comparison and the case drawer together.
+  const selectedSnapshotId = searchParams.get("snapshot_id");
+  const selectSnapshot = React.useCallback(
+    (snapshotId: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("snapshot_id", snapshotId);
+          return next;
+        },
+        { replace: false },
+      );
+    },
+    [setSearchParams],
+  );
 
   useEffect(() => {
     setShowRawManifest(false);
@@ -815,6 +837,14 @@ export const LaunchDetail: React.FC = () => {
             ))}
           </div>
         </div>
+      )}
+
+      {launchId && (
+        <ResultSnapshotPanel
+          launchId={launchId}
+          selectedSnapshotId={selectedSnapshotId}
+          onSelect={selectSnapshot}
+        />
       )}
 
       {/* Issue #83: the quality policy frozen with this Launch. A historical

@@ -163,6 +163,7 @@ class LaunchService:
                 "protocol": ver_rec.protocol,
                 "method": ver_rec.method,
                 "request_mapping": dict(ver_rec.request_mapping or {}),
+                "usage_cost_mapping": dict(ver_rec.usage_cost_mapping or {}) or None,
                 "credential_ref": ver_rec.credential_ref,
                 "spec_digest": ver_rec.spec_digest,
                 "artifact_ref": ver_rec.artifact_ref,

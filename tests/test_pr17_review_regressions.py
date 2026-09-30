@@ -348,6 +348,10 @@ def test_finalize_active_attempt_id_cas_and_running_status_enforced(setup_runtim
         att.status = "FAILED"
         s.commit()
 
+    evidence = {
+        "usage": {"input_tokens": 3},
+        "cost": {"amount": "0.001", "currency": "USD"},
+    }
     ok = w.finalize_execution_and_attempt(
         item_id=item_id,
         generation=gen,
@@ -356,7 +360,7 @@ def test_finalize_active_attempt_id_cas_and_running_status_enforced(setup_runtim
         target_eval_status="succeeded",
         target_quality_conclusion="pass",
         current_attempt_id=active_att_id,
-        attempt_updates={"status": "COMPLETED"},
+        attempt_updates={"status": "COMPLETED", "usage_cost": evidence},
         scores={"accuracy": 1.0},
     )
     assert ok is False
@@ -366,6 +370,7 @@ def test_finalize_active_attempt_id_cas_and_running_status_enforced(setup_runtim
         it = s.get(Item, item_id)
         assert it.execution_status == "running"
         assert it.active_attempt_id == active_att_id
+        assert s.get(Attempt, active_att_id).usage_cost is None
 
 
 # 14. Interleaved Resume and Retry Failed contracts on PARTIAL_FAILED
@@ -655,3 +660,37 @@ def test_clock_timestamp_lock_wait_expiration_fails_on_postgres():
 
 
 
+
+
+def test_finalize_persists_attempt_usage_cost_atomically(setup_runtime):
+    db_mgr, _, _, _, worker, _ = setup_runtime
+    _, messages = create_launch_helper(setup_runtime)
+    _, item_id, generation = messages[0]
+    claim = worker.claim_item(item_id, generation)
+    assert claim is not None
+    token = claim["lease_token"]
+    assert worker.authorize_attempt(item_id, token, generation) is not None
+
+    with db_mgr.get_session() as session:
+        item = session.get(Item, item_id)
+        attempt_id = item.active_attempt_id
+
+    evidence = {
+        "usage": {"input_tokens": 2, "output_tokens": 1, "total_tokens": 3},
+        "cost": {"amount": "0.004", "currency": "USD", "source": "provider_reported",
+                 "measurement_scope": "agent_invocation_total", "unavailable_reason": None},
+    }
+    assert worker.finalize_execution_and_attempt(
+        item_id=item_id,
+        generation=generation,
+        lease_token=token,
+        target_item_status="SUCCEEDED",
+        target_eval_status="succeeded",
+        target_quality_conclusion="pass",
+        current_attempt_id=attempt_id,
+        attempt_updates={"status": "COMPLETED", "usage_cost": evidence},
+    ) is True
+
+    with db_mgr.get_session() as session:
+        attempt = session.get(Attempt, attempt_id)
+        assert attempt.usage_cost == evidence

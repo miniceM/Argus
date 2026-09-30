@@ -11,7 +11,9 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -307,3 +309,87 @@ def test_registered_agent_version_maps_every_real_dataset_item():
         payload = map_request(item["input"], mapping)
         assert payload["messages"] == item["input"]["messages"]
         assert payload["customer_id"] == item["input"]["customer_id"]
+
+
+class _FakeSession:
+    def __init__(self, launch):
+        self._launch = launch
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+    def get(self, _model, _launch_id):
+        return self._launch
+
+
+class _FakeSessionFactory:
+    def __init__(self, launch):
+        self._launch = launch
+
+    def get_session(self):
+        return _FakeSession(self._launch)
+
+
+def test_drive_until_link_surfaces_link_backfill_reason(capsys):
+    """补链没成功时，验证脚本必须给出原因码，而不是只报"没等到链接"。
+
+    Reconciler 在候选之间有退避，永久性原因（DASHBOARD_UNCONFIGURED、
+    DATASET_ID_CONFLICT 等）不会出现在任何日志里，只会表现为超时。
+    """
+    script = _load_verification_script()
+
+    class _Launch:
+        id = "launch-1"
+        status = "COMPLETED"
+        langfuse_sync_status = "SYNCED"
+        langfuse_experiment_id = "run-1"
+        langfuse_experiment_url = None
+        langfuse_sync_error = None
+
+    class _LinkService:
+        def __init__(self):
+            self.calls = 0
+
+        def ensure_launch_link(self, _launch_id):
+            self.calls += 1
+            return SimpleNamespace(status="UNAVAILABLE", reason="DATASET_ID_CONFLICT", url=None, run_id="run-1")
+
+    link_service = _LinkService()
+
+    class _NoWork:
+        @staticmethod
+        def poll_queue(count=10, block_ms=1000):
+            return []
+
+        @staticmethod
+        def process_batch(batch_size=1):
+            return 0
+
+        @staticmethod
+        def run_reconcile_cycle():
+            return None
+
+        @staticmethod
+        def reconcile_langfuse_links(_service=None, **_kwargs):
+            return 0
+
+    with pytest.raises(SystemExit):
+        script._drive_until_link(
+            {
+                "worker": _NoWork(),
+                "outbox_syncer": _NoWork(),
+                "run_score_syncer": _NoWork(),
+                "reconciler": _NoWork(),
+                "launch_link_service": link_service,
+                "db_manager": _FakeSessionFactory(_Launch()),
+            },
+            "launch-1",
+            deadline=time.monotonic() + 0.01,
+        )
+
+    output = capsys.readouterr()
+    assert "DATASET_ID_CONFLICT" in (output.out + output.err)
+    assert link_service.calls >= 1

@@ -235,6 +235,9 @@ def _drive_until_link(
     db_manager = app_modules["db_manager"]
 
     last_state: dict[str, Any] = {}
+    last_reported_reason: str | None = None
+    last_link_status: str | None = None
+    last_link_reason: str | None = None
     while time.monotonic() < deadline:
         messages = worker.poll_queue(count=10, block_ms=200)
         for message_id, item_id, generation in messages:
@@ -245,6 +248,19 @@ def _drive_until_link(
         reconciler.run_reconcile_cycle()
         # Explicit compensation pass: a SYNCED launch must end up with a valid link.
         reconciler.reconcile_langfuse_links(link_service)
+
+        # Drive the link service directly as well. The reconciler only sees candidates
+        # that pass its own query and backs off between retries, so a permanent reason
+        # (unconfigured dashboard, conflicting dataset identity, ...) would otherwise
+        # stay invisible and surface only as this loop's timeout.
+        try:
+            link_result = link_service.ensure_launch_link(launch_id)
+            last_link_status, last_link_reason = link_result.status, link_result.reason
+        except Exception as exc:  # noqa: BLE001 - reported as verification evidence
+            last_link_status, last_link_reason = "EXCEPTION", type(exc).__name__
+        if last_link_reason and last_link_reason != last_reported_reason:
+            last_reported_reason = last_link_reason
+            print(f"link backfill: status={last_link_status} reason={last_link_reason}")
 
         with db_manager.get_session() as session:
             from app.db_models import ExperimentLaunchRecord
@@ -258,6 +274,8 @@ def _drive_until_link(
                 "langfuse_experiment_id": launch.langfuse_experiment_id,
                 "langfuse_experiment_url": launch.langfuse_experiment_url,
                 "langfuse_sync_error": launch.langfuse_sync_error,
+                "link_backfill_status": last_link_status,
+                "link_backfill_reason": last_link_reason,
             }
         if (
             last_state["status"] in ("COMPLETED", "PARTIAL_FAILED", "FAILED", "CANCELLED")

@@ -18,6 +18,10 @@ from .evaluator_binding import (
     freeze_binding,
     manifest_measurement_digest,
 )
+from .comparison_contracts import (
+    COMPARISON_CONTRACT_SCHEMA_VERSION,
+    aggregation_comparison_digest,
+)
 from .evaluators import EvaluatorSelectionError, default_evaluator_registry
 from .quality_policy import (
     QUALITY_POLICY_SCHEMA_VERSION,
@@ -272,6 +276,24 @@ class LaunchService:
                 "timeout_seconds": ver_rec.timeout_seconds,
                 "max_retries": ver_rec.max_retries,
                 "rate_limit_per_minute": ver_rec.rate_limit_per_minute,
+            },
+        }
+
+        # ---- Issue #86: freeze the three comparison contracts independently ----
+        # Measurement, judgement and comparison semantics move independently, so
+        # each gets its own versioned digest. A comparison may then name the one
+        # that moved instead of reporting an Agent regression.
+        measurement_digest = manifest["measurement_digest"]
+        manifest["contract_digests"] = {
+            "schema_version": COMPARISON_CONTRACT_SCHEMA_VERSION,
+            "measurement": {"digest": measurement_digest, "version": MANIFEST_BINDING_SCHEMA_VERSION},
+            "quality_policy": {
+                "digest": policy.policy_digest,
+                "version": f"{policy.policy_id}@{policy.version}",
+            },
+            "aggregation_comparison": {
+                "digest": aggregation_comparison_digest(),
+                "version": manifest["comparison"]["comparison_policy_version"],
             },
         }
 

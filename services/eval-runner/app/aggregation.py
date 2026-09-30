@@ -249,6 +249,42 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
     }
 
 
+def _comparable_values(item: dict[str, Any]) -> tuple[dict[str, float], list[str]]:
+    """Split one item's results into delta-comparable numbers and the rest.
+
+    Issue #86: only a numeric typed result, or a value a *frozen* normalization
+    rule mapped onto a number, may produce a delta. Unordered categories and
+    free text are reported for diagnosis but never turned into an invented
+    numeric difference.
+    """
+    typed = item.get("evaluation_results")
+    if not isinstance(typed, list) or not typed:
+        return dict(_item_numeric_values(item)), []
+
+    values: dict[str, float] = {}
+    non_numeric: list[str] = []
+    for result in typed:
+        if not isinstance(result, dict):
+            continue
+        evaluator_id = str(result.get("evaluator_id"))
+        if str(result.get("status", "")).lower() != "succeeded":
+            non_numeric.append(evaluator_id)
+            continue
+        # A frozen normalization rule is the only sanctioned way to order a
+        # non-numeric value.
+        normalized = _finite_number(result.get("normalized_value"))
+        if normalized is not None:
+            values[evaluator_id] = normalized
+            continue
+        if str(result.get("result_type", "")).lower() == "numeric":
+            number = _finite_number(result.get("value"))
+            if number is not None:
+                values[evaluator_id] = number
+                continue
+        non_numeric.append(evaluator_id)
+    return values, sorted(set(non_numeric))
+
+
 def _contract(specs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     keys = ("id", "version", "scope", "threshold", "params", "critical", "direction")
     return sorted(
@@ -282,6 +318,7 @@ def compare_case_results(
         "baseline_scores": baseline.get("scores") or {},
         "candidate_scores": candidate.get("scores") or {},
         "score_deltas": {},
+        "non_numeric_evaluators": [],
     }
 
     if not baseline or not candidate:
@@ -306,12 +343,18 @@ def compare_case_results(
     if any(str(item.get("eval_status", "")).lower() != "succeeded" for item in (baseline, candidate)):
         result.update(classification="NOT_COMPARABLE", reason="EVALUATION_NOT_COMPLETED")
         return result
-    baseline_scores = baseline.get("scores") or {}
-    candidate_scores = candidate.get("scores") or {}
+    baseline_scores, baseline_non_numeric = _comparable_values(baseline)
+    candidate_scores, candidate_non_numeric = _comparable_values(candidate)
+    result["non_numeric_evaluators"] = sorted(set(baseline_non_numeric) | set(candidate_non_numeric))
+    result["baseline_scores"] = baseline_scores
+    result["candidate_scores"] = candidate_scores
     has_regression = False
     has_improvement = False
     for spec in evaluator_specs:
         evaluator_id = str(spec["id"])
+        if evaluator_id in result["non_numeric_evaluators"]:
+            # Diagnosed qualitatively; no numeric delta may be invented.
+            continue
         before = _finite_number(baseline_scores.get(evaluator_id))
         after = _finite_number(candidate_scores.get(evaluator_id))
         if before is None or after is None:

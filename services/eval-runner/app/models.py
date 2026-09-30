@@ -633,6 +633,47 @@ class ResultSnapshotDetailResponse(BaseModel):
     items: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class ComparisonContractDimension(BaseModel):
+    """One independently versioned contract, and whether it matches."""
+
+    dimension: str
+    status: str
+    baseline_digest: str | None = None
+    candidate_digest: str | None = None
+    baseline_version: str | None = None
+    candidate_version: str | None = None
+
+
+class ComparisonComparability(BaseModel):
+    """Whether a formal comparison is allowed, and what to do about it."""
+
+    comparable: bool
+    reason_codes: list[str]
+    provenance: str
+    dimensions: list[ComparisonContractDimension]
+    suggestions: list[str] = Field(default_factory=list)
+
+
+class ComparisonFormalVerdict(BaseModel):
+    """The run-level release-grade conclusion, withheld unless fully supported."""
+
+    available: bool
+    verdict: str | None = None
+    reason: str | None = None
+    required_cases: int = 0
+    comparable_cases: int = 0
+    coverage: float = 0.0
+    withheld_reasons: list[str] = Field(default_factory=list)
+
+
+class ComparisonDiagnostic(BaseModel):
+    """Best-effort per-case diagnosis. Never a release-grade conclusion."""
+
+    note: str
+    comparable_cases: int
+    classification_counts: dict[str, int]
+
+
 class ComparisonResponse(BaseModel):
     launch_id: str
     candidate_snapshot_id: str
@@ -640,7 +681,12 @@ class ComparisonResponse(BaseModel):
     baseline_binding_revision: int | None = None
     versions: dict[str, Any]
     summary: ComparisonSummaryResponse
+    # Diagnostic case counts, kept at the top level for existing readers;
+    # `diagnostic` is the labelled home for the same numbers.
     classification_counts: dict[str, int]
+    comparability: ComparisonComparability
+    formal: ComparisonFormalVerdict
+    diagnostic: ComparisonDiagnostic
     items: list[dict[str, Any]]
     next_cursor: int | None = None
 

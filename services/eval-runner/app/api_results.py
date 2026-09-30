@@ -7,9 +7,14 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 
 from .aggregation import aggregate_run, compare_case_results
+from .comparison_contracts import assess_comparability
 from .costs import compare_costs
 from .db_models import ExperimentLaunchRecord, RunResultSnapshotRecord
 from .models import (
+    ComparisonComparability,
+    ComparisonContractDimension,
+    ComparisonDiagnostic,
+    ComparisonFormalVerdict,
     ComparisonResponse,
     ResultSnapshotDetailResponse,
     ResultSnapshotListResponse,
@@ -19,6 +24,7 @@ from .models import (
 from .result_outputs import ComparisonCaseOutputResponse, fetch_observation_output
 from .result_snapshots import (
     EVIDENCE_COMPLETE,
+    EVIDENCE_DIAGNOSTIC,
     create_result_snapshot,
     latest_result_snapshot,
     list_result_snapshots,
@@ -199,6 +205,62 @@ def get_launch_result_snapshot(launch_id: str, snapshot_id: str) -> ResultSnapsh
         )
 
 
+
+def _formal_verdict(
+    *,
+    comparability,
+    classification_counts: Counter,
+    required_cases: int,
+    baseline_snapshot,
+    candidate_snapshot,
+    baseline_bound: bool,
+) -> ComparisonFormalVerdict:
+    """Withhold a run-level verdict unless every required case is supported.
+
+    Issue #86: a formal 'no regression' must never be inferred from a handful of
+    comparable cases, a moved contract, or an incomplete evidence state.
+    """
+    comparable_cases = sum(
+        value for key, value in classification_counts.items() if key != "NOT_COMPARABLE"
+    )
+    withheld: list[str] = list(comparability.reason_codes)
+    if not baseline_bound:
+        withheld.append("BASELINE_NOT_BOUND")
+    for label, snapshot in (("BASELINE", baseline_snapshot), ("CANDIDATE", candidate_snapshot)):
+        state = ((snapshot.evidence_state if snapshot else None) or EVIDENCE_COMPLETE).upper()
+        if state != EVIDENCE_COMPLETE:
+            withheld.append(f"{label}_EVIDENCE_INCOMPLETE")
+    if required_cases and comparable_cases < required_cases:
+        withheld.append("COVERAGE_INCOMPLETE")
+
+    coverage = (comparable_cases / required_cases) if required_cases else 0.0
+    if withheld:
+        return ComparisonFormalVerdict(
+            available=False,
+            verdict=None,
+            reason=None,
+            required_cases=required_cases,
+            comparable_cases=comparable_cases,
+            coverage=coverage,
+            withheld_reasons=list(dict.fromkeys(withheld)),
+        )
+    if classification_counts.get("REGRESSION"):
+        verdict, reason = "REGRESSION", "CASE_REGRESSION"
+    elif classification_counts.get("IMPROVEMENT"):
+        verdict, reason = "IMPROVEMENT", "CASE_IMPROVEMENT"
+    else:
+        verdict, reason = "UNCHANGED", "NO_QUALITY_CHANGE"
+    return ComparisonFormalVerdict(
+        available=True,
+        verdict=verdict,
+        reason=reason,
+        required_cases=required_cases,
+        comparable_cases=comparable_cases,
+        coverage=coverage,
+        withheld_reasons=[],
+    )
+
+
 @router.get("/{launch_id}/comparison", response_model=ComparisonResponse, summary="Compare a Candidate against its frozen Baseline")
 def get_launch_comparison(
     launch_id: str,
@@ -231,6 +293,12 @@ def get_launch_comparison(
                 dataset_identity_error = "DATASET_IDENTITY_UNKNOWN"
             elif candidate_dataset_identity != baseline_dataset_identity:
                 dataset_identity_error = "DATASET_IDENTITY_MISMATCH"
+        # Issue #86: a formal comparison requires identical Measurement, Quality
+        # Policy and Aggregation/Comparison contracts on both sides.
+        comparability = assess_comparability(
+            baseline_snapshot.manifest if baseline_snapshot else None,
+            candidate_snapshot.manifest,
+        )
         evaluator_specs = candidate_snapshot.manifest.get("evaluators", [])
         baseline_evaluators = baseline_snapshot.manifest.get("evaluators", []) if baseline_snapshot else []
         diffs: list[dict[str, Any]] = []
@@ -257,6 +325,11 @@ def get_launch_comparison(
             diff["baseline_experiment_url"] = baseline_launch.langfuse_experiment_url if baseline_launch else None
             diff["candidate_experiment_url"] = candidate_launch.langfuse_experiment_url
             classification_counts[diff["classification"]] += 1
+            diff["basis"] = (
+                "FORMAL"
+                if comparability.comparable and diff["classification"] != "NOT_COMPARABLE"
+                else "DIAGNOSTIC_ONLY"
+            )
             if diff["classification"] != "NOT_COMPARABLE" and base_case and candidate_case:
                 comparable_baseline.append(base_case)
                 comparable_candidate.append(candidate_case)
@@ -306,6 +379,14 @@ def get_launch_comparison(
             summary["pass_rate_delta"] = None
             summary["score_mean_deltas"] = {}
 
+        formal = _formal_verdict(
+            comparability=comparability,
+            classification_counts=classification_counts,
+            required_cases=len(all_case_ids),
+            baseline_snapshot=baseline_snapshot,
+            candidate_snapshot=candidate_snapshot,
+            baseline_bound=baseline_snapshot is not None,
+        )
         return ComparisonResponse(
             launch_id=launch_id,
             candidate_snapshot_id=candidate_snapshot.id,
@@ -314,6 +395,23 @@ def get_launch_comparison(
             versions={"candidate": _versions(candidate_snapshot.manifest), "baseline": _versions(baseline_snapshot.manifest) if baseline_snapshot else None},
             summary=summary,
             classification_counts=dict(classification_counts),
+            comparability=ComparisonComparability(
+                comparable=comparability.comparable,
+                reason_codes=list(comparability.reason_codes),
+                provenance=comparability.provenance,
+                dimensions=[
+                    ComparisonContractDimension(**dim.to_payload()) for dim in comparability.dimensions
+                ],
+                suggestions=list(comparability.suggestions),
+            ),
+            formal=formal,
+            diagnostic=ComparisonDiagnostic(
+                note="仅供诊断，不作为正式发布比较。",
+                comparable_cases=sum(
+                    value for key, value in classification_counts.items() if key != "NOT_COMPARABLE"
+                ),
+                classification_counts=dict(classification_counts),
+            ),
             items=page,
             next_cursor=next_cursor,
         )

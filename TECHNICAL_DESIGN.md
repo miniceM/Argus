@@ -574,6 +574,61 @@ Console：Launch 详情新增「结果报告 (Result Snapshot)」面板，显示
 「设为当前环境 Baseline」按钮的可用性改由**该修订的证据状态**决定，
 诊断版本显示"当前版本证据不足，不可设为 Baseline"并说明原因。
 
+#### 8.3.6 比较契约分层与不可比较原因（Issue #86）
+
+**问题**：早期实现把 threshold、params、critical 混在同一个 contract 里比较，
+只能整体判"契约变了"。结果是**收紧阈值会被报成 Agent 回归**——判定规则变了，
+被测对象并没有变。
+
+**分层契约**：三个契约独立版本化、各自 digest，任何一个变化都会被单独点名。
+
+| 层 | 覆盖 | Manifest 字段 |
+|---|---|---|
+| Measurement | 影响测量的版本、schema、参数、实现制品、归一化语义、输入输出契约 | `contract_digests.measurement` |
+| QualityPolicy | threshold、operator、critical、required、UNKNOWN 处置 | `contract_digests.quality_policy` |
+| Aggregation/Comparison | 分母、覆盖率要求、分类算法、direction 语义、category 有序性、text 处理 | `contract_digests.aggregation_comparison` |
+
+Measurement digest 沿用 `manifest_measurement_digest`（剔除 threshold / direction /
+critical）；QualityPolicy digest 复用 `QualityPolicy.policy_digest`；比较口径 digest 由
+`comparison_contracts.aggregation_comparison_digest()` 对固定 canonical payload 计算。
+三者写入 Manifest schema 1.2 的 `contract_digests` 块。
+
+**兼容性规则**：正式比较要求三层 digest **全部相等**且证据完整。
+Candidate 的 Agent 版本变化、Launch id 变化属于"被比较对象"，不参与可比性判定。
+Dataset 身份变化独立报告 `DATASET_CHANGED`。
+
+**历史契约**：#81–#85 的 Manifest 只有 Measurement 与 QualityPolicy digest，
+比较口径从未 digest，一律记为 `UNKNOWN`，产出 `CONTRACT_PROVENANCE_UNKNOWN`。
+**不凭当前 Catalog 回填**——旧报告仍可阅读（能证明相同的维度照常显示"一致"），
+但新正式资格验证不能补造证据。
+
+**原因码**：`DATASET_CHANGED`、`MEASUREMENT_CHANGED`、`QUALITY_POLICY_CHANGED`、
+`AGGREGATION_COMPARISON_CHANGED`、`CONTRACT_PROVENANCE_UNKNOWN`。
+
+**正式结论 vs 诊断结论**：API 分字段返回，互不冒充。
+
+```text
+comparability: { comparable, reason_codes[], provenance, dimensions[], suggestions[] }
+formal:       { available, verdict, required_cases, comparable_cases, coverage, withheld_reasons[] }
+diagnostic:   { note, comparable_cases, classification_counts }
+items[].basis: "FORMAL" | "DIAGNOSTIC_ONLY"
+```
+
+`formal.available` 仅在以下条件同时满足时为真：三层契约一致、Baseline 已绑定、
+两侧 `evidence_state == COMPLETE`、且**全部必要 Case 均可比**（首期默认
+`coverage == 1`）。否则 `verdict` 为 `null` 并给出 `withheld_reasons`。
+"少量可比 Case 的漂亮结果"永远不能宣称完整无回归。
+
+**非数值结果**：`compare_case_results` 以 typed 结果为准。只有
+`result_type == numeric` 的值、或由**冻结归一化规则**映射出的 `normalized_value`
+才产生 delta；无序 category 与 text 进入 `non_numeric_evaluators` 仅供诊断，
+绝不生成无依据的均值或差值。
+
+Console：Comparison Report 顶部新增「正式比较」结论块；不可比较时显示横幅
+「判定规则不同，无法正式比较」，逐层列出维度状态（MATCH / CHANGED / UNKNOWN）与
+两侧版本、digest 摘要，并给出可执行建议（"使用相同质量策略重新评测"），
+不覆盖旧 Snapshot。Case 表在该状态下逐行标注「仅诊断」。
+
 ### 8.4 ExperimentItemExecution
 
 表示单个 Dataset Item 的执行状态：

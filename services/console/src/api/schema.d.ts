@@ -918,6 +918,83 @@ export interface components {
             baseline: components["schemas"]["OutputSideResponse"];
             candidate: components["schemas"]["OutputSideResponse"];
         };
+        /**
+         * ComparisonComparability
+         * @description Whether a formal comparison is allowed, and what to do about it.
+         */
+        ComparisonComparability: {
+            /** Comparable */
+            comparable: boolean;
+            /** Reason Codes */
+            reason_codes: string[];
+            /** Provenance */
+            provenance: string;
+            /** Dimensions */
+            dimensions: components["schemas"]["ComparisonContractDimension"][];
+            /** Suggestions */
+            suggestions?: string[];
+        };
+        /**
+         * ComparisonContractDimension
+         * @description One independently versioned contract, and whether it matches.
+         */
+        ComparisonContractDimension: {
+            /** Dimension */
+            dimension: string;
+            /** Status */
+            status: string;
+            /** Baseline Digest */
+            baseline_digest?: string | null;
+            /** Candidate Digest */
+            candidate_digest?: string | null;
+            /** Baseline Version */
+            baseline_version?: string | null;
+            /** Candidate Version */
+            candidate_version?: string | null;
+        };
+        /**
+         * ComparisonDiagnostic
+         * @description Best-effort per-case diagnosis. Never a release-grade conclusion.
+         */
+        ComparisonDiagnostic: {
+            /** Note */
+            note: string;
+            /** Comparable Cases */
+            comparable_cases: number;
+            /** Classification Counts */
+            classification_counts: {
+                [key: string]: number;
+            };
+        };
+        /**
+         * ComparisonFormalVerdict
+         * @description The run-level release-grade conclusion, withheld unless fully supported.
+         */
+        ComparisonFormalVerdict: {
+            /** Available */
+            available: boolean;
+            /** Verdict */
+            verdict?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Required Cases
+             * @default 0
+             */
+            required_cases: number;
+            /**
+             * Comparable Cases
+             * @default 0
+             */
+            comparable_cases: number;
+            /**
+             * Coverage
+             * @default 0
+             */
+            coverage: number;
+            /** Withheld Reasons */
+            withheld_reasons?: string[];
+        };
         /** ComparisonResponse */
         ComparisonResponse: {
             /** Launch Id */
@@ -937,6 +1014,9 @@ export interface components {
             classification_counts: {
                 [key: string]: number;
             };
+            comparability: components["schemas"]["ComparisonComparability"];
+            formal: components["schemas"]["ComparisonFormalVerdict"];
+            diagnostic: components["schemas"]["ComparisonDiagnostic"];
             /** Items */
             items: {
                 [key: string]: unknown;

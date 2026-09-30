@@ -2658,6 +2658,196 @@
         ],
         "title": "ComparisonCaseOutputResponse"
       },
+      "ComparisonComparability": {
+        "properties": {
+          "comparable": {
+            "type": "boolean",
+            "title": "Comparable"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reason Codes"
+          },
+          "provenance": {
+            "type": "string",
+            "title": "Provenance"
+          },
+          "dimensions": {
+            "items": {
+              "$ref": "#/components/schemas/ComparisonContractDimension"
+            },
+            "type": "array",
+            "title": "Dimensions"
+          },
+          "suggestions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Suggestions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "comparable",
+          "reason_codes",
+          "provenance",
+          "dimensions"
+        ],
+        "title": "ComparisonComparability",
+        "description": "Whether a formal comparison is allowed, and what to do about it."
+      },
+      "ComparisonContractDimension": {
+        "properties": {
+          "dimension": {
+            "type": "string",
+            "title": "Dimension"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "baseline_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Digest"
+          },
+          "candidate_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Digest"
+          },
+          "baseline_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Version"
+          },
+          "candidate_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dimension",
+          "status"
+        ],
+        "title": "ComparisonContractDimension",
+        "description": "One independently versioned contract, and whether it matches."
+      },
+      "ComparisonDiagnostic": {
+        "properties": {
+          "note": {
+            "type": "string",
+            "title": "Note"
+          },
+          "comparable_cases": {
+            "type": "integer",
+            "title": "Comparable Cases"
+          },
+          "classification_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Classification Counts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "note",
+          "comparable_cases",
+          "classification_counts"
+        ],
+        "title": "ComparisonDiagnostic",
+        "description": "Best-effort per-case diagnosis. Never a release-grade conclusion."
+      },
+      "ComparisonFormalVerdict": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "required_cases": {
+            "type": "integer",
+            "title": "Required Cases",
+            "default": 0
+          },
+          "comparable_cases": {
+            "type": "integer",
+            "title": "Comparable Cases",
+            "default": 0
+          },
+          "coverage": {
+            "type": "number",
+            "title": "Coverage",
+            "default": 0.0
+          },
+          "withheld_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Withheld Reasons"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "title": "ComparisonFormalVerdict",
+        "description": "The run-level release-grade conclusion, withheld unless fully supported."
+      },
       "ComparisonResponse": {
         "properties": {
           "launch_id": {
@@ -2705,6 +2895,15 @@
             "type": "object",
             "title": "Classification Counts"
           },
+          "comparability": {
+            "$ref": "#/components/schemas/ComparisonComparability"
+          },
+          "formal": {
+            "$ref": "#/components/schemas/ComparisonFormalVerdict"
+          },
+          "diagnostic": {
+            "$ref": "#/components/schemas/ComparisonDiagnostic"
+          },
           "items": {
             "items": {
               "additionalProperties": true,
@@ -2732,6 +2931,9 @@
           "versions",
           "summary",
           "classification_counts",
+          "comparability",
+          "formal",
+          "diagnostic",
           "items"
         ],
         "title": "ComparisonResponse"

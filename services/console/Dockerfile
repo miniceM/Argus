@@ -14,7 +14,7 @@ COPY . .
 RUN pnpm build
 
 # Production stage (Unprivileged Non-Root Nginx)
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.29-alpine
 
 ENV RUNNER_HOST=eval-runner
 ENV RUNNER_PORT=8080

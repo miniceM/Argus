@@ -7,4 +7,4 @@ langfuse==4.15.6
 opentelemetry-api>=1.45.0,<2
 sqlalchemy>=2.0,<3
 psycopg[binary]>=3.3.6,<4
-redis>=5.0,<6
+redis>=8.1.0,<9

@@ -1,10 +1,10 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
 
 import type { components } from "../src/api/schema";
+import { buildEvaluatorCatalog, DIAGNOSTIC_IDS } from "./fixtures/evaluators";
 
 type Agent = components["schemas"]["AgentResponse"];
 type Version = components["schemas"]["AgentVersionResponse"];
-type Evaluator = components["schemas"]["EvaluatorResponse"];
 type CreateRequest = components["schemas"]["ExperimentLaunchCreateRequest"];
 
 const AGENT_ID = "financial-fraud-detection-assistant-enterprise-prod";
@@ -176,18 +176,9 @@ async function mockApi(page: Page): Promise<void> {
     const version = new URL(route.request().url()).searchParams.get("version");
     return route.fulfill({ json: version ? versions.find((v) => v.version === version) : versions });
   });
-  const evaluators: Evaluator[] = [
-    { id: "intent_match", version: "1.0.0", scope: "item", threshold: 1,
-      description: "确定性意图匹配", default_selected: true, composed_of: [],
-      direction: "higher_is_better", critical: false },
-    { id: "overall_pass", version: "1.0.0", scope: "item", threshold: 1,
-      description: "复合质量结论", default_selected: false, composed_of: ["intent_match"],
-      direction: "higher_is_better", critical: true },
-    { id: "run_pass_rate", version: "1.0.0", scope: "run", threshold: 1,
-      description: "运行级质量聚合", default_selected: false, composed_of: [],
-      direction: "higher_is_better", critical: false },
-  ];
-  await page.route("**/api/v1/evaluators", (route) => route.fulfill({ json: evaluators }));
+  await page.route("**/api/v1/evaluators", (route) =>
+    route.fulfill({ json: buildEvaluatorCatalog() }),
+  );
   await page.route("**/api/v1/datasets*", (route) =>
     route.fulfill({
       json: [
@@ -260,7 +251,7 @@ async function expectPageReady(page: Page, routePath: string) {
   } else if (routePath === "/launches/new") {
     await expect(heading).toContainText("发起新评测任务");
     await expect(page.getByRole("combobox", { name: /选择版本规格/ })).toHaveValue("1.0.0");
-    await expect(page.getByRole("checkbox", { name: /intent_match/ })).toBeChecked();
+    await expect(page.getByTestId("evaluator-toggle-intent_match")).toBeChecked();
   } else if (routePath === "/launches") {
     await expect(page.locator("tbody tr")).toHaveCount(1);
   } else {
@@ -448,10 +439,11 @@ test.describe("Issue #47: 核心页面布局与操作闭环", () => {
       const snapshot = page.getByPlaceholder("例如: 2026-09-20T08:35:12Z");
       await expectReachable(snapshot);
       await snapshot.fill("2026-10-01T00:00:00Z");
-      const evaluator = page.getByRole("checkbox", { name: /intent_match/ });
+      const evaluator = page.getByTestId("evaluator-toggle-intent_match");
       await expectReachable(evaluator);
+      await expect(evaluator).toBeChecked();
       await evaluator.uncheck();
-      await evaluator.check();
+      await expect(evaluator).not.toBeChecked();
       await concurrency.fill("2");
       const submit = page.getByRole("button", { name: /创建评测任务/ });
       const cancel = page.getByRole("link", { name: "取消", exact: true });
@@ -463,9 +455,18 @@ test.describe("Issue #47: 核心页面布局与操作闭环", () => {
       await expect(submit).toBeEnabled();
       await submit.click();
       await expect(page).toHaveURL(`/launches/${LAUNCH_ID}`);
-      expect(submitted).toEqual({ name: `responsive-${width}`, agent_id: AGENT_ID,
+      expect(submitted).toMatchObject({ name: `responsive-${width}`, agent_id: AGENT_ID,
         agent_version: "1.0.0", dataset_name: "responsive-regression", dataset_version: "2026-10-01T00:00:00Z",
-        environment: "staging", evaluator_ids: ["intent_match"], max_concurrency: 2 });
+        environment: "staging", max_concurrency: 2 });
+      // The unchecked evaluator must be absent from both the submitted
+      // selections and the derived quality policy.
+      const expectedSelected = DIAGNOSTIC_IDS.filter((id) => id !== "intent_match");
+      expect(submitted?.evaluator_selections).toEqual(
+        expectedSelected.map((id) => ({ id, version: "1.0.0" })),
+      );
+      expect((submitted?.quality_policy?.rules ?? []).map((rule) => rule.evaluator_id).sort()).toEqual(
+        [...expectedSelected].sort(),
+      );
       await expectPageReady(page, `/launches/${LAUNCH_ID}`);
     });
   }

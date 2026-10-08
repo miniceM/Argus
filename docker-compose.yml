@@ -204,6 +204,7 @@ services:
       LANGFUSE_TRACING_ENVIRONMENT: poc
       AGENT_REGISTRY_PATH: /app/config/agents.yaml
       DATASET_SEED_PATH: /app/data/dataset.json
+      ARGUS_CONSOLE_BASE_URL: ${ARGUS_CONSOLE_BASE_URL:-http://localhost:18083}
       RUNNER_VERSION: 0.1.0
     volumes: [./config:/app/config:ro, ./data:/app/data:ro, ./migrations:/app/migrations:ro]
     ports: ["18080:8080"]

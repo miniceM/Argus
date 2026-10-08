@@ -11,8 +11,9 @@ from .aggregation import aggregate_run, compare_case_results
 from .baselines import normalize_environment
 from .comparison_contracts import aggregation_comparison_digest, assess_comparability
 from .evaluator_binding import canonical_digest
+from .runner_identity import RunnerIdentity
 
-ENGINE_VERSION = "release-gate-v1"
+ENGINE_VERSION = "release-gate-v2"
 ABSOLUTE_METRICS = {"pass_rate", "evaluation_coverage", "execution_error_rate", "critical_failure_count", "p95_latency_ms"}
 RELATIVE_METRICS = {"regression_count", "pass_rate_delta", "p95_latency_regression_percent"}
 
@@ -124,8 +125,21 @@ def _evidence_reasons(snapshot, label: str) -> list[str]:
     if frozen_aggregation and frozen_aggregation != aggregation_comparison_digest():
         reasons.append("AGGREGATION_CONTRACT_UNSUPPORTED")
     dataset = snapshot.manifest.get("dataset", {})
-    if not dataset.get("source") or not dataset.get("dataset_id"):
+    def frozen_version(value):
+        return isinstance(value, str) and bool(value.strip()) and value.strip().lower() not in {"latest", "active"}
+
+    if not dataset.get("source") or not dataset.get("dataset_id") or not frozen_version(dataset.get("dataset_version")):
         reasons.append("DATASET_IDENTITY_UNKNOWN")
+    agent = snapshot.manifest.get("agent") or {}
+    if agent.get("agent_id") != snapshot.agent_id or not frozen_version(agent.get("version")):
+        reasons.append("AGENT_IDENTITY_UNKNOWN")
+    evaluators = snapshot.manifest.get("evaluators") or []
+    if not evaluators or any(not spec.get("id") or not frozen_version(spec.get("version")) for spec in evaluators):
+        reasons.append("EVALUATOR_IDENTITY_UNKNOWN")
+    runner = snapshot.manifest.get("runner") or {}
+    identity = RunnerIdentity(runner.get("runner_version", ""), runner.get("build_id", ""), runner.get("mapping_engine_version", ""))
+    if not identity.is_reliable or not frozen_version(identity.runner_version):
+        reasons.append("RUNNER_IDENTITY_UNKNOWN")
     return list(dict.fromkeys(reasons))
 
 

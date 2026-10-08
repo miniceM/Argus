@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import UTC, datetime
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
@@ -131,7 +132,11 @@ def create_release_gate(payload: EvaluateGateRequest) -> ReleaseGateResponse:
             baseline_id = candidate.manifest.get("comparison", {}).get("baseline_snapshot_id")
             baseline = session.get(RunResultSnapshotRecord, baseline_id) if baseline_id else None
             evaluated = evaluate_gate(policy, candidate, baseline)
-            report_url = f"/launches/{quote(candidate.launch_id, safe='')}?snapshot_id={quote(candidate.id, safe='')}"
+            console_base = os.getenv("ARGUS_CONSOLE_BASE_URL", "http://localhost:18083").rstrip("/")
+            console_origin = urlsplit(console_base)
+            if console_origin.scheme not in {"http", "https"} or not console_origin.hostname or console_origin.username or console_origin.password or console_origin.query or console_origin.fragment:
+                raise HTTPException(503, "Console base URL is invalid")
+            report_url = f"{console_base}/launches/{quote(candidate.launch_id, safe='')}?snapshot_id={quote(candidate.id, safe='')}"
             result = ReleaseGateResponse(
                 **evaluated.model_dump(), id=str(uuid.uuid4()), created_at=datetime.now(UTC),
                 policy=policy, policy_digest=policy.content_digest, candidate_launch_id=candidate.launch_id,

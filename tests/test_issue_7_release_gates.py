@@ -25,8 +25,9 @@ def snapshot(*, passed=2, count=2, baseline_id=None):
         "quality_evaluation": {"rules": [{"critical": False, "conclusion": "pass"}]},
     } for index in range(count)]
     manifest = {
+        "runner": {"runner_version": "0.1.0", "build_id": "gate-test-build", "mapping_engine_version": "sha256-mapping-engine-v1"},
         "schema_version": "1.2", "agent": {"agent_id": "test-agent", "version": "v1"},
-        "dataset": {"source": "seed", "dataset_id": "ds", "items": [{"id": str(i)} for i in range(count)]},
+        "dataset": {"source": "seed", "dataset_id": "ds", "dataset_version": "v1", "items": [{"id": str(i)} for i in range(count)]},
         "comparison": {"environment": "production", "baseline_snapshot_id": baseline_id},
         "evaluators": [{"id": "intent_match", "version": "1.0.0", "scope": "item", "threshold": 1.0}],
         "contract_digests": {
@@ -342,3 +343,81 @@ def test_mean_gate_accepts_evaluator_ids_supported_by_the_registry(evaluator_id)
     result = evaluate_gate(policy({'id':'mean','metric':f'score_mean:{evaluator_id}','operator':'>=','threshold':.9}), candidate)
     assert result.decision == 'PASS'
     assert result.rules[0].actual == 1.0
+
+
+@pytest.mark.parametrize('identity', ['dataset', 'agent', 'evaluator', 'runner', 'runner-build', 'runner-mapping'])
+def test_gate_rejects_missing_or_unreliable_frozen_version_identity(identity):
+    candidate = snapshot()
+    if identity == 'dataset':
+        candidate.manifest['dataset'].pop('dataset_version')
+    elif identity == 'agent':
+        candidate.manifest['agent'].pop('version')
+    elif identity == 'evaluator':
+        candidate.manifest['evaluators'][0].pop('version')
+    elif identity == 'runner':
+        candidate.manifest.pop('runner')
+    elif identity == 'runner-build':
+        candidate.manifest['runner']['build_id'] = 'latest'
+    else:
+        candidate.manifest['runner'].pop('mapping_engine_version')
+    result = evaluate_gate(policy(), candidate)
+    assert result.decision == 'UNKNOWN'
+    assert not result.releasable
+
+
+def test_gate_report_uses_the_configured_console_origin(setup_runtime, monkeypatch):
+    monkeypatch.setattr(main, 'db_manager', setup_runtime[0])
+    monkeypatch.setenv('ARGUS_CONSOLE_BASE_URL', 'https://console.example/argus/')
+    client = TestClient(main.app)
+    draft = policy().model_dump()
+    assert client.post('/api/v1/release-policies',json=draft).status_code == 201
+    candidate = snapshot()
+    store_snapshot(setup_runtime[0],candidate)
+    response = client.post('/api/v1/release-gates/evaluate',json={'policy_name':draft['name'],'policy_version':draft['version'],'candidate_launch_id':candidate.launch_id,'candidate_snapshot_id':candidate.id})
+    assert response.status_code == 201
+    assert response.json()['report_url'] == f'https://console.example/argus/launches/{candidate.launch_id}?snapshot_id={candidate.id}'
+    assert response.json()['comparison_url'].endswith('&tab=comparison')
+
+
+def test_postgres_migration_enforces_release_policy_ownership():
+    import os
+    from pathlib import Path
+
+    from app.db import MigrationRunner
+    from sqlalchemy import create_engine, inspect
+    url = os.getenv('TEST_POSTGRES_URL')
+    if not url:
+        pytest.skip('TEST_POSTGRES_URL is not configured; skipping real PostgreSQL policy ownership test')
+    engine = create_engine(url)
+    try:
+        MigrationRunner(engine,Path(__file__).resolve().parents[1]/'migrations').apply_all()
+        columns = {column['name']:column for column in inspect(engine).get_columns('release_policies')}
+        assert columns['agent_id']['nullable'] is False
+    finally:
+        engine.dispose()
+
+
+def test_new_gate_engine_does_not_reuse_a_legacy_pass_without_runner_identity(setup_runtime, monkeypatch):
+    from app.db_models import ReleaseGateRecord
+    from app.evaluator_binding import canonical_digest
+    manager = setup_runtime[0]
+    monkeypatch.setattr(main, 'db_manager', manager)
+    client = TestClient(main.app)
+    draft = policy().model_dump()
+    assert client.post('/api/v1/release-policies',json=draft).status_code == 201
+    candidate = snapshot()
+    store_snapshot(manager,candidate)
+    request = {'policy_name':draft['name'],'policy_version':draft['version'],'candidate_launch_id':candidate.launch_id,'candidate_snapshot_id':candidate.id}
+    legacy = client.post('/api/v1/release-gates/evaluate',json=request).json()
+    # 模拟恢复的旧引擎记录：曾放行缺少 Runner 身份的历史快照。
+    with manager.get_session() as session:
+        record = session.get(ReleaseGateRecord,legacy['id'])
+        record.request_digest = canonical_digest({'candidate_snapshot_id':candidate.id,'policy_digest':policy().content_digest,'engine_version':'release-gate-v1'})
+        record.result = {**record.result,'engine_version':'release-gate-v1'}
+        restored = session.get(RunResultSnapshotRecord,candidate.id)
+        restored.manifest = {key:value for key,value in restored.manifest.items() if key!='runner'}
+        session.commit()
+    fresh = client.post('/api/v1/release-gates/evaluate',json=request).json()
+    assert fresh['decision'] == 'UNKNOWN'
+    assert fresh['id'] != legacy['id']
+    assert client.get(f"/api/v1/release-gates/{legacy['id']}").json()['decision'] == 'PASS'

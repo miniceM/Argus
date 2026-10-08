@@ -5414,7 +5414,7 @@
           "engine_version": {
             "type": "string",
             "title": "Engine Version",
-            "default": "release-gate-v1"
+            "default": "release-gate-v2"
           },
           "candidate_snapshot_id": {
             "type": "string",

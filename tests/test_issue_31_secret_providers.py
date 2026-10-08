@@ -172,3 +172,29 @@ def test_vault_missing_jwt_and_missing_secret_are_sanitized(vault_config, monkey
     ))
     with pytest.raises(ValueError, match="CREDENTIAL_UNAVAILABLE"):
         resolve_credential("vault://secret/agents/a#token")
+
+
+def test_fifty_credential_resolutions_are_not_queued_behind_the_default_thread_pool(monkeypatch):
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.credentials import CredentialService, ResolvedCredential
+
+    # 缩放 5 秒预算以避免慢测试；Provider 本身在预算内，共享池排队会耗尽预算。
+    original_wait = asyncio.wait_for
+    async def scaled_wait(task, timeout):
+        return await original_wait(task, timeout=timeout * .04 if timeout <= 5 else timeout)
+    monkeypatch.setattr("app.executor.asyncio.wait_for", scaled_wait)
+    def resolve(*args):
+        time.sleep(.05)
+        return ResolvedCredential("example-concurrent-token", "credential-1", 1, "managed")
+    monkeypatch.setattr(CredentialService, "resolve", resolve)
+    spec = AgentVersionSpec(agent_id="test-agent", version="v1", endpoint="https://agent.example/invoke", credential_id="credential-1", max_concurrency=50, method="POST", timeout_seconds=5, max_retries=0, rate_limit_per_minute=600, request_mapping={})
+    async def run():
+        asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=2))
+        async with httpx.AsyncClient() as client:
+            executors = [RemoteAgentExecutor(spec, client=client, credential_db_manager=object()) for _ in range(50)]
+            results = await asyncio.gather(*(executor.prepare_credential() for executor in executors), return_exceptions=True)
+            assert not any(isinstance(result, BaseException) for result in results)
+            assert all(executor.resolved_credential.version == 1 for executor in executors)
+    asyncio.run(run())

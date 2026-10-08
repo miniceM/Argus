@@ -133,8 +133,25 @@ it("submits the same normalized environment used by Credential selection", async
   render(<QueryClientProvider client={queryClient}><CreateVersionDialog agentId="banking-agent" isOpen onClose={vi.fn()} /></QueryClientProvider>);
   fireEvent.change(screen.getByRole("textbox", { name: /版本号/ }), { target: { value: "secured-v1" } });
   fireEvent.change(screen.getByRole("textbox", { name: /^运行环境$/ }), { target: { value: " Production " } });
-  await screen.findByRole("option", { name: "生产凭据 · managed" });
+  await screen.findByRole("option", { name: "生产凭据 · managed · cred-1" });
   fireEvent.change(screen.getByRole("combobox", { name: /选择凭据/ }), { target: { value: "cred-1" } });
   fireEvent.submit(document.getElementById("create-version-form")!);
   await waitFor(() => expect(api.POST).toHaveBeenCalledWith("/api/v1/agent-versions", expect.objectContaining({ body: expect.objectContaining({ credential_id: "cred-1", environment: "production" }) })));
+});
+
+it("distinguishes same-name Credentials before binding a specific ID", async () => {
+  const ids = ["00000000-0000-4000-8000-aaaaaaaaaaaa", "00000000-0000-4000-8000-bbbbbbbbbbbb"];
+  vi.mocked(api.GET).mockResolvedValue({ data: ids.map(id => ({ id, name: "同名凭据", environment: "production", provider: "managed", enabled: true, version: 1 })), response: new Response() } as any);
+  vi.mocked(api.POST).mockResolvedValue({ data: {}, response: new Response() } as any);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={queryClient}><CreateVersionDialog agentId="banking-agent" isOpen onClose={vi.fn()} /></QueryClientProvider>);
+  fireEvent.change(screen.getByRole("textbox", { name: /^运行环境$/ }), { target: { value: "production" } });
+  const first = await screen.findByRole("option", { name: /同名凭据.*aaaaaaaa/ });
+  const second = screen.getByRole("option", { name: /同名凭据.*bbbbbbbb/ });
+  expect(first).toHaveAttribute("value", ids[0]);
+  expect(second).toHaveAttribute("value", ids[1]);
+  fireEvent.change(screen.getByRole("textbox", { name: /版本号/ }), { target: { value: "specific-credential" } });
+  fireEvent.change(screen.getByRole("combobox", { name: /选择凭据/ }), { target: { value: ids[1] } });
+  fireEvent.submit(document.getElementById("create-version-form")!);
+  await waitFor(() => expect(api.POST).toHaveBeenCalledWith("/api/v1/agent-versions", expect.objectContaining({ body: expect.objectContaining({ credential_id: ids[1] }) })));
 });

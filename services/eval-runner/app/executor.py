@@ -5,6 +5,8 @@ import email.utils
 import time
 from collections import deque
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -13,10 +15,36 @@ from typing import Any
 import httpx
 
 from .costs import extract_usage_cost
-from .credentials import CredentialService, ResolvedCredential
+from .credentials import CredentialService
 from .registry import AgentVersionSpec
 from .secret_providers import CredentialUnavailable
-from .security import resolve_credential
+from .security import resolve_execution_credential
+
+# 与单个 Launch 允许的最大并发一致，避免与 Langfuse/文件任务争抢默认线程池。
+_CREDENTIAL_EXECUTOR = ThreadPoolExecutor(max_workers=50, thread_name_prefix="argus-credentials")
+
+
+async def _resolve_execution_secret(callback, *args):
+    loop = asyncio.get_running_loop()
+    started = loop.create_future()
+    context = copy_context()
+
+    def announce(timestamp):
+        if not started.done():
+            started.set_result(timestamp)
+
+    def resolve():
+        loop.call_soon_threadsafe(announce, time.monotonic())
+        return context.run(callback, *args)
+
+    work = loop.run_in_executor(_CREDENTIAL_EXECUTOR, resolve)
+    try:
+        # 排队等待不是 Provider 解析失败；预算从线程实际开始解析时计算。
+        began = await started
+        return await asyncio.wait_for(work, timeout=max(0, 5 - (time.monotonic() - began)))
+    finally:
+        if not work.done():
+            work.cancel()
 
 
 class AttemptAuthorizationError(RuntimeError):
@@ -119,12 +147,9 @@ class RemoteAgentExecutor:
                 if manager is None:
                     from .main import db_manager
                     manager = db_manager
-                self.resolved_credential = await asyncio.wait_for(
-                    asyncio.to_thread(CredentialService(manager).resolve, self.spec.credential_id), timeout=5,
-                )
+                self.resolved_credential = await _resolve_execution_secret(CredentialService(manager).resolve, self.spec.credential_id)
             elif self.spec.credential_ref:
-                token = await asyncio.wait_for(asyncio.to_thread(resolve_credential, self.spec.credential_ref), timeout=5)
-                self.resolved_credential = ResolvedCredential(token, provider=self.spec.credential_ref.split(":", 1)[0])
+                self.resolved_credential = await _resolve_execution_secret(resolve_execution_credential, self.spec.credential_ref)
             self._credential_prepared = True
         except (ValueError, TimeoutError):
             raise CredentialUnavailable() from None

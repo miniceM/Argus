@@ -110,7 +110,8 @@ def test_worker_preserves_credential_ref_in_agent_spec(setup_env, monkeypatch):
         from app.executor import RemoteAgentExecutor
         monkeypatch.setattr(RemoteAgentExecutor, "invoke_once", mock_invoke_once)
         # 此回归检查规格传递；Provider 解析由凭据测试验证，不访问真实 Vault。
-        monkeypatch.setattr("app.executor.resolve_credential", lambda _reference: "example-auth-token")
+        from app.credentials import ResolvedCredential
+        monkeypatch.setattr("app.executor.resolve_execution_credential", lambda _reference: ResolvedCredential("example-auth-token", version=1, provider="vault"))
 
         msgs = queue.read_group("worker-test-1", count=1)
         assert len(msgs) == 1

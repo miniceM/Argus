@@ -301,7 +301,7 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
                   className="w-full font-mono"
                 >
                   <option value="">无需鉴权 / 使用历史引用</option>
-                  {credentials.data?.filter(credential => credential.enabled && credential.environment === (environment.trim().toLowerCase() || "production")).map(credential => <option key={credential.id} value={credential.id}>{credential.name} · {credential.provider}</option>)}
+                  {credentials.data?.filter(credential => credential.enabled && credential.environment === (environment.trim().toLowerCase() || "production")).map(credential => <option key={credential.id} value={credential.id}>{credential.name} · {credential.provider} · {credential.id.slice(-8)}</option>)}
                 </SelectInput>
               )}
             </Field>

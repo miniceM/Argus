@@ -395,3 +395,66 @@ def test_sync_api_refreshes_credentials_for_each_future_attempt(credentials, set
         if change.endswith("disable"):
             rows = session.scalars(select(ExperimentItemExecutionRecord).where(ExperimentItemExecutionRecord.launch_id == launch.id)).all()
             assert any(item.execution_status == "failed" for item in rows)
+
+
+@pytest.mark.parametrize("environment", ["production", " Production "])
+def test_launch_cannot_use_a_credential_version_from_another_environment(credentials, setup_runtime, environment):
+    from app.manifest import LaunchService
+
+    client, _, registry, _ = credentials
+    credential_id = create(client, environment="staging").json()["id"]
+    registry.create_version("test-agent", "staging-secured", "https://agent.example/invoke", credential_id=credential_id, environment="staging")
+    service = LaunchService(setup_runtime[0], registry)
+    arguments = dict(agent_id="test-agent", agent_version="staging-secured", dataset_name="test", evaluator_ids=["intent_match"], dataset_snapshot={
+        "source": "seed", "dataset_id": "ds", "dataset_version": "v1", "items": [],
+    })
+    with pytest.raises(ValueError, match="environment"):
+        service.create_launch(**arguments, environment=environment)
+    launch = service.create_launch(**arguments, environment=" STAGING ")
+    assert launch.manifest["comparison"]["environment"] == "staging"
+
+
+@pytest.mark.parametrize("mode", ["sync", "worker"])
+@pytest.mark.parametrize("revision", [7, None])
+def test_legacy_vault_attempt_records_actual_revision_or_stops_before_dispatch(credentials, setup_runtime, monkeypatch, tmp_path, mode, revision):
+    import httpx
+    from app.manifest import LaunchService
+    from app.secret_providers import VaultKubernetesProvider
+
+    client, _, registry, _ = credentials
+    jwt = tmp_path / "workload-jwt"
+    jwt.write_text("example-service-account-token")
+    monkeypatch.setenv("ARGUS_VAULT_ADDR", "https://vault.example")
+    monkeypatch.setenv("ARGUS_VAULT_ROLE", "argus-worker")
+    monkeypatch.setenv("ARGUS_VAULT_JWT_PATH", str(jwt))
+    def vault(request):
+        if request.url.path.endswith("/login"):
+            return httpx.Response(200, json={"auth": {"client_token": "example-vault-session-token"}})
+        return httpx.Response(200, json={"data": {"data": {"token": "example-legacy-token"}, "metadata": {"version": revision}}})
+    monkeypatch.setattr(VaultKubernetesProvider, "_transport", httpx.MockTransport(vault))
+    registry.create_version("test-agent", "legacy-vault", "https://agent.example/invoke", credential_ref="vault://secret/agents/banking#token", max_retries=0)
+    manager, queue, _, orchestrator, worker, _ = setup_runtime
+    service = LaunchService(manager, registry)
+    monkeypatch.setattr(main, "launch_service", service)
+    monkeypatch.setattr(main, "orchestrator", orchestrator)
+    launch = service.create_launch(agent_id="test-agent", agent_version="legacy-vault", dataset_name="test", evaluator_ids=["intent_match"], dataset_snapshot={
+        "source": "seed", "dataset_id": "ds", "dataset_version": "v1", "items": [{"id": "0", "input": {}, "expected_output": {"expected_intent": "refund"}}],
+    })
+    with patch("app.execution.get_langfuse_client_safe", return_value=None), patch("app.worker.get_langfuse_client_safe", return_value=None), patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=httpx.Response(200, json={"intent": "refund"})) as invoke:
+        if mode == "sync":
+            assert client.post("/api/v1/experiment-launches/run", json={"launch_id": launch.id}).status_code == 200
+        else:
+            orchestrator.start_launch(launch.id)
+            message = queue.read_group("legacy-vault", count=1)[0]
+            asyncio.run(worker.execute_item_message(*message))
+    assert invoke.await_count == (1 if revision is not None else 0)
+    with manager.get_session() as session:
+        attempts = session.scalars(select(ExecutionAttemptRecord).join(ExperimentItemExecutionRecord, ExecutionAttemptRecord.item_execution_id == ExperimentItemExecutionRecord.id).where(ExperimentItemExecutionRecord.launch_id == launch.id)).all()
+        assert len(attempts) == (1 if revision is not None or mode == "worker" else 0)
+        if revision is None and mode == "worker":
+            assert attempts[0].status == "FAILED"
+            assert attempts[0].request_phase == "PREPARED"
+            assert attempts[0].error_type == "CREDENTIAL_UNAVAILABLE"
+        if revision is not None:
+            assert invoke.await_args.kwargs["headers"]["Authorization"] == "Bearer example-legacy-token"
+            assert (attempts[0].credential_id, attempts[0].credential_version, attempts[0].credential_provider) == (None, revision, "vault")

@@ -3,7 +3,8 @@ from __future__ import annotations
 import os
 from urllib.parse import parse_qsl, urlsplit
 
-from .secret_providers import provider_for
+from .credentials import ResolvedCredential
+from .secret_providers import CredentialUnavailable, VaultKubernetesProvider, provider_for
 
 FORBIDDEN_QUERY_KEYS = {"token", "secret", "key", "password", "auth", "api_key", "apikey"}
 DEFAULT_ALLOWED_ENVS = {"DEMO_AUTH_TOKEN", "ARGUS_DEMO_TOKEN"}
@@ -41,6 +42,16 @@ def resolve_credential(ref: str | None) -> str | None:
         return None
 
     return provider_for(ref, get_allowed_credential_envs()).resolve(ref)
+
+
+def resolve_execution_credential(ref: str) -> ResolvedCredential:
+    provider = provider_for(ref, get_allowed_credential_envs())
+    if isinstance(provider, VaultKubernetesProvider):
+        token, version = provider.resolve_with_metadata(ref)
+        if not isinstance(version, int) or isinstance(version, bool) or version < 1:
+            raise CredentialUnavailable()
+        return ResolvedCredential(token, version=version, provider="vault")
+    return ResolvedCredential(provider.resolve(ref), provider=ref.split(":", 1)[0])
 
 
 def sanitize_headers_for_trace(headers: dict[str, str]) -> dict[str, str]:

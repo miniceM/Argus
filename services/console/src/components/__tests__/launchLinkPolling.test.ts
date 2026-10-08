@@ -230,12 +230,28 @@ describe("launch link backfill polling", () => {
     expect(tracker.size).toBe(1);
     expect([...tracker.keys()]).toEqual(["other-launch"]);
 
-    // Empty data (query not loaded yet) must not release anything.
-    evaluateLaunchPolling(tracker, [], 20);
+    // An unresolved query (loaded=false) must not release anything.
+    evaluateLaunchPolling(tracker, [], 20, LINK_BACKFILL_WINDOW_MS, false);
     expect(tracker.size).toBe(1);
 
     // Re-entering the filtered launch opens a fresh window instead of a dead one.
     expect(evaluateLaunchPolling(tracker, [syncedNoLink], 30).shouldPoll).toBe(true);
+  });
+
+  it("releases expired windows when a filter loads zero results", () => {
+    const tracker = createBackfillTracker();
+    evaluateLaunchPolling(tracker, [syncedNoLink], 0);
+    expect(tracker.size).toBe(1);
+
+    // The filter matches nothing. That is a loaded answer, not an unresolved query,
+    // so the window must be released instead of lingering.
+    const afterWindow = LINK_BACKFILL_WINDOW_MS + 10;
+    expect(evaluateLaunchPolling(tracker, [], afterWindow).shouldPoll).toBe(false);
+    expect(tracker.size).toBe(0);
+
+    // Resetting the filter must therefore open a fresh window rather than reuse the
+    // expired deadline, otherwise the launch never polls for a late link again.
+    expect(evaluateLaunchPolling(tracker, [syncedNoLink], afterWindow + 1).shouldPoll).toBe(true);
   });
 
   it("aggregates a list of launches", () => {

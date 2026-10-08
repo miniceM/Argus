@@ -134,6 +134,25 @@ def test_base_url_surrounding_whitespace_is_written_back(monkeypatch, reloaded_c
     assert os.environ["LANGFUSE_BASE_URL"] == CLEAN
 
 
+def test_base_url_of_only_invisible_characters_falls_back_to_the_default(monkeypatch, reloaded_config):
+    """净化结果为空时必须回写默认值，而不是把 None 写进环境变量。
+
+    `os.environ[...] = None` 会在导入 `app.config` 时抛 `TypeError: str expected,
+    not NoneType`，Runner 直接起不来，而不是退回默认地址。
+    """
+    monkeypatch.setenv("LANGFUSE_BASE_URL", f"{BOM}{ZWSP}{CLEAN[:0]}")
+    reloaded = importlib.reload(reloaded_config)
+    assert reloaded.settings.langfuse_base_url == "http://langfuse-web:3000"
+    assert os.environ["LANGFUSE_BASE_URL"] == "http://langfuse-web:3000"
+
+
+def test_blank_base_url_falls_back_to_the_default(monkeypatch, reloaded_config):
+    monkeypatch.setenv("LANGFUSE_BASE_URL", "   \n")
+    reloaded = importlib.reload(reloaded_config)
+    assert reloaded.settings.langfuse_base_url == "http://langfuse-web:3000"
+    assert os.environ["LANGFUSE_BASE_URL"] == "http://langfuse-web:3000"
+
+
 def test_clean_base_url_is_left_untouched(monkeypatch, reloaded_config):
     """本就干净的配置不得被改写，避免无谓地污染进程环境。"""
     monkeypatch.setenv("LANGFUSE_BASE_URL", CLEAN)

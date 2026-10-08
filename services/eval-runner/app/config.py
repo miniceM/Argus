@@ -106,19 +106,23 @@ def _load_langfuse_base_url() -> str:
     default = "http://langfuse-web:3000"
     configured = os.getenv("LANGFUSE_BASE_URL")
     sanitized = sanitize_langfuse_url_input(configured)
+    # A value made only of whitespace/BOM/zero-width sanitizes to None; the effective
+    # base URL is then the default, and that is what has to reach the environment.
+    resolved = sanitized or default
     if configured and sanitized != configured.strip():
         logger.warning(
             "Stripped invisible characters (BOM/zero-width) from LANGFUSE_BASE_URL; "
             "otherwise every Langfuse SDK call fails with a missing-scheme error."
         )
-    if configured and sanitized != configured:
+    if configured and resolved != configured:
         # The SDK reads LANGFUSE_BASE_URL straight from the environment through
         # `get_client()` and normalizes nothing, so cleaning only the settings value
-        # would leave every request using the original value: the log would claim the
+        # would leave every request using the original one: the log would claim the
         # URL was sanitized while the SDK still failed with a missing-scheme error.
-        # Write the cleaned value back before the first client is created.
-        os.environ["LANGFUSE_BASE_URL"] = sanitized
-    return sanitized or default
+        # Write the resolved value back before the first client is created. It is
+        # never None, so this cannot raise `str expected, not NoneType` at import.
+        os.environ["LANGFUSE_BASE_URL"] = resolved
+    return resolved
 
 
 def find_path(configured_path: str | Path, *subpaths: str) -> Path:

@@ -45,7 +45,8 @@ export const evaluateLaunchPolling = (
   tracker: BackfillTracker,
   launches: readonly (LangfuseLinkLaunch | null | undefined)[],
   now: number,
-  windowMs: number = LINK_BACKFILL_WINDOW_MS
+  windowMs: number = LINK_BACKFILL_WINDOW_MS,
+  loaded: boolean = true
 ): LaunchPollingDecision => {
   let executionActive = false;
   let syncActive = false;
@@ -85,8 +86,12 @@ export const evaluateLaunchPolling = (
 
   // Filtering or navigating away drops launches from `data`; their windows must not
   // survive, otherwise re-entering a filtered launch could never open a new one.
-  // Empty data means "not loaded yet", so nothing is pruned in that case.
-  if (launches.length > 0) {
+  //
+  // Only an unresolved query counts as "not loaded yet". A loaded result that happens
+  // to be empty is a real answer -- a filter matching nothing -- and must prune: those
+  // windows have long expired, and keeping them means resetting the filter reuses a
+  // stale deadline and the launch stops polling for a link that arrives later.
+  if (loaded) {
     for (const launchId of [...tracker.keys()]) {
       if (!seen.has(launchId)) tracker.delete(launchId);
     }
@@ -117,8 +122,13 @@ export const useLaunchPolling = <T extends LangfuseLinkLaunch>(
   return useCallback(
     (data: T | readonly T[] | undefined) => {
       const launches = Array.isArray(data) ? data : data ? [data as T] : [];
-      return evaluateLaunchPolling(trackerRef.current!, launches, Date.now(), windowMs)
-        .shouldPoll
+      return evaluateLaunchPolling(
+        trackerRef.current!,
+        launches,
+        Date.now(),
+        windowMs,
+        data !== undefined
+      ).shouldPoll
         ? intervalMs
         : false;
     },

@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator,
 
 from .aggregation import aggregate_run, compare_case_results
 from .baselines import normalize_environment
-from .comparison_contracts import assess_comparability
+from .comparison_contracts import aggregation_comparison_digest, assess_comparability
 from .evaluator_binding import canonical_digest
 
 ENGINE_VERSION = "release-gate-v1"
@@ -120,6 +120,9 @@ def _evidence_reasons(snapshot, label: str) -> list[str]:
     provenance = assess_comparability(snapshot.manifest, snapshot.manifest)
     if not provenance.comparable:
         reasons.extend(provenance.reason_codes)
+    frozen_aggregation = snapshot.manifest.get("contract_digests", {}).get("aggregation_comparison", {}).get("digest")
+    if frozen_aggregation and frozen_aggregation != aggregation_comparison_digest():
+        reasons.append("AGGREGATION_CONTRACT_UNSUPPORTED")
     dataset = snapshot.manifest.get("dataset", {})
     if not dataset.get("source") or not dataset.get("dataset_id"):
         reasons.append("DATASET_IDENTITY_UNKNOWN")

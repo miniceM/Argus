@@ -58,3 +58,5 @@ Gate 返回固定修订的报告链接、策略摘要、候选与基线 Snapshot
 数据库升级追加迁移 `013_release_gates.sql`。本期提供规则引擎与 API，不包含 Console 策略管理页。与既有控制面一致，生产部署必须在入口实施身份认证和权限控制。
 
 本期没有 Override 接口，不能把 `FAIL` 或 `UNKNOWN` 改成可发布。授权 Override、SSO/RBAC、操作者审计与保留期治理仍由 Issue #6/#7 承接；不可变 Gate 用于追溯原始判断，不代替完整审计系统。
+
+创建策略时锁定 Agent 行并要求 active，防止 Purge 中途创建策略。引擎仅接受当前实现支持的冻结聚合/比较 digest；双方历史契约即使相同，若实现不支持仍返回 AGGREGATION_CONTRACT_UNSUPPORTED / UNKNOWN。

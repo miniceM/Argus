@@ -294,3 +294,27 @@ def test_api_rejects_snapshot_from_different_launch_and_wrong_policy_scope(setup
     assert client.post("/api/v1/release-policies", json=draft).status_code == 201
     request["policy_version"] = "2.0.0"
     assert client.post("/api/v1/release-gates/evaluate", json=request).status_code == 409
+
+
+def test_policy_creation_rejects_an_agent_already_being_purged(setup_runtime, monkeypatch):
+    from app.db_models import AgentRecord
+
+    manager = setup_runtime[0]
+    with manager.get_session() as session:
+        session.get(AgentRecord, "test-agent").status = "deleting"
+        session.commit()
+    monkeypatch.setattr(main, "db_manager", manager)
+    response = TestClient(main.app).post("/api/v1/release-policies", json=policy().model_dump())
+    assert response.status_code == 409
+
+
+@pytest.mark.parametrize("relative", [False, True])
+def test_obsolete_aggregation_contract_cannot_authorize_release_even_when_both_match(relative):
+    baseline = snapshot()
+    candidate = snapshot(baseline_id=baseline.id)
+    for value in (baseline, candidate):
+        value.manifest["contract_digests"]["aggregation_comparison"]["digest"] = "sha256:obsolete-semantics"
+    gate_policy = policy({"id": "no-regression", "metric": "regression_count", "operator": "<=", "threshold": 0}) if relative else policy()
+    result = evaluate_gate(gate_policy, candidate, baseline)
+    assert result.decision == "UNKNOWN" and not result.releasable
+    assert "AGGREGATION_CONTRACT_UNSUPPORTED" in result.reason_codes

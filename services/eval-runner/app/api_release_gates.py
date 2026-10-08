@@ -67,8 +67,11 @@ def create_release_policy(payload: ReleasePolicy) -> ReleasePolicyResponse:
     manager = _db_manager()
     try:
         with manager.get_session() as session:
-            if session.get(AgentRecord, payload.agent_id) is None:
+            agent = session.scalar(select(AgentRecord).where(AgentRecord.id == payload.agent_id).with_for_update())
+            if agent is None:
                 raise HTTPException(404, "Agent not found")
+            if agent.status != "active":
+                raise HTTPException(409, "Agent is inactive or being purged")
             existing = _policy(session, payload.name, payload.version)
             if existing:
                 if existing.policy_digest != payload.content_digest:

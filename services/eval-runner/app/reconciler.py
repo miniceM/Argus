@@ -558,16 +558,26 @@ class ExecutionReconciler:
             candidate_ids = self._link_candidate_ids(None, batch_size)
 
         updated = 0
+        # Highest candidate id actually examined this pass. The cursor must never move
+        # past an unvisited candidate: skipping the tail delays those launches until the
+        # whole keyspace wraps, and starves them outright when new ids keep arriving
+        # past the cursor.
+        last_visited: str | None = None
+        truncated = False
         for launch_id in candidate_ids:
             now = time.monotonic()
             entry = self._link_backoff.get(launch_id)
             if entry is not None and entry[0] > now:
+                # Skipped without remote work, but still examined: safe to advance past.
+                last_visited = launch_id
                 continue
             # The budget bounds the whole pass. Gating it on `updated > 0` let a batch
             # where every lookup fails run all sequential remote calls, each with its
             # own timeout, far beyond the advertised budget.
-            if time.monotonic() >= deadline:
+            if now >= deadline:
+                truncated = True
                 break
+            last_visited = launch_id
             try:
                 result = link_service.ensure_launch_link(launch_id)
             except Exception:
@@ -584,7 +594,12 @@ class ExecutionReconciler:
                     launch_id, f"{status}:{getattr(result, 'run_id', None)}", time.monotonic()
                 )
 
-        self._link_cursor = candidate_ids[-1] if len(candidate_ids) >= batch_size else None
+        if truncated:
+            # Resume from the last examined candidate so the unvisited tail is retried on
+            # the next pass. If nothing was examined the cursor is left untouched.
+            self._link_cursor = last_visited if last_visited is not None else cursor
+        else:
+            self._link_cursor = candidate_ids[-1] if len(candidate_ids) >= batch_size else None
         return updated
 
     def reconcile_launch_states(self) -> int:

@@ -12,6 +12,7 @@ sys.path[:0] = [str(ROOT / "tests"), str(ROOT / "services" / "eval-runner")]
 
 from app.db_models import ExperimentItemExecutionRecord as Item  # noqa: E402
 from app.db_models import ExperimentLaunchRecord as Launch  # noqa: E402
+from app.db_models import LangfuseSyncTaskRecord as Task  # noqa: E402
 from app.langfuse_links import (  # noqa: E402
     DATASET_ID_CONFLICT,
     DATASET_UNRESOLVED,
@@ -19,6 +20,7 @@ from app.langfuse_links import (  # noqa: E402
     NO_REMOTE_RUN,
     NOT_FOUND,
     PROJECT_UNRESOLVED,
+    RUN_ID_CONFLICT,
     STALE,
     UNAVAILABLE,
     UPDATED,
@@ -209,19 +211,69 @@ def test_resolver_detects_dataset_id_conflict():
     assert not res.ok and res.reason == DATASET_ID_CONFLICT
 
 
-def test_resolver_uses_run_name_lookup_for_synthetic_id_and_verifies_run():
-    lf = FakeLangfuseSDK(runs={("banking", "run-name"): remote_run("ds-real", "r1")})
+def test_resolver_resolves_synthetic_id_through_supported_apis_only():
+    """A synthetic dataset id must resolve without the withdrawn v3 read path.
+
+    ``datasets.get_run`` answers 410 ``LEGACY_API_UNAVAILABLE_FOR_NEW_ORGANIZATION``
+    for Organizations created after 2026-09-16, so a resolver that depends on it can
+    never recover the promised historical backfill in a current deployment.
+    """
+    lf = FakeLangfuseSDK(dataset_ids={"banking": "ds-real"}, experiment_datasets={"r1": "ds-real"})
     resolver = LangfuseLinkResolver(lf, DASHBOARD)
     res = resolver.resolve(
         run_id="r1", dataset_name="banking", run_names=["run-name"], manifest_dataset_id="lf-banking"
     )
     assert res.ok and res.dataset_id == "ds-real"
-    assert lf.datasets.calls[0][0] == "banking"
-    assert lf.datasets.calls[0][1] == "run-name"
+    assert lf.datasets.legacy_get_run_calls == []
+    assert [name for name, _ in lf.datasets.calls] == ["banking"]
+    assert lf.experiments.calls[0]["id"] == "r1"
 
 
-def test_resolver_rejects_name_lookup_pointing_at_other_run():
-    lf = FakeLangfuseSDK(runs={("banking", "run-name"): remote_run("ds-real", "other-run")})
+def test_resolver_falls_back_to_dataset_name_when_run_is_not_exposed():
+    """Runs written through the async ingestion API are not always readable back.
+
+    ``experiments.list`` then answers an empty page, which must not be treated as a
+    mismatch: the Key-scoped Dataset identity is still authoritative.
+    """
+    lf = FakeLangfuseSDK(dataset_ids={"banking": "ds-real"})
+    resolver = LangfuseLinkResolver(lf, DASHBOARD)
+    res = resolver.resolve(
+        run_id="r1", dataset_name="banking", run_names=["run-name"], manifest_dataset_id="lf-banking"
+    )
+    assert res.ok and res.dataset_id == "ds-real"
+    assert lf.datasets.legacy_get_run_calls == []
+    assert lf.experiments.calls[0]["id"] == "r1"
+
+
+def test_resolver_ignores_a_working_legacy_dataset_run_endpoint():
+    """即使旧接口仍然可用，解析器也必须走受支持的 API。
+
+    ``datasets.get_run`` 在新 Organization 上返回 410，依赖它的实现在旧部署上仍然
+    "能跑"，因此只有断言它从未被调用，才能保证同一份代码在新旧环境上语义一致。
+    """
+    lf = FakeLangfuseSDK(
+        runs={("banking", "run-name"): remote_run("ds-legacy", "r1")},
+        dataset_ids={"banking": "ds-real"},
+    )
+    resolver = LangfuseLinkResolver(lf, DASHBOARD)
+    res = resolver.resolve(
+        run_id="r1", dataset_name="banking", run_names=["run-name"], manifest_dataset_id="lf-banking"
+    )
+    assert res.ok and res.dataset_id == "ds-real"
+    assert lf.datasets.legacy_get_run_calls == []
+
+
+def test_resolver_rejects_dataset_disagreeing_with_the_run():
+    lf = FakeLangfuseSDK(dataset_ids={"banking": "ds-real"}, experiment_datasets={"r1": "ds-other"})
+    resolver = LangfuseLinkResolver(lf, DASHBOARD)
+    res = resolver.resolve(
+        run_id="r1", dataset_name="banking", run_names=["run-name"], manifest_dataset_id="lf-banking"
+    )
+    assert not res.ok and res.reason == DATASET_ID_CONFLICT
+
+
+def test_resolver_reports_unresolved_when_no_supported_path_answers():
+    lf = FakeLangfuseSDK()
     resolver = LangfuseLinkResolver(lf, DASHBOARD)
     res = resolver.resolve(
         run_id="r1", dataset_name="banking", run_names=["run-name"], manifest_dataset_id="lf-banking"
@@ -242,7 +294,7 @@ def test_resolver_no_dashboard_short_circuits_without_remote_calls():
 # ---------------------------------------------------------------------------
 def test_service_backfills_historical_synced_launch(setup_runtime):
     lid, _ = seed_terminal_launch(setup_runtime)
-    lf = FakeLangfuseSDK(runs={("banking-agent-regression", "review"): remote_run("ds-real", "r1")})
+    lf = FakeLangfuseSDK(dataset_ids={"banking-agent-regression": "ds-real"})
     service = make_service(setup_runtime[0], lf, DASHBOARD)
 
     result = service.ensure_launch_link(lid)
@@ -365,7 +417,7 @@ def test_service_uses_launch_run_id_when_no_outbox_exists(setup_runtime):
     lid, _ = seed_terminal_launch(
         setup_runtime, dataset_id=None, store_run_id="legacy-run", task_status=None
     )
-    lf = FakeLangfuseSDK(runs={("banking-agent-regression", "review"): remote_run("ds-legacy", "legacy-run")})
+    lf = FakeLangfuseSDK(dataset_ids={"banking-agent-regression": "ds-legacy"})
     service = make_service(setup_runtime[0], lf, DASHBOARD)
 
     result = service.ensure_launch_link(lid)
@@ -493,9 +545,95 @@ def test_seed_source_with_real_run_still_gets_a_link(setup_runtime):
         task_run_id="r1",
         sync_status="SYNCED",
     )
-    lf = FakeLangfuseSDK(runs={("banking-agent-regression", "review"): remote_run("ds-real", "r1")})
+    lf = FakeLangfuseSDK(dataset_ids={"banking-agent-regression": "ds-real"})
     service = make_service(setup_runtime[0], lf, DASHBOARD)
 
     result = service.ensure_launch_link(lid)
     assert result.status == UPDATED
     assert result.url == f"{DASHBOARD}/project/proj-real/datasets/ds-real/runs/r1"
+
+
+# ---------------------------------------------------------------------------
+# Run evidence must be settled before a link is published or trusted
+# ---------------------------------------------------------------------------
+def test_service_defers_link_until_every_current_task_has_settled(setup_runtime):
+    """当前代次仍有未落定任务时不得落链。
+
+    旧实现在第一个任务 SYNCED 后立即为 run-a 生成链接。此时第二个任务还没上报任何
+    Run，"没有冲突"只是证据尚未到齐，而不是证据一致。若它随后上报 run-b，
+    ``aggregate_launch_sync_status`` 会因冲突抛错却不会清空已写入的 URL，而
+    ``ensure_launch_link`` 又因"已存 URL 是安全的"直接短路返回 UNCHANGED，launch
+    于是永久暴露 run-a。
+    """
+    db = setup_runtime[0]
+    lid, _ = seed_terminal_launch(
+        setup_runtime,
+        store_run_id=None,
+        task_run_id="run-a",
+        item_count=2,
+        extra_tasks=[{"item_index": 1, "payload": {}, "status": "PENDING"}],
+    )
+    lf = FakeLangfuseSDK()
+    service = make_service(db, lf, DASHBOARD)
+
+    # 1. 证据尚未完整：一个 Run 已被看到，但当前代次还没有全部落定
+    assert service.ensure_launch_link(lid).status == DEFERRED
+    with db.get_session() as s:
+        assert s.get(Launch, lid).langfuse_experiment_url is None
+    assert lf.projects.calls == []  # a launch that may still move costs no remote work
+
+    # 2. 第二个任务落定为另一个 Run：launch 必须停止暴露第一个 Run
+    with db.get_session() as s:
+        second = s.query(Task).filter(Task.launch_id == lid, Task.dataset_item_id == "1").one()
+        second.status = "SYNCED"
+        second.scores_payload = {"_dataset_run_id": "run-b"}
+
+    result = service.ensure_launch_link(lid)
+    assert result.status == NO_REMOTE_RUN
+    assert result.reason == RUN_ID_CONFLICT
+    with db.get_session() as s:
+        assert s.get(Launch, lid).langfuse_experiment_url is None
+
+
+def test_service_retracts_stored_link_when_current_runs_conflict(setup_runtime):
+    """已落链的 URL 必须先与当前代次证据核对，再谈幂等短路。"""
+    db = setup_runtime[0]
+    stored = f"{DASHBOARD}/project/proj-real/datasets/ds-real/runs/run-a"
+    lid, _ = seed_terminal_launch(
+        setup_runtime,
+        store_url=stored,
+        store_run_id="run-a",
+        task_run_id="run-a",
+        item_count=2,
+        extra_tasks=[
+            {"item_index": 1, "payload": {"_dataset_run_id": "run-b"}, "status": "SYNCED"},
+        ],
+    )
+    lf = FakeLangfuseSDK()
+    service = make_service(db, lf, DASHBOARD)
+
+    result = service.ensure_launch_link(lid)
+    assert result.status == RUN_ID_CONFLICT
+    with db.get_session() as s:
+        launch = s.get(Launch, lid)
+        assert launch.langfuse_experiment_url is None
+        # 只清链接：同步事实与已聚合的 Run ID 保持不变，冲突仍可审计、可重算
+        assert launch.langfuse_experiment_id == "run-a"
+        assert launch.langfuse_sync_status == "SYNCED"
+        assert launch.langfuse_sync_error is None
+    assert lf.projects.calls == []
+
+
+def test_service_keeps_stored_link_when_evidence_agrees(setup_runtime):
+    """证据一致时仍然是幂等短路，且不产生任何远端调用。"""
+    db = setup_runtime[0]
+    stored = f"{DASHBOARD}/project/proj-real/datasets/ds-real/runs/r1"
+    lid, _ = seed_terminal_launch(setup_runtime, store_url=stored, store_run_id="r1", task_run_id="r1")
+    lf = FakeLangfuseSDK()
+    service = make_service(db, lf, DASHBOARD)
+
+    result = service.ensure_launch_link(lid)
+    assert result.status == "UNCHANGED"
+    with db.get_session() as s:
+        assert s.get(Launch, lid).langfuse_experiment_url == stored
+    assert lf.projects.calls == [] and lf.datasets.calls == []

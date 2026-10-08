@@ -479,6 +479,39 @@ def test_republishing_identical_evidence_is_idempotent_and_history_stays_put(set
     assert count == 1
 
 
+def test_snapshot_identity_ignores_remeasured_duration_but_not_real_evidence():
+    """快照身份只由证据决定，不受重新评测时重新测量的耗时影响。
+
+    ``evaluator_binding`` 每次评测都会重新记录 ``duration_ms``。若把它算进 source
+    digest，同一份证据的重新评测就会 fork 出一条内容近乎相同的新 revision，
+    "相同证据不产生重复 revision" 的不变量就只在一台机器上成立。
+    """
+    from app.result_snapshots import _canonical_digest, _snapshot_identity_items
+
+    def _digest(duration_ms: float, value: float) -> str:
+        return _canonical_digest(_snapshot_identity_items([
+            {
+                "dataset_item_id": "0",
+                "execution_status": "succeeded",
+                "eval_status": "succeeded",
+                "quality_conclusion": "pass",
+                "evaluation_results": [
+                    {
+                        "evaluator_id": "intent_match",
+                        "status": "succeeded",
+                        "value": value,
+                        "duration_ms": duration_ms,
+                    }
+                ],
+            }
+        ]))
+
+    # 仅耗时变化 -> 同一份证据 -> 同一身份
+    assert _digest(3.0, 1.0) == _digest(4.0, 1.0)
+    # 结论变化 -> 真实证据变化 -> 必须产生新身份
+    assert _digest(3.0, 1.0) != _digest(3.0, 0.5)
+
+
 def test_changed_evidence_appends_a_new_revision_and_never_mutates_the_old_one(setup_runtime):
     """Genuinely different evidence lands in a NEW revision; history is append-only."""
     binding = _binding("intent_match")

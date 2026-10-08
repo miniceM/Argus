@@ -173,7 +173,6 @@ def test_async_lifecycle_survives_link_backfill():
     """202 semantics, cancellation and recovery stay intact when a link is backfilled
     after the launch already reached a terminal state."""
     import sys as _sys
-    from types import SimpleNamespace
 
     _sys.path[:0] = [str(ROOT / "tests")]
     from app.db_models import ExperimentItemExecutionRecord, LangfuseSyncTaskRecord
@@ -220,7 +219,7 @@ def test_async_lifecycle_survives_link_backfill():
             )
         )
 
-    lf = FakeLangfuseSDK(runs={("banking-agent-regression", "Backfill Lifecycle"): SimpleNamespace(id="run-1", dataset_id="ds-real")})
+    lf = FakeLangfuseSDK(dataset_ids={"banking-agent-regression": "ds-real"})
     service = LangfuseLaunchLinkService(
         db_manager, LangfuseLinkResolver(lf, "https://cloud.example.com")
     )

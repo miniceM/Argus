@@ -22,6 +22,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import quote
 
@@ -43,6 +44,13 @@ PROJECT_CACHE_TTL_SECONDS = 300.0
 DATASET_CACHE_TTL_SECONDS = 300.0
 DATASET_CACHE_MAX_ENTRIES = 256
 REMOTE_READ_TIMEOUT_SECONDS = 2.0
+# A Dataset Run is an Experiment in Langfuse v4. The Experiment read path is time
+# filtered, so the lookup window has to be wide enough to also cover the historical
+# launches this module exists to backfill.
+EXPERIMENT_LOOKBACK_DAYS = 3650
+EXPERIMENT_LOOKUP_LIMIT = 1
+# Outbox task states whose Run evidence may still change.
+UNSETTLED_TASK_STATUSES = ("PENDING", "PROCESSING")
 
 # Internal reason codes. They are only used for logs and internal results and must
 # never be written into `langfuse_sync_error` (that would fake a sync failure).
@@ -224,6 +232,11 @@ class CurrentRunEvidence:
         )
 
 
+def _count_unsettled_tasks(evidence: CurrentRunEvidence) -> int:
+    """How many current-generation outbox tasks may still change their Run evidence."""
+    return sum(1 for e in evidence.current_task_evidence if e.task_status in UNSETTLED_TASK_STATUSES)
+
+
 def _task_run_id(task: Any) -> str | None:
     payload = getattr(task, "scores_payload", None) or {}
     if not isinstance(payload, dict):
@@ -402,49 +415,105 @@ class LangfuseLinkResolver:
         if not dataset_name:
             return None, DATASET_UNRESOLVED
 
+        # The resolved identity no longer depends on which Run name is tried first, so a
+        # single representative key is enough for the success-only cache.
+        cache_key = next((n for n in run_names if n), run_id)
+        cached = self._cached_dataset(client, dataset_name, cache_key, run_id)
+        if cached is not None:
+            return cached, None
+
+        dataset_id, dataset_error = self._resolve_dataset_identity(client, dataset_name, run_id)
+        if dataset_error or not dataset_id:
+            return None, dataset_error or DATASET_UNRESOLVED
+
+        self._cache_dataset(client, dataset_name, cache_key, run_id, dataset_id)
+        return dataset_id, None
+
+    def _dataset_id_by_name(self, client: Any, dataset_name: str) -> str | None:
+        """``GET /api/v2/datasets/{name}`` - the supported Dataset identity read."""
         datasets_api = getattr(getattr(client, "api", None), "datasets", None)
-        getter = getattr(datasets_api, "get_run", None)
+        getter = getattr(datasets_api, "get", None)
         if not callable(getter):
+            return None
+        try:
+            response = getter(dataset_name, **{_REQUEST_OPTIONS_KEY: _read_timeout_options()})
+        except Exception as exc:
+            logger.warning("Langfuse dataset lookup failed for dataset=%s: %s", dataset_name, exc)
+            return None
+
+        returned_name = _clean_id(_extract_field(response, "name"))
+        if returned_name is not None and returned_name != dataset_name:
+            logger.warning(
+                "Langfuse dataset lookup answered %r for dataset %r; refusing to guess",
+                returned_name,
+                dataset_name,
+            )
+            return None
+        dataset_id = _clean_id(_extract_field(response, "id"))
+        return dataset_id if is_real_remote_id(dataset_id) else None
+
+    def _dataset_id_by_run(self, client: Any, run_id: str) -> str | None:
+        """``GET /api/public/experiments`` - ties a Run to its Dataset.
+
+        A Dataset Run is an Experiment in Langfuse v4, so this is the supported
+        replacement for the withdrawn ``datasets.get_run`` read path. Runs written
+        through the asynchronous ingestion API are not always exposed here; ``None``
+        then means "not exposed", never "a different dataset".
+        """
+        experiments_api = getattr(getattr(client, "api", None), "experiments", None)
+        lister = getattr(experiments_api, "list", None)
+        if not callable(lister):
+            return None
+
+        now = datetime.now(UTC)
+        try:
+            response = lister(
+                id=run_id,
+                from_start_time=now - timedelta(days=EXPERIMENT_LOOKBACK_DAYS),
+                to_start_time=now + timedelta(minutes=5),
+                limit=EXPERIMENT_LOOKUP_LIMIT,
+                **{_REQUEST_OPTIONS_KEY: _read_timeout_options()},
+            )
+        except Exception as exc:
+            logger.warning("Langfuse experiment lookup failed for run=%s: %s", run_id, exc)
+            return None
+
+        rows = _extract_field(response, "data")
+        if not isinstance(rows, (list, tuple)):
+            return None
+        for row in rows:
+            if _clean_id(_extract_field(row, "id")) != run_id:
+                continue
+            dataset_id = _clean_id(_extract_field(row, "dataset_id"))
+            return dataset_id if is_real_remote_id(dataset_id) else None
+        return None
+
+    def _resolve_dataset_identity(
+        self, client: Any, dataset_name: str, run_id: str
+    ) -> tuple[str | None, str | None]:
+        """Resolve the Dataset id through supported APIs only.
+
+        ``datasets.get_run`` belongs to the v3 read family that Langfuse withdrew for
+        Organizations created after 2026-09-16 (HTTP 410
+        ``LEGACY_API_UNAVAILABLE_FOR_NEW_ORGANIZATION``), so it can never be the only
+        path: a historical launch carrying a synthetic dataset id would stay
+        permanently unresolvable and the promised backfill would need a rerun.
+        """
+        by_name = self._dataset_id_by_name(client, dataset_name)
+        by_run = self._dataset_id_by_run(client, run_id)
+        if by_name and by_run and by_name != by_run:
+            logger.warning(
+                "Langfuse run %s belongs to dataset %s but %r resolves to %s; refusing to guess",
+                run_id,
+                by_run,
+                dataset_name,
+                by_name,
+            )
+            return None, DATASET_ID_CONFLICT
+        resolved = by_run or by_name
+        if not is_real_remote_id(resolved):
             return None, DATASET_UNRESOLVED
-
-        for candidate_run_name in [n for n in run_names if n]:
-            cached = self._cached_dataset(client, dataset_name, candidate_run_name, run_id)
-            if cached is not None:
-                return cached, None
-
-            try:
-                response = getter(
-                    dataset_name,
-                    candidate_run_name,
-                    **{_REQUEST_OPTIONS_KEY: _read_timeout_options()},
-                )
-            except Exception as exc:
-                logger.warning(
-                    "Langfuse dataset run lookup failed for dataset=%s run=%s: %s",
-                    dataset_name,
-                    candidate_run_name,
-                    exc,
-                )
-                continue
-
-            remote_run_id = _clean_id(_extract_field(response, "id", "run_id", "dataset_run_id"))
-            remote_dataset_id = _clean_id(_extract_field(response, "dataset_id"))
-            if not is_real_remote_id(remote_dataset_id):
-                continue
-            # Never trust a name lookup that resolves to a different run.
-            if remote_run_id != run_id:
-                logger.warning(
-                    "Langfuse dataset run lookup mismatch for dataset=%s run_name=%s (expected run %s)",
-                    dataset_name,
-                    candidate_run_name,
-                    run_id,
-                )
-                continue
-
-            self._cache_dataset(client, dataset_name, candidate_run_name, run_id, remote_dataset_id)
-            return remote_dataset_id, None
-
-        return None, DATASET_UNRESOLVED
+        return resolved, None
 
     def _cached_dataset(self, client: Any, dataset_name: str, run_name: str, run_id: str) -> str | None:
         now = time.monotonic()
@@ -577,6 +646,7 @@ class LaunchLinkSnapshot:
     conflicting_run_ids: tuple[str, ...]
     has_current_tasks: bool
     has_any_tasks: bool
+    unsettled_current_tasks: int
 
 
 class LangfuseLaunchLinkService:
@@ -631,6 +701,7 @@ class LangfuseLaunchLinkService:
                 conflicting_run_ids=evidence.conflicting_run_ids,
                 has_current_tasks=evidence.has_tasks,
                 has_any_tasks=len(tasks) > 0,
+                unsettled_current_tasks=_count_unsettled_tasks(evidence),
             )
 
     def choose_run_id(self, snapshot: LaunchLinkSnapshot) -> tuple[str | None, str | None]:
@@ -649,6 +720,77 @@ class LangfuseLaunchLinkService:
         return None, NO_REMOTE_RUN
 
     # -- phase C ----------------------------------------------------------
+    def stored_link_conflict(self, snapshot: LaunchLinkSnapshot) -> str | None:
+        """Reason the persisted link is contradicted by current-generation evidence.
+
+        Checked *before* the idempotent short-circuit: a stored URL is only a display
+        value, so it must never win over Run evidence that has since moved.
+        """
+        if not (snapshot.stored_url and is_safe_browser_url(snapshot.stored_url)):
+            return None
+        if not snapshot.has_current_tasks:
+            # Nothing current-generation contradicts the persisted link.
+            return None
+        if snapshot.conflicting_run_ids:
+            return RUN_ID_CONFLICT
+        if snapshot.run_id and snapshot.stored_run_id and snapshot.run_id != snapshot.stored_run_id:
+            return RUN_ID_CONFLICT
+        return None
+
+    def retract_conflicting_link(self, launch_id: str, reason: str) -> LinkResult:
+        """Drop a link that current-generation evidence contradicts.
+
+        Only ``langfuse_experiment_url`` is cleared. Sync status, outbox rows, Run
+        evidence and scores are never touched, and ``langfuse_experiment_id`` keeps the
+        last aggregated Run so the conflict stays auditable and recomputable.
+        """
+        with self.db_mgr.get_session() as session:
+            launch = session.get(ExperimentLaunchRecord, launch_id)
+            if launch is None:
+                return LinkResult(NOT_FOUND, reason=NOT_FOUND)
+            stored_url = _clean_id(launch.langfuse_experiment_url)
+            stored_run_id = _clean_id(launch.langfuse_experiment_id)
+            if not (stored_url and is_safe_browser_url(stored_url)):
+                return LinkResult(UNCHANGED, url=stored_url, run_id=stored_run_id)
+
+            items = session.scalars(
+                select(ExperimentItemExecutionRecord).where(
+                    ExperimentItemExecutionRecord.launch_id == launch_id
+                )
+            ).all()
+            tasks = session.scalars(
+                select(LangfuseSyncTaskRecord).where(LangfuseSyncTaskRecord.launch_id == launch_id)
+            ).all()
+            evidence = select_current_run_evidence(items, tasks)
+            still_conflicting = bool(evidence.conflicting_run_ids) or (
+                evidence.run_id is not None
+                and stored_run_id is not None
+                and evidence.run_id != stored_run_id
+            )
+            if not still_conflicting:
+                return LinkResult(UNCHANGED, url=stored_url, run_id=stored_run_id)
+
+            retracted = session.execute(
+                update(ExperimentLaunchRecord)
+                .where(
+                    ExperimentLaunchRecord.id == launch_id,
+                    ExperimentLaunchRecord.langfuse_experiment_url == stored_url,
+                )
+                .values(langfuse_experiment_url=None)
+            )
+            session.commit()
+            if retracted.rowcount == 0:
+                # A concurrent writer already changed the link; converge instead.
+                return LinkResult(UNCHANGED, url=stored_url, run_id=stored_run_id)
+
+        logger.warning(
+            "Langfuse link retracted launch=%s run=%s reason=%s: current-generation evidence disagrees",
+            launch_id,
+            stored_run_id,
+            reason,
+        )
+        return LinkResult(reason, reason=reason, run_id=stored_run_id)
+
     def _facts_match(self, snapshot: LaunchLinkSnapshot, fresh: LaunchLinkSnapshot, run_id: str) -> bool:
         if fresh.launch_status not in TERMINAL_LAUNCH_STATUSES:
             return False
@@ -672,9 +814,19 @@ class LangfuseLaunchLinkService:
         snapshot = self.read_snapshot(launch_id)
         if snapshot is None:
             return LinkResult(NOT_FOUND, reason=NOT_FOUND)
+        # Current-generation evidence outranks an already persisted link.
+        conflict = self.stored_link_conflict(snapshot)
+        if conflict:
+            return self.retract_conflicting_link(launch_id, conflict)
         if snapshot.stored_url and is_safe_browser_url(snapshot.stored_url):
             return LinkResult(UNCHANGED, url=snapshot.stored_url, run_id=snapshot.stored_run_id)
         if snapshot.launch_status not in TERMINAL_LAUNCH_STATUSES:
+            return LinkResult(DEFERRED, reason=DEFERRED, run_id=snapshot.stored_run_id)
+        if snapshot.unsettled_current_tasks:
+            # Run evidence for this generation is still arriving. Publishing now would
+            # freeze whichever Run happens to report first, and a later conflicting Run
+            # could no longer retract it, because a stored URL short-circuits before the
+            # conflict check above can ever run again.
             return LinkResult(DEFERRED, reason=DEFERRED, run_id=snapshot.stored_run_id)
 
         run_id, evidence_error = self.choose_run_id(snapshot)
@@ -739,6 +891,7 @@ class LangfuseLaunchLinkService:
                 conflicting_run_ids=evidence.conflicting_run_ids,
                 has_current_tasks=evidence.has_tasks,
                 has_any_tasks=len(tasks) > 0,
+                unsettled_current_tasks=_count_unsettled_tasks(evidence),
             )
 
             if fresh.stored_url and is_safe_browser_url(fresh.stored_url):

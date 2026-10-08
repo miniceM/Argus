@@ -13,7 +13,7 @@ sys.path[:0] = [str(ROOT / "tests"), str(ROOT / "services" / "eval-runner")]
 from app.db_models import ExperimentLaunchRecord as Launch  # noqa: E402
 from app.db_models import LangfuseSyncTaskRecord as Task  # noqa: E402
 from app.langfuse_sync import LangfuseOutboxSyncer  # noqa: E402
-from fake_langfuse import FakeLangfuseSDK, remote_run  # noqa: E402
+from fake_langfuse import FakeLangfuseSDK  # noqa: E402
 from link_helpers import make_service, seed_terminal_launch  # noqa: E402
 
 DASHBOARD = "https://cloud.langfuse.example.com"
@@ -47,7 +47,7 @@ def test_history_backfill_without_rerun(setup_runtime):
     lid, _ = seed_terminal_launch(setup_runtime)
     tasks_before = _task_rows(db, lid)
 
-    lf = FakeLangfuseSDK(runs={(DATASET, "review"): remote_run("ds-real", "r1")})
+    lf = FakeLangfuseSDK(dataset_ids={DATASET: "ds-real"})
     service = make_service(db, lf, DASHBOARD)
 
     assert reconciler.reconcile_langfuse_links(service) == 1
@@ -65,7 +65,7 @@ def test_history_backfill_recovers_run_id_from_task_only(setup_runtime):
     db, reconciler = setup_runtime[0], setup_runtime[5]
     lid, _ = seed_terminal_launch(setup_runtime, store_run_id=None, task_run_id="r1")
 
-    lf = FakeLangfuseSDK(runs={(DATASET, "review"): remote_run("ds-real", "r1")})
+    lf = FakeLangfuseSDK(dataset_ids={DATASET: "ds-real"})
     service = make_service(db, lf, DASHBOARD)
 
     assert reconciler.reconcile_langfuse_links(service) == 1
@@ -165,6 +165,44 @@ def test_budget_is_enforced_even_when_no_launch_is_updated(setup_runtime):
     assert len(service.calls) > 0
 
 
+def test_budget_exhaustion_keeps_cursor_on_last_visited_candidate(setup_runtime):
+    """预算耗尽时游标只能推进到真正访问过的候选。
+
+    旧实现无条件把 ``_link_cursor`` 推到 ``candidate_ids[-1]``：一批 6 个候选只访问了
+    前 3 个就超时，剩下 3 个仍被当作"已扫描"，必须等整个键空间回绕才会重试；若游标
+    之后持续有新 Launch 插入，它们会被永久饿死。
+    """
+    import time as time_module
+
+    reconciler = setup_runtime[5]
+    lids = [seed_terminal_launch(setup_runtime)[0] for _ in range(6)]
+
+    class SlowService:
+        def __init__(self):
+            self.calls: list[str] = []
+
+        def ensure_launch_link(self, launch_id):
+            self.calls.append(launch_id)
+            time_module.sleep(0.05)
+            return SimpleNamespace(status="UNAVAILABLE", run_id=None)
+
+    # 候选按主键排序，UUID 的字典序与创建顺序无关
+    ordered = sorted(lids)
+
+    service = SlowService()
+    assert reconciler.reconcile_langfuse_links(service, batch_size=6, budget_seconds=0.13) == 0
+
+    visited = list(service.calls)
+    assert 0 < len(visited) < len(lids)
+    assert reconciler._link_cursor == visited[-1]
+    assert reconciler._link_cursor != ordered[-1]
+
+    # 未访问的尾部必须立刻成为下一轮的候选，而不是等键空间回绕
+    remaining = reconciler._link_candidate_ids(reconciler._link_cursor, len(lids))
+    assert remaining == [lid for lid in ordered if lid > reconciler._link_cursor]
+    assert remaining, "budget exhaustion must not skip the unvisited tail"
+
+
 def test_backoff_eviction_bounds_both_dictionaries(setup_runtime):
     """退避表淘汰时必须同步淘汰延迟计数，否则字典无界增长。"""
     _db, reconciler = setup_runtime[0], setup_runtime[5]
@@ -261,7 +299,7 @@ def test_outbox_success_persists_run_id_and_link(setup_runtime):
         task_status="PENDING",
         task_run_name="review",
     )
-    lf = FakeLangfuseSDK(dataset_run_id="r1", runs={(DATASET, "review"): remote_run("ds-real", "r1")})
+    lf = FakeLangfuseSDK(dataset_run_id="r1", dataset_ids={DATASET: "ds-real"})
     service = make_service(db, lf, DASHBOARD)
     syncer = LangfuseOutboxSyncer(db, lf, link_service=service)
 
@@ -281,7 +319,7 @@ def test_outbox_link_failure_does_not_fail_task(setup_runtime):
         sync_status="SYNCING",
         task_status="PENDING",
     )
-    lf = FakeLangfuseSDK(dataset_run_id="r1", runs={(DATASET, "review"): remote_run("ds-real", "r1")})
+    lf = FakeLangfuseSDK(dataset_run_id="r1", dataset_ids={DATASET: "ds-real"})
 
     class BrokenLinkService:
         def ensure_launch_link(self, launch_id):

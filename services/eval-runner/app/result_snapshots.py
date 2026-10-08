@@ -27,6 +27,32 @@ def _canonical_digest(value: Any) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+# Measured wall-clock values are performance observations, not evidence, so they must
+# stay out of snapshot identity. `evaluator_binding` records a freshly measured
+# duration on every judgement, so re-judging byte-identical output would otherwise
+# produce a different digest and fork a duplicate revision for the same evidence.
+VOLATILE_EVIDENCE_KEYS = frozenset({"duration_ms"})
+
+
+def _snapshot_identity_items(result_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Identity projection of the frozen items: identical evidence -> identical digest.
+
+    The published snapshot still carries every measured value; only the digest input is
+    narrowed, so the append-only history keeps exactly one revision per real evidence
+    change while remaining explainable.
+    """
+    return [
+        {
+            **item,
+            "evaluation_results": [
+                {key: value for key, value in result.items() if key not in VOLATILE_EVIDENCE_KEYS}
+                for result in item.get("evaluation_results") or []
+            ],
+        }
+        for item in result_items
+    ]
+
+
 def _safe_scores(scores: dict[str, Any] | None) -> dict[str, float]:
     result: dict[str, float] = {}
     for key, value in (scores or {}).items():
@@ -234,7 +260,7 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
             })
     result_items = build_result_items(launch, items, attempts, typed_by_item)
     evidence_state, evidence_reasons = evaluate_snapshot_evidence(result_items)
-    source_digest = _canonical_digest(result_items)
+    source_digest = _canonical_digest(_snapshot_identity_items(result_items))
     existing = session.scalars(select(RunResultSnapshotRecord).where(
         RunResultSnapshotRecord.launch_id == launch.id,
         RunResultSnapshotRecord.source_result_digest == source_digest,

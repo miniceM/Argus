@@ -267,7 +267,7 @@ def test_link_backfill_does_not_mutate_frozen_manifest(tmp_path, monkeypatch):
     _sys.path[:0] = [str(ROOT / "tests")]
     from app.db_models import ExperimentItemExecutionRecord, LangfuseSyncTaskRecord
     from app.langfuse_links import LangfuseLaunchLinkService, LangfuseLinkResolver
-    from fake_langfuse import FakeLangfuseSDK, remote_run
+    from fake_langfuse import FakeLangfuseSDK
 
     db_mgr, registry = setup_db(tmp_path)
     launch_svc = LaunchService(db_mgr, registry, runner_version="0.1.0")
@@ -308,7 +308,7 @@ def test_link_backfill_does_not_mutate_frozen_manifest(tmp_path, monkeypatch):
         before_digest = record.manifest["dataset"].get("snapshot_digest")
 
     lf = FakeLangfuseSDK(
-        runs={("banking-agent-regression", launch.name): remote_run("ds-real", "run-1")}
+        dataset_ids={"banking-agent-regression": "ds-real"}
     )
     service = LangfuseLaunchLinkService(db_mgr, LangfuseLinkResolver(lf, "https://cloud.example.com"))
     result = service.ensure_launch_link(launch_id)

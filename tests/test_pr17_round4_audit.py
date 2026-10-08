@@ -17,7 +17,7 @@ from app.db_models import ExperimentLaunchRecord as Launch  # noqa: E402
 from app.db_models import LangfuseSyncTaskRecord as Task  # noqa: E402
 from app.langfuse_sync import LangfuseOutboxSyncer, _invoke_with_timeout, aggregate_launch_sync_status  # noqa: E402
 from app.main import _client  # noqa: E402
-from fake_langfuse import FakeLangfuseSDK, remote_run  # noqa: E402
+from fake_langfuse import FakeLangfuseSDK  # noqa: E402
 from link_helpers import make_service  # noqa: E402
 from sqlalchemy import event  # noqa: E402
 from test_pr17_review_regressions import create_launch_helper  # noqa: E402
@@ -71,7 +71,7 @@ def test_remote_run_id_persisted(setup_runtime):
         launch.dataset_id = "ds-real"
     lf = FakeLangfuseSDK(
         dataset_run_id="run-real",
-        runs={("banking-agent-regression", "audit-run"): remote_run("ds-real", "run-real")},
+        dataset_ids={"banking-agent-regression": "ds-real"},
     )
     service = make_service(db, lf, DASHBOARD)
 
@@ -183,7 +183,7 @@ def test_old_generation_run_id_does_not_override_launch(setup_runtime):
     # The derived link must describe the current generation run, never the old one.
     lf = FakeLangfuseSDK(
         dataset_run_id="new-run-id-gen2",
-        runs={("ds", "audit-run"): remote_run("ds-real", "new-run-id-gen2")},
+        dataset_ids={"ds": "ds-real"},
     )
     service = make_service(db, lf, DASHBOARD)
     assert service.ensure_launch_link(lid).status == "UPDATED"

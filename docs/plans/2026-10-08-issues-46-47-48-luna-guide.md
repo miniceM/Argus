@@ -162,5 +162,5 @@
 - `make validate`：PASS。Ruff、Token lint、OpenAPI/schema 同步、typecheck、build 与 Compose 静态校验通过；Vitest 27 文件 / 397 项通过；pytest 252 passed / 3 skipped。
 - 三项 PostgreSQL 实测跳过：未配置 `TEST_POSTGRES_URL`，分别为真实行锁、外键与 lock-wait `clock_timestamp` 检查。未启动或连接额外 PostgreSQL。
 - 既有构建大 chunk 提示及 Python datetime 弃用警告保留，本任务不扩大至包拆分或时间模型重构。
-- 本地提交顺序：#46 `1bad671`，#47 `03a1071`，#48 `docs(console): document isolated Playwright ports`（本记录随第三个提交落盘，最终 hash 见交付回复或 git log）。
+- 本地提交顺序为 #46、#47、#48（`test(console): cover launch filter result sets` → `test(console): strengthen core responsive layout coverage` → `docs(console): document isolated Playwright ports`）。合并走 squash，历史 hash 不可解析，复核请以文件位置为准：`services/console/e2e/launches-filter.spec.ts`、`services/console/e2e/responsive.spec.ts`、`CONTRIBUTING.md`。
 - 无生产代码/API/数据迁移改动，无 push/PR/远端 Issue 关闭，也未验证真实 Worker/Agent/Langfuse 完整链路或远端 CI。

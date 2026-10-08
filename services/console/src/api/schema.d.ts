@@ -2544,7 +2544,9 @@ export interface operations {
     create_agent_version_api_v1_agent_versions_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string | null;
+            };
             path?: never;
             cookie?: never;
         };

@@ -22,6 +22,7 @@ test("真实 API：创建凭据、Agent 选择、轮换、引用保护和停用"
     await page.getByRole("textbox", { name: /版本号/ }).fill("secured-v1");
     await page.getByRole("textbox", { name: "运行环境", exact: true }).fill(" Production ");
     await page.getByRole("combobox", { name: /选择凭据/ }).selectOption(credential.id);
+    await page.getByLabel("凭据绑定管理授权 Token").fill("argus-e2e-admin-token");
     await page.getByRole("button", { name: "确认创建版本" }).click();
     await expect(page.getByRole("cell", { name: "secured-v1" })).toBeVisible();
     const version = await (await request.get(`/api/v1/agent-versions?agent_id=${agent}&version=secured-v1`)).json();

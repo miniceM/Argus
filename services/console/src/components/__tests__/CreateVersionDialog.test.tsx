@@ -135,6 +135,7 @@ it("submits the same normalized environment used by Credential selection", async
   fireEvent.change(screen.getByRole("textbox", { name: /^运行环境$/ }), { target: { value: " Production " } });
   await screen.findByRole("option", { name: "生产凭据 · managed · cred-1" });
   fireEvent.change(screen.getByRole("combobox", { name: /选择凭据/ }), { target: { value: "cred-1" } });
+  fireEvent.change(screen.getByLabelText("凭据绑定管理授权 Token"), { target: { value: "example-binding-authorization" } });
   fireEvent.submit(document.getElementById("create-version-form")!);
   await waitFor(() => expect(api.POST).toHaveBeenCalledWith("/api/v1/agent-versions", expect.objectContaining({ body: expect.objectContaining({ credential_id: "cred-1", environment: "production" }) })));
 });
@@ -152,6 +153,24 @@ it("distinguishes same-name Credentials before binding a specific ID", async () 
   expect(second).toHaveAttribute("value", ids[1]);
   fireEvent.change(screen.getByRole("textbox", { name: /版本号/ }), { target: { value: "specific-credential" } });
   fireEvent.change(screen.getByRole("combobox", { name: /选择凭据/ }), { target: { value: ids[1] } });
+  fireEvent.change(screen.getByLabelText("凭据绑定管理授权 Token"), { target: { value: "example-binding-authorization" } });
   fireEvent.submit(document.getElementById("create-version-form")!);
   await waitFor(() => expect(api.POST).toHaveBeenCalledWith("/api/v1/agent-versions", expect.objectContaining({ body: expect.objectContaining({ credential_id: ids[1] }) })));
+});
+
+it("requires binding authorization and clears it after a successful version creation", async () => {
+  vi.mocked(api.POST).mockClear();
+  vi.mocked(api.GET).mockResolvedValue({ data: [{ id: "cred-1", name: "生产凭据", environment: "production", provider: "managed", enabled: true, version: 1 }], response: new Response() } as any);
+  vi.mocked(api.POST).mockResolvedValue({ data: {}, response: new Response() } as any);
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><CreateVersionDialog agentId="banking-agent" isOpen onClose={vi.fn()} /></QueryClientProvider>);
+  fireEvent.change(screen.getByRole("textbox", { name: /版本号/ }), { target: { value: "authorized-v1" } });
+  fireEvent.change(screen.getByRole("textbox", { name: /^运行环境$/ }), { target: { value: "production" } });
+  await screen.findByRole("option", { name: /生产凭据/ });
+  fireEvent.change(screen.getByRole("combobox", { name: /选择凭据/ }), { target: { value: "cred-1" } });
+  fireEvent.submit(document.getElementById("create-version-form")!);
+  expect(api.POST).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText("凭据绑定管理授权 Token"), { target: { value: "example-binding-authorization" } });
+  fireEvent.submit(document.getElementById("create-version-form")!);
+  await waitFor(() => expect(api.POST).toHaveBeenCalledWith("/api/v1/agent-versions", expect.objectContaining({ headers: { Authorization: "Bearer example-binding-authorization" } })));
+  await waitFor(() => expect(screen.queryByDisplayValue("example-binding-authorization")).not.toBeInTheDocument());
 });

@@ -34,6 +34,10 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
   const [isIdempotent, setIsIdempotent] = useState(false);
   const [credentialRef, setCredentialRef] = useState("");
   const [credentialId, setCredentialId] = useState("");
+  const [credentialAuthorization, setCredentialAuthorization] = useState("");
+  useEffect(() => {
+    if (!isOpen || !credentialId) setCredentialAuthorization("");
+  }, [isOpen, credentialId]);
   const credentials = useQuery({ queryKey: ["credentials"], enabled: isOpen, queryFn: async () => {
     const result = await api.GET("/api/v1/credentials");
     if (result.error || !result.data) throw new Error("无法加载凭据");
@@ -64,6 +68,7 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
       }
 
       const res = await api.POST("/api/v1/agent-versions", {
+        ...(credentialId ? { headers: { Authorization: `Bearer ${credentialAuthorization}` } } : {}),
         body: {
           agent_id: agentId,
           version: version.trim(),
@@ -90,6 +95,7 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
       return res.data;
     },
     onSuccess: () => {
+      setCredentialAuthorization("");
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.versions(agentId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agentId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.list() });
@@ -109,6 +115,10 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
     setFieldErrors(next);
     if (Object.keys(next).length > 0) {
       setErrorMsg("请填写版本号与远程 HTTP 端点");
+      return;
+    }
+    if (credentialId && !credentialAuthorization.trim()) {
+      setErrorMsg("绑定凭据需要管理授权 Token，请由管理员确认端点可信。");
       return;
     }
     mutation.mutate();
@@ -297,7 +307,7 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
                   {...aria}
                   id={id}
                   value={credentialId}
-                  onChange={(e) => { setCredentialId(e.target.value); setCredentialRef(""); }}
+                  onChange={(e) => { setCredentialId(e.target.value); setCredentialRef(""); setCredentialAuthorization(""); }}
                   className="w-full font-mono"
                 >
                   <option value="">无需鉴权 / 使用历史引用</option>
@@ -324,6 +334,10 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
               )}
             </Field>
           </div>
+
+          {credentialId && <Field label="凭据绑定管理授权 Token" hint="绑定会允许 Runner 向此端点发送凭据，需管理员确认端点可信。授权仅用于本次操作。">
+            {({ id }) => <TextInput id={id} type="password" autoComplete="off" required value={credentialAuthorization} onChange={e => setCredentialAuthorization(e.target.value)} />}
+          </Field>}
 
           {credentials.isError && <p role="alert" className="text-sm text-fail">凭据列表加载失败，请关闭并重试，或前往 Credentials 检查服务状态。</p>}
           <details className="text-sm text-foreground-secondary">

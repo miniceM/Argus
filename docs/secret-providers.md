@@ -35,7 +35,9 @@ docker compose --env-file .env.poc -f docker-compose.yml -f deploy/credentials.c
 `ARGUS_MANAGED_SECRET_KEY_FILE` 和 `ARGUS_CREDENTIAL_ADMIN_TOKEN_FILE` 读取。部署使用不同
 UID 时，应设置文件所有者让 Runner 能读取，不能放宽为组或全局可读。
 在 Console 创建名称、环境与 Token，管理授权 Token 由部署管理员安全交付。
-创建 AgentVersion 时选同一环境的 Credential，即可发起正式评测；无鉴权 Agent 可不选。Console 将环境名称去除首尾空白并转为小写；有声明环境的 AgentVersion 只能用于同环境的 Launch。绑定 Credential 时未填写环境会冻结为 production；旧凭据版本的空环境也按 production 校验，不能跨环境发起评测。同名凭据的选项显示 ID 后缀，绑定仍提交完整 ID。
+创建 AgentVersion 时选同一环境的 Credential，并提交现有管理授权 Token 批准其目标端点，即可发起正式评测；无鉴权 Agent 可不选。Console 将环境名称去除首尾空白并转为小写；有声明环境的 AgentVersion 只能用于同环境的 Launch。绑定 Credential 时未填写环境会冻结为 production；旧凭据版本的空环境也按 production 校验，不能跨环境发起评测。同名凭据的选项显示 ID 后缀，绑定仍提交完整 ID。
+
+绑定 `credential_id` 的 `POST /api/v1/agent-versions` 同样需管理授权，防止普通 API 用户把凭据发送到自己控制的端点。已有批准的不可变版本仍可正常执行；无凭据版本保持原有行为。YAML 导入只用于管理员控制的启动配置，不提供公开导入 API。
 
 写操作 `POST /api/v1/credentials`、`/{id}/rotate`、`/{id}/disable`、`/rewrap` 与
 `DELETE /{id}` 需独立 Bearer 管理授权。未配置授权/主密钥则拒绝写入；错误响应不回显输入。

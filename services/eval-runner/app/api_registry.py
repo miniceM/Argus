@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
+from .api_credentials import authorize as authorize_credential
 from .models import (
     AgentConcurrencyError,
     AgentCreateRequest,
@@ -195,7 +196,11 @@ def purge_agent_by_path(
 def create_agent_version(
     payload: AgentVersionCreateRequest,
     reg: AgentRegistry = Depends(get_registry),
+    authorization: str | None = Header(default=None),
 ) -> AgentVersionResponse:
+    # 绑定即授权 Runner 向该不可变端点发送 Secret，复用现有管理授权。
+    if payload.credential_id:
+        authorize_credential(authorization)
     try:
         version = reg.create_version(
             agent_id=payload.agent_id,

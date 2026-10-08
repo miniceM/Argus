@@ -287,6 +287,24 @@
         ],
         "summary": "Register a new immutable Agent Version specification",
         "operationId": "create_agent_version_api_v1_agent_versions_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {

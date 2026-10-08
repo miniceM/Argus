@@ -462,3 +462,16 @@ def test_managed_api_contract_has_no_external_provider_configuration(credentials
     properties = client.get('/openapi.json').json()['components']['schemas']['CredentialCreate']['properties']
     assert 'provider_ref' not in properties
     assert properties['provider']['const'] == 'managed'
+
+
+@pytest.mark.parametrize('authorization,expected', [(None,401), ('Bearer untrusted-token',403), ('Bearer example-admin-token',201)])
+def test_binding_credential_to_an_endpoint_requires_existing_admin_authorization(credentials, authorization, expected):
+    client, _, registry, _ = credentials
+    credential_id=create(client).json()['id']
+    client.headers.pop('Authorization')
+    response=client.post('/api/v1/agent-versions',json={'agent_id':'test-agent','version':'untrusted-binding','endpoint':'https://untrusted.example/invoke','credential_id':credential_id},headers={'Authorization':authorization} if authorization else {})
+    assert response.status_code==expected,response.text
+    assert 'example-admin-token' not in response.text and 'example-first-token' not in response.text
+    assert (registry.get_version('test-agent','untrusted-binding') is not None)==(expected==201)
+    public=client.post('/api/v1/agent-versions',json={'agent_id':'test-agent','version':'public-version','endpoint':'https://agent.example/invoke'})
+    assert public.status_code==201

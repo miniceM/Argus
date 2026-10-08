@@ -287,7 +287,22 @@ jobs:
             printf 'LANGFUSE_BASE_URL=%s\n' "$LANGFUSE_BASE_URL"
             printf 'LANGFUSE_PUBLIC_KEY=%s\n' "$LANGFUSE_PUBLIC_KEY"
             printf 'LANGFUSE_SECRET_KEY=%s\n' "$LANGFUSE_SECRET_KEY"
+            # CI-only default: the managed Cloud API host also serves the UI. This must never
+            # become an application runtime fallback for ARGUS_LANGFUSE_DASHBOARD_URL.
+            printf 'ARGUS_LANGFUSE_DASHBOARD_URL=%s\n' "$LANGFUSE_BASE_URL"
           } > .env.cloud
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/eval-runner/requirements.txt
+
+      - name: Install async link verification dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m venv .venv
+          .venv/bin/python -m pip install -r services/eval-runner/requirements.txt
 
       - name: Run cloud end-to-end tests
         env:

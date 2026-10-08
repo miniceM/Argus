@@ -59,6 +59,46 @@ make console-e2e
 
 Console UI 改动请先阅读 `.agents/skills/argus-design-system/SKILL.md`。
 
+### Playwright E2E：隔离服务与端口
+
+从仓库根目录运行。先完成上述 Python 虚拟环境和 Console 依赖安装；浏览器项目使用 `channel: "chrome"`，本机需有可启动的 Google Chrome。配置来源为 `services/console/playwright.config.ts`、`services/console/vite.config.ts` 和 `services/console/package.json`。
+
+| 测试服务 | 默认端口 | 覆盖变量 |
+|---|---|---|
+| Eval Runner API | `18080` | `ARGUS_E2E_API_PORT` |
+| Console Preview | `18083` | `ARGUS_E2E_CONSOLE_PORT` |
+
+端口值必须为 **1–65535 的整数**，否则配置加载时会报错。有效范围不代表端口可用：两个端口应不同、空闲且有绑定权限；并行运行不同 checkout 时，各自使用不同的端口对。
+
+推荐入口会先构建当前源码，再启动测试，避免误测旧 `dist/`：
+
+```bash
+ARGUS_E2E_API_PORT=28080 ARGUS_E2E_CONSOLE_PORT=28083 make console-e2e
+```
+
+等价的分步命令（`test:e2e` 自身不会 build）：
+
+```bash
+pnpm --dir services/console build
+ARGUS_E2E_API_PORT=28080 ARGUS_E2E_CONSOLE_PORT=28083 pnpm --dir services/console test:e2e
+```
+
+Playwright 会自行启动绑定于 `127.0.0.1` 的 API 和 Console Preview，**不会复用开发者或 Compose 已运行的服务**（两者均设置 `reuseExistingServer: false`）。API 以 test 模式使用独立 SQLite 文件 `/tmp/argus_playwright_e2e_<API端口>.db`，启动前会删除同名测试数据库。部分场景会创建真实 Launch；不要让测试连接开发环境，也不要把服务复用改成 `true` 来绕过端口冲突。Console 的 API proxy 同步读取 `ARGUS_E2E_API_PORT`。
+
+端口冲突时先检查占用者，改用空闲端口，不必停止已有开发服务。在 macOS / 安装了 `lsof` 的 Linux 上可以运行：
+
+```bash
+# 检查默认端口是否被 Compose 或其它服务占用
+lsof -nP -iTCP:18080 -iTCP:18083 -sTCP:LISTEN
+
+# 按覆盖命令测试后，检查测试服务是否已退出
+lsof -nP -iTCP:28080 -iTCP:28083 -sTCP:LISTEN
+```
+
+正常测试结束（包含断言失败）后，Playwright 会停止自己启动的服务；第二条检查应无 LISTEN 输出（`lsof` 无匹配时返回 1）。SQLite 文件可能保留，不代表服务仍在运行。若进程被强制杀死或机器异常，先通过 `lsof` 核对残留进程归属，再处理；不要误杀开发服务。
+
+隔离真实 API 场景验证 Console/API 创建与 Frozen Manifest，不等于完整真实 Agent → Worker → Langfuse 执行验收。
+
 ## Commit 与 PR
 
 - 分支建议：`codex/<简短描述>`（其他前缀也可以，但请保持短且语义清晰）。

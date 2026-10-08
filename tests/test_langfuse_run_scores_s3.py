@@ -297,3 +297,27 @@ def test_run_score_partial_success_retries_with_same_score_ids(setup_runtime):
     assert syncer.process_batch() == 1
     assert _score_task(db_mgr, snapshot_id).status == "SYNCED"
     assert [call["id"] for call in client.calls[:2]] == [call["id"] for call in client.calls[2:4]]
+
+
+def test_run_scores_publish_without_derived_link(setup_runtime):
+    """Run score publication depends on the run id, never on a derived browser link."""
+    db_mgr, _, _, _, _, _ = setup_runtime
+    launch_id = _create_completed_launch(db_mgr)
+    with db_mgr.get_session() as session:
+        launch = session.get(ExperimentLaunchRecord, launch_id)
+        launch.manifest["dataset"]["source"] = "langfuse"
+        launch.langfuse_sync_status = "SYNCED"
+        launch.langfuse_experiment_id = "dataset-run-sync"
+        launch.langfuse_experiment_url = None  # link backfill has not run yet
+        create_result_snapshot(session, launch)
+        session.commit()
+
+    client = FakeLangfuse()
+    assert LangfuseRunScoreSyncer(db_mgr, client).process_batch() == 1
+    assert client.scores
+    assert all(score["dataset_run_id"] == "dataset-run-sync" for score in client.scores)
+    with db_mgr.get_session() as session:
+        launch = session.get(ExperimentLaunchRecord, launch_id)
+        assert launch.langfuse_experiment_url is None
+        task = session.query(LangfuseRunScoreTaskRecord).filter_by(launch_id=launch_id).one()
+        assert task.status == "SYNCED"

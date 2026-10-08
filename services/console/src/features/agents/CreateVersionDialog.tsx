@@ -290,7 +290,7 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
                   {...aria}
                   id={id}
                   type="text"
-                  placeholder="env://API_TOKEN 或 vault://path"
+                  placeholder="vault://secret/agents/banking#token"
                   value={credentialRef}
                   onChange={(e) => setCredentialRef(e.target.value)}
                   className="w-full font-mono"

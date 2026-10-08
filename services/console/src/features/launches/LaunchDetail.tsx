@@ -26,7 +26,9 @@ import { SyncStatusBadge } from "../../components/SyncStatusBadge";
 import { JsonViewer } from "../../components/JsonViewer";
 import { ItemTable } from "./ItemTable";
 import { ComparisonReport } from "./ComparisonReport";
-import { ACTIVE_LAUNCH_STATUSES, LaunchStatus } from "./LaunchesList";
+import { getLangfuseLinkView } from "./langfuseLink";
+import { isLaunchExecutionActive } from "./launchState";
+import { useLaunchPolling } from "./useLaunchPolling";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { Button, PageHeader, Panel, buttonClassName } from "../../components/ui/Primitives";
 import { Modal } from "../../components/ui/Overlay";
@@ -267,6 +269,8 @@ export const LaunchDetail: React.FC = () => {
   }, [launchId]);
 
   // 1. Fetch Launch Details with S2 Polling
+  const launchPollingInterval = useLaunchPolling<LaunchResponse>(1500);
+
   const {
     data: launch,
     isLoading: isLaunchLoading,
@@ -300,16 +304,9 @@ export const LaunchDetail: React.FC = () => {
       return res.data as LaunchResponse;
     },
     enabled: Boolean(launchId),
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      if (
-        data &&
-        ACTIVE_LAUNCH_STATUSES.has((data.status?.toUpperCase() || "") as LaunchStatus)
-      ) {
-        return 1500;
-      }
-      return false;
-    },
+    // Keeps polling while executing, while sync is running, and during the
+    // bounded window where a synced link may still arrive.
+    refetchInterval: (query) => launchPollingInterval(query.state.data as LaunchResponse | undefined),
   });
 
   // 2. Fetch Items with S2 Polling
@@ -349,10 +346,9 @@ export const LaunchDetail: React.FC = () => {
       ) {
         return 1500;
       }
-      if (
-        launch &&
-        ACTIVE_LAUNCH_STATUSES.has((launch.status?.toUpperCase() || "") as LaunchStatus)
-      ) {
+      // Issue #44: items only refresh while the launch executes; waiting for a
+      // pending Langfuse link never multiplies item traffic.
+      if (launch && isLaunchExecutionActive(launch.status)) {
         return 1500;
       }
       return false;
@@ -497,6 +493,7 @@ export const LaunchDetail: React.FC = () => {
   const manifest = (launch.manifest || {}) as ManifestData;
   const manifestAgent = manifest.agent || {};
   const manifestPolicy = manifest.execution_policy || manifestAgent.execution_policy || {};
+  const langfuseLink = getLangfuseLinkView(launch);
   const manifestEvaluators = manifest.evaluators || [];
   const manifestRunner = manifest.runner || {};
 
@@ -614,17 +611,25 @@ export const LaunchDetail: React.FC = () => {
                 </Button>
               )}
 
-              {launch.langfuse_experiment_url && (
+              {langfuseLink.kind === "link" ? (
                 <a
-                  href={launch.langfuse_experiment_url}
+                  href={langfuseLink.href}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="在 Langfuse 中查看"
                   className={buttonClassName("secondary", "text-xs")}
                 >
-                  <span>在 Langfuse 中查看</span>
+                  <span>{langfuseLink.detailLabel}</span>
                   <ExternalLink className="h-3.5 w-3.5" />
                 </a>
+              ) : (
+                <span
+                  className="text-xs text-muted-foreground"
+                  title={langfuseLink.title}
+                  data-testid="langfuse-link-reason"
+                >
+                  {langfuseLink.label}
+                </span>
               )}
             </>
           )}

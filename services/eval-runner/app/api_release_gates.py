@@ -76,6 +76,7 @@ def create_release_policy(payload: ReleasePolicy) -> ReleasePolicyResponse:
                 return _policy_response(existing)
             record = ReleasePolicyRecord(
                 id=str(uuid.uuid4()), name=payload.name, version=payload.version,
+                agent_id=payload.agent_id,
                 definition=payload.model_dump(mode="json"), policy_digest=payload.content_digest,
             )
             session.add(record)

@@ -132,6 +132,8 @@ def _comparison(candidate, baseline) -> tuple[dict[str, Any], list[str]]:
         return {}, ["BASELINE_NOT_BOUND"]
     if baseline.id != frozen_id or baseline.agent_id != candidate.agent_id:
         return {}, ["BASELINE_IDENTITY_MISMATCH"]
+    if baseline.manifest.get("comparison", {}).get("environment", "production") != candidate.manifest.get("comparison", {}).get("environment", "production"):
+        return {}, ["BASELINE_ENVIRONMENT_MISMATCH"]
     reasons = _evidence_reasons(baseline, "BASELINE")
     comparability = assess_comparability(baseline.manifest, candidate.manifest)
     reasons.extend(comparability.reason_codes)

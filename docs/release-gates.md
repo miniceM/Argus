@@ -47,9 +47,9 @@ curl --fail-with-body -X POST "$ARGUS_API_URL/api/v1/release-policies" \
 
 仅 `PASS` 且 `releasable=true` 可放行。阈值违反或 critical 失败得到 `FAIL`。证据不完整、历史契约未知、缺失指标、critical 证据缺失或不可比得到 `UNKNOWN`，同样阻断发布，并返回逐规则实际值和原因码。
 
-相对规则只使用 Candidate Manifest 中的 `baseline_snapshot_id`；更新当前 Baseline 不会移动该引用。两侧必须覆盖相同用例、拥有完整证据，并满足 Dataset 身份、Measurement、Quality Policy、Aggregation/Comparison 的既有可比契约。缺少 Baseline 时不会伪造零退化。
+相对规则只使用 Candidate Manifest 中的 `baseline_snapshot_id`；更新当前 Baseline 不会移动该引用。两侧必须属于同一 environment、覆盖相同用例、拥有完整证据，并满足 Dataset 身份、Measurement、Quality Policy、Aggregation/Comparison 的既有可比契约。缺少 Baseline 时不会伪造零退化。
 
-Gate 返回固定修订的报告链接、策略摘要、候选与基线 Snapshot ID/revision/digest、引擎版本和创建时间。数据库外键保留被引用的 Snapshot；Purge 此类 Agent 返回 409，避免清理已发布的证据。
+Gate 返回固定修订的报告链接、策略摘要、候选与基线 Snapshot ID/revision/digest、引擎版本和创建时间。数据库外键保留被引用的 Snapshot；Purge 此类 Agent 返回 409，包括并发插入 Gate 时的冲突。策略有显式 Agent 外键；没有 Gate 的策略随 Agent 清理，避免遗留可被同名 Agent 复用的策略。
 
 ## 部署与治理边界
 

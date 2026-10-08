@@ -328,32 +328,32 @@ class AgentRegistry:
             if retained_gate:
                 raise AgentConcurrencyError(agent_id=agent_id, reason="发布门禁引用的 Snapshot 必须保留，不能清理该 Agent")
 
-            # Set status to "deleting" and flush to block concurrent launch creations
-            agent.status = "deleting"
-            session.flush()
-
-            if launch_count > 0:
-                # Force delete: clean launches and their dependent records in local DB only.
-                # Notice: we DO NOT call Langfuse API/SDK.
-                launch_ids = [launch_rec.id for launch_rec in launches]
-                if launch_ids:
-                    # Clean up sync tasks explicitly for database engines without full ON DELETE CASCADE support (like SQLite in tests)
-                    session.execute(
-                        delete(LangfuseSyncTaskRecord).where(
-                            LangfuseSyncTaskRecord.launch_id.in_(launch_ids)
-                        )
-                    )
-                    # Clear final_attempt_id to avoid circular foreign key dependency during deletion
-                    session.execute(
-                        update(ExperimentItemExecutionRecord)
-                        .where(ExperimentItemExecutionRecord.launch_id.in_(launch_ids))
-                        .values(final_attempt_id=None)
-                    )
-                    for launch in launches:
-                        session.delete(launch)
-                    session.flush()
-
             try:
+                # Set status to "deleting" and flush to block concurrent launch creations
+                agent.status = "deleting"
+                session.flush()
+
+                if launch_count > 0:
+                    # Force delete: clean launches and their dependent records in local DB only.
+                    # Notice: we DO NOT call Langfuse API/SDK.
+                    launch_ids = [launch_rec.id for launch_rec in launches]
+                    if launch_ids:
+                        # Clean up sync tasks explicitly for database engines without full ON DELETE CASCADE support (like SQLite in tests)
+                        session.execute(
+                            delete(LangfuseSyncTaskRecord).where(
+                                LangfuseSyncTaskRecord.launch_id.in_(launch_ids)
+                            )
+                        )
+                        # Clear final_attempt_id to avoid circular foreign key dependency during deletion
+                        session.execute(
+                            update(ExperimentItemExecutionRecord)
+                            .where(ExperimentItemExecutionRecord.launch_id.in_(launch_ids))
+                            .values(final_attempt_id=None)
+                        )
+                        for launch in launches:
+                            session.delete(launch)
+                        session.flush()
+
                 session.delete(agent)
                 session.commit()
             except IntegrityError as exc:

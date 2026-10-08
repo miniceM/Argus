@@ -428,6 +428,7 @@ class ReleasePolicyRecord(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     version: Mapped[str] = mapped_column(String(64), nullable=False)
+    agent_id: Mapped[str] = mapped_column(String(128), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
     definition: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     policy_digest: Mapped[str] = mapped_column(String(128), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)

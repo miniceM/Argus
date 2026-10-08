@@ -93,6 +93,51 @@ def test_relative_rules_use_every_case_and_frozen_baseline():
     assert result.baseline_snapshot_id == baseline.id
 
 
+def test_relative_gate_rejects_baseline_from_another_environment():
+    baseline = snapshot()
+    baseline.manifest["comparison"]["environment"] = "staging"
+    candidate = snapshot(baseline_id=baseline.id)
+    result = evaluate_gate(policy(
+        {"id": "regressions", "metric": "regression_count", "operator": "<=", "threshold": 0},
+    ), candidate, baseline)
+    assert result.decision == "UNKNOWN"
+    assert "BASELINE_ENVIRONMENT_MISMATCH" in result.reason_codes
+
+
+def test_agent_purge_removes_unused_policies_instead_of_orphaning_them(setup_runtime, monkeypatch):
+    monkeypatch.setattr(main, "db_manager", setup_runtime[0])
+    monkeypatch.setattr(main, "registry", AgentRegistry(setup_runtime[0]))
+    client = TestClient(main.app)
+    draft = policy().model_dump()
+    assert client.post("/api/v1/release-policies", json=draft).status_code == 201
+    assert client.post("/api/v1/agents/purge", json={"agent_id": "test-agent", "confirm_name": "Test Agent"}).status_code == 200
+    assert client.get("/api/v1/release-policies", params={"name": draft["name"], "version": draft["version"]}).status_code == 404
+
+
+def test_purge_flush_conflict_returns_409_and_rolls_back(setup_runtime, monkeypatch):
+    from sqlalchemy.orm import Session
+
+    manager = setup_runtime[0]
+    candidate = snapshot()
+    store_snapshot(manager, candidate)
+    original = Session.flush
+
+    def race(session, *args, **kwargs):
+        if any(isinstance(record, ExperimentLaunchRecord) for record in session.deleted):
+            raise IntegrityError("gate inserted during purge", {}, Exception("restricted snapshot"))
+        return original(session, *args, **kwargs)
+
+    monkeypatch.setattr(main, "db_manager", manager)
+    monkeypatch.setattr(main, "registry", AgentRegistry(manager))
+    monkeypatch.setattr(Session, "flush", race)
+    response = TestClient(main.app, raise_server_exceptions=False).post(
+        "/api/v1/agents/purge", json={"agent_id": "test-agent", "confirm_name": "Test Agent"},
+    )
+    assert response.status_code == 409
+    with manager.get_session() as session:
+        assert session.get(ExperimentLaunchRecord, candidate.launch_id) is not None
+
+
 @pytest.mark.parametrize("problem", ["missing", "wrong_id", "contract", "dataset", "case", "diagnostic"])
 def test_noncomparable_baseline_is_unknown_not_zero_regressions(problem):
     baseline = snapshot()

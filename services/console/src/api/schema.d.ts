@@ -467,7 +467,8 @@ export interface paths {
          */
         get: operations["list_launch_result_snapshots_api_v1_experiment_launches__launch_id__result_snapshots_get"];
         put?: never;
-        post?: never;
+        /** Freeze current settled results for a release gate */
+        post: operations["freeze_run_results_api_v1_experiment_launches__launch_id__result_snapshots_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -523,6 +524,58 @@ export interface paths {
         };
         /** Read frozen baseline and candidate outputs for one comparison case */
         get: operations["get_comparison_case_api_v1_experiment_launches__launch_id__comparison_case_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/release-policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Release Policy */
+        get: operations["get_release_policy_api_v1_release_policies_get"];
+        put?: never;
+        /** Create Release Policy */
+        post: operations["create_release_policy_api_v1_release_policies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/release-gates/evaluate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Release Gate */
+        post: operations["create_release_gate_api_v1_release_gates_evaluate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/release-gates/{gate_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Release Gate */
+        get: operations["get_release_gate_api_v1_release_gates__gate_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1301,6 +1354,17 @@ export interface components {
              */
             active_launch_count?: number | null;
         };
+        /** EvaluateGateRequest */
+        EvaluateGateRequest: {
+            /** Policy Name */
+            policy_name: string;
+            /** Policy Version */
+            policy_version: string;
+            /** Candidate Launch Id */
+            candidate_launch_id: string;
+            /** Candidate Snapshot Id */
+            candidate_snapshot_id: string;
+        };
         /**
          * EvaluationResultProvenance
          * @description Frozen evidence source of one typed result (Issue #82).
@@ -1750,6 +1814,12 @@ export interface components {
              * @default 0
              */
             recoverable_evaluation_count: number;
+            /**
+             * Evaluating
+             * @description 不依赖执行终态的在途 evaluation-only 工作数
+             * @default 0
+             */
+            evaluating: number;
         };
         /** ExperimentLaunchResponse */
         ExperimentLaunchResponse: {
@@ -1868,6 +1938,29 @@ export interface components {
             result: {
                 [key: string]: unknown;
             };
+        };
+        /** GateRuleResult */
+        GateRuleResult: {
+            /** Id */
+            id: string;
+            /** Metric */
+            metric: string;
+            /**
+             * Operator
+             * @enum {string}
+             */
+            operator: ">=" | "<=";
+            /** Threshold */
+            threshold: number;
+            /** Actual */
+            actual: number | null;
+            /**
+             * Conclusion
+             * @enum {string}
+             */
+            conclusion: "PASS" | "FAIL" | "UNKNOWN";
+            /** Reason */
+            reason: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -2056,6 +2149,117 @@ export interface components {
             critical: boolean;
             /** Note */
             note?: string | null;
+        };
+        /** ReleaseGateResponse */
+        ReleaseGateResponse: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "PASS" | "FAIL" | "UNKNOWN";
+            /** Releasable */
+            releasable: boolean;
+            /**
+             * Engine Version
+             * @default release-gate-v3
+             */
+            engine_version: string;
+            /** Candidate Snapshot Id */
+            candidate_snapshot_id: string;
+            /** Baseline Snapshot Id */
+            baseline_snapshot_id?: string | null;
+            /** Reason Codes */
+            reason_codes: string[];
+            /** Rules */
+            rules: components["schemas"]["GateRuleResult"][];
+            /** Id */
+            id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            policy: components["schemas"]["ReleasePolicy"];
+            /** Policy Digest */
+            policy_digest: string;
+            /** Candidate Launch Id */
+            candidate_launch_id: string;
+            /** Candidate Revision */
+            candidate_revision: number;
+            /** Candidate Manifest Digest */
+            candidate_manifest_digest: string;
+            /** Candidate Source Result Digest */
+            candidate_source_result_digest: string;
+            /** Baseline Revision */
+            baseline_revision?: number | null;
+            /** Baseline Manifest Digest */
+            baseline_manifest_digest?: string | null;
+            /** Baseline Source Result Digest */
+            baseline_source_result_digest?: string | null;
+            /** Report Url */
+            report_url: string;
+            /** Comparison Url */
+            comparison_url: string;
+        };
+        /** ReleasePolicy */
+        ReleasePolicy: {
+            /** Name */
+            name: string;
+            /** Version */
+            version: string;
+            /** Agent Id */
+            agent_id: string;
+            /**
+             * Environment
+             * @default production
+             */
+            environment: string;
+            /**
+             * Block Critical Failures
+             * @default true
+             */
+            block_critical_failures: boolean;
+            /** Rules */
+            rules: components["schemas"]["ReleaseRule"][];
+        };
+        /** ReleasePolicyResponse */
+        ReleasePolicyResponse: {
+            /** Name */
+            name: string;
+            /** Version */
+            version: string;
+            /** Agent Id */
+            agent_id: string;
+            /**
+             * Environment
+             * @default production
+             */
+            environment: string;
+            /**
+             * Block Critical Failures
+             * @default true
+             */
+            block_critical_failures: boolean;
+            /** Rules */
+            rules: components["schemas"]["ReleaseRule"][];
+            /** Id */
+            id: string;
+            /** Policy Digest */
+            policy_digest: string;
+        };
+        /** ReleaseRule */
+        ReleaseRule: {
+            /** Id */
+            id: string;
+            /** Metric */
+            metric: string;
+            /**
+             * Operator
+             * @enum {string}
+             */
+            operator: ">=" | "<=";
+            /** Threshold */
+            threshold: number;
         };
         /**
          * ResultSnapshotDetailResponse
@@ -3428,6 +3632,37 @@ export interface operations {
             };
         };
     };
+    freeze_run_results_api_v1_experiment_launches__launch_id__result_snapshots_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_launch_result_snapshot_api_v1_experiment_launches__launch_id__result_snapshots__snapshot_id__get: {
         parameters: {
             query?: never;
@@ -3517,6 +3752,135 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ComparisonCaseOutputResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_release_policy_api_v1_release_policies_get: {
+        parameters: {
+            query: {
+                name: string;
+                version: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleasePolicyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_release_policy_api_v1_release_policies_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleasePolicy"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleasePolicyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_release_gate_api_v1_release_gates_evaluate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvaluateGateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseGateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_release_gate_api_v1_release_gates__gate_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseGateResponse"];
                 };
             };
             /** @description Validation Error */

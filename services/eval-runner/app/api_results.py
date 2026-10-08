@@ -76,7 +76,7 @@ def _versions(manifest: dict[str, Any]) -> dict[str, Any]:
 
 
 def _get_snapshot(
-    session, launch_id: str, snapshot_id: str | None = None
+    session, launch_id: str, snapshot_id: str | None = None, *, refresh: bool = False
 ) -> tuple[ExperimentLaunchRecord, RunResultSnapshotRecord]:
     launch = session.get(ExperimentLaunchRecord, launch_id)
     if not launch:
@@ -93,8 +93,13 @@ def _get_snapshot(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Result snapshot not found")
         return launch, snapshot
 
-    snapshot = latest_result_snapshot(session, launch_id)
-    if snapshot is None and launch.status in {"COMPLETED", "PARTIAL_FAILED", "FAILED", "CANCELLED"}:
+    # 发布门禁显式要求当前已完成的结果，不能回退到评测重试前的快照。
+    if refresh:
+        snapshot = create_result_snapshot(session, launch)
+        session.commit()
+    else:
+        snapshot = latest_result_snapshot(session, launch_id)
+    if not refresh and snapshot is None and launch.status in {"COMPLETED", "PARTIAL_FAILED", "FAILED", "CANCELLED"}:
         snapshot = create_result_snapshot(session, launch)
         session.commit()
     if snapshot is None:
@@ -111,12 +116,11 @@ def _dataset_identity(manifest: dict[str, Any]) -> tuple[str, str] | None:
     return source.strip(), dataset_id.strip()
 
 
-@router.get("/{launch_id}/summary", response_model=RunSummaryResponse, summary="Get a stable run-level evaluation summary")
-def get_run_summary(
-    launch_id: str, snapshot_id: str | None = None
+def _run_summary(
+    launch_id: str, snapshot_id: str | None = None, *, refresh: bool = False
 ) -> RunSummaryResponse:
     with _db_manager().get_session() as session:
-        _, snapshot = _get_snapshot(session, launch_id, snapshot_id)
+        _, snapshot = _get_snapshot(session, launch_id, snapshot_id, refresh=refresh)
         from .db_models import LangfuseRunScoreTaskRecord
 
         score_task = session.scalars(select(LangfuseRunScoreTaskRecord).where(
@@ -139,6 +143,19 @@ def get_run_summary(
             langfuse_score_sync_status=score_sync_status,
             langfuse_sync=_sync_status(launch_id),
         )
+
+
+@router.get("/{launch_id}/summary", response_model=RunSummaryResponse, summary="Get a stable run-level evaluation summary")
+def get_run_summary(launch_id: str, snapshot_id: str | None = None) -> RunSummaryResponse:
+    return _run_summary(launch_id, snapshot_id)
+
+
+@router.post(
+    "/{launch_id}/result-snapshots", response_model=RunSummaryResponse,
+    summary="Freeze current settled results for a release gate",
+)
+def freeze_run_results(launch_id: str) -> RunSummaryResponse:
+    return _run_summary(launch_id, refresh=True)
 
 
 def _revision_row(snapshot: RunResultSnapshotRecord, is_latest: bool) -> ResultSnapshotRevisionResponse:

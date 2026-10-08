@@ -131,6 +131,7 @@ Remote Agent Runner ── W3C Trace Context ──► 业务 Agent
 | 异步执行 | Redis Streams 队列 + Worker、可靠执行状态机、`cancel` / `resume` / `retry-failed`、分布式限流 |
 | 评测与对比 | 确定性 item-level Evaluator、Run-level 汇总与 Score、Baseline 绑定、Candidate 对比（含单用例） |
 | Console | React + TypeScript 控制台：Agent、Launch、Evaluator、对比视图 |
+| 发布门禁 | 不可变策略、固定 Snapshot 的绝对/相对规则、critical veto、Gate API；见 [发布门禁](./docs/release-gates.md) 与 [CLI/CI 集成](./docs/release-cli.md) |
 | 界面语言 | 官方 Langfuse 的独立 `zh-CN` Patch Layer 镜像 |
 
 ### Roadmap
@@ -143,9 +144,9 @@ Remote Agent Runner ── W3C Trace Context ──► 业务 Agent
 | S3 | 版本化评测、Baseline Comparison、Run-level Score | ✅ 已完成 |
 | S4 | Standard Agent Trajectory、Trace Assembler、深度轨迹评测 | 🚧 规划中 |
 | S5 | Vault、RBAC、SSO、Audit、数据脱敏 | 🚧 规划中 |
-| S6 | ReleasePolicy、Release Gate、CLI、CI/CD 集成 | 🚧 规划中 |
+| S6 | ReleasePolicy、Release Gate、CLI、CI/CD 集成 | 🚧 规则/API、CLI 与 CI 示例已实现，授权治理继续推进 |
 
-当前版本仍不是完整的 v1.0 企业平台；尚未覆盖 LLM-as-a-Judge 版本治理、Agent Trajectory、Worker 独立扩缩容、SSO / RBAC、Release Gate 等能力。路线图见 [Roadmap Issue #1](https://github.com/miniceM/Argus/issues/1)。
+当前版本仍不是完整的 v1.0 企业平台；尚未覆盖 LLM-as-a-Judge 版本治理、Agent Trajectory、Worker 独立扩缩容、SSO / RBAC、发布 Override 授权等能力。路线图见 [Roadmap Issue #1](https://github.com/miniceM/Argus/issues/1)。
 
 ---
 

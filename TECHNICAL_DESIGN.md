@@ -1115,6 +1115,16 @@ Runner 在执行时按最小权限读取。
 
 ## 19. Release Gate
 
+### 19.1 当前实现
+
+Issue #7 的首批实现提供不可变 `ReleasePolicy(name, version)` 和持久化 `ReleaseGate`。策略固定 Agent/environment、绝对/相对规则与 critical veto；Gate 输入必须是明确的 Candidate Snapshot ID，相对规则从该 Snapshot Manifest 读取冻结 Baseline。策略修改需新版本，同一策略摘要、Snapshot 和引擎版本的请求幂等。
+
+判定为 `PASS`、`FAIL`、`UNKNOWN`，仅 `PASS` 可放行。完整证据、全用例覆盖、分层契约可比性优先于阈值判定；未知指标、缺失 critical 证据与诊断快照均不能发布。逐规则结果、原始策略、双方 Snapshot 修订与摘要一起保存，外键限制删除被引用的证据。
+
+API 契约见 [OpenAPI](./docs/openapi.json)，使用方式和当前指标见 [发布门禁](./docs/release-gates.md)。本期不包含成本/Judge 不确定性规则、Console 策略编辑器、授权 Override 与身份审计，这些仍是后续范围。
+
+### 19.2 完整能力目标
+
 最终目标不是“生成一张评测报表”，而是形成软件发布质量门禁。
 
 示例规则：
@@ -1347,7 +1357,7 @@ v2: 6/6 overall pass
 | Agent mode | SYNC_HTTP | sync + async + callback + SSE |
 | Evaluator | Python deterministic | centralized evaluator registry |
 | Trajectory | 未实现 | Trace Assembler + canonical model |
-| Release Gate | 未实现 | CI/CD policy service |
+| Release Gate | 规则/API、CLI 与 CI 示例已实现 | 授权治理继续推进 |
 | Auth | PoC credentials | SSO/RBAC/service identity |
 | Network | Docker bridge | VPC/K8s/mTLS/service mesh |
 | Audit | Langfuse + app logs | enterprise audit trail |

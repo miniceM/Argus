@@ -747,6 +747,7 @@ class ExperimentLaunchProgressResponse(BaseModel):
     action_reasons: dict[str, str] = Field(default_factory=dict)
     # Issue #84: how many cases can be re-judged without re-calling the Agent.
     recoverable_evaluation_count: int = 0
+    evaluating: int = Field(default=0, ge=0, description="不依赖执行终态的在途 evaluation-only 工作数")
 
 
 class ExperimentLaunchResponse(BaseModel):

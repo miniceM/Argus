@@ -454,6 +454,31 @@ class RunResultSnapshotRecord(Base):
     evidence_reasons: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
 
+class ReleasePolicyRecord(Base):
+    __tablename__ = "release_policies"
+    __table_args__ = (UniqueConstraint("name", "version", name="uq_release_policy_version"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    version: Mapped[str] = mapped_column(String(64), nullable=False)
+    agent_id: Mapped[str] = mapped_column(String(128), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    definition: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    policy_digest: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
+class ReleaseGateRecord(Base):
+    __tablename__ = "release_gates"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    policy_id: Mapped[str] = mapped_column(String(64), ForeignKey("release_policies.id", ondelete="RESTRICT"), nullable=False)
+    candidate_snapshot_id: Mapped[str] = mapped_column(String(64), ForeignKey("run_result_snapshots.id", ondelete="RESTRICT"), nullable=False)
+    baseline_snapshot_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("run_result_snapshots.id", ondelete="RESTRICT"))
+    request_digest: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
 class BaselineBindingRecord(Base):
     __tablename__ = "baseline_bindings"
 

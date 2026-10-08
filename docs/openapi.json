@@ -1833,6 +1833,46 @@
       }
     },
     "/api/v1/experiment-launches/{launch_id}/result-snapshots": {
+      "post": {
+        "tags": [
+          "Evaluation Results"
+        ],
+        "summary": "Freeze current settled results for a release gate",
+        "operationId": "freeze_run_results_api_v1_experiment_launches__launch_id__result_snapshots_post",
+        "parameters": [
+          {
+            "name": "launch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Launch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummaryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "get": {
         "tags": [
           "Evaluation Results"
@@ -2069,6 +2109,179 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ComparisonCaseOutputResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/release-policies": {
+      "post": {
+        "tags": [
+          "Release Gates"
+        ],
+        "summary": "Create Release Policy",
+        "operationId": "create_release_policy_api_v1_release_policies_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleasePolicy"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleasePolicyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Release Gates"
+        ],
+        "summary": "Get Release Policy",
+        "operationId": "get_release_policy_api_v1_release_policies_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleasePolicyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/release-gates/evaluate": {
+      "post": {
+        "tags": [
+          "Release Gates"
+        ],
+        "summary": "Create Release Gate",
+        "operationId": "create_release_gate_api_v1_release_gates_evaluate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluateGateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseGateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/release-gates/{gate_id}": {
+      "get": {
+        "tags": [
+          "Release Gates"
+        ],
+        "summary": "Get Release Gate",
+        "operationId": "get_release_gate_api_v1_release_gates__gate_id__get",
+        "parameters": [
+          {
+            "name": "gate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Gate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseGateResponse"
                 }
               }
             }
@@ -3777,6 +3990,43 @@
         ],
         "title": "DomainErrorResponse"
       },
+      "EvaluateGateRequest": {
+        "properties": {
+          "policy_name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Policy Name"
+          },
+          "policy_version": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Policy Version"
+          },
+          "candidate_launch_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Candidate Launch Id"
+          },
+          "candidate_snapshot_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Candidate Snapshot Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "policy_name",
+          "policy_version",
+          "candidate_launch_id",
+          "candidate_snapshot_id"
+        ],
+        "title": "EvaluateGateRequest"
+      },
       "EvaluationResultProvenance": {
         "properties": {
           "binding_id": {
@@ -4911,6 +5161,13 @@
             "type": "integer",
             "title": "Recoverable Evaluation Count",
             "default": 0
+          },
+          "evaluating": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Evaluating",
+            "description": "不依赖执行终态的在途 evaluation-only 工作数",
+            "default": 0
           }
         },
         "type": "object",
@@ -5272,6 +5529,65 @@
           "result"
         ],
         "title": "ExperimentResult"
+      },
+      "GateRuleResult": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "metric": {
+            "type": "string",
+            "title": "Metric"
+          },
+          "operator": {
+            "type": "string",
+            "enum": [
+              ">=",
+              "<="
+            ],
+            "title": "Operator"
+          },
+          "threshold": {
+            "type": "number",
+            "title": "Threshold"
+          },
+          "actual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual"
+          },
+          "conclusion": {
+            "type": "string",
+            "enum": [
+              "PASS",
+              "FAIL",
+              "UNKNOWN"
+            ],
+            "title": "Conclusion"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "metric",
+          "operator",
+          "threshold",
+          "actual",
+          "conclusion",
+          "reason"
+        ],
+        "title": "GateRuleResult"
       },
       "HTTPValidationError": {
         "properties": {
@@ -5691,6 +6007,299 @@
         ],
         "title": "QualityRuleRequest",
         "description": "One user-authored judgement rule over a selected metric (Issue #83)."
+      },
+      "ReleaseGateResponse": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "PASS",
+              "FAIL",
+              "UNKNOWN"
+            ],
+            "title": "Decision"
+          },
+          "releasable": {
+            "type": "boolean",
+            "title": "Releasable"
+          },
+          "engine_version": {
+            "type": "string",
+            "title": "Engine Version",
+            "default": "release-gate-v3"
+          },
+          "candidate_snapshot_id": {
+            "type": "string",
+            "title": "Candidate Snapshot Id"
+          },
+          "baseline_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Snapshot Id"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reason Codes"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/GateRuleResult"
+            },
+            "type": "array",
+            "title": "Rules"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/ReleasePolicy"
+          },
+          "policy_digest": {
+            "type": "string",
+            "title": "Policy Digest"
+          },
+          "candidate_launch_id": {
+            "type": "string",
+            "title": "Candidate Launch Id"
+          },
+          "candidate_revision": {
+            "type": "integer",
+            "title": "Candidate Revision"
+          },
+          "candidate_manifest_digest": {
+            "type": "string",
+            "title": "Candidate Manifest Digest"
+          },
+          "candidate_source_result_digest": {
+            "type": "string",
+            "title": "Candidate Source Result Digest"
+          },
+          "baseline_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Revision"
+          },
+          "baseline_manifest_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Manifest Digest"
+          },
+          "baseline_source_result_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Source Result Digest"
+          },
+          "report_url": {
+            "type": "string",
+            "title": "Report Url"
+          },
+          "comparison_url": {
+            "type": "string",
+            "title": "Comparison Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision",
+          "releasable",
+          "candidate_snapshot_id",
+          "reason_codes",
+          "rules",
+          "id",
+          "created_at",
+          "policy",
+          "policy_digest",
+          "candidate_launch_id",
+          "candidate_revision",
+          "candidate_manifest_digest",
+          "candidate_source_result_digest",
+          "report_url",
+          "comparison_url"
+        ],
+        "title": "ReleaseGateResponse"
+      },
+      "ReleasePolicy": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "title": "Version"
+          },
+          "agent_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Agent Id"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment",
+            "default": "production"
+          },
+          "block_critical_failures": {
+            "type": "boolean",
+            "title": "Block Critical Failures",
+            "default": true
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/ReleaseRule"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Rules"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "agent_id",
+          "rules"
+        ],
+        "title": "ReleasePolicy"
+      },
+      "ReleasePolicyResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "title": "Version"
+          },
+          "agent_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Agent Id"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment",
+            "default": "production"
+          },
+          "block_critical_failures": {
+            "type": "boolean",
+            "title": "Block Critical Failures",
+            "default": true
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/ReleaseRule"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Rules"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "policy_digest": {
+            "type": "string",
+            "title": "Policy Digest"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "agent_id",
+          "rules",
+          "id",
+          "policy_digest"
+        ],
+        "title": "ReleasePolicyResponse"
+      },
+      "ReleaseRule": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "title": "Id"
+          },
+          "metric": {
+            "type": "string",
+            "title": "Metric"
+          },
+          "operator": {
+            "type": "string",
+            "enum": [
+              ">=",
+              "<="
+            ],
+            "title": "Operator"
+          },
+          "threshold": {
+            "type": "number",
+            "title": "Threshold"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "metric",
+          "operator",
+          "threshold"
+        ],
+        "title": "ReleaseRule"
       },
       "ResultSnapshotDetailResponse": {
         "properties": {

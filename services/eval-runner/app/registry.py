@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from .config import find_path
@@ -20,6 +20,8 @@ from .db_models import (
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
     LangfuseSyncTaskRecord,
+    ReleaseGateRecord,
+    RunResultSnapshotRecord,
 )
 from .models import (
     AgentConcurrencyError,
@@ -323,32 +325,41 @@ class AgentRegistry:
                         active_launch_count=len(active_launches),
                     )
 
-            # Set status to "deleting" and flush to block concurrent launch creations
-            agent.status = "deleting"
-            session.flush()
-
-            if launch_count > 0:
-                # Force delete: clean launches and their dependent records in local DB only.
-                # Notice: we DO NOT call Langfuse API/SDK.
-                launch_ids = [launch_rec.id for launch_rec in launches]
-                if launch_ids:
-                    # Clean up sync tasks explicitly for database engines without full ON DELETE CASCADE support (like SQLite in tests)
-                    session.execute(
-                        delete(LangfuseSyncTaskRecord).where(
-                            LangfuseSyncTaskRecord.launch_id.in_(launch_ids)
-                        )
-                    )
-                    # Clear final_attempt_id to avoid circular foreign key dependency during deletion
-                    session.execute(
-                        update(ExperimentItemExecutionRecord)
-                        .where(ExperimentItemExecutionRecord.launch_id.in_(launch_ids))
-                        .values(final_attempt_id=None)
-                    )
-                    for launch in launches:
-                        session.delete(launch)
-                    session.flush()
+            # 门禁证据必须保留，拒绝清理而不是让 FK 冲突变成 500。
+            snapshot_ids = select(RunResultSnapshotRecord.id).where(RunResultSnapshotRecord.agent_id == agent_id)
+            retained_gate = session.scalar(select(ReleaseGateRecord.id).where(or_(
+                ReleaseGateRecord.candidate_snapshot_id.in_(snapshot_ids),
+                ReleaseGateRecord.baseline_snapshot_id.in_(snapshot_ids),
+            )).limit(1))
+            if retained_gate:
+                raise AgentConcurrencyError(agent_id=agent_id, reason="发布门禁引用的 Snapshot 必须保留，不能清理该 Agent")
 
             try:
+                # Set status to "deleting" and flush to block concurrent launch creations
+                agent.status = "deleting"
+                session.flush()
+
+                if launch_count > 0:
+                    # Force delete: clean launches and their dependent records in local DB only.
+                    # Notice: we DO NOT call Langfuse API/SDK.
+                    launch_ids = [launch_rec.id for launch_rec in launches]
+                    if launch_ids:
+                        # Clean up sync tasks explicitly for database engines without full ON DELETE CASCADE support (like SQLite in tests)
+                        session.execute(
+                            delete(LangfuseSyncTaskRecord).where(
+                                LangfuseSyncTaskRecord.launch_id.in_(launch_ids)
+                            )
+                        )
+                        # Clear final_attempt_id to avoid circular foreign key dependency during deletion
+                        session.execute(
+                            update(ExperimentItemExecutionRecord)
+                            .where(ExperimentItemExecutionRecord.launch_id.in_(launch_ids))
+                            .values(final_attempt_id=None)
+                        )
+                        for launch in launches:
+                            session.delete(launch)
+                        session.flush()
+
                 session.delete(agent)
                 session.commit()
             except IntegrityError as exc:

@@ -1,0 +1,505 @@
+from __future__ import annotations
+
+import copy
+import uuid
+from types import SimpleNamespace
+
+import pytest
+from app import main
+from app.comparison_contracts import aggregation_comparison_digest
+from app.db_models import ExperimentLaunchRecord, RunResultSnapshotRecord
+from app.registry import AgentRegistry
+from app.release_gates import ReleasePolicy, evaluate_gate
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
+
+
+def snapshot(*, passed=2, count=2, baseline_id=None):
+    items = [{
+        "dataset_item_id": str(index), "case_digest": f"case-{index}",
+        "execution_status": "succeeded", "eval_status": "succeeded",
+        "quality_conclusion": "pass" if index < passed else "fail",
+        "scores": {"intent_match": 1.0 if index < passed else 0.0},
+        "latency_ms": 10,
+        "quality_evaluation": {"rules": [{"critical": False, "conclusion": "pass"}]},
+    } for index in range(count)]
+    manifest = {
+        "runner": {"runner_version": "0.1.0", "build_id": "gate-test-build", "mapping_engine_version": "sha256-mapping-engine-v1"},
+        "schema_version": "1.2", "agent": {"agent_id": "test-agent", "version": "v1"},
+        "dataset": {"source": "seed", "dataset_id": "ds", "dataset_version": "v1", "items": [{"id": str(i)} for i in range(count)]},
+        "comparison": {"environment": "production", "baseline_snapshot_id": baseline_id},
+        "evaluators": [{"id": "intent_match", "version": "1.0.0", "scope": "item", "threshold": 1.0}],
+        "contract_digests": {
+            "measurement": {"digest": "measurement-v1"}, "quality_policy": {"digest": "policy-v1"},
+            "aggregation_comparison": {"digest": aggregation_comparison_digest()},
+        },
+    }
+    return SimpleNamespace(
+        id=str(uuid.uuid4()), launch_id=str(uuid.uuid4()), agent_id="test-agent", revision=1,
+        manifest=manifest, items=items, evidence_state="COMPLETE", manifest_digest="manifest-digest",
+        source_result_digest="source-digest",
+    )
+
+
+def policy(*rules, **kwargs):
+    return ReleasePolicy(
+        name="production-default", version="1.0.0", agent_id="test-agent", environment="production",
+        rules=list(rules) or [{"id": "pass-rate", "metric": "pass_rate", "operator": ">=", "threshold": 0.95}],
+        **kwargs,
+    )
+
+
+def test_absolute_gate_explains_rules_and_keeps_quality_failure_separate():
+    assert evaluate_gate(policy(), snapshot()).decision == "PASS"
+    result = evaluate_gate(policy(), snapshot(passed=1))
+    assert result.decision == "FAIL"
+    assert not result.releasable
+    assert result.rules[0].actual == 0.5
+    assert result.rules[0].reason == "THRESHOLD_VIOLATED"
+
+
+@pytest.mark.parametrize("problem", ["empty", "unknown", "execution", "evaluation", "diagnostic", "missing_case", "legacy"])
+def test_incomplete_evidence_never_releases(problem):
+    candidate = snapshot()
+    if problem == "empty":
+        candidate.items = []
+    elif problem == "unknown":
+        candidate.items[0]["quality_conclusion"] = "unknown"
+    elif problem == "execution":
+        candidate.items[0]["execution_status"] = "failed"
+    elif problem == "evaluation":
+        candidate.items[0]["eval_status"] = "failed"
+    elif problem == "diagnostic":
+        candidate.evidence_state = "DIAGNOSTIC"
+    elif problem == "missing_case":
+        candidate.items.pop()
+    else:
+        candidate.manifest.pop("contract_digests")
+    result = evaluate_gate(policy(), candidate)
+    assert result.decision == "UNKNOWN"
+    assert result.releasable is False
+    assert result.reason_codes
+
+
+def test_relative_rules_use_every_case_and_frozen_baseline():
+    baseline = snapshot()
+    candidate = snapshot(passed=1, baseline_id=baseline.id)
+    result = evaluate_gate(policy(
+        {"id": "regressions", "metric": "regression_count", "operator": "<=", "threshold": 0},
+        {"id": "delta", "metric": "pass_rate_delta", "operator": ">=", "threshold": -0.01},
+    ), candidate, baseline)
+    assert result.decision == "FAIL"
+    assert [rule.actual for rule in result.rules] == [1, -0.5]
+    assert result.baseline_snapshot_id == baseline.id
+
+
+def test_relative_gate_rejects_baseline_from_another_environment():
+    baseline = snapshot()
+    baseline.manifest["comparison"]["environment"] = "staging"
+    candidate = snapshot(baseline_id=baseline.id)
+    result = evaluate_gate(policy(
+        {"id": "regressions", "metric": "regression_count", "operator": "<=", "threshold": 0},
+    ), candidate, baseline)
+    assert result.decision == "UNKNOWN"
+    assert "BASELINE_ENVIRONMENT_MISMATCH" in result.reason_codes
+
+
+def test_agent_purge_removes_unused_policies_instead_of_orphaning_them(setup_runtime, monkeypatch):
+    monkeypatch.setattr(main, "db_manager", setup_runtime[0])
+    monkeypatch.setattr(main, "registry", AgentRegistry(setup_runtime[0]))
+    client = TestClient(main.app)
+    draft = policy().model_dump()
+    assert client.post("/api/v1/release-policies", json=draft).status_code == 201
+    assert client.post("/api/v1/agents/purge", json={"agent_id": "test-agent", "confirm_name": "Test Agent"}).status_code == 200
+    assert client.get("/api/v1/release-policies", params={"name": draft["name"], "version": draft["version"]}).status_code == 404
+
+
+def test_purge_flush_conflict_returns_409_and_rolls_back(setup_runtime, monkeypatch):
+    from sqlalchemy.orm import Session
+
+    manager = setup_runtime[0]
+    candidate = snapshot()
+    store_snapshot(manager, candidate)
+    original = Session.flush
+
+    def race(session, *args, **kwargs):
+        if any(isinstance(record, ExperimentLaunchRecord) for record in session.deleted):
+            raise IntegrityError("gate inserted during purge", {}, Exception("restricted snapshot"))
+        return original(session, *args, **kwargs)
+
+    monkeypatch.setattr(main, "db_manager", manager)
+    monkeypatch.setattr(main, "registry", AgentRegistry(manager))
+    monkeypatch.setattr(Session, "flush", race)
+    response = TestClient(main.app, raise_server_exceptions=False).post(
+        "/api/v1/agents/purge", json={"agent_id": "test-agent", "confirm_name": "Test Agent"},
+    )
+    assert response.status_code == 409
+    with manager.get_session() as session:
+        assert session.get(ExperimentLaunchRecord, candidate.launch_id) is not None
+
+
+@pytest.mark.parametrize("problem", ["missing", "wrong_id", "contract", "dataset", "case", "diagnostic"])
+def test_noncomparable_baseline_is_unknown_not_zero_regressions(problem):
+    baseline = snapshot()
+    candidate = snapshot(baseline_id=baseline.id)
+    if problem == "missing":
+        baseline = None
+    elif problem == "wrong_id":
+        baseline.id = "other-snapshot"
+    elif problem == "contract":
+        baseline.manifest["contract_digests"]["quality_policy"]["digest"] = "changed"
+    elif problem == "dataset":
+        baseline.manifest["dataset"]["dataset_id"] = "other-dataset"
+    elif problem == "case":
+        baseline.items[0]["case_digest"] = "changed-case"
+    else:
+        baseline.evidence_state = "DIAGNOSTIC"
+    result = evaluate_gate(policy(
+        {"id": "regressions", "metric": "regression_count", "operator": "<=", "threshold": 5},
+    ), candidate, baseline)
+    assert result.decision == "UNKNOWN"
+    assert not result.releasable
+    assert result.rules[0].actual is None
+
+
+def test_critical_violation_vetoes_otherwise_passing_policy():
+    candidate = snapshot()
+    candidate.items[0]["quality_evaluation"]["rules"][0] = {"critical": True, "conclusion": "fail"}
+    result = evaluate_gate(policy(), candidate)
+    assert result.decision == "FAIL"
+    assert "CRITICAL_FAILURE" in result.reason_codes
+
+
+def test_missing_critical_evidence_blocks_release_even_when_optional_item_rule_passes():
+    candidate = snapshot()
+    candidate.items[0]["quality_evaluation"]["rules"][0] = {"critical": True, "conclusion": "unknown"}
+    result = evaluate_gate(policy(), candidate)
+    assert result.decision == "UNKNOWN"
+    assert "CRITICAL_EVIDENCE_INCOMPLETE" in result.reason_codes
+
+
+def test_undefined_and_nonfinite_metrics_are_unknown_not_zero():
+    candidate = snapshot()
+    for item in candidate.items:
+        item["latency_ms"] = None
+    result = evaluate_gate(policy(
+        {"id": "latency", "metric": "p95_latency_ms", "operator": "<=", "threshold": 100},
+    ), candidate)
+    assert result.decision == "UNKNOWN"
+    assert result.rules[0].actual is None
+
+
+def test_latency_gate_requires_measurements_for_every_required_case():
+    candidate = snapshot()
+    candidate.items[0]["latency_ms"] = None
+    result = evaluate_gate(policy(
+        {"id": "latency", "metric": "p95_latency_ms", "operator": "<=", "threshold": 100},
+    ), candidate)
+    assert result.decision == "UNKNOWN"
+    assert result.rules[0].actual is None
+
+
+def test_declared_critical_rule_cannot_disappear_from_item_evidence():
+    candidate = snapshot()
+    candidate.manifest["quality_policy"] = {"rules": [{"evaluator_id": "safety", "critical": True}]}
+    result = evaluate_gate(policy(), candidate)
+    assert result.decision == "UNKNOWN"
+    assert "CRITICAL_EVIDENCE_INCOMPLETE" in result.reason_codes
+
+
+@pytest.mark.parametrize("changes", [{"version": "latest"}, {"rules": []}, {"rules": [
+    {"id": "bad", "metric": "pass_rate", "operator": ">=", "threshold": float("nan")}
+]}, {"rules": [
+    {"id": "bad", "metric": "arbitrary", "operator": ">=", "threshold": 1}
+]}])
+def test_policy_rejects_ambiguous_or_invalid_definitions(changes):
+    draft = policy().model_dump()
+    draft.update(changes)
+    with pytest.raises(ValidationError):
+        ReleasePolicy.model_validate(draft)
+
+
+def store_snapshot(db_manager, value):
+    with db_manager.get_session() as session:
+        session.add(ExperimentLaunchRecord(
+            id=value.launch_id, name="release-test", agent_id="test-agent", agent_version="v1", agent_version_id="test-agent-v1",
+            dataset_id="ds", dataset_name="ds", dataset_version="v1", manifest=value.manifest,
+            status="COMPLETED",
+        ))
+        session.flush()
+        session.add(RunResultSnapshotRecord(
+            id=value.id, launch_id=value.launch_id, agent_id=value.agent_id, revision=value.revision,
+            source_result_digest=value.source_result_digest, manifest_digest=value.manifest_digest,
+            manifest=value.manifest, summary={}, items=value.items, evidence_state=value.evidence_state,
+        ))
+        session.commit()
+
+
+def test_http_policy_is_immutable_and_gate_result_is_durable_and_idempotent(setup_runtime, monkeypatch):
+    db_manager = setup_runtime[0]
+    monkeypatch.setattr(main, "db_manager", db_manager)
+    monkeypatch.setattr(main, "registry", AgentRegistry(db_manager))
+    client = TestClient(main.app)
+    draft = policy().model_dump()
+    created = client.post("/api/v1/release-policies", json=draft)
+    assert created.status_code == 201, created.text
+    assert client.post("/api/v1/release-policies", json=draft).json() == created.json()
+    changed = copy.deepcopy(draft)
+    changed["rules"][0]["threshold"] = 0.5
+    assert client.post("/api/v1/release-policies", json=changed).status_code == 409
+    assert client.get("/api/v1/release-policies", params={"name": draft["name"], "version": draft["version"]}).json() == created.json()
+    candidate = snapshot()
+    store_snapshot(db_manager, candidate)
+    request = {
+        "policy_name": draft["name"], "policy_version": draft["version"],
+        "candidate_launch_id": candidate.launch_id, "candidate_snapshot_id": candidate.id,
+    }
+    response = client.post("/api/v1/release-gates/evaluate", json=request)
+    assert response.status_code == 201, response.text
+    result = response.json()
+    assert result["decision"] == "PASS"
+    assert result["candidate_snapshot_id"] == candidate.id
+    assert result["policy_digest"] == created.json()["policy_digest"]
+    assert client.post("/api/v1/release-gates/evaluate", json=request).json() == result
+    # 活动 Launch 的变化、重新读报告或重发请求不能改写已保存的门禁结论。
+    with db_manager.get_session() as session:
+        session.get(ExperimentLaunchRecord, candidate.launch_id).quality_conclusion = "fail"
+        session.commit()
+    assert client.get(f"/api/v1/release-gates/{result['id']}").json() == result
+    assert candidate.id in result["report_url"]
+    purge = client.post("/api/v1/agents/purge", json={"agent_id": "test-agent", "confirm_name": "Test Agent"})
+    assert purge.status_code == 409
+    assert client.get(f"/api/v1/release-gates/{result['id']}").json() == result
+    with db_manager.get_session() as session:
+        session.delete(session.get(RunResultSnapshotRecord, candidate.id))
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+
+
+def test_api_rejects_snapshot_from_different_launch_and_wrong_policy_scope(setup_runtime, monkeypatch):
+    db_manager = setup_runtime[0]
+    monkeypatch.setattr(main, "db_manager", db_manager)
+    client = TestClient(main.app)
+    draft = policy().model_dump()
+    assert client.post("/api/v1/release-policies", json=draft).status_code == 201
+    candidate = snapshot()
+    store_snapshot(db_manager, candidate)
+    request = {"policy_name": draft["name"], "policy_version": draft["version"],
+               "candidate_launch_id": "other-launch", "candidate_snapshot_id": candidate.id}
+    assert client.post("/api/v1/release-gates/evaluate", json=request).status_code == 404
+    request["candidate_launch_id"] = candidate.launch_id
+    draft["version"] = "2.0.0"
+    draft["environment"] = "staging"
+    assert client.post("/api/v1/release-policies", json=draft).status_code == 201
+    request["policy_version"] = "2.0.0"
+    assert client.post("/api/v1/release-gates/evaluate", json=request).status_code == 409
+
+
+def test_policy_creation_rejects_an_agent_already_being_purged(setup_runtime, monkeypatch):
+    from app.db_models import AgentRecord
+
+    manager = setup_runtime[0]
+    with manager.get_session() as session:
+        session.get(AgentRecord, "test-agent").status = "deleting"
+        session.commit()
+    monkeypatch.setattr(main, "db_manager", manager)
+    response = TestClient(main.app).post("/api/v1/release-policies", json=policy().model_dump())
+    assert response.status_code == 409
+
+
+@pytest.mark.parametrize("relative", [False, True])
+def test_obsolete_aggregation_contract_cannot_authorize_release_even_when_both_match(relative):
+    baseline = snapshot()
+    candidate = snapshot(baseline_id=baseline.id)
+    for value in (baseline, candidate):
+        value.manifest["contract_digests"]["aggregation_comparison"]["digest"] = "sha256:obsolete-semantics"
+    gate_policy = policy({"id": "no-regression", "metric": "regression_count", "operator": "<=", "threshold": 0}) if relative else policy()
+    result = evaluate_gate(gate_policy, candidate, baseline)
+    assert result.decision == "UNKNOWN" and not result.releasable
+    assert "AGGREGATION_CONTRACT_UNSUPPORTED" in result.reason_codes
+
+
+@pytest.mark.parametrize('evidence', ['missing', 'unknown'])
+def test_explicit_critical_count_requires_evidence_when_automatic_veto_is_disabled(evidence):
+    candidate = snapshot()
+    candidate.manifest['quality_policy'] = {'rules': [{'evaluator_id': 'safety', 'critical': True, 'required': False}]}
+    for item in candidate.items:
+        item['quality_evaluation']['rules'] = [{'evaluator_id': 'safety', 'critical': True, 'conclusion': 'pass'}]
+    candidate.items[0]['quality_evaluation']['rules'] = [] if evidence == 'missing' else [{'evaluator_id': 'safety', 'critical': True, 'conclusion': 'unknown'}]
+    result = evaluate_gate(policy({'id':'critical-count','metric':'critical_failure_count','operator':'<=','threshold':0}, block_critical_failures=False), candidate)
+    assert result.decision == 'UNKNOWN'
+    assert result.rules[0].actual is None
+    assert 'CRITICAL_EVIDENCE_INCOMPLETE' in result.reason_codes
+
+
+@pytest.mark.parametrize('evaluator_id', ['toxicity-check', 'quality.safety'])
+def test_mean_gate_accepts_evaluator_ids_supported_by_the_registry(evaluator_id):
+    candidate = snapshot()
+    candidate.manifest['evaluators'][0]['id'] = evaluator_id
+    for item in candidate.items:
+        item['scores'] = {evaluator_id: 1.0}
+    result = evaluate_gate(policy({'id':'mean','metric':f'score_mean:{evaluator_id}','operator':'>=','threshold':.9}), candidate)
+    assert result.decision == 'PASS'
+    assert result.rules[0].actual == 1.0
+
+
+@pytest.mark.parametrize('identity', ['dataset', 'agent', 'evaluator', 'runner', 'runner-build', 'runner-mapping'])
+def test_gate_rejects_missing_or_unreliable_frozen_version_identity(identity):
+    candidate = snapshot()
+    if identity == 'dataset':
+        candidate.manifest['dataset'].pop('dataset_version')
+    elif identity == 'agent':
+        candidate.manifest['agent'].pop('version')
+    elif identity == 'evaluator':
+        candidate.manifest['evaluators'][0].pop('version')
+    elif identity == 'runner':
+        candidate.manifest.pop('runner')
+    elif identity == 'runner-build':
+        candidate.manifest['runner']['build_id'] = 'latest'
+    else:
+        candidate.manifest['runner'].pop('mapping_engine_version')
+    result = evaluate_gate(policy(), candidate)
+    assert result.decision == 'UNKNOWN'
+    assert not result.releasable
+
+
+def test_gate_report_uses_the_configured_console_origin(setup_runtime, monkeypatch):
+    monkeypatch.setattr(main, 'db_manager', setup_runtime[0])
+    monkeypatch.setenv('ARGUS_CONSOLE_BASE_URL', 'https://console.example/')
+    client = TestClient(main.app)
+    draft = policy().model_dump()
+    assert client.post('/api/v1/release-policies',json=draft).status_code == 201
+    candidate = snapshot()
+    store_snapshot(setup_runtime[0],candidate)
+    response = client.post('/api/v1/release-gates/evaluate',json={'policy_name':draft['name'],'policy_version':draft['version'],'candidate_launch_id':candidate.launch_id,'candidate_snapshot_id':candidate.id})
+    assert response.status_code == 201
+    assert response.json()['report_url'] == f'https://console.example/launches/{candidate.launch_id}?snapshot_id={candidate.id}'
+    assert response.json()['comparison_url'].endswith('&tab=comparison')
+
+
+@pytest.mark.parametrize('environment', [None, '', ' Production ', 'invalid/env'])
+def test_gate_requires_an_explicit_normalized_frozen_environment(environment):
+    candidate = snapshot()
+    if environment is None:
+        candidate.manifest['comparison'].pop('environment')
+    else:
+        candidate.manifest['comparison']['environment'] = environment
+    result = evaluate_gate(policy(), candidate)
+    assert result.decision == 'UNKNOWN' and not result.releasable
+    assert 'CANDIDATE_ENVIRONMENT_UNKNOWN' in result.reason_codes
+
+
+def test_relative_gate_requires_a_frozen_baseline_environment():
+    baseline = snapshot()
+    baseline.manifest['comparison'].pop('environment')
+    candidate = snapshot(baseline_id=baseline.id)
+    result = evaluate_gate(policy({'id':'regressions','metric':'regression_count','operator':'<=','threshold':0}), candidate, baseline)
+    assert result.decision == 'UNKNOWN' and not result.releasable
+    assert 'BASELINE_ENVIRONMENT_UNKNOWN' in result.reason_codes
+
+
+def test_api_persists_unknown_for_missing_environment_provenance(setup_runtime, monkeypatch):
+    monkeypatch.setattr(main, 'db_manager', setup_runtime[0])
+    client = TestClient(main.app)
+    draft = policy().model_dump()
+    assert client.post('/api/v1/release-policies',json=draft).status_code == 201
+    candidate = snapshot()
+    candidate.manifest['comparison'].pop('environment')
+    store_snapshot(setup_runtime[0],candidate)
+    response = client.post('/api/v1/release-gates/evaluate',json={'policy_name':draft['name'],'policy_version':draft['version'],'candidate_launch_id':candidate.launch_id,'candidate_snapshot_id':candidate.id})
+    assert response.status_code == 201
+    assert response.json()['decision'] == 'UNKNOWN'
+    assert not response.json()['releasable']
+
+
+def test_gate_rejects_an_unsupported_console_path_prefix(setup_runtime, monkeypatch):
+    monkeypatch.setattr(main, 'db_manager', setup_runtime[0])
+    monkeypatch.setenv('ARGUS_CONSOLE_BASE_URL', 'https://console.example/argus/')
+    client = TestClient(main.app)
+    draft = policy().model_dump()
+    assert client.post('/api/v1/release-policies',json=draft).status_code == 201
+    candidate = snapshot()
+    store_snapshot(setup_runtime[0],candidate)
+    response = client.post('/api/v1/release-gates/evaluate',json={'policy_name':draft['name'],'policy_version':draft['version'],'candidate_launch_id':candidate.launch_id,'candidate_snapshot_id':candidate.id})
+    assert response.status_code == 503
+
+
+def test_manual_freeze_uses_current_results_and_preserves_the_old_snapshot(setup_runtime, monkeypatch):
+    from app.db_models import ExperimentItemExecutionRecord
+    from sqlalchemy import select
+    from test_issue_85_snapshot_revision import _create_launch
+
+    manager = setup_runtime[0]
+    monkeypatch.setattr(main, 'db_manager', manager)
+    launch_id = _create_launch(manager)
+    client = TestClient(main.app)
+    path = f'/api/v1/experiment-launches/{launch_id}'
+    first = client.post(f'{path}/result-snapshots')
+    assert first.status_code == 200
+    assert first.json()['summary']['pass_rate'] == 1.0
+    with manager.get_session() as session:
+        item = session.scalar(select(ExperimentItemExecutionRecord).where(ExperimentItemExecutionRecord.launch_id == launch_id))
+        item.quality_conclusion = 'fail'
+        item.scores = {'intent_match':0.0}
+        session.commit()
+    fresh = client.post(f'{path}/result-snapshots')
+    assert fresh.status_code == 200
+    assert fresh.json()['snapshot_id'] != first.json()['snapshot_id']
+    assert fresh.json()['summary']['pass_rate'] == 0.5
+    historical = client.get(f'{path}/summary',params={'snapshot_id':first.json()['snapshot_id']}).json()
+    # Langfuse 同步进度是实时投影；原 Snapshot 的事实与摘要保持固定。
+    assert historical['summary'] == first.json()['summary']
+    assert historical['source_result_digest'] == first.json()['source_result_digest']
+    assert client.post(f'{path}/result-snapshots').json()['snapshot_id'] == fresh.json()['snapshot_id']
+
+
+def test_postgres_migration_enforces_release_policy_ownership():
+    import os
+    from pathlib import Path
+
+    from app.db import MigrationRunner
+    from sqlalchemy import create_engine, inspect
+    url = os.getenv('TEST_POSTGRES_URL')
+    if not url:
+        pytest.skip('TEST_POSTGRES_URL is not configured; skipping real PostgreSQL policy ownership test')
+    engine = create_engine(url)
+    try:
+        MigrationRunner(engine,Path(__file__).resolve().parents[1]/'migrations').apply_all()
+        columns = {column['name']:column for column in inspect(engine).get_columns('release_policies')}
+        assert columns['agent_id']['nullable'] is False
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize('old_engine,missing_identity', [('release-gate-v1','runner'), ('release-gate-v2','environment')])
+def test_new_gate_engine_does_not_reuse_a_legacy_pass_without_frozen_identity(setup_runtime, monkeypatch, old_engine, missing_identity):
+    from app.db_models import ReleaseGateRecord
+    from app.evaluator_binding import canonical_digest
+    manager = setup_runtime[0]
+    monkeypatch.setattr(main, 'db_manager', manager)
+    client = TestClient(main.app)
+    draft = policy().model_dump()
+    assert client.post('/api/v1/release-policies',json=draft).status_code == 201
+    candidate = snapshot()
+    store_snapshot(manager,candidate)
+    request = {'policy_name':draft['name'],'policy_version':draft['version'],'candidate_launch_id':candidate.launch_id,'candidate_snapshot_id':candidate.id}
+    legacy = client.post('/api/v1/release-gates/evaluate',json=request).json()
+    # 模拟恢复的旧引擎记录：曾放行缺少 Runner 或 environment 身份的历史快照。
+    with manager.get_session() as session:
+        record = session.get(ReleaseGateRecord,legacy['id'])
+        record.request_digest = canonical_digest({'candidate_snapshot_id':candidate.id,'policy_digest':policy().content_digest,'engine_version':old_engine})
+        record.result = {**record.result,'engine_version':old_engine}
+        restored = session.get(RunResultSnapshotRecord,candidate.id)
+        manifest = copy.deepcopy(restored.manifest)
+        if missing_identity == 'runner':
+            manifest.pop('runner')
+        else:
+            manifest['comparison'].pop('environment')
+        restored.manifest = manifest
+        session.commit()
+    fresh = client.post('/api/v1/release-gates/evaluate',json=request).json()
+    assert fresh['decision'] == 'UNKNOWN'
+    assert fresh['id'] != legacy['id']
+    assert client.get(f"/api/v1/release-gates/{legacy['id']}").json()['decision'] == 'PASS'

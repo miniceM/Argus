@@ -16,6 +16,7 @@ from .db import DatabaseManager
 from .db_models import (
     AgentRecord,
     AgentVersionRecord,
+    CredentialRecord,
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
     LangfuseSyncTaskRecord,
@@ -39,6 +40,7 @@ def compute_spec_digest(spec_dict: dict[str, Any]) -> str:
     keys_to_include = [
         "artifact_ref",
         "credential_ref",
+        "credential_id",
         "endpoint",
         "environment",
         "is_idempotent",
@@ -104,6 +106,7 @@ class AgentVersionSpec:
     artifact_ref: str | None = None
     id: str = ""
     usage_cost_mapping: dict[str, Any] | None = None
+    credential_id: str | None = None
 
 
 class AgentRegistry:
@@ -378,6 +381,7 @@ class AgentRegistry:
         request_schema: dict[str, Any] | None = None,
         response_schema: dict[str, Any] | None = None,
         credential_ref: str | None = None,
+        credential_id: str | None = None,
         timeout_seconds: float = 30.0,
         max_retries: int = 2,
         rate_limit_per_minute: int = 600,
@@ -398,6 +402,7 @@ class AgentRegistry:
             "request_schema": request_schema,
             "response_schema": response_schema,
             "credential_ref": credential_ref,
+            "credential_id": credential_id,
             "timeout_seconds": timeout_seconds,
             "max_retries": max_retries,
             "rate_limit_per_minute": rate_limit_per_minute,
@@ -415,6 +420,10 @@ class AgentRegistry:
             agent = session.get(AgentRecord, agent_id)
             if not agent:
                 raise ValueError(f"Agent '{agent_id}' does not exist. Please register the agent first.")
+            if credential_id:
+                credential = session.scalar(select(CredentialRecord).where(CredentialRecord.id == credential_id).with_for_update())
+                if credential is None or not credential.enabled or credential.environment != (normalized["environment"] or "production"):
+                    raise ValueError("Credential is missing, disabled or outside AgentVersion environment")
 
             # Check duplicate version
             stmt = select(AgentVersionRecord).where(
@@ -440,6 +449,7 @@ class AgentRegistry:
                 request_schema=normalized["request_schema"],
                 response_schema=normalized["response_schema"],
                 credential_ref=normalized["credential_ref"],
+                credential_id=normalized["credential_id"],
                 timeout_seconds=normalized["timeout_seconds"],
                 max_retries=normalized["max_retries"],
                 rate_limit_per_minute=normalized["rate_limit_per_minute"],
@@ -502,6 +512,7 @@ class AgentRegistry:
             usage_cost_mapping=dict(ver.usage_cost_mapping or {}) or None,
             max_concurrency=ver.max_concurrency,
             credential_ref=ver.credential_ref,
+            credential_id=ver.credential_id,
             is_idempotent=ver.is_idempotent,
             spec_digest=ver.spec_digest,
             artifact_ref=ver.artifact_ref,
@@ -573,6 +584,11 @@ class AgentRegistry:
                                 f"AgentVersion '{agent_id}:{ver_name}' exists with different spec_digest ({existing.spec_digest} != {digest}). Cannot overwrite."
                             )
 
+                    if normalized["credential_id"]:
+                        credential = session.scalar(select(CredentialRecord).where(CredentialRecord.id == normalized["credential_id"]).with_for_update())
+                        if credential is None or not credential.enabled or credential.environment != (normalized["environment"] or "production"):
+                            raise ValueError("Credential must be enabled and match the AgentVersion environment")
+
                     new_ver = AgentVersionRecord(
                         id=str(uuid.uuid4()),
                         agent_id=agent_id,
@@ -587,6 +603,7 @@ class AgentRegistry:
                         request_schema=normalized["request_schema"],
                         response_schema=normalized["response_schema"],
                         credential_ref=normalized["credential_ref"],
+                        credential_id=normalized["credential_id"],
                         timeout_seconds=normalized["timeout_seconds"],
                         max_retries=normalized["max_retries"],
                         rate_limit_per_minute=normalized["rate_limit_per_minute"],

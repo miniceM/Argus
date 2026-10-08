@@ -31,7 +31,7 @@ export const AGENT_VERSION_FIELD_HELPS: Record<string, Omit<FieldHelpProps, "pla
         </li>
         <li>
           <strong className="text-fail">禁止在 Query 中携带敏感参数</strong>（如{" "}
-          <code className="font-mono text-muted-foreground">?token=...</code>），鉴权请使用 SecretRef。
+          <code className="font-mono text-muted-foreground">?token=...</code>），鉴权请选择 Credential。
         </li>
       </ul>
     ),
@@ -40,16 +40,16 @@ export const AGENT_VERSION_FIELD_HELPS: Record<string, Omit<FieldHelpProps, "pla
   credentialRef: {
     title: "凭据引用 (SecretRef)",
     meaning:
-      "被测 Agent 接口若需要 Token 鉴权，在此配置密钥的引用标识。Runner 会在运行时动态读取并注入请求头，同时在上报 Langfuse Trace 时自动打码脱敏。",
+      "选择当前环境已启用的 Credential。只冻结逻辑 ID，Token 在发送请求前解密，轮换无需重建 Agent 版本。",
     rules: (
       <span>
-        <strong className="text-fail">严禁直接填入明文 Secret</strong>。生产环境使用{" "}
-        <code className="font-mono bg-surface-muted px-1 py-0.5 rounded">vault://mount/path#field</code>，由 Worker 身份按 Vault 权限读取。{" "}
-        <code className="font-mono bg-surface-muted px-1 py-0.5 rounded">env://&lt;环境变量名&gt;</code> 仅供本地开发/PoC，读取 Runner 容器白名单变量；宿主管理员可读取，轮换需更新容器配置。无需鉴权请留空。
+        <strong className="text-fail">严禁直接填入明文 Secret</strong>。先在 Credentials 创建凭据，再选择名称。
+        env:// 仅供本地开发/PoC；Vault 是管理员可选的 Provider，普通 Agent 用户无需填写路径。无需鉴权请留空。
       </span>
     ),
-    example: "vault://secret/agents/banking#token",
+    example: "生产 Agent Token（Credential 名称）",
   },
+
   artifactRef: {
     title: "产物标识 (ArtifactRef)",
     meaning:

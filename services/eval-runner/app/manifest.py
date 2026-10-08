@@ -257,6 +257,7 @@ class LaunchService:
                 "request_mapping": dict(ver_rec.request_mapping or {}),
                 "usage_cost_mapping": dict(ver_rec.usage_cost_mapping or {}) or None,
                 "credential_ref": ver_rec.credential_ref,
+                "credential_id": ver_rec.credential_id,
                 "spec_digest": ver_rec.spec_digest,
                 "artifact_ref": ver_rec.artifact_ref,
                 "is_idempotent": ver_rec.is_idempotent,

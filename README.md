@@ -125,7 +125,7 @@ Remote Agent Runner ── W3C Trace Context ──► 业务 Agent
 
 | 能力域 | 内容 |
 |---|---|
-| Agent Registry | PostgreSQL 持久化 `AgentDefinition` / `AgentVersion`；不可变版本；只保存 `credentialRef` |
+| Agent Registry | PostgreSQL 持久化 `AgentDefinition` / `AgentVersion`；不可变版本；选择稳定 Credential ID，Token 加密存储、运行时解析（[接入说明](docs/secret-providers.md)） |
 | Versioned Launch | 四维冻结 Manifest、Dataset 版本与内容校验、Idempotency-Key 与冲突检测、Launch 生命周期持久化 |
 | Remote Runner | `SYNC_HTTP` 调用、Request Mapping、timeout / retry / rate limit、W3C Trace Context 注入、逐次 Attempt 记录 |
 | 异步执行 | Redis Streams 队列 + Worker、可靠执行状态机、`cancel` / `resume` / `retry-failed`、分布式限流 |

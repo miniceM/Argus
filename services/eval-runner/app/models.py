@@ -209,7 +209,8 @@ class AgentVersionSpecValidator(BaseModel):
     usage_cost_mapping: UsageCostMapping | None = None
     request_schema: dict[str, Any] | None = None
     response_schema: dict[str, Any] | None = None
-    credential_ref: str | None = Field(default=None, description="Runtime secret reference: vault://mount/path#field; env://NAME is development-only")
+    credential_ref: str | None = Field(default=None, description="Legacy Provider reference; prefer credential_id. env://NAME requires development mode")
+    credential_id: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9_-]+$", description="稳定 Credential ID，与 legacy credential_ref 互斥")
     timeout_seconds: float = Field(default=30.0, ge=1.0, le=600.0)
     max_retries: int = Field(default=2, ge=0, le=10)
     rate_limit_per_minute: int = Field(default=600, ge=1, le=10000)
@@ -262,6 +263,12 @@ class AgentVersionSpecValidator(BaseModel):
         validate_credential_ref(v)
         return v
 
+    @model_validator(mode="after")
+    def credential_source(self):
+        if self.credential_id and self.credential_ref:
+            raise ValueError("Use credential_id or legacy credential_ref, not both")
+        return self
+
 
 class AgentVersionCreateRequest(AgentVersionSpecValidator):
     agent_id: str = Field(..., description="Parent agent ID")
@@ -285,6 +292,7 @@ class AgentVersionResponse(BaseModel):
     request_schema: dict[str, Any] | None = None
     response_schema: dict[str, Any] | None = None
     credential_ref: str | None = None
+    credential_id: str | None = None
     timeout_seconds: float
     max_retries: int
     rate_limit_per_minute: int
@@ -831,6 +839,9 @@ class ExecutionAttemptResponse(BaseModel):
     trace_context_received: bool
     worker_id: str | None = None
     request_phase: str = "PREPARED"
+    credential_id: str | None = None
+    credential_version: int | None = None
+    credential_provider: str | None = None
     started_at: datetime
     completed_at: datetime | None = None
 

@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException
 from langfuse import get_client
 
 from .api_baselines import router as baselines_router
+from .api_credentials import router as credentials_router
 from .api_evaluators import router as evaluators_router
 from .api_launches import router as launches_router
 from .api_registry import router as registry_router
@@ -203,6 +204,7 @@ app = FastAPI(
 
 # Mount Routers
 app.include_router(registry_router)
+app.include_router(credentials_router)
 app.include_router(launches_router)
 app.include_router(evaluators_router)
 app.include_router(baselines_router)

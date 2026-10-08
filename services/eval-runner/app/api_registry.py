@@ -208,6 +208,7 @@ def create_agent_version(
             request_schema=payload.request_schema,
             response_schema=payload.response_schema,
             credential_ref=payload.credential_ref,
+            credential_id=payload.credential_id,
             timeout_seconds=payload.timeout_seconds,
             max_retries=payload.max_retries,
             rate_limit_per_minute=payload.rate_limit_per_minute,

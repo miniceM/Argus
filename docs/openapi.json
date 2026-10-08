@@ -433,6 +433,378 @@
         }
       }
     },
+    "/api/v1/credentials": {
+      "get": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "List Credentials",
+        "operationId": "list_credentials_api_v1_credentials_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CredentialResponse"
+                  },
+                  "title": "Response List Credentials Api V1 Credentials Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Create Credential",
+        "operationId": "create_credential_api_v1_credentials_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/credentials/rewrap": {
+      "post": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Rewrap Credentials",
+        "operationId": "rewrap_credentials_api_v1_credentials_rewrap_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/credentials/{credential_id}/usage": {
+      "get": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Credential Usage",
+        "operationId": "credential_usage_api_v1_credentials__credential_id__usage_get",
+        "parameters": [
+          {
+            "name": "credential_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Credential Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialUsage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/credentials/{credential_id}/rotate": {
+      "post": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Rotate Credential",
+        "operationId": "rotate_credential_api_v1_credentials__credential_id__rotate_post",
+        "parameters": [
+          {
+            "name": "credential_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Credential Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialRotate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/credentials/{credential_id}/disable": {
+      "post": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Disable Credential",
+        "operationId": "disable_credential_api_v1_credentials__credential_id__disable_post",
+        "parameters": [
+          {
+            "name": "credential_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Credential Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialDisable"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/credentials/{credential_id}": {
+      "delete": {
+        "tags": [
+          "Credentials"
+        ],
+        "summary": "Delete Credential",
+        "operationId": "delete_credential_api_v1_credentials__credential_id__delete",
+        "parameters": [
+          {
+            "name": "credential_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Credential Id"
+            }
+          },
+          {
+            "name": "confirm_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Confirm Name"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/experiment-launches": {
       "post": {
         "tags": [
@@ -2186,7 +2558,21 @@
               }
             ],
             "title": "Credential Ref",
-            "description": "Runtime secret reference: vault://mount/path#field; env://NAME is development-only"
+            "description": "Legacy Provider reference; prefer credential_id. env://NAME requires development mode"
+          },
+          "credential_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Id",
+            "description": "稳定 Credential ID，与 legacy credential_ref 互斥"
           },
           "timeout_seconds": {
             "type": "number",
@@ -2372,6 +2758,17 @@
               }
             ],
             "title": "Credential Ref"
+          },
+          "credential_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Id"
           },
           "timeout_seconds": {
             "type": "number",
@@ -3154,6 +3551,195 @@
         ],
         "title": "CostComparisonStatus"
       },
+      "CredentialCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "const": "bearer_token",
+            "title": "Type",
+            "default": "bearer_token"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment",
+            "default": "production"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "managed",
+              "vault"
+            ],
+            "title": "Provider",
+            "default": "managed"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret"
+          },
+          "provider_ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Ref",
+            "description": "Vault 管理员登记的内部映射，普通 API 不返回"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CredentialCreate"
+      },
+      "CredentialDisable": {
+        "properties": {
+          "confirm_name": {
+            "type": "string",
+            "title": "Confirm Name"
+          },
+          "force": {
+            "type": "boolean",
+            "title": "Force",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "confirm_name"
+        ],
+        "title": "CredentialDisable"
+      },
+      "CredentialResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "const": "bearer_token",
+            "title": "Type",
+            "default": "bearer_token"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "managed",
+              "vault"
+            ],
+            "title": "Provider"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "environment",
+          "provider",
+          "enabled",
+          "version"
+        ],
+        "title": "CredentialResponse"
+      },
+      "CredentialRotate": {
+        "properties": {
+          "secret": {
+            "type": "string",
+            "format": "password",
+            "title": "Secret",
+            "writeOnly": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "secret"
+        ],
+        "title": "CredentialRotate"
+      },
+      "CredentialUsage": {
+        "properties": {
+          "credential_id": {
+            "type": "string",
+            "title": "Credential Id"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/CredentialUsageVersion"
+            },
+            "type": "array",
+            "title": "Versions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "credential_id",
+          "versions"
+        ],
+        "title": "CredentialUsage"
+      },
+      "CredentialUsageVersion": {
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "title": "Agent Id"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "agent_id",
+          "version",
+          "is_active"
+        ],
+        "title": "CredentialUsageVersion"
+      },
       "DomainErrorResponse": {
         "properties": {
           "code": {
@@ -3790,6 +4376,39 @@
             "type": "string",
             "title": "Request Phase",
             "default": "PREPARED"
+          },
+          "credential_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Id"
+          },
+          "credential_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Version"
+          },
+          "credential_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Provider"
           },
           "started_at": {
             "type": "string",

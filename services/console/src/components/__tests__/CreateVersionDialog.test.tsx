@@ -6,6 +6,7 @@ import { CreateVersionDialog } from "../../features/agents/CreateVersionDialog";
 vi.mock("../../api/client", () => ({
   api: {
     POST: vi.fn(),
+    GET: vi.fn().mockResolvedValue({ data: [] }),
   },
 }));
 
@@ -48,7 +49,7 @@ describe("CreateVersionDialog Help Indicators (Issue #18)", () => {
     fireEvent.click(secretHelpBtn);
 
     expect(screen.getByText(/严禁直接填入明文 Secret/)).toBeInTheDocument();
-    expect(screen.getByText("vault://secret/agents/banking#token")).toBeInTheDocument();
+    expect(screen.getByText("生产 Agent Token（Credential 名称）")).toBeInTheDocument();
     expect(screen.getByText(/仅供本地开发\/PoC/)).toBeInTheDocument();
   });
 });

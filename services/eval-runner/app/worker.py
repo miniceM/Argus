@@ -519,6 +519,7 @@ class ExecutionWorker:
                 max_concurrency=policy_dict["max_concurrency"],
                 is_idempotent=bool(agent_dict.get("is_idempotent", False)),
                 credential_ref=agent_dict.get("credential_ref"),
+                credential_id=agent_dict.get("credential_id"),
                 id=agent_dict.get("agent_version_id", f"{agent_dict['agent_id']}-{agent_dict['version']}"),
             )
 
@@ -596,8 +597,23 @@ class ExecutionWorker:
                 ).first()
                 current_attempt_id = att_rec.id if att_rec else None
 
-            executor = RemoteAgentExecutor(spec)
+            executor = RemoteAgentExecutor(spec, credential_db_manager=self.db_mgr)
             mapped_payload = map_request(dataset_input, spec.request_mapping)
+            # 在可能发送标记、Agent Trace 和 HTTP 调用之前预取凭据。
+            try:
+                await executor.prepare_credential()
+            except ValueError:
+                finalized = self.finalize_execution_and_attempt(
+                    item_id=item_id, generation=generation, lease_token=token,
+                    target_item_status="FAILED", target_eval_status="skipped", target_quality_conclusion="unknown",
+                    current_attempt_id=current_attempt_id, execution_error="CREDENTIAL_UNAVAILABLE",
+                    attempt_updates={"status": "FAILED", "error_type": "CREDENTIAL_UNAVAILABLE",
+                                     "error_message": "CREDENTIAL_UNAVAILABLE", "request_phase": "PREPARED"},
+                )
+                self.limiter.release_concurrency_permit(spec.id, permit_id)
+                await executor._client.aclose()
+                self.queue.ack(message_id)
+                return finalized
             headers = {
                 "Content-Type": "application/json",
                 "X-Eval-Launch-Id": launch_id,
@@ -680,6 +696,10 @@ class ExecutionWorker:
                 with self.db_mgr.get_session() as session:
                     att = session.get(ExecutionAttemptRecord, current_attempt_id)
                     if att:
+                        if executor.resolved_credential:
+                            att.credential_id = executor.resolved_credential.credential_id
+                            att.credential_version = executor.resolved_credential.version
+                            att.credential_provider = executor.resolved_credential.provider
                         att.request_phase = "MAY_HAVE_BEEN_SENT"
                         session.commit()
 

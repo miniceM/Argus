@@ -132,6 +132,34 @@ def test_vault_requires_tls_and_workload_configuration(vault_config, monkeypatch
         validate_credential_ref("vault://secret/agents/a#token")
 
 
+@pytest.mark.parametrize("address", ["https://vault.example:notaport", "https://vault.example:70000", "https://vault.example:0"])
+def test_vault_rejects_invalid_port_before_runtime(vault_config, monkeypatch, address):
+    monkeypatch.setenv("ARGUS_VAULT_ADDR", address)
+    with pytest.raises(ValueError):
+        validate_credential_ref("vault://secret/agents/a#token")
+
+
+@pytest.mark.parametrize("slow_step", ["login", "read"])
+def test_vault_entire_resolution_shares_one_budget(vault_config, monkeypatch, slow_step):
+    from app import secret_providers
+    now = [0.0]
+    calls = []
+    monkeypatch.setattr(secret_providers.time, "monotonic", lambda: now[0])
+
+    def handler(request):
+        calls.append(request)
+        if request.method == "POST":
+            now[0] += 6 if slow_step == "login" else 3
+            return httpx.Response(200, json={"auth": {"client_token": "example-short-token"}})
+        assert request.extensions["timeout"]["read"] == 2
+        now[0] += 3
+        return httpx.Response(200, json={"data": {"data": {"token": "example-token"}, "metadata": {"version": 2}}})
+    monkeypatch.setattr(secret_providers.VaultKubernetesProvider, "_transport", httpx.MockTransport(handler))
+    with pytest.raises(ValueError, match="CREDENTIAL_UNAVAILABLE"):
+        resolve_credential("vault://secret/agents/a#token")
+    assert len(calls) == (1 if slow_step == "login" else 2)
+
+
 def test_vault_missing_jwt_and_missing_secret_are_sanitized(vault_config, monkeypatch):
     from app.secret_providers import VaultKubernetesProvider
 

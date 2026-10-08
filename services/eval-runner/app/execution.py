@@ -435,6 +435,7 @@ class LaunchExecutionService:
                 request_mapping=agent_spec_dict["request_mapping"],
                 max_concurrency=exec_policy["max_concurrency"],
                 credential_ref=agent_spec_dict.get("credential_ref"),
+                credential_id=agent_spec_dict.get("credential_id"),
                 id=agent_spec_dict.get("agent_version_id", ""),
                 is_idempotent=bool(agent_spec_dict.get("is_idempotent", False)),
             )

@@ -251,7 +251,7 @@ export const AgentVersionDetail: React.FC = () => {
           <div className="space-y-3 text-xs">
             <div>
               <span className="text-muted-foreground block mb-1.5 font-medium">安全凭据引用 (Credential Ref)</span>
-              <SecretRef credentialRef={versionData.credential_ref} />
+              {versionData.credential_id ? <Link to="/credentials" className="text-primary font-mono">{versionData.credential_id}</Link> : <SecretRef credentialRef={versionData.credential_ref} />}
             </div>
 
             <div>

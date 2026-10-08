@@ -6,12 +6,14 @@ import { AgentVersionDetail } from "../features/agents/AgentVersionDetail";
 import { LaunchesList } from "../features/launches/LaunchesList";
 import { CreateLaunch } from "../features/launches/CreateLaunch";
 import { LaunchDetail } from "../features/launches/LaunchDetail";
+import { CredentialsPage } from "../features/credentials/CredentialsPage";
 
 export const router = createBrowserRouter([
   {
     path: "/",
     element: <AppShell />,
     children: [
+      { path: "credentials", element: <CredentialsPage /> },
       {
         index: true,
         element: <Navigate to="/launches" replace />,

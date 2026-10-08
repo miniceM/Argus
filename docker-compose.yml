@@ -205,6 +205,9 @@ services:
       AGENT_REGISTRY_PATH: /app/config/agents.yaml
       DATASET_SEED_PATH: /app/data/dataset.json
       RUNNER_VERSION: 0.1.0
+      ARGUS_SECRET_MODE: ${ARGUS_SECRET_MODE:-production}
+      ARGUS_ALLOWED_CREDENTIAL_ENVS: ${ARGUS_ALLOWED_CREDENTIAL_ENVS:-DEMO_AUTH_TOKEN}
+      DEMO_AUTH_TOKEN: ${DEMO_AUTH_TOKEN:-}
     volumes: [./config:/app/config:ro, ./data:/app/data:ro, ./migrations:/app/migrations:ro]
     ports: ["18080:8080"]
     healthcheck:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlsplit
@@ -74,6 +75,12 @@ class VaultKubernetesProvider:
         ):
             raise ValueError("Invalid vault:// reference; expected configured-mount/path#field")
         address = urlsplit(self.address)
+        try:
+            port = address.port
+            if port is not None and not 1 <= port <= 65535:
+                raise ValueError()
+        except ValueError:
+            raise ValueError("ARGUS_VAULT_ADDR has an invalid port") from None
         if (
             address.scheme != "https" or not address.hostname or address.username or address.password
             or address.query or address.fragment or address.path not in ("", "/")
@@ -84,9 +91,18 @@ class VaultKubernetesProvider:
             raise ValueError("Invalid Vault mount configuration")
 
     def resolve(self, reference: str) -> str:
-        self.validate(reference)
-        parts = urlsplit(reference)
+        return self.resolve_with_metadata(reference)[0]
+
+    def resolve_with_metadata(self, reference: str) -> tuple[str, int | None]:
+        deadline = time.monotonic() + 5
+        def remaining():
+            budget = deadline - time.monotonic()
+            if budget <= 0:
+                raise CredentialUnavailable()
+            return budget
         try:
+            self.validate(reference)
+            parts = urlsplit(reference)
             jwt = _token(Path(self.jwt_path).read_text().strip())
             headers = {"X-Vault-Namespace": self.namespace} if self.namespace else {}
             # TLS 验证保持开启，不跟随重定向，不自动重试，不缓存 Agent Secret。
@@ -94,16 +110,21 @@ class VaultKubernetesProvider:
                 login = client.post(
                     f"{self.address}/v1/auth/{self.auth_mount}/login",
                     json={"role": self.role, "jwt": jwt}, headers=headers,
+                    timeout=remaining(),
                 )
+                remaining()
                 login.raise_for_status()
                 vault_token = _token(login.json()["auth"]["client_token"])
                 response = client.get(
                     f"{self.address}/v1/{self.mount}/data{parts.path}",
                     headers={**headers, "X-Vault-Token": vault_token},
+                    timeout=remaining(),
                 )
+                remaining()
                 response.raise_for_status()
-                return _token(response.json()["data"]["data"][parts.fragment])
-        except (OSError, ValueError, KeyError, TypeError, httpx.HTTPError):
+                data = response.json()["data"]
+                return _token(data["data"][parts.fragment]), data.get("metadata", {}).get("version")
+        except (OSError, ValueError, KeyError, TypeError, httpx.HTTPError, httpx.InvalidURL):
             raise CredentialUnavailable() from None
 
 

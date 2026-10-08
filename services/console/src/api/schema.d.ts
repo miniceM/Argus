@@ -75,6 +75,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Credentials */
+        get: operations["list_credentials_api_v1_credentials_get"];
+        put?: never;
+        /** Create Credential */
+        post: operations["create_credential_api_v1_credentials_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/credentials/rewrap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rewrap Credentials */
+        post: operations["rewrap_credentials_api_v1_credentials_rewrap_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/credentials/{credential_id}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Credential Usage */
+        get: operations["credential_usage_api_v1_credentials__credential_id__usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/credentials/{credential_id}/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotate Credential */
+        post: operations["rotate_credential_api_v1_credentials__credential_id__rotate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/credentials/{credential_id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disable Credential */
+        post: operations["disable_credential_api_v1_credentials__credential_id__disable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/credentials/{credential_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Credential */
+        delete: operations["delete_credential_api_v1_credentials__credential_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/experiment-launches": {
         parameters: {
             query?: never;
@@ -724,9 +827,14 @@ export interface components {
             } | null;
             /**
              * Credential Ref
-             * @description Runtime secret reference: vault://mount/path#field; env://NAME is development-only
+             * @description Legacy Provider reference; prefer credential_id. env://NAME requires development mode
              */
             credential_ref?: string | null;
+            /**
+             * Credential Id
+             * @description 稳定 Credential ID，与 legacy credential_ref 互斥
+             */
+            credential_id?: string | null;
             /**
              * Timeout Seconds
              * @default 30
@@ -814,6 +922,8 @@ export interface components {
             } | null;
             /** Credential Ref */
             credential_ref?: string | null;
+            /** Credential Id */
+            credential_id?: string | null;
             /** Timeout Seconds */
             timeout_seconds: number;
             /** Max Retries */
@@ -1083,6 +1193,93 @@ export interface components {
          * @enum {string}
          */
         CostComparisonStatus: "COMPARABLE" | "NOT_COMPARABLE";
+        /** CredentialCreate */
+        CredentialCreate: {
+            /** Name */
+            name: string;
+            /**
+             * Type
+             * @default bearer_token
+             * @constant
+             */
+            type: "bearer_token";
+            /**
+             * Environment
+             * @default production
+             */
+            environment: string;
+            /**
+             * Provider
+             * @default managed
+             * @enum {string}
+             */
+            provider: "managed" | "vault";
+            /** Secret */
+            secret?: string | null;
+            /**
+             * Provider Ref
+             * @description Vault 管理员登记的内部映射，普通 API 不返回
+             */
+            provider_ref?: string | null;
+        };
+        /** CredentialDisable */
+        CredentialDisable: {
+            /** Confirm Name */
+            confirm_name: string;
+            /**
+             * Force
+             * @default false
+             */
+            force: boolean;
+        };
+        /** CredentialResponse */
+        CredentialResponse: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Type
+             * @default bearer_token
+             * @constant
+             */
+            type: "bearer_token";
+            /** Environment */
+            environment: string;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "managed" | "vault";
+            /** Enabled */
+            enabled: boolean;
+            /** Version */
+            version: number;
+        };
+        /** CredentialRotate */
+        CredentialRotate: {
+            /**
+             * Secret
+             * Format: password
+             */
+            secret: string;
+        };
+        /** CredentialUsage */
+        CredentialUsage: {
+            /** Credential Id */
+            credential_id: string;
+            /** Versions */
+            versions: components["schemas"]["CredentialUsageVersion"][];
+        };
+        /** CredentialUsageVersion */
+        CredentialUsageVersion: {
+            /** Agent Id */
+            agent_id: string;
+            /** Version */
+            version: string;
+            /** Is Active */
+            is_active: boolean;
+        };
         /** DomainErrorResponse */
         DomainErrorResponse: {
             /**
@@ -1341,6 +1538,12 @@ export interface components {
              * @default PREPARED
              */
             request_phase: string;
+            /** Credential Id */
+            credential_id?: string | null;
+            /** Credential Version */
+            credential_version?: number | null;
+            /** Credential Provider */
+            credential_provider?: string | null;
             /**
              * Started At
              * Format: date-time
@@ -2393,6 +2596,232 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentVersionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_credentials_api_v1_credentials_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialResponse"][];
+                };
+            };
+        };
+    };
+    create_credential_api_v1_credentials_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CredentialCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rewrap_credentials_api_v1_credentials_rewrap_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    credential_usage_api_v1_credentials__credential_id__usage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credential_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialUsage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rotate_credential_api_v1_credentials__credential_id__rotate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                credential_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CredentialRotate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disable_credential_api_v1_credentials__credential_id__disable_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                credential_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CredentialDisable"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_credential_api_v1_credentials__credential_id__delete: {
+        parameters: {
+            query: {
+                confirm_name: string;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                credential_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

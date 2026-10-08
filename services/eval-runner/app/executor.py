@@ -13,7 +13,9 @@ from typing import Any
 import httpx
 
 from .costs import extract_usage_cost
+from .credentials import CredentialService, ResolvedCredential
 from .registry import AgentVersionSpec
+from .secret_providers import CredentialUnavailable
 from .security import resolve_credential
 
 
@@ -93,8 +95,11 @@ class SlidingWindowRateLimiter:
 class RemoteAgentExecutor:
     """Remote Agent invocation executor with HTTP error classification, idempotency protection, and rate limiting."""
 
-    def __init__(self, spec: AgentVersionSpec, client: httpx.AsyncClient | None = None):
+    def __init__(self, spec: AgentVersionSpec, client: httpx.AsyncClient | None = None, *, credential_db_manager=None):
         self.spec = spec
+        self.credential_db_manager = credential_db_manager
+        self.resolved_credential = None
+        self._credential_prepared = False
         self._limiter = SlidingWindowRateLimiter(spec.rate_limit_per_minute)
         self._client = client or httpx.AsyncClient(
             timeout=httpx.Timeout(
@@ -104,6 +109,25 @@ class RemoteAgentExecutor:
                 write=spec.timeout_seconds,
             )
         )
+
+    async def prepare_credential(self):
+        if self._credential_prepared:
+            return
+        try:
+            if self.spec.credential_id:
+                manager = self.credential_db_manager
+                if manager is None:
+                    from .main import db_manager
+                    manager = db_manager
+                self.resolved_credential = await asyncio.wait_for(
+                    asyncio.to_thread(CredentialService(manager).resolve, self.spec.credential_id), timeout=5,
+                )
+            elif self.spec.credential_ref:
+                token = await asyncio.wait_for(asyncio.to_thread(resolve_credential, self.spec.credential_ref), timeout=5)
+                self.resolved_credential = ResolvedCredential(token, provider=self.spec.credential_ref.split(":", 1)[0])
+            self._credential_prepared = True
+        except (ValueError, TimeoutError):
+            raise CredentialUnavailable() from None
 
     async def invoke_once(
         self,
@@ -117,10 +141,9 @@ class RemoteAgentExecutor:
             raise ValueError(f"Executor currently supports POST only, got: {self.spec.method}")
 
         call_headers = dict(headers)
-        if self.spec.credential_ref:
-            token = await asyncio.to_thread(resolve_credential, self.spec.credential_ref)
-            if token:
-                call_headers["Authorization"] = f"Bearer {token}"
+        await self.prepare_credential()
+        if self.resolved_credential:
+            call_headers["Authorization"] = f"Bearer {self.resolved_credential.token}"
 
         active_client = client or self._client
         start_time = time.monotonic()
@@ -281,10 +304,9 @@ class RemoteAgentExecutor:
         call_headers = dict(headers)
 
         # Inject resolved credential if present
-        if self.spec.credential_ref:
-            token = await asyncio.to_thread(resolve_credential, self.spec.credential_ref)
-            if token:
-                call_headers["Authorization"] = f"Bearer {token}"
+        await self.prepare_credential()
+        if self.resolved_credential:
+            call_headers["Authorization"] = f"Bearer {self.resolved_credential.token}"
 
         timeout = httpx.Timeout(
             self.spec.timeout_seconds,

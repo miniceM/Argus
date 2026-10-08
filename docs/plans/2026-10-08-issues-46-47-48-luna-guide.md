@@ -106,14 +106,14 @@
 
 全部命令从仓库根目录执行。以下初始为待执行，结果填在文末，不提前称为通过。
 
-- [ ] #46 所有筛选 case 同时验证请求参数和精确可见集合；空态无残留，重置恢复全部记录。
-- [ ] #47 四类核心页在桌面/窄桌面均完成渲染；长内容不产生整页横向溢出。
-- [ ] #47 form 正常纵向滚动可填写和提交，POST 及跳转正确。
-- [ ] 原 390/768px 检查保持，错误 Version 响应不能再假绿。
-- [ ] #48 文档端口与变量、整数范围、命令、隔离说明准确。
-- [ ] 覆盖端口的完整命令成功，结束后两个端口不再 LISTEN。
-- [ ] typecheck、Vitest、完整 Playwright 与 make validate 通过，跳过项明确记录。
-- [ ] 三个 Issue 顺序独立本地提交，工作区干净；不自动变更远端 Issue 状态。
+- [x] #46 所有筛选 case 同时验证请求参数和精确可见集合；空态无残留，重置恢复全部记录。
+- [x] #47 四类核心页在桌面/窄桌面均完成渲染；长内容不产生整页横向溢出。
+- [x] #47 form 正常纵向滚动可填写和提交，POST 及跳转正确。
+- [x] 原 390/768px 检查保持，错误 Version 响应不能再假绿。
+- [x] #48 文档端口与变量、整数范围、命令、隔离说明准确。
+- [x] 覆盖端口的完整命令成功，结束后两个端口不再 LISTEN。
+- [x] typecheck、Vitest、完整 Playwright 与 make validate 通过，跳过项明确记录。
+- [x] 三个 Issue 顺序独立本地提交，工作区干净；不自动变更远端 Issue 状态。
 
 ## 9. 风险与注意事项
 
@@ -140,7 +140,7 @@
 - typecheck、build、Token lint 通过；Vitest 27 文件 / 397 项通过。
 - `launches-filter.spec.ts`：5 项通过。
 - 灵敏度验证：临时忽略 Agent 参数，Agent case 因期望 3 行而实际 6 行失败；恢复后 5 项再次通过。未修改产品逻辑。
-- 环境：Python 3.12.4 虚拟环境；本机 Node 22 缺少 `libsimdutf.31.dylib` 无法启动，使用可用 Node 24.13.0。其余 Issue 与完整门禁待执行。
+- 环境：Python 3.12.4 虚拟环境；本机 Node 22 缺少 `libsimdutf.31.dylib` 无法启动，使用可用 Node 24.13.0。该阶段尚未执行完整门禁，最终结果见 #48。
 
 
 ### #47
@@ -149,4 +149,18 @@
 - typecheck、Token lint 通过；Vitest 27 文件 / 397 项通过。
 - 灵敏度验证：临时恢复错误的 Version 数组响应，390px Version case 因标题缺少 `1.0.0` 失败；临时遮挡页面，1440px journey 因 `unobstructed: false` 失败。两项扰动均已恢复。
 - 首次新增场景暴露的是测试 locator 的 Environment 名称及复制按钮变更名称问题；已按真实 accessible name 修正，不是产品 Bug。无需改动业务 UI。
-- Homebrew Node 22 无法启动，但已取得隔离的 Node 22.22.0，最终完整门禁将使用此运行时，未修改系统安装。
+- Homebrew Node 22 无法启动，但已取得隔离的 Node 22.22.0，最终完整门禁使用此运行时，未修改系统安装。
+
+
+### #48 与最终门禁
+
+- 已在 `CONTRIBUTING.md` 门禁章节补默认端口、覆盖变量、build 前置、隔离服务、SQLite 生命周期、lsof 排查和并发端口要求。
+- 使用 Python 3.12.4、隔离 Node 22.22.0、pnpm 10.5.2。
+- 按文档运行 `ARGUS_E2E_API_PORT=28080 ARGUS_E2E_CONSOLE_PORT=28083 make console-e2e`：构建成功，50 项 Playwright 全部通过（53.5s）。
+- 测试前后 `lsof -nP -iTCP:28080 -iTCP:28083 -sTCP:LISTEN` 均无输出、返回 1，确认没有遗留监听服务。
+- 配置加载验证：两个变量分别取 `0`、`65536`、`1.5`、`invalid` 时均被准确错误提示拒绝；`1`、`65535` 均可枚举测试（不实际绑定特权/边界端口）。
+- `make validate`：PASS。Ruff、Token lint、OpenAPI/schema 同步、typecheck、build 与 Compose 静态校验通过；Vitest 27 文件 / 397 项通过；pytest 252 passed / 3 skipped。
+- 三项 PostgreSQL 实测跳过：未配置 `TEST_POSTGRES_URL`，分别为真实行锁、外键与 lock-wait `clock_timestamp` 检查。未启动或连接额外 PostgreSQL。
+- 既有构建大 chunk 提示及 Python datetime 弃用警告保留，本任务不扩大至包拆分或时间模型重构。
+- 本地提交顺序：#46 `1bad671`，#47 `03a1071`，#48 `docs(console): document isolated Playwright ports`（本记录随第三个提交落盘，最终 hash 见交付回复或 git log）。
+- 无生产代码/API/数据迁移改动，无 push/PR/远端 Issue 关闭，也未验证真实 Worker/Agent/Langfuse 完整链路或远端 CI。

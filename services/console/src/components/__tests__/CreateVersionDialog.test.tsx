@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { api } from "../../api/client";
 import { CreateVersionDialog } from "../../features/agents/CreateVersionDialog";
 
 vi.mock("../../api/client", () => ({
@@ -123,4 +124,17 @@ describe("CreateVersionDialog field-level validation", () => {
       "aria-invalid",
     );
   });
+});
+
+it("submits the same normalized environment used by Credential selection", async () => {
+  vi.mocked(api.GET).mockResolvedValue({ data: [{ id: "cred-1", name: "生产凭据", environment: "production", provider: "managed", enabled: true, version: 1 }], response: new Response() } as any);
+  vi.mocked(api.POST).mockResolvedValue({ data: {}, response: new Response() } as any);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={queryClient}><CreateVersionDialog agentId="banking-agent" isOpen onClose={vi.fn()} /></QueryClientProvider>);
+  fireEvent.change(screen.getByRole("textbox", { name: /版本号/ }), { target: { value: "secured-v1" } });
+  fireEvent.change(screen.getByRole("textbox", { name: /^运行环境$/ }), { target: { value: " Production " } });
+  await screen.findByRole("option", { name: "生产凭据 · managed" });
+  fireEvent.change(screen.getByRole("combobox", { name: /选择凭据/ }), { target: { value: "cred-1" } });
+  fireEvent.submit(document.getElementById("create-version-form")!);
+  await waitFor(() => expect(api.POST).toHaveBeenCalledWith("/api/v1/agent-versions", expect.objectContaining({ body: expect.objectContaining({ credential_id: "cred-1", environment: "production" }) })));
 });

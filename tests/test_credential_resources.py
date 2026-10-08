@@ -293,3 +293,48 @@ def test_optional_vault_resource_hides_mapping_and_records_real_kv_revision(cred
     assert create(client, provider="vault", secret=None, provider_ref="vault://secret/agents/private#token").status_code == 503
     with pytest.raises(CredentialUnavailable):
         service.resolve(response.json()["id"])
+
+
+@pytest.mark.parametrize("http_statuses", [[200], [401], [500, 200]])
+def test_sync_api_attempts_record_the_exact_managed_revision(credentials, setup_runtime, monkeypatch, http_statuses):
+    import httpx
+    from app.manifest import LaunchService
+
+    client, _, registry, _ = credentials
+    manager = setup_runtime[0]
+    credential_id = create(client).json()["id"]
+    registry.create_version("test-agent", "sync-secured", "https://agent.example/invoke", credential_id=credential_id,
+                            environment="production", max_retries=len(http_statuses) - 1)
+    svc = LaunchService(manager, registry)
+    monkeypatch.setattr(main, "launch_service", svc)
+    monkeypatch.setattr(main, "orchestrator", setup_runtime[3])
+    launch = svc.create_launch(agent_id="test-agent", agent_version="sync-secured", dataset_name="test", evaluator_ids=["intent_match"], dataset_snapshot={
+        "source": "seed", "dataset_id": "ds", "dataset_version": "v1", "items": [{"id": "1", "input": {}, "expected_output": {"expected_intent": "refund"}}],
+    })
+    assert client.post(f"/api/v1/credentials/{credential_id}/rotate", json={"secret": "example-second-token"}).status_code == 200
+    responses = [httpx.Response(code, json={"intent": "refund"}) for code in http_statuses]
+    with patch("app.execution.get_langfuse_client_safe", return_value=None), patch("httpx.AsyncClient.post", new_callable=AsyncMock, side_effect=responses) as invoke:
+        response = client.post("/api/v1/experiment-launches/run", json={"launch_id": launch.id})
+    assert response.status_code == 200, response.text
+    assert invoke.await_count == len(http_statuses)
+    assert all(call.kwargs["headers"]["Authorization"] == "Bearer example-second-token" for call in invoke.await_args_list)
+    with manager.get_session() as session:
+        attempts = session.scalars(select(ExecutionAttemptRecord).join(ExperimentItemExecutionRecord, ExecutionAttemptRecord.item_execution_id == ExperimentItemExecutionRecord.id).where(ExperimentItemExecutionRecord.launch_id == launch.id)).all()
+        assert len(attempts) == len(http_statuses)
+        assert all((attempt.credential_id, attempt.credential_version, attempt.credential_provider) == (credential_id, 2, "managed") for attempt in attempts)
+
+
+def test_rewrap_audits_each_historical_secret_revision(credentials, setup_runtime):
+    from app.db_models import CredentialAuditRecord
+
+    client, _, _, path = credentials
+    credential_id = create(client).json()["id"]
+    assert client.post(f"/api/v1/credentials/{credential_id}/rotate", json={"secret": "example-second-token"}).status_code == 200
+    keys = json.loads(path.read_text())
+    keys["keys"]["key-2"] = base64.b64encode(b"b" * 32).decode()
+    keys["active_key_id"] = "key-2"
+    path.write_text(json.dumps(keys))
+    assert client.post("/api/v1/credentials/rewrap").json()["rewrapped"] == 2
+    with setup_runtime[0].get_session() as session:
+        rows = session.scalars(select(CredentialAuditRecord).where(CredentialAuditRecord.action == "REWRAP")).all()
+        assert sorted(row.version for row in rows) == [1, 2]

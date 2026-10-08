@@ -35,11 +35,12 @@ docker compose --env-file .env.poc -f docker-compose.yml -f deploy/credentials.c
 `ARGUS_MANAGED_SECRET_KEY_FILE` 和 `ARGUS_CREDENTIAL_ADMIN_TOKEN_FILE` 读取。部署使用不同
 UID 时，应设置文件所有者让 Runner 能读取，不能放宽为组或全局可读。
 在 Console 创建名称、环境与 Token，管理授权 Token 由部署管理员安全交付。
-创建 AgentVersion 时选同一环境的 Credential，即可发起正式评测；无鉴权 Agent 可不选。
+创建 AgentVersion 时选同一环境的 Credential，即可发起正式评测；无鉴权 Agent 可不选。Console 将环境名称去除首尾空白并转为小写。
 
 写操作 `POST /api/v1/credentials`、`/{id}/rotate`、`/{id}/disable`、`/rewrap` 与
 `DELETE /{id}` 需独立 Bearer 管理授权。未配置授权/主密钥则拒绝写入；错误响应不回显输入。
 创建、轮换、停用、删除和重包裹留存不含 Secret 的审计动作、修订和管理 Token 指纹。
+重包裹的每条审计记录对应实际处理的历史修订；同步执行和 Worker 执行均在 Attempt 记录实际使用的凭据 ID、Provider 与修订。
 该指纹不代表具体用户身份。生产部署仍需网关鉴权和 HTTPS 保护整个 Console/API；本 PR
 没有实现 SSO、租户 RBAC 或细粒度读取授权，这些继续由治理 Issue #6 承接。
 浏览器只在当前操作表单保留 Token，成功或关闭后清空，不写 localStorage。

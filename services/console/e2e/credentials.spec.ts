@@ -20,7 +20,7 @@ test("真实 API：创建凭据、Agent 选择、轮换、引用保护和停用"
     await page.goto(`/agents/${agent}`);
     await page.getByRole("button", { name: "创建新版本" }).click();
     await page.getByRole("textbox", { name: /版本号/ }).fill("secured-v1");
-    await page.getByRole("textbox", { name: "运行环境", exact: true }).fill("production");
+    await page.getByRole("textbox", { name: "运行环境", exact: true }).fill(" Production ");
     await page.getByRole("combobox", { name: /选择凭据/ }).selectOption(credential.id);
     await page.getByRole("button", { name: "确认创建版本" }).click();
     await expect(page.getByRole("cell", { name: "secured-v1" })).toBeVisible();

@@ -79,7 +79,7 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
           credential_ref: credentialId ? null : credentialRef.trim() || null,
           credential_id: credentialId || null,
           artifact_ref: artifactRef.trim() || null,
-          environment: environment.trim() || null,
+          environment: environment.trim().toLowerCase() || null,
           trace_propagation: "W3C",
         },
       });

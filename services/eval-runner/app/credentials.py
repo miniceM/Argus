@@ -76,9 +76,9 @@ class CredentialService:
                 "type": "bearer_token", "provider": record.provider, "enabled": record.enabled, "version": record.active_version}
 
     @staticmethod
-    def audit(session, record, action, actor):
+    def audit(session, record, action, actor, *, version=None):
         session.add(CredentialAuditRecord(id=str(uuid.uuid4()), credential_id=record.id,
-                                         action=action, actor=actor, version=record.active_version))
+                                         action=action, actor=actor, version=record.active_version if version is None else version))
 
     def usage(self, credential_id):
         with self.manager.get_session() as session:
@@ -132,7 +132,7 @@ class CredentialService:
                 if row.envelope["key_id"] == provider.active_key_id:
                     continue
                 row.envelope = provider.encrypt(row.credential_id, row.version, token)
-                self.audit(session, session.get(CredentialRecord, row.credential_id), "REWRAP", actor)
+                self.audit(session, session.get(CredentialRecord, row.credential_id), "REWRAP", actor, version=row.version)
                 count += 1
             session.commit()
         return {"rewrapped": count}

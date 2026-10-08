@@ -7,6 +7,7 @@ import { Modal } from "../../components/ui/Overlay";
 
 type Credential = components["schemas"]["CredentialResponse"];
 type Operation = "create" | "rotate" | "disable" | "delete";
+const credentialLabel = (credential: Credential) => `${credential.name} (${credential.id.slice(-8)})`;
 const titles = { create: "创建凭据", rotate: "轮换凭据", disable: "停用凭据", delete: "删除凭据" };
 
 export function CredentialsPage() {
@@ -28,6 +29,7 @@ export function CredentialsPage() {
   const [force, setForce] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [usageTarget, setUsageTarget] = useState<Credential | null>(null);
   const [usage, setUsage] = useState<components["schemas"]["CredentialUsage"] | null>(null);
   const close = () => {
     setSecret(""); setAuthorization(""); setReference(""); setOperation(null); setError(null);
@@ -39,7 +41,7 @@ export function CredentialsPage() {
   const showUsage = async (credential: Credential) => {
     const result = await api.GET("/api/v1/credentials/{credential_id}/usage", { params: { path: { credential_id: credential.id } } });
     if (result.error || !result.data) { setError("无法加载使用关系，请重试。"); return; }
-    setUsage(result.data);
+    setUsageTarget(credential); setUsage(result.data);
   };
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -81,19 +83,19 @@ export function CredentialsPage() {
     {list.data?.map(credential => <article key={credential.id} className="rounded-lg border border-border bg-surface p-4 space-y-3">
       <div><h2 className="font-semibold">{credential.name}</h2><p className="text-sm text-foreground-secondary">Bearer Token · {credential.environment} · {credential.provider} · {credential.enabled ? "已启用" : "已停用"} · 修订 {credential.version}</p><p className="text-xs font-mono text-muted-foreground">{credential.id}</p></div>
       <div className="flex flex-wrap gap-2">
-        <Button variant="secondary" onClick={() => showUsage(credential)}>查看使用关系</Button>
-        {credential.provider === "managed" && credential.enabled && <Button variant="secondary" onClick={() => open("rotate", credential)}>轮换</Button>}
-        {credential.enabled && <Button variant="secondary" onClick={() => open("disable", credential)}>停用</Button>}
-        <Button variant="danger" onClick={() => open("delete", credential)}>删除</Button>
+        <Button variant="secondary" aria-label={`查看使用关系 ${credentialLabel(credential)}`} onClick={() => showUsage(credential)}>查看使用关系</Button>
+        {credential.provider === "managed" && credential.enabled && <Button variant="secondary" aria-label={`轮换 ${credentialLabel(credential)}`} onClick={() => open("rotate", credential)}>轮换</Button>}
+        {credential.enabled && <Button variant="secondary" aria-label={`停用 ${credentialLabel(credential)}`} onClick={() => open("disable", credential)}>停用</Button>}
+        <Button variant="danger" aria-label={`删除 ${credentialLabel(credential)}`} onClick={() => open("delete", credential)}>删除</Button>
       </div>
     </article>)}
-    <Modal open={usage !== null} onClose={() => setUsage(null)} title="凭据使用关系">
+    <Modal open={usage !== null} onClose={() => setUsage(null)} title={usageTarget ? `凭据使用关系 · ${credentialLabel(usageTarget)}` : "凭据使用关系"}>
       <div className="p-6 space-y-2"><p className="text-sm text-foreground-secondary">不可变历史版本也会保护凭据不被删除。</p>
         {usage?.versions.length === 0 && <p>暂无版本引用。</p>}
         {usage?.versions.map(version => <p key={`${version.agent_id}:${version.version}`}>{version.agent_id} / {version.version} · {version.is_active ? "当前版本" : "历史版本"}</p>)}
       </div>
     </Modal>
-    <Modal open={operation !== null} onClose={close} title={operation ? titles[operation] : "凭据"} dismissable={!pending} footer={<>
+    <Modal open={operation !== null} onClose={close} title={operation ? `${titles[operation]}${selected ? ` · ${credentialLabel(selected)}` : ""}` : "凭据"} dismissable={!pending} footer={<>
       <Button variant="secondary" onClick={close} disabled={pending}>取消</Button>
       <Button type="submit" form="credential-form" disabled={pending} variant={operation === "delete" || operation === "disable" ? "danger" : "primary"}>{pending ? "提交中…" : "确认"}</Button>
     </>}>

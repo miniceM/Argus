@@ -25,3 +25,16 @@ describe("Credentials 管理", () => {
     expect(screen.queryByDisplayValue("example-admin-token")).not.toBeInTheDocument();
   });
 });
+
+it("names each Credential action and its Modal target even for duplicate names", async () => {
+  const ids = ["00000000-0000-4000-8000-aaaaaaaaaaaa", "00000000-0000-4000-8000-bbbbbbbbbbbb"];
+  vi.mocked(api.GET).mockResolvedValue({ data: ids.map(id => ({ id, name: "同名凭据", provider: "managed", environment: "production", enabled: true, version: 1 })), response: new Response() } as any);
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><CredentialsPage /></QueryClientProvider>);
+  for (const suffix of ["aaaaaaaa", "bbbbbbbb"]) {
+    for (const action of ["查看使用关系", "轮换", "停用", "删除"]) {
+      expect(await screen.findByRole("button", { name: `${action} 同名凭据 (${suffix})` })).toBeVisible();
+    }
+  }
+  fireEvent.click(screen.getByRole("button", { name: "轮换 同名凭据 (bbbbbbbb)" }));
+  expect(screen.getByRole("dialog", { name: "轮换凭据 · 同名凭据 (bbbbbbbb)" })).toBeVisible();
+});

@@ -458,3 +458,72 @@ def test_legacy_vault_attempt_records_actual_revision_or_stops_before_dispatch(c
         if revision is not None:
             assert invoke.await_args.kwargs["headers"]["Authorization"] == "Bearer example-legacy-token"
             assert (attempts[0].credential_id, attempts[0].credential_version, attempts[0].credential_provider) == (None, revision, "vault")
+
+
+def test_omitted_credential_environment_is_frozen_before_launch_creation(credentials, setup_runtime):
+    from app.manifest import LaunchService
+
+    client, _, registry, _ = credentials
+    credential_id = create(client).json()["id"]
+    version = registry.create_version("test-agent", "implicit-production", "https://agent.example/invoke", credential_id=credential_id)
+    assert version.environment == "production"
+    service = LaunchService(setup_runtime[0], registry)
+    with pytest.raises(ValueError, match="environment"):
+        service.create_launch(agent_id="test-agent", agent_version=version.version, dataset_name="test", environment="staging", evaluator_ids=["intent_match"], dataset_snapshot={"source": "seed", "dataset_id": "ds", "dataset_version": "v1", "items": []})
+
+
+@pytest.mark.parametrize("state", ["expired", "reclaimed", "saturated"])
+def test_saturated_credential_pool_cannot_dispatch_outside_the_worker_lease(credentials, setup_runtime, monkeypatch, state):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from datetime import UTC, datetime, timedelta
+
+    import httpx
+    from app import executor as executor_module
+    from app.manifest import LaunchService
+
+    client, _, registry, _ = credentials
+    manager, queue, _, orchestrator, worker, reconciler = setup_runtime
+    credential_id = create(client).json()["id"]
+    registry.create_version("test-agent", "saturated", "https://agent.example/invoke", credential_id=credential_id, max_retries=1)
+    service = LaunchService(manager, registry)
+    launch = service.create_launch(agent_id="test-agent", agent_version="saturated", dataset_name="test", evaluator_ids=["intent_match"], dataset_snapshot={"source": "seed", "dataset_id": "ds", "dataset_version": "v1", "items": [{"id": "0", "input": {}, "expected_output": {"expected_intent": "refund"}}]})
+    orchestrator.start_launch(launch.id)
+    message = queue.read_group("credential-pool-saturated", count=1)[0]
+    release = threading.Event()
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pool.submit(release.wait, 3)
+        monkeypatch.setattr(executor_module, "_CREDENTIAL_EXECUTOR", pool)
+        monkeypatch.setattr(executor_module, "_CREDENTIAL_QUEUE_TIMEOUT", .1, raising=False)
+        async def run():
+            task = asyncio.create_task(worker.execute_item_message(*message))
+            try:
+                for _ in range(100):
+                    with manager.get_session() as session:
+                        if session.get(ExperimentItemExecutionRecord, message[1]).active_attempt_id:
+                            break
+                    await asyncio.sleep(.005)
+                else:
+                    pytest.fail("Worker never authorized its PREPARED attempt")
+                if state != "saturated":
+                    with manager.get_session() as session:
+                        session.get(ExperimentItemExecutionRecord, message[1]).lease_expires_at = datetime.now(UTC) - timedelta(seconds=2)
+                        session.commit()
+                    if state == "reclaimed":
+                        assert reconciler.reconcile_expired_leases() == 1
+                    release.set()
+                await asyncio.wait_for(task, .5)
+            finally:
+                release.set()
+                if not task.done():
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+        with patch("app.worker.get_langfuse_client_safe", return_value=None), patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=httpx.Response(200, json={"intent": "refund"})) as invoke:
+            asyncio.run(run())
+        assert invoke.await_count == 0
+    with manager.get_session() as session:
+        attempts = session.scalars(select(ExecutionAttemptRecord).where(ExecutionAttemptRecord.item_execution_id == message[1])).all()
+        assert len(attempts) == 1
+        assert attempts[0].request_phase == "PREPARED"
+        if state == "saturated":
+            assert attempts[0].status == "FAILED"

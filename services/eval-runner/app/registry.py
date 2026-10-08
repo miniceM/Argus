@@ -83,6 +83,9 @@ def normalize_and_validate_spec(data: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(msg) from exc
 
     normalized = model.model_dump()
+    # 凭据绑定必须冻结环境，不能继承无凭据旧版本的跨环境兼容行为。
+    if normalized["credential_id"] and normalized["environment"] is None:
+        normalized["environment"] = "production"
     digest = compute_spec_digest(normalized)
     normalized["spec_digest"] = digest
     return normalized

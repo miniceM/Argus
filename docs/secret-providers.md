@@ -35,7 +35,7 @@ docker compose --env-file .env.poc -f docker-compose.yml -f deploy/credentials.c
 `ARGUS_MANAGED_SECRET_KEY_FILE` 和 `ARGUS_CREDENTIAL_ADMIN_TOKEN_FILE` 读取。部署使用不同
 UID 时，应设置文件所有者让 Runner 能读取，不能放宽为组或全局可读。
 在 Console 创建名称、环境与 Token，管理授权 Token 由部署管理员安全交付。
-创建 AgentVersion 时选同一环境的 Credential，即可发起正式评测；无鉴权 Agent 可不选。Console 将环境名称去除首尾空白并转为小写；有声明环境的 AgentVersion 只能用于同环境的 Launch。同名凭据的选项显示 ID 后缀，绑定仍提交完整 ID。
+创建 AgentVersion 时选同一环境的 Credential，即可发起正式评测；无鉴权 Agent 可不选。Console 将环境名称去除首尾空白并转为小写；有声明环境的 AgentVersion 只能用于同环境的 Launch。绑定 Credential 时未填写环境会冻结为 production；旧凭据版本的空环境也按 production 校验，不能跨环境发起评测。同名凭据的选项显示 ID 后缀，绑定仍提交完整 ID。
 
 写操作 `POST /api/v1/credentials`、`/{id}/rotate`、`/{id}/disable`、`/rewrap` 与
 `DELETE /{id}` 需独立 Bearer 管理授权。未配置授权/主密钥则拒绝写入；错误响应不回显输入。
@@ -111,4 +111,4 @@ DEMO_AUTH_TOKEN=<本地演示 Token>
 其他白名单变量还需 Compose override 显式注入对应值，不能只改白名单。
 这是 Runner 进程的变量，宿主管理员可读；轮换需要更新容器配置，不用于生产隔离承诺。
 
-执行时的凭据解析使用独立的 50 线程池，不与默认后台任务共用；5 秒解析预算从任务实际开始计算，覆盖 Vault 登录与读取。等待排队不会被误记为 Provider 不可用。旧 `vault://` 兼容引用也记录实际 KV 修订；响应缺少有效修订时在 HTTP 派发前失败。
+执行时的凭据解析使用独立的 50 线程池，不与默认后台任务共用；5 秒解析预算从任务实际开始计算，覆盖 Vault 登录与读取。排队另有 5 秒上限，超时以 CREDENTIAL_UNAVAILABLE 终止且保持 PREPARED，不调用 Agent。解析完成后 Worker 按 Launch → Item → Attempt 锁顺序重新核验租约、派发代次、当前 Attempt 和取消状态；失去发送权时不修改旧 Attempt 或发送请求。旧 `vault://` 兼容引用也记录实际 KV 修订；响应缺少有效修订时在 HTTP 派发前失败。

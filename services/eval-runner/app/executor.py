@@ -22,6 +22,7 @@ from .security import resolve_execution_credential
 
 # 与单个 Launch 允许的最大并发一致，避免与 Langfuse/文件任务争抢默认线程池。
 _CREDENTIAL_EXECUTOR = ThreadPoolExecutor(max_workers=50, thread_name_prefix="argus-credentials")
+_CREDENTIAL_QUEUE_TIMEOUT = 5.0
 
 
 async def _resolve_execution_secret(callback, *args):
@@ -39,8 +40,8 @@ async def _resolve_execution_secret(callback, *args):
 
     work = loop.run_in_executor(_CREDENTIAL_EXECUTOR, resolve)
     try:
-        # 排队等待不是 Provider 解析失败；预算从线程实际开始解析时计算。
-        began = await started
+        # 排队和解析分别有界，避免挂起的 Provider 占满线程后无限等待。
+        began = await asyncio.wait_for(started, timeout=_CREDENTIAL_QUEUE_TIMEOUT)
         return await asyncio.wait_for(work, timeout=max(0, 5 - (time.monotonic() - began)))
     finally:
         if not work.done():

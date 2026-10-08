@@ -207,7 +207,8 @@ class LaunchService:
         if not ver_rec.is_active:
             raise ValueError(f"AgentVersion '{agent_id}:{agent_version}' is archived/inactive")
 
-        if ver_rec.environment is not None and normalize_environment(ver_rec.environment) != normalized_environment:
+        version_environment = ver_rec.environment or ("production" if ver_rec.credential_id else None)
+        if version_environment is not None and normalize_environment(version_environment) != normalized_environment:
             raise ValueError("Launch environment must match AgentVersion environment")
 
         agent_rec = self.registry.get_agent(agent_id)

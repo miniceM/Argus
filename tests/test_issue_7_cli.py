@@ -236,3 +236,52 @@ def test_response_arriving_after_budget_never_authorizes_release():
                     client=client, stdout=out, stderr=io.StringIO(), monotonic=clock.monotonic)
     assert code == 2
     assert json.loads(out.getvalue())["error_code"] == "TIMEOUT"
+
+
+def test_result_rejects_another_gate_id():
+    def handler(request):
+        return httpx.Response(200, json={"id": "other-gate", "decision": "PASS", "releasable": True,
+                                       "candidate_launch_id": "launch", "candidate_snapshot_id": "snapshot"})
+    code, result, _, _, _ = exercise(["eval", "result", "--gate-id", "gate-1"], handler=handler)
+    assert code == 2 and result["error_code"] == "INVALID_RESPONSE"
+
+
+@pytest.mark.parametrize("invalid", ["bad_float", "missing_version", "unknown_flag"])
+def test_parser_errors_produce_unknown_json_and_report(tmp_path, invalid):
+    report = tmp_path / "gate.json"
+    args = arguments(report=report)
+    if invalid == "bad_float":
+        args[args.index("--timeout") + 1] = "nope"
+    elif invalid == "missing_version":
+        index = args.index("--policy-version")
+        del args[index:index + 2]
+    else:
+        args += ["--private-unknown", "private-token"]
+    code, result, err, calls, _ = exercise(args)
+    assert code == 2 and result["error_code"] == "INVALID_ARGUMENTS"
+    assert json.loads(report.read_text()) == result
+    assert not calls and "private-token" not in err
+
+
+def test_authenticated_cli_rejects_non_loopback_plaintext_http(monkeypatch):
+    monkeypatch.setenv("ARGUS_API_TOKEN", "example-private-token")
+    code, result, _, calls, _ = exercise(arguments(api_url="http://argus.internal"))
+    assert code == 2 and result["error_code"] == "INSECURE_AUTH_TRANSPORT"
+    assert not calls
+
+
+def test_same_key_start_conflict_waits_for_the_existing_launch():
+    def handler(request):
+        if request.url.path.endswith("/run"):
+            return httpx.Response(409, json={"detail": "another caller started the launch"})
+    code, result, _, calls, _ = exercise(arguments(idempotency_key="stable-ci-key"), handler=handler)
+    assert code == 0 and result["decision"] == "PASS"
+    assert sum(request.url.path.endswith("/run") for request in calls) == 1
+
+
+def test_start_conflict_does_not_accept_a_pending_launch():
+    def handler(request):
+        if request.url.path.endswith("/run"):
+            return httpx.Response(409, json={"detail": "not started"})
+    code, result, _, _, _ = exercise(arguments(), handler=handler, status="PENDING")
+    assert code == 2 and result["error_code"] == "HTTP_409"

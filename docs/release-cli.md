@@ -19,6 +19,8 @@ python -m pip install "argus-release-cli @ git+https://github.com/miniceM/Argus.
 
 `ARGUS_CLI_REF` 应为审核过的 40 位 commit SHA。示例流水线会校验其格式。
 
+配置 `ARGUS_API_TOKEN` 时，API 必须使用 HTTPS；仅 localhost 与 IP loopback 的本地开发地址允许 HTTP。参数解析错误同样返回结构化 UNKNOWN 与报告，不回显原始参数值。
+
 先按 [发布门禁](./release-gates.md) 创建固定策略，并确认 Agent、Dataset 与 Evaluator 的具体版本。`--dataset-version` 必须与平台所选 Dataset 的已确认版本一致；不得使用 `latest`。正式部署的 Runner 自身也必须配置不可变 Build ID。
 
 ```bash

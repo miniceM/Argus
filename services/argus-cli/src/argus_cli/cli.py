@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import math
 import os
@@ -24,8 +25,14 @@ class CLIError(ValueError):
         self.code = code
 
 
+class SafeArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        # 不回显参数值；将所有参数错误纳入 JSON 证据与退出码契约。
+        raise CLIError("INVALID_ARGUMENTS")
+
+
 def _parser():
-    parser = argparse.ArgumentParser(prog="argus", description="Argus 评测与发布门禁")
+    parser = SafeArgumentParser(prog="argus", description="Argus 评测与发布门禁")
     evaluation = parser.add_subparsers(dest="group", required=True).add_parser("eval")
     commands = evaluation.add_subparsers(dest="command", required=True)
     common = argparse.ArgumentParser(add_help=False)
@@ -68,6 +75,13 @@ def _validate(args):
     if (url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password
             or url.query or url.fragment or any(char.isspace() or char == "\\" for char in args.api_url)):
         raise CLIError("INVALID_API_URL")
+    if os.getenv("ARGUS_API_TOKEN") and url.scheme != "https":
+        try:
+            loopback = ipaddress.ip_address(url.hostname).is_loopback
+        except ValueError:
+            loopback = url.hostname == "localhost"
+        if not loopback:
+            raise CLIError("INSECURE_AUTH_TRANSPORT")
     if args.command == "result":
         return []
     _exact(args.policy_version)
@@ -100,13 +114,18 @@ def _gate_exit(gate):
 
 
 def main(argv=None, *, client=None, stdout=None, stderr=None, monotonic=time.monotonic, sleep=time.sleep):
-    args = _parser().parse_args(argv)
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    preliminary = SafeArgumentParser(add_help=False)
+    preliminary.add_argument("--report", type=Path)
+    report = None
     stdout, stderr = stdout or sys.stdout, stderr or sys.stderr
     launch_id = None
     idempotency_key = None
     owned = client is None
     result, code = {}, 2
     try:
+        report = preliminary.parse_known_args(arguments)[0].report
+        args = _parser().parse_args(arguments)
         selections = _validate(args)
         deadline = monotonic() + args.timeout
         if owned:
@@ -133,6 +152,8 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, monotonic=time.mon
 
         if args.command == "result":
             result = request("GET", f"/api/v1/release-gates/{quote(args.gate_id, safe='')}")
+            if result.get("id") != args.gate_id:
+                raise CLIError("INVALID_RESPONSE")
         else:
             policy = request("GET", "/api/v1/release-policies", params={"name": args.policy, "version": args.policy_version})
             if policy.get("name") != args.policy or policy.get("version") != args.policy_version:
@@ -156,7 +177,17 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, monotonic=time.mon
                 if not isinstance(launch_id, str) or not launch_id:
                     raise CLIError("INVALID_RESPONSE")
                 if launch.get("status") == "PENDING":
-                    request("POST", f"/api/v1/experiment-launches/{quote(launch_id, safe='')}/run")
+                    path = f"/api/v1/experiment-launches/{quote(launch_id, safe='')}"
+                    try:
+                        request("POST", path + "/run")
+                    except CLIError as exc:
+                        if exc.code != "HTTP_409":
+                            raise
+                        recovered = request("GET", path)
+                        if recovered.get("id") != launch_id:
+                            raise CLIError("INVALID_RESPONSE") from None
+                        if recovered.get("status") not in (ACTIVE | TERMINAL) - {"PENDING"}:
+                            raise exc
             else:
                 launch_id = args.launch_id
             path = f"/api/v1/experiment-launches/{quote(launch_id, safe='')}"
@@ -194,10 +225,10 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, monotonic=time.mon
     finally:
         if owned and client is not None:
             client.close()
-    if args.report:
+    if report:
         try:
-            args.report.parent.mkdir(parents=True, exist_ok=True)
-            args.report.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            report.parent.mkdir(parents=True, exist_ok=True)
+            report.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         except OSError:
             code = 2
             result = {**result, "decision": "UNKNOWN", "releasable": False, "error_code": "REPORT_WRITE_FAILED"}

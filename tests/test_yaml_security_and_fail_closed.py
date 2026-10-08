@@ -157,18 +157,21 @@ def test_init_queue_and_limiter_fail_closed():
     from app.main import init_queue_and_limiter
     from app.queue import MemoryQueueAdapter
 
-    # 1. SQLite or test mode fallback to Memory without Redis
-    queue_adapter, limiter_adapter = init_queue_and_limiter(
+    # 1. SQLite or test mode fallback to Memory without Redis, and no client is
+    #    handed back: without Redis there is nothing to fence the link loop with.
+    queue_adapter, limiter_adapter, client = init_queue_and_limiter(
         redis_url=None, db_mode="prod", db_url="sqlite:////tmp/test.db"
     )
     assert isinstance(queue_adapter, MemoryQueueAdapter)
     assert isinstance(limiter_adapter, MemoryAgentLimiter)
+    assert client is None
 
-    q2, l2_limiter = init_queue_and_limiter(
+    q2, l2_limiter, client2 = init_queue_and_limiter(
         redis_url=None, db_mode="test", db_url="postgresql://user:pass@host/db"
     )
     assert isinstance(q2, MemoryQueueAdapter)
     assert isinstance(l2_limiter, MemoryAgentLimiter)
+    assert client2 is None
 
     # 2. Production mode with PostgreSQL and no Redis must fail closed
     with pytest.raises(RuntimeError, match="ARGUS_REDIS_URL must be configured in production mode"):

@@ -39,6 +39,7 @@ import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -438,13 +439,16 @@ def test_reevaluation_reuses_the_agent_and_leaves_history_immutable(setup_runtim
         assert current.revision == baseline_revision
 
 
-def test_republishing_identical_evidence_is_idempotent_and_history_stays_put(setup_runtime):
+def test_republishing_identical_evidence_is_idempotent_and_history_stays_put(setup_runtime, monkeypatch):
     """Re-evaluating to the *same* evidence must not fork a duplicate revision.
 
     ``create_result_snapshot`` is idempotent on the source digest, so a retry
     that lands on the same numbers republishes the same snapshot instead of
     inventing a near-identical revision.
     """
+    # duration_ms 也是冻结证据；仅相同分数不等于相同证据。固定评测器的时钟，
+    # 保持完整证据相同，不修改生产 digest，也不弱化 Snapshot 的不可变断言。
+    monkeypatch.setattr("app.evaluator_binding.time", SimpleNamespace(perf_counter=lambda: 1.0))
     binding = _binding("intent_match")
     manifest = _manifest(binding.to_payload(), policy_payload=_policy([binding]).to_payload())
     db_mgr, _q, orchestrator, _w, launch_id, item_id, _calls, _ok = _run_item(
@@ -477,6 +481,26 @@ def test_republishing_identical_evidence_is_idempotent_and_history_stays_put(set
             .count()
         )
     assert count == 1
+
+
+def test_changed_evaluator_duration_appends_revision_without_rewriting_history(setup_runtime):
+    binding = _binding("intent_match")
+    manifest = _manifest(binding.to_payload(), policy_payload=_policy([binding]).to_payload())
+    db_mgr, _q, _o, _w, launch_id, item_id, _calls, _ok = _run_item(
+        setup_runtime, manifest, "issue49-duration", {"intent": "refund"}
+    )
+    first = _complete_and_snapshot(db_mgr, launch_id)
+    before = first.items
+    with db_mgr.get_session() as session:
+        result = session.query(EvaluationResultRecord).filter_by(item_execution_id=item_id).one()
+        result.duration_ms += 10
+        session.flush()
+        second = create_result_snapshot(session, session.get(ExperimentLaunchRecord, launch_id))
+        session.commit()
+        assert second.id != first.id
+        assert second.revision == first.revision + 1
+        assert second.source_result_digest != first.source_result_digest
+        assert session.get(RunResultSnapshotRecord, first.id).items == before
 
 
 def test_changed_evidence_appends_a_new_revision_and_never_mutates_the_old_one(setup_runtime):

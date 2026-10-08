@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
@@ -361,3 +362,83 @@ def test_system_info_dashboard_url_is_null_when_unconfigured_even_if_internal_ur
     assert res.status_code == 200
     assert res.json()["langfuse_dashboard_url"] is None
     assert res.json()["environment"] == "local"
+
+
+# ---------------------------------------------------------------------------
+# Langfuse link contract: top-level URL and links.langfuse_experiment must agree
+# ---------------------------------------------------------------------------
+def _link_contract_assertions(payload: dict) -> None:
+    assert payload["langfuse_experiment_url"] == payload["links"]["langfuse_experiment"]
+
+
+def test_launch_list_detail_and_filter_share_langfuse_link(client):
+    from app.db_models import ExperimentLaunchRecord as Launch
+
+    created = client.post(
+        "/api/v1/experiment-launches",
+        json={
+            "agent_id": "banking-agent",
+            "agent_version": "v1",
+            "dataset_name": "banking-agent-regression",
+            "name": "Link Contract",
+        },
+    ).json()
+    launch_id = created["id"]
+
+    from app.main import db_manager
+
+    with db_manager.get_session() as session:
+        launch = session.get(Launch, launch_id)
+        launch.status = "COMPLETED"
+        launch.langfuse_sync_status = "SYNCED"
+        launch.langfuse_experiment_id = "run-1"
+        launch.langfuse_experiment_url = "https://cloud.example.com/project/p1/datasets/d1/runs/run-1"
+
+    listed = client.get("/api/v1/experiment-launches").json()
+    entry = next(x for x in listed if x["id"] == launch_id)
+    _link_contract_assertions(entry)
+
+    detail = client.get(f"/api/v1/experiment-launches/{launch_id}").json()
+    _link_contract_assertions(detail)
+
+    filtered = client.get("/api/v1/experiment-launches?status=COMPLETED").json()
+    filtered_entry = next(x for x in filtered if x["id"] == launch_id)
+    _link_contract_assertions(filtered_entry)
+
+
+def test_launch_link_is_null_on_both_fields_when_missing(client):
+    created = client.post(
+        "/api/v1/experiment-launches",
+        json={
+            "agent_id": "banking-agent",
+            "agent_version": "v1",
+            "dataset_name": "banking-agent-regression",
+            "name": "Link Contract Missing",
+        },
+    ).json()
+    detail = client.get(f"/api/v1/experiment-launches/{created['id']}").json()
+    _link_contract_assertions(detail)
+    assert detail["langfuse_experiment_url"] is None
+    assert detail["links"]["langfuse_experiment"] is None
+
+
+def test_populate_links_overrides_stale_caller_links():
+    from app.models import ExperimentLaunchResponse
+
+    response = ExperimentLaunchResponse(
+        id="l1",
+        name="n",
+        status="COMPLETED",
+        quality_conclusion="pass",
+        dataset_name="d",
+        agent_id="a",
+        agent_version="v1",
+        agent_version_id="av1",
+        manifest={},
+        langfuse_experiment_url="https://cloud.example.com/project/p/datasets/d/runs/r",
+        langfuse_sync_status="SYNCED",
+        links={"langfuse_experiment": "https://stale.example.com/old", "langfuse_trace": "t"},
+        created_at=datetime.now(UTC),
+    )
+    assert response.links["langfuse_experiment"] == response.langfuse_experiment_url
+    assert response.links["langfuse_trace"] == "t"  # other keys preserved

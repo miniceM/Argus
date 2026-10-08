@@ -166,6 +166,119 @@ describe("LaunchDetail Frozen Manifest Structured Audit View", () => {
     expect(screen.queryByText("启动评测 (Run)")).not.toBeInTheDocument();
   });
 
+
+  it("shows the Langfuse link or the concrete reason even without allowed_actions", async () => {
+    const freshClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path === "/api/v1/experiment-launches/{launch_id}") {
+        return Promise.resolve({
+          data: {
+            ...mockLaunch,
+            status: "COMPLETED",
+            allowed_actions: [],
+            langfuse_sync_status: "SYNCED",
+            langfuse_experiment_id: "r1",
+            langfuse_experiment_url: "https://cloud.example.com/project/p1/datasets/d1/runs/r1",
+          },
+        });
+      }
+      if (path === "/api/v1/experiment-launches/{launch_id}/items") {
+        return Promise.resolve({ data: [] });
+      }
+      return Promise.resolve({ data: null });
+    });
+
+    render(
+      <QueryClientProvider client={freshClient}>
+        <MemoryRouter initialEntries={["/launches/launch-freeze-001"]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<LaunchDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    // A terminal launch with no business actions still exposes the external link.
+    const link = await screen.findByRole("link", { name: "在 Langfuse 中查看" });
+    expect(link).toHaveAttribute(
+      "href",
+      "https://cloud.example.com/project/p1/datasets/d1/runs/r1"
+    );
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.getByRole("button", { name: "刷新" })).toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      "a synced launch whose link is not backfilled yet",
+      {
+        status: "COMPLETED",
+        allowed_actions: [],
+        langfuse_sync_status: "SYNCED",
+        langfuse_experiment_id: "r1",
+        langfuse_experiment_url: null,
+      },
+      "已同步，链接暂不可用",
+    ],
+    [
+      "a dangerous stored URL",
+      {
+        status: "COMPLETED",
+        allowed_actions: [],
+        langfuse_sync_status: "SYNCED",
+        langfuse_experiment_id: "r1",
+        langfuse_experiment_url: "javascript:alert(1)",
+      },
+      "Langfuse 地址无效",
+    ],
+    [
+      "a launch that has not started",
+      {
+        status: "PENDING",
+        allowed_actions: [],
+        langfuse_sync_status: "PENDING",
+        langfuse_experiment_url: null,
+      },
+      "尚未创建 Langfuse Run",
+    ],
+    [
+      "a seed dataset without a remote run",
+      {
+        status: "COMPLETED",
+        allowed_actions: [],
+        langfuse_sync_status: "SYNCED",
+        langfuse_experiment_url: null,
+        manifest: { dataset: { source: "seed" } },
+      },
+      "未创建 Langfuse Run",
+    ],
+  ])("degrades gracefully for %s", async (_name, launch, expected) => {
+    const freshClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path === "/api/v1/experiment-launches/{launch_id}") {
+        return Promise.resolve({ data: { ...mockLaunch, ...(launch as Record<string, unknown>) } });
+      }
+      if (path === "/api/v1/experiment-launches/{launch_id}/items") {
+        return Promise.resolve({ data: [] });
+      }
+      return Promise.resolve({ data: null });
+    });
+
+    render(
+      <QueryClientProvider client={freshClient}>
+        <MemoryRouter initialEntries={["/launches/launch-freeze-001"]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<LaunchDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByTestId("langfuse-link-reason")).toHaveTextContent(expected);
+    expect(screen.queryByRole("link", { name: "在 Langfuse 中查看" })).not.toBeInTheDocument();
+  });
+
   it("opens retry confirmation modal with force replay checkbox when retry_failed is allowed", async () => {
     const s2FailedLaunch = {
       ...mockLaunch,

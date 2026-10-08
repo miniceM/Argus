@@ -258,3 +258,65 @@ def test_list_launches_case_insensitive_filtering(tmp_path):
     # Query with non-matching quality
     res3 = launch_svc.list_launches(quality_conclusion="FAIL")
     assert len(res3) == 0
+
+
+def test_link_backfill_does_not_mutate_frozen_manifest(tmp_path, monkeypatch):
+    """Backfilling a link may only add run metadata; the frozen snapshot must not change."""
+    import sys as _sys
+
+    _sys.path[:0] = [str(ROOT / "tests")]
+    from app.db_models import ExperimentItemExecutionRecord, LangfuseSyncTaskRecord
+    from app.langfuse_links import LangfuseLaunchLinkService, LangfuseLinkResolver
+    from fake_langfuse import FakeLangfuseSDK
+
+    db_mgr, registry = setup_db(tmp_path)
+    launch_svc = LaunchService(db_mgr, registry, runner_version="0.1.0")
+    launch = launch_svc.create_launch(
+        agent_id="banking-agent",
+        agent_version="v1",
+        dataset_name="banking-agent-regression",
+        name="frozen-manifest-link",
+    )
+    launch_id = launch.id
+    with db_mgr.get_session() as session:
+        record = session.get(ExperimentLaunchRecord, launch_id)
+        record.status = "COMPLETED"
+        record.langfuse_sync_status = "SYNCED"
+        record.langfuse_experiment_id = "run-1"
+        record.langfuse_experiment_url = None
+        item = (
+            session.query(ExperimentItemExecutionRecord)
+            .filter_by(launch_id=launch_id)
+            .first()
+        )
+        item.execution_status = "succeeded"
+        item.trace_id = "t" * 32
+        session.add(
+            LangfuseSyncTaskRecord(
+                id="frozen-task",
+                launch_id=launch_id,
+                item_id=item.id,
+                dataset_item_id=item.dataset_item_id,
+                dispatch_generation=item.dispatch_generation,
+                trace_id="t" * 32,
+                dataset_run_name=launch.name,
+                scores_payload={"_dataset_source": "langfuse", "_dataset_run_id": "run-1"},
+                status="SYNCED",
+            )
+        )
+        before_manifest = dict(record.manifest)
+        before_digest = record.manifest["dataset"].get("snapshot_digest")
+
+    lf = FakeLangfuseSDK(
+        dataset_ids={"banking-agent-regression": "ds-real"}
+    )
+    service = LangfuseLaunchLinkService(db_mgr, LangfuseLinkResolver(lf, "https://cloud.example.com"))
+    result = service.ensure_launch_link(launch_id)
+    assert result.status == "UPDATED"
+
+    with db_mgr.get_session() as session:
+        record = session.get(ExperimentLaunchRecord, launch_id)
+        assert record.manifest == before_manifest
+        assert record.manifest["dataset"].get("snapshot_digest") == before_digest
+        assert record.manifest["dataset"]["items"] == before_manifest["dataset"]["items"]
+        assert record.langfuse_experiment_url.endswith("/datasets/ds-real/runs/run-1")

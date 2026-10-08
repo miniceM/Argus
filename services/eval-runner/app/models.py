@@ -780,11 +780,15 @@ class ExperimentLaunchResponse(BaseModel):
 
     @model_validator(mode="after")
     def populate_links(self) -> ExperimentLaunchResponse:
+        # The top-level URL is the single source of truth; `links` mirrors exactly this
+        # key so list, detail and run responses can never disagree.
         if self.links is None:
             self.links = {
                 "langfuse_experiment": self.langfuse_experiment_url,
                 "langfuse_trace": None,
             }
+        else:
+            self.links = {**self.links, "langfuse_experiment": self.langfuse_experiment_url}
         return self
 
 

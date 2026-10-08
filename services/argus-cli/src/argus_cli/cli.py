@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote, urlsplit
 
@@ -23,6 +24,36 @@ class CLIError(ValueError):
     def __init__(self, code: str):
         super().__init__(code)
         self.code = code
+
+
+def _same_dataset_version(actual, requested):
+    if not isinstance(actual, str):
+        return False
+    if actual == requested:
+        return True
+    try:
+        left = datetime.fromisoformat(actual.replace("Z", "+00:00"))
+        right = datetime.fromisoformat(requested.replace("Z", "+00:00"))
+        return left.tzinfo is not None and right.tzinfo is not None and left == right
+    except ValueError:
+        return False
+
+
+def _assert_candidate(launch, requested):
+    """验证创建/恢复/轮询响应的完整版本身份，避免错误缓存放行其他候选。"""
+    manifest = launch.get("manifest") or {}
+    agent, dataset = manifest.get("agent", {}), manifest.get("dataset", {})
+    bindings = [(binding.get("id"), binding.get("version")) for binding in manifest.get("evaluators", [])]
+    expected = [(binding["id"], binding["version"]) for binding in requested["evaluator_selections"]]
+    if (launch.get("agent_id") != requested["agent_id"] or agent.get("agent_id") != requested["agent_id"]
+            or launch.get("agent_version") != requested["agent_version"] or agent.get("version") != requested["agent_version"]
+            or launch.get("dataset_name") != requested["dataset_name"] or dataset.get("dataset_name") != requested["dataset_name"]
+            or not _same_dataset_version(launch.get("dataset_version"), requested["dataset_version"])
+            or not _same_dataset_version(dataset.get("dataset_version"), requested["dataset_version"])
+            or sorted(bindings) != sorted(expected)
+            or manifest.get("comparison", {}).get("environment") != requested["environment"]
+            or ("baseline_snapshot_id" in requested and manifest.get("comparison", {}).get("baseline_snapshot_id") != requested["baseline_snapshot_id"])):
+        raise CLIError("CANDIDATE_IDENTITY_MISMATCH")
 
 
 class SafeArgumentParser(argparse.ArgumentParser):
@@ -176,6 +207,7 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, monotonic=time.mon
                 launch_id = launch.get("id")
                 if not isinstance(launch_id, str) or not launch_id:
                     raise CLIError("INVALID_RESPONSE")
+                _assert_candidate(launch, payload)
                 if launch.get("status") == "PENDING":
                     path = f"/api/v1/experiment-launches/{quote(launch_id, safe='')}"
                     try:
@@ -186,6 +218,7 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, monotonic=time.mon
                         recovered = request("GET", path)
                         if recovered.get("id") != launch_id:
                             raise CLIError("INVALID_RESPONSE") from None
+                        _assert_candidate(recovered, payload)
                         if recovered.get("status") not in (ACTIVE | TERMINAL) - {"PENDING"}:
                             raise exc
             else:
@@ -195,13 +228,19 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, monotonic=time.mon
                 launch = request("GET", path)
                 if launch.get("id") != launch_id:
                     raise CLIError("INVALID_RESPONSE")
+                if args.command == "run":
+                    _assert_candidate(launch, payload)
                 environment = launch.get("manifest", {}).get("comparison", {}).get("environment", "production")
                 if launch.get("agent_id") != policy.get("agent_id") or environment != policy.get("environment"):
                     raise CLIError("POLICY_SCOPE_MISMATCH")
                 status = launch.get("status")
                 if status in TERMINAL:
-                    break
-                if status not in ACTIVE:
+                    evaluating = (launch.get("progress") or {}).get("evaluating")
+                    if not isinstance(evaluating, int) or isinstance(evaluating, bool) or evaluating < 0:
+                        raise CLIError("INVALID_RESPONSE")
+                    if evaluating == 0:
+                        break
+                elif status not in ACTIVE:
                     raise CLIError("UNKNOWN_LAUNCH_STATUS")
                 sleep(min(args.poll_interval, max(0, deadline - monotonic())))
             summary = request("GET", path + "/summary")

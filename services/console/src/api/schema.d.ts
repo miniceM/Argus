@@ -1612,6 +1612,12 @@ export interface components {
              * @default 0
              */
             recoverable_evaluation_count: number;
+            /**
+             * Evaluating
+             * @description 不依赖执行终态的在途 evaluation-only 工作数
+             * @default 0
+             */
+            evaluating: number;
         };
         /** ExperimentLaunchResponse */
         ExperimentLaunchResponse: {

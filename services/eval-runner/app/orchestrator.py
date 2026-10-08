@@ -565,6 +565,12 @@ class LaunchOrchestrator:
 
             progress = calculate_launch_progress(counts, attempts_count, retries_count)
             progress["recoverable_evaluation_count"] = int(recoverable_eval_count)
+            progress["evaluating"] = int(session.scalar(
+                select(func.count(ExperimentItemExecutionRecord.id)).where(
+                    ExperimentItemExecutionRecord.launch_id == launch_id,
+                    ExperimentItemExecutionRecord.evaluation_status == "evaluating",
+                )
+            ) or 0)
             actions = determine_allowed_actions(
                 launch_status=launch.status,
                 cancel_requested_at=launch.cancel_requested_at,

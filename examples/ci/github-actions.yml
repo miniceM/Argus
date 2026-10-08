@@ -19,7 +19,6 @@ jobs:
     timeout-minutes: 10
     env:
       ARGUS_API_URL: ${{ vars.ARGUS_API_URL }}
-      ARGUS_API_TOKEN: ${{ secrets.ARGUS_API_TOKEN }}
       ARGUS_CLI_REF: ${{ vars.ARGUS_CLI_REF }}
       AGENT_VERSION: ${{ inputs.agent_version }}
       DATASET_VERSION: ${{ inputs.dataset_version }}
@@ -36,6 +35,8 @@ jobs:
           test -n "$ARGUS_API_URL"
           python -m pip install "argus-release-cli @ git+https://github.com/miniceM/Argus.git@${ARGUS_CLI_REF}#subdirectory=services/argus-cli"
       - name: Evaluate and gate
+        env:
+          ARGUS_API_TOKEN: ${{ secrets.ARGUS_API_TOKEN }}
         run: |
           argus eval run --agent banking-agent --agent-version "$AGENT_VERSION" \
             --dataset banking-agent-regression --dataset-version "$DATASET_VERSION" \

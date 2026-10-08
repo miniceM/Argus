@@ -4509,6 +4509,13 @@
             "type": "integer",
             "title": "Recoverable Evaluation Count",
             "default": 0
+          },
+          "evaluating": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Evaluating",
+            "description": "不依赖执行终态的在途 evaluation-only 工作数",
+            "default": 0
           }
         },
         "type": "object",

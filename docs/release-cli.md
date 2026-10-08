@@ -68,3 +68,5 @@ argus eval result --gate-id "$GATE_ID" --report artifacts/argus-gate.json
 示例部署步骤仅提示接入业务已有发布命令，需替换后使用。配置固定客户端 commit、可访问的 API 地址、精确 Dataset/Agent 版本、预先创建的策略及 CI 凭据；平台须有正常运行的 Worker 和生产入口鉴权。
 
 不要用 `continue-on-error`、`allow_failure` 或忽略 shell 退出码来绕过 Gate。授权 Override 及审计仍依赖 Issue #6/#7，本期客户端不提供覆盖结论的开关。
+
+CLI 在创建、并发恢复和轮询时校验完整 Agent/Dataset/Evaluator 版本与显式 Baseline 身份；ISO UTC Dataset 时间戳允许等价表示。终态必须同时确认 progress.evaluating 为 0，才捕获当前 Snapshot；evaluation-only 重试仍在运行时继续等待。控制面缺少该字段则返回 UNKNOWN，需与本 PR 的 API 配套使用。GitHub 模板的 API Token 只注入 Evaluate 步骤，安装和 artifact Action 不接收该凭据。

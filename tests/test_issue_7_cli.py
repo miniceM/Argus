@@ -38,6 +38,15 @@ def arguments(*, command="run", **options):
     return args
 
 
+def launch_response(status="COMPLETED"):
+    return {"id": "launch-1", "status": status, "agent_id": "banking", "agent_version": "v2",
+            "dataset_name": "regression", "dataset_version": "2026-10-08", "progress": {"evaluating": 0},
+            "manifest": {"agent": {"agent_id": "banking", "version": "v2"},
+                         "dataset": {"dataset_name": "regression", "dataset_version": "2026-10-08"},
+                         "evaluators": [{"id": "intent_match", "version": "1.0.0"}],
+                         "comparison": {"environment": "production"}}}
+
+
 def exercise(args, *, decision="PASS", status="COMPLETED", handler=None):
     calls = []
     clock, out, err = Clock(), io.StringIO(), io.StringIO()
@@ -52,12 +61,11 @@ def exercise(args, *, decision="PASS", status="COMPLETED", handler=None):
             return httpx.Response(200, json={"name": "production", "version": "1.0.0",
                                            "agent_id": "banking", "environment": "production"})
         if request.method == "POST" and request.url.path.endswith("/experiment-launches"):
-            return httpx.Response(201, json={"id": "launch-1", "status": "PENDING"})
+            return httpx.Response(201, json=launch_response("PENDING"))
         if request.url.path.endswith("/run"):
             return httpx.Response(202, json={"launch_id": "launch-1", "status": "QUEUED"})
         if request.url.path.endswith("/launch-1"):
-            return httpx.Response(200, json={"id": "launch-1", "status": status,
-                                           "agent_id": "banking", "manifest": {"comparison": {"environment": "production"}}})
+            return httpx.Response(200, json=launch_response(status))
         if request.url.path.endswith("/summary"):
             return httpx.Response(200, json={"launch_id": "launch-1", "snapshot_id": "snapshot-fixed"})
         if request.url.path.endswith("/evaluate") or "/release-gates/" in request.url.path:
@@ -93,8 +101,7 @@ def test_cli_polls_until_terminal_without_resubmitting_launch():
 
     def handler(request):
         if request.url.path.endswith("/launch-1"):
-            return httpx.Response(200, json={"id": "launch-1", "status": next(statuses),
-                                           "agent_id": "banking", "manifest": {"comparison": {"environment": "production"}}})
+            return httpx.Response(200, json=launch_response(next(statuses)))
 
     code, _, _, calls, clock = exercise(arguments(), handler=handler)
     assert code == 0 and clock.now == 2
@@ -285,3 +292,101 @@ def test_start_conflict_does_not_accept_a_pending_launch():
             return httpx.Response(409, json={"detail": "not started"})
     code, result, _, _, _ = exercise(arguments(), handler=handler, status="PENDING")
     assert code == 2 and result["error_code"] == "HTTP_409"
+
+
+@pytest.mark.parametrize("problem", ["agent_version", "manifest_agent", "dataset_version", "manifest_dataset", "dataset_name", "evaluator", "extra_evaluator", "baseline"])
+def test_run_rejects_a_passing_launch_for_other_frozen_inputs(problem):
+    value = launch_response()
+    if problem == "agent_version":
+        value["agent_version"] = "v1"
+    elif problem == "manifest_agent":
+        value["manifest"]["agent"]["version"] = "v1"
+    elif problem == "dataset_version":
+        value["dataset_version"] = "other-version"
+    elif problem == "manifest_dataset":
+        value["manifest"]["dataset"]["dataset_version"] = "other-version"
+    elif problem == "dataset_name":
+        value["dataset_name"] = "other-dataset"
+    elif problem == "evaluator":
+        value["manifest"]["evaluators"][0]["version"] = "2.0.0"
+    elif problem == "extra_evaluator":
+        value["manifest"]["evaluators"].append({"id": "pii_safe", "version": "1.0.0"})
+    else:
+        value["manifest"]["comparison"]["baseline_snapshot_id"] = "other-baseline"
+    def handler(request):
+        if request.url.path.endswith("/launch-1"):
+            return httpx.Response(200, json=value)
+    options = {"baseline_snapshot": "requested-baseline"} if problem == "baseline" else {}
+    # 创建响应与请求相符，轮询响应却错配：不能用该 Gate 放行。
+    if options:
+        def with_baseline(request):
+            if request.method == "POST" and request.url.path.endswith("/experiment-launches"):
+                created = launch_response("PENDING")
+                created["manifest"]["comparison"]["baseline_snapshot_id"] = "requested-baseline"
+                return httpx.Response(201, json=created)
+            return handler(request)
+        response_handler = with_baseline
+    else:
+        response_handler = handler
+    code, result, _, calls, _ = exercise(arguments(**options), handler=response_handler)
+    assert code == 2 and result["error_code"] == "CANDIDATE_IDENTITY_MISMATCH"
+    assert not any(request.url.path.endswith("/evaluate") for request in calls)
+
+
+def test_wait_ignores_the_old_snapshot_until_evaluation_only_work_finishes():
+    evaluating = iter([1, 0])
+    def handler(request):
+        if request.url.path.endswith("/launch-1"):
+            value = launch_response()
+            value["progress"]["evaluating"] = next(evaluating)
+            return httpx.Response(200, json=value)
+    code, _, _, calls, clock = exercise(arguments(command="wait"), handler=handler)
+    assert code == 0 and clock.now == 1
+    assert sum(request.url.path.endswith("/launch-1") for request in calls) == 2
+    assert sum(request.url.path.endswith("/summary") for request in calls) == 1
+
+
+def test_launch_progress_exposes_in_flight_evaluation_only_work(setup_runtime):
+    from app.db_models import ExperimentItemExecutionRecord
+    from test_issue_7_release_gates import snapshot, store_snapshot
+    candidate = snapshot()
+    manager, _, _, orchestrator, _, _ = setup_runtime
+    store_snapshot(manager, candidate)
+    with manager.get_session() as session:
+        session.add(ExperimentItemExecutionRecord(id="reevaluating", launch_id=candidate.launch_id, dataset_item_id="0", execution_status="succeeded", eval_status="failed", evaluation_status="evaluating"))
+        session.commit()
+    assert orchestrator.get_launch_progress(candidate.launch_id)["evaluating"] == 1
+
+
+
+def test_wrong_created_launch_is_rejected_before_start():
+    def handler(request):
+        if request.method == "POST" and request.url.path.endswith("/experiment-launches"):
+            wrong = launch_response("PENDING")
+            wrong["agent_version"] = "v1"
+            return httpx.Response(201, json=wrong)
+    code, result, _, calls, _ = exercise(arguments(), handler=handler)
+    assert code == 2 and result["error_code"] == "CANDIDATE_IDENTITY_MISMATCH"
+    assert not any(request.url.path.endswith("/run") for request in calls)
+
+
+def test_terminal_launch_with_missing_evaluation_progress_never_reads_stale_summary():
+    def handler(request):
+        if request.url.path.endswith("/launch-1"):
+            value = launch_response()
+            value.pop("progress")
+            return httpx.Response(200, json=value)
+    code, result, _, calls, _ = exercise(arguments(command="wait"), handler=handler)
+    assert code == 2 and result["error_code"] == "INVALID_RESPONSE"
+    assert not any(request.url.path.endswith("/summary") for request in calls)
+
+
+def test_equivalent_utc_dataset_versions_preserve_the_requested_identity():
+    def handler(request):
+        if request.url.path.endswith("/launch-1") or (request.method == "POST" and request.url.path.endswith("/experiment-launches")):
+            value = launch_response("PENDING" if request.method == "POST" else "COMPLETED")
+            value["dataset_version"] = "2026-10-08T00:00:00+00:00"
+            value["manifest"]["dataset"]["dataset_version"] = value["dataset_version"]
+            return httpx.Response(201 if request.method == "POST" else 200, json=value)
+    code, _, _, _, _ = exercise(arguments(dataset_version="2026-10-08T00:00:00Z"), handler=handler)
+    assert code == 0

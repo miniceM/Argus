@@ -318,3 +318,27 @@ def test_obsolete_aggregation_contract_cannot_authorize_release_even_when_both_m
     result = evaluate_gate(gate_policy, candidate, baseline)
     assert result.decision == "UNKNOWN" and not result.releasable
     assert "AGGREGATION_CONTRACT_UNSUPPORTED" in result.reason_codes
+
+
+@pytest.mark.parametrize('evidence', ['missing', 'unknown'])
+def test_explicit_critical_count_requires_evidence_when_automatic_veto_is_disabled(evidence):
+    candidate = snapshot()
+    candidate.manifest['quality_policy'] = {'rules': [{'evaluator_id': 'safety', 'critical': True, 'required': False}]}
+    for item in candidate.items:
+        item['quality_evaluation']['rules'] = [{'evaluator_id': 'safety', 'critical': True, 'conclusion': 'pass'}]
+    candidate.items[0]['quality_evaluation']['rules'] = [] if evidence == 'missing' else [{'evaluator_id': 'safety', 'critical': True, 'conclusion': 'unknown'}]
+    result = evaluate_gate(policy({'id':'critical-count','metric':'critical_failure_count','operator':'<=','threshold':0}, block_critical_failures=False), candidate)
+    assert result.decision == 'UNKNOWN'
+    assert result.rules[0].actual is None
+    assert 'CRITICAL_EVIDENCE_INCOMPLETE' in result.reason_codes
+
+
+@pytest.mark.parametrize('evaluator_id', ['toxicity-check', 'quality.safety'])
+def test_mean_gate_accepts_evaluator_ids_supported_by_the_registry(evaluator_id):
+    candidate = snapshot()
+    candidate.manifest['evaluators'][0]['id'] = evaluator_id
+    for item in candidate.items:
+        item['scores'] = {evaluator_id: 1.0}
+    result = evaluate_gate(policy({'id':'mean','metric':f'score_mean:{evaluator_id}','operator':'>=','threshold':.9}), candidate)
+    assert result.decision == 'PASS'
+    assert result.rules[0].actual == 1.0

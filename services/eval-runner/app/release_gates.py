@@ -29,7 +29,7 @@ class ReleaseRule(BaseModel):
     @classmethod
     def valid_metric(cls, value: str) -> str:
         if value not in ABSOLUTE_METRICS | RELATIVE_METRICS:
-            if not value.startswith("score_mean:") or not value.removeprefix("score_mean:").replace("_", "").isalnum():
+            if not value.startswith("score_mean:") or not value.removeprefix("score_mean:").strip():
                 raise ValueError("Unsupported release metric")
         return value
 
@@ -176,7 +176,10 @@ def evaluate_gate(policy: ReleasePolicy, candidate, baseline=None) -> GateEvalua
             if rule.get("critical") and rule.get("conclusion") in {"pass", "fail"}
         }) for item in candidate.items
     )
-    if policy.block_critical_failures and (missing_critical or any(
+    needs_critical_evidence = policy.block_critical_failures or any(
+        rule.metric == "critical_failure_count" for rule in policy.rules
+    )
+    if needs_critical_evidence and (missing_critical or any(
         rule.get("critical") and rule.get("conclusion") not in {"pass", "fail"}
         for item in candidate.items
         for rule in (item.get("quality_evaluation") or {}).get("rules", [])

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "argus-release-cli"
+version = "0.1.0"
+description = "Argus 冻结评测证据与发布门禁 CLI"
+requires-python = ">=3.12"
+dependencies = ["httpx>=0.28.1,<0.29"]
+
+[project.scripts]
+argus = "argus_cli.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

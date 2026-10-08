@@ -1,0 +1,44 @@
+// 配置 ARGUS_API_URL、ARGUS_CLI_REF 环境变量与 argus-api-token 凭据；替换发布命令。
+pipeline {
+  agent any
+  parameters {
+    string(name: 'AGENT_VERSION', description: '已注册的不可变 Agent 版本')
+    string(name: 'DATASET_VERSION', description: '平台已确认的 Dataset 版本')
+  }
+  options { timeout(time: 10, unit: 'MINUTES') }
+  stages {
+    stage('Install CLI') {
+      steps {
+        sh '''
+          set -eu
+          python3.12 -c 'import os,re; assert re.fullmatch(r"[0-9a-f]{40}", os.environ["ARGUS_CLI_REF"])'
+          test -n "$ARGUS_API_URL"
+          python3.12 -m venv .argus-venv
+          .argus-venv/bin/pip install "argus-release-cli @ git+https://github.com/miniceM/Argus.git@${ARGUS_CLI_REF}#subdirectory=services/argus-cli"
+        '''
+      }
+    }
+    stage('Argus gate') {
+      steps {
+        withCredentials([string(credentialsId: 'argus-api-token', variable: 'ARGUS_API_TOKEN')]) {
+          sh '''
+            set +x
+            set -eu
+            .argus-venv/bin/argus eval run --agent banking-agent --agent-version "$AGENT_VERSION" \
+              --dataset banking-agent-regression --dataset-version "$DATASET_VERSION" \
+              --evaluator intent_match@1.0.0 --evaluator required_tool_match@1.0.0 \
+              --evaluator pii_safe@1.0.0 --evaluator escalation_match@1.0.0 \
+              --policy banking-production --policy-version 1.0.0 \
+              --idempotency-key "$JOB_NAME-$BUILD_NUMBER" --wait --timeout 300 --report artifacts/argus-gate.json
+          '''
+        }
+      }
+    }
+    stage('Deploy') {
+      steps { echo '门禁已通过，在此接入业务已有发布命令' }
+    }
+  }
+  post {
+    always { archiveArtifacts artifacts: 'artifacts/argus-gate.json', allowEmptyArchive: true }
+  }
+}

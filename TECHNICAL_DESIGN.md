@@ -1357,7 +1357,7 @@ v2: 6/6 overall pass
 | Agent mode | SYNC_HTTP | sync + async + callback + SSE |
 | Evaluator | Python deterministic | centralized evaluator registry |
 | Trajectory | 未实现 | Trace Assembler + canonical model |
-| Release Gate | 首批规则引擎与 API 已实现 | CI/CD 集成与授权治理继续推进 |
+| Release Gate | 规则/API、CLI 与 CI 示例已实现 | 授权治理继续推进 |
 | Auth | PoC credentials | SSO/RBAC/service identity |
 | Network | Docker bridge | VPC/K8s/mTLS/service mesh |
 | Audit | Langfuse + app logs | enterprise audit trail |

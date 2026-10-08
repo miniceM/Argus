@@ -190,6 +190,10 @@ describe("CreateLaunch Evaluator selection", () => {
     renderCreateLaunch();
     await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
 
+    const agentVersion = screen.getByLabelText(/选择版本规格/);
+    await waitFor(() => expect(agentVersion).toHaveValue("v1"));
+    fireEvent.change(agentVersion, { target: { value: "v1" } });
+
     const submit = screen.getByRole("button", { name: /创建评测任务/ });
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);

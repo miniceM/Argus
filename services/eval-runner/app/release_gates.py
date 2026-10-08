@@ -13,7 +13,7 @@ from .comparison_contracts import aggregation_comparison_digest, assess_comparab
 from .evaluator_binding import canonical_digest
 from .runner_identity import RunnerIdentity
 
-ENGINE_VERSION = "release-gate-v2"
+ENGINE_VERSION = "release-gate-v3"
 ABSOLUTE_METRICS = {"pass_rate", "evaluation_coverage", "execution_error_rate", "critical_failure_count", "p95_latency_ms"}
 RELATIVE_METRICS = {"regression_count", "pass_rate_delta", "p95_latency_regression_percent"}
 
@@ -94,6 +94,18 @@ def _finite(value: Any) -> float | None:
     return float(value) if math.isfinite(value) else None
 
 
+def frozen_environment(snapshot) -> str | None:
+    """缺失或未规范化的历史环境不能推定为 production。"""
+    comparison = snapshot.manifest.get("comparison") or {}
+    value = comparison.get("environment")
+    if not isinstance(value, str):
+        return None
+    try:
+        return value if normalize_environment(value) == value else None
+    except ValueError:
+        return None
+
+
 def _summary(snapshot) -> dict[str, Any]:
     summary = aggregate_run(snapshot.items, snapshot.manifest.get("evaluators", []))
     if any((latency := _finite(item.get("latency_ms"))) is None or latency < 0 for item in snapshot.items):
@@ -110,6 +122,8 @@ def _summary(snapshot) -> dict[str, Any]:
 
 def _evidence_reasons(snapshot, label: str) -> list[str]:
     reasons = []
+    if frozen_environment(snapshot) is None:
+        reasons.append(f"{label}_ENVIRONMENT_UNKNOWN")
     if snapshot.evidence_state != "COMPLETE" or not snapshot.items:
         reasons.append(f"{label}_EVIDENCE_INCOMPLETE")
     expected = [str(item.get("id")) for item in snapshot.manifest.get("dataset", {}).get("items", [])]
@@ -149,7 +163,8 @@ def _comparison(candidate, baseline) -> tuple[dict[str, Any], list[str]]:
         return {}, ["BASELINE_NOT_BOUND"]
     if baseline.id != frozen_id or baseline.agent_id != candidate.agent_id:
         return {}, ["BASELINE_IDENTITY_MISMATCH"]
-    if baseline.manifest.get("comparison", {}).get("environment", "production") != candidate.manifest.get("comparison", {}).get("environment", "production"):
+    baseline_environment, candidate_environment = frozen_environment(baseline), frozen_environment(candidate)
+    if baseline_environment is not None and candidate_environment is not None and baseline_environment != candidate_environment:
         return {}, ["BASELINE_ENVIRONMENT_MISMATCH"]
     reasons = _evidence_reasons(baseline, "BASELINE")
     comparability = assess_comparability(baseline.manifest, candidate.manifest)
@@ -180,6 +195,9 @@ def _comparison(candidate, baseline) -> tuple[dict[str, Any], list[str]]:
 
 def evaluate_gate(policy: ReleasePolicy, candidate, baseline=None) -> GateEvaluation:
     reasons = _evidence_reasons(candidate, "CANDIDATE")
+    environment = frozen_environment(candidate)
+    if environment is not None and environment != policy.environment:
+        reasons.append("CANDIDATE_ENVIRONMENT_MISMATCH")
     declared_critical = {
         rule["evaluator_id"] for rule in candidate.manifest.get("quality_policy", {}).get("rules", [])
         if rule.get("critical") and rule.get("evaluator_id")

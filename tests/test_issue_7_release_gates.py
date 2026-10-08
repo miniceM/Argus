@@ -367,7 +367,7 @@ def test_gate_rejects_missing_or_unreliable_frozen_version_identity(identity):
 
 def test_gate_report_uses_the_configured_console_origin(setup_runtime, monkeypatch):
     monkeypatch.setattr(main, 'db_manager', setup_runtime[0])
-    monkeypatch.setenv('ARGUS_CONSOLE_BASE_URL', 'https://console.example/argus/')
+    monkeypatch.setenv('ARGUS_CONSOLE_BASE_URL', 'https://console.example/')
     client = TestClient(main.app)
     draft = policy().model_dump()
     assert client.post('/api/v1/release-policies',json=draft).status_code == 201
@@ -375,8 +375,84 @@ def test_gate_report_uses_the_configured_console_origin(setup_runtime, monkeypat
     store_snapshot(setup_runtime[0],candidate)
     response = client.post('/api/v1/release-gates/evaluate',json={'policy_name':draft['name'],'policy_version':draft['version'],'candidate_launch_id':candidate.launch_id,'candidate_snapshot_id':candidate.id})
     assert response.status_code == 201
-    assert response.json()['report_url'] == f'https://console.example/argus/launches/{candidate.launch_id}?snapshot_id={candidate.id}'
+    assert response.json()['report_url'] == f'https://console.example/launches/{candidate.launch_id}?snapshot_id={candidate.id}'
     assert response.json()['comparison_url'].endswith('&tab=comparison')
+
+
+@pytest.mark.parametrize('environment', [None, '', ' Production ', 'invalid/env'])
+def test_gate_requires_an_explicit_normalized_frozen_environment(environment):
+    candidate = snapshot()
+    if environment is None:
+        candidate.manifest['comparison'].pop('environment')
+    else:
+        candidate.manifest['comparison']['environment'] = environment
+    result = evaluate_gate(policy(), candidate)
+    assert result.decision == 'UNKNOWN' and not result.releasable
+    assert 'CANDIDATE_ENVIRONMENT_UNKNOWN' in result.reason_codes
+
+
+def test_relative_gate_requires_a_frozen_baseline_environment():
+    baseline = snapshot()
+    baseline.manifest['comparison'].pop('environment')
+    candidate = snapshot(baseline_id=baseline.id)
+    result = evaluate_gate(policy({'id':'regressions','metric':'regression_count','operator':'<=','threshold':0}), candidate, baseline)
+    assert result.decision == 'UNKNOWN' and not result.releasable
+    assert 'BASELINE_ENVIRONMENT_UNKNOWN' in result.reason_codes
+
+
+def test_api_persists_unknown_for_missing_environment_provenance(setup_runtime, monkeypatch):
+    monkeypatch.setattr(main, 'db_manager', setup_runtime[0])
+    client = TestClient(main.app)
+    draft = policy().model_dump()
+    assert client.post('/api/v1/release-policies',json=draft).status_code == 201
+    candidate = snapshot()
+    candidate.manifest['comparison'].pop('environment')
+    store_snapshot(setup_runtime[0],candidate)
+    response = client.post('/api/v1/release-gates/evaluate',json={'policy_name':draft['name'],'policy_version':draft['version'],'candidate_launch_id':candidate.launch_id,'candidate_snapshot_id':candidate.id})
+    assert response.status_code == 201
+    assert response.json()['decision'] == 'UNKNOWN'
+    assert not response.json()['releasable']
+
+
+def test_gate_rejects_an_unsupported_console_path_prefix(setup_runtime, monkeypatch):
+    monkeypatch.setattr(main, 'db_manager', setup_runtime[0])
+    monkeypatch.setenv('ARGUS_CONSOLE_BASE_URL', 'https://console.example/argus/')
+    client = TestClient(main.app)
+    draft = policy().model_dump()
+    assert client.post('/api/v1/release-policies',json=draft).status_code == 201
+    candidate = snapshot()
+    store_snapshot(setup_runtime[0],candidate)
+    response = client.post('/api/v1/release-gates/evaluate',json={'policy_name':draft['name'],'policy_version':draft['version'],'candidate_launch_id':candidate.launch_id,'candidate_snapshot_id':candidate.id})
+    assert response.status_code == 503
+
+
+def test_manual_freeze_uses_current_results_and_preserves_the_old_snapshot(setup_runtime, monkeypatch):
+    from app.db_models import ExperimentItemExecutionRecord
+    from sqlalchemy import select
+    from test_issue_85_snapshot_revision import _create_launch
+
+    manager = setup_runtime[0]
+    monkeypatch.setattr(main, 'db_manager', manager)
+    launch_id = _create_launch(manager)
+    client = TestClient(main.app)
+    path = f'/api/v1/experiment-launches/{launch_id}'
+    first = client.post(f'{path}/result-snapshots')
+    assert first.status_code == 200
+    assert first.json()['summary']['pass_rate'] == 1.0
+    with manager.get_session() as session:
+        item = session.scalar(select(ExperimentItemExecutionRecord).where(ExperimentItemExecutionRecord.launch_id == launch_id))
+        item.quality_conclusion = 'fail'
+        item.scores = {'intent_match':0.0}
+        session.commit()
+    fresh = client.post(f'{path}/result-snapshots')
+    assert fresh.status_code == 200
+    assert fresh.json()['snapshot_id'] != first.json()['snapshot_id']
+    assert fresh.json()['summary']['pass_rate'] == 0.5
+    historical = client.get(f'{path}/summary',params={'snapshot_id':first.json()['snapshot_id']}).json()
+    # Langfuse 同步进度是实时投影；原 Snapshot 的事实与摘要保持固定。
+    assert historical['summary'] == first.json()['summary']
+    assert historical['source_result_digest'] == first.json()['source_result_digest']
+    assert client.post(f'{path}/result-snapshots').json()['snapshot_id'] == fresh.json()['snapshot_id']
 
 
 def test_postgres_migration_enforces_release_policy_ownership():
@@ -397,7 +473,8 @@ def test_postgres_migration_enforces_release_policy_ownership():
         engine.dispose()
 
 
-def test_new_gate_engine_does_not_reuse_a_legacy_pass_without_runner_identity(setup_runtime, monkeypatch):
+@pytest.mark.parametrize('old_engine,missing_identity', [('release-gate-v1','runner'), ('release-gate-v2','environment')])
+def test_new_gate_engine_does_not_reuse_a_legacy_pass_without_frozen_identity(setup_runtime, monkeypatch, old_engine, missing_identity):
     from app.db_models import ReleaseGateRecord
     from app.evaluator_binding import canonical_digest
     manager = setup_runtime[0]
@@ -409,13 +486,18 @@ def test_new_gate_engine_does_not_reuse_a_legacy_pass_without_runner_identity(se
     store_snapshot(manager,candidate)
     request = {'policy_name':draft['name'],'policy_version':draft['version'],'candidate_launch_id':candidate.launch_id,'candidate_snapshot_id':candidate.id}
     legacy = client.post('/api/v1/release-gates/evaluate',json=request).json()
-    # 模拟恢复的旧引擎记录：曾放行缺少 Runner 身份的历史快照。
+    # 模拟恢复的旧引擎记录：曾放行缺少 Runner 或 environment 身份的历史快照。
     with manager.get_session() as session:
         record = session.get(ReleaseGateRecord,legacy['id'])
-        record.request_digest = canonical_digest({'candidate_snapshot_id':candidate.id,'policy_digest':policy().content_digest,'engine_version':'release-gate-v1'})
-        record.result = {**record.result,'engine_version':'release-gate-v1'}
+        record.request_digest = canonical_digest({'candidate_snapshot_id':candidate.id,'policy_digest':policy().content_digest,'engine_version':old_engine})
+        record.result = {**record.result,'engine_version':old_engine}
         restored = session.get(RunResultSnapshotRecord,candidate.id)
-        restored.manifest = {key:value for key,value in restored.manifest.items() if key!='runner'}
+        manifest = copy.deepcopy(restored.manifest)
+        if missing_identity == 'runner':
+            manifest.pop('runner')
+        else:
+            manifest['comparison'].pop('environment')
+        restored.manifest = manifest
         session.commit()
     fresh = client.post('/api/v1/release-gates/evaluate',json=request).json()
     assert fresh['decision'] == 'UNKNOWN'

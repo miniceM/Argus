@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 
 from .db_models import AgentRecord, ReleaseGateRecord, ReleasePolicyRecord, RunResultSnapshotRecord
 from .evaluator_binding import canonical_digest
-from .release_gates import ENGINE_VERSION, GateEvaluation, ReleasePolicy, evaluate_gate
+from .release_gates import ENGINE_VERSION, GateEvaluation, ReleasePolicy, evaluate_gate, frozen_environment
 
 router = APIRouter(prefix="/api/v1", tags=["Release Gates"])
 
@@ -117,8 +117,8 @@ def create_release_gate(payload: EvaluateGateRequest) -> ReleaseGateResponse:
             if candidate is None or candidate.launch_id != payload.candidate_launch_id:
                 raise HTTPException(404, "Candidate result snapshot not found")
             policy = ReleasePolicy.model_validate(policy_record.definition)
-            environment = candidate.manifest.get("comparison", {}).get("environment", "production")
-            if candidate.agent_id != policy.agent_id or environment != policy.environment:
+            environment = frozen_environment(candidate)
+            if candidate.agent_id != policy.agent_id or (environment is not None and environment != policy.environment):
                 raise HTTPException(409, "Candidate Agent/environment does not match ReleasePolicy scope")
             request_digest = canonical_digest({
                 "candidate_snapshot_id": candidate.id, "policy_digest": policy.content_digest,
@@ -134,7 +134,7 @@ def create_release_gate(payload: EvaluateGateRequest) -> ReleaseGateResponse:
             evaluated = evaluate_gate(policy, candidate, baseline)
             console_base = os.getenv("ARGUS_CONSOLE_BASE_URL", "http://localhost:18083").rstrip("/")
             console_origin = urlsplit(console_base)
-            if console_origin.scheme not in {"http", "https"} or not console_origin.hostname or console_origin.username or console_origin.password or console_origin.query or console_origin.fragment:
+            if console_origin.scheme not in {"http", "https"} or not console_origin.hostname or console_origin.username or console_origin.password or console_origin.path or console_origin.query or console_origin.fragment:
                 raise HTTPException(503, "Console base URL is invalid")
             report_url = f"{console_base}/launches/{quote(candidate.launch_id, safe='')}?snapshot_id={quote(candidate.id, safe='')}"
             result = ReleaseGateResponse(

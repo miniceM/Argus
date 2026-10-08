@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS credentials (
 );
 CREATE TABLE IF NOT EXISTS credential_secrets (
  credential_id VARCHAR(64) NOT NULL REFERENCES credentials(id) ON DELETE CASCADE,
- version INTEGER NOT NULL, envelope JSON, provider_ref VARCHAR(255),
+ version INTEGER NOT NULL, envelope JSON NOT NULL,
  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
  PRIMARY KEY(credential_id, version)
 );

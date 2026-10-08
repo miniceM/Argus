@@ -38,3 +38,12 @@ it("names each Credential action and its Modal target even for duplicate names",
   fireEvent.click(screen.getByRole("button", { name: "轮换 同名凭据 (bbbbbbbb)" }));
   expect(screen.getByRole("dialog", { name: "轮换凭据 · 同名凭据 (bbbbbbbb)" })).toBeVisible();
 });
+
+it("creates a Managed Credential without asking users to configure a Provider", () => {
+  vi.mocked(api.GET).mockResolvedValue({ data: [], response: new Response() } as any);
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><CredentialsPage /></QueryClientProvider>);
+  fireEvent.click(screen.getByRole("button", { name: "创建凭据" }));
+  expect(screen.queryByRole("combobox", { name: "存储方式" })).not.toBeInTheDocument();
+  expect(screen.queryByText("Vault（需管理员启用）")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Agent Token（仅输入一次）")).toBeVisible();
+});

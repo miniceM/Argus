@@ -1211,16 +1211,14 @@ export interface components {
             /**
              * Provider
              * @default managed
-             * @enum {string}
+             * @constant
              */
-            provider: "managed" | "vault";
-            /** Secret */
-            secret?: string | null;
+            provider: "managed";
             /**
-             * Provider Ref
-             * @description Vault 管理员登记的内部映射，普通 API 不返回
+             * Secret
+             * Format: password
              */
-            provider_ref?: string | null;
+            secret: string;
         };
         /** CredentialDisable */
         CredentialDisable: {
@@ -1248,9 +1246,9 @@ export interface components {
             environment: string;
             /**
              * Provider
-             * @enum {string}
+             * @constant
              */
-            provider: "managed" | "vault";
+            provider: "managed";
             /** Enabled */
             enabled: boolean;
             /** Version */

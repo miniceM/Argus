@@ -8,7 +8,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
@@ -54,22 +54,13 @@ class CredentialCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     type: Literal["bearer_token"] = "bearer_token"
     environment: str = "production"
-    provider: Literal["managed", "vault"] = "managed"
-    secret: SecretStr | None = None
-    provider_ref: str | None = Field(default=None, max_length=255, description="Vault 管理员登记的内部映射，普通 API 不返回")
+    provider: Literal["managed"] = "managed"
+    secret: SecretStr
 
     @field_validator("environment")
     @classmethod
     def environment_scope(cls, value):
         return normalize_environment(value)
-
-    @model_validator(mode="after")
-    def check_provider(self):
-        if self.provider == "managed" and (self.secret is None or self.provider_ref is not None):
-            raise ValueError("Managed secret required")
-        if self.provider == "vault" and (not self.provider_ref or self.secret is not None):
-            raise ValueError("Vault reference required")
-        return self
 
 
 class CredentialRotate(BaseModel):
@@ -88,7 +79,7 @@ class CredentialResponse(BaseModel):
     name: str
     type: Literal["bearer_token"] = "bearer_token"
     environment: str
-    provider: Literal["managed", "vault"]
+    provider: Literal["managed"]
     enabled: bool
     version: int
 
@@ -112,14 +103,13 @@ def list_credentials(svc=Depends(service)):
 
 @router.post("", response_model=CredentialResponse, status_code=201)
 def create_credential(payload: CredentialCreate, actor=Depends(authorize), svc=Depends(service)):
-    secret = payload.secret.get_secret_value() if payload.secret is not None else None
-    if secret is not None:
-        try:
-            _token(secret)
-        except CredentialUnavailable:
-            raise HTTPException(422, "Invalid credential secret") from None
+    secret = payload.secret.get_secret_value()
     try:
-        return svc.create(payload.name, payload.environment, payload.provider, secret, payload.provider_ref, actor)
+        _token(secret)
+    except CredentialUnavailable:
+        raise HTTPException(422, "Invalid credential secret") from None
+    try:
+        return svc.create(payload.name, payload.environment, secret, actor)
     except CredentialUnavailable:
         raise HTTPException(503, "Credential provider is unavailable or not configured") from None
     except ValueError:

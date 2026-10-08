@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import select
 
 from .db_models import AgentVersionRecord, CredentialAuditRecord, CredentialRecord, CredentialSecretRecord
-from .secret_providers import CredentialUnavailable, VaultKubernetesProvider, _token
+from .secret_providers import CredentialUnavailable, _token
 
 
 @dataclass(frozen=True)
@@ -87,21 +87,14 @@ class CredentialService:
                 {"agent_id": version.agent_id, "version": version.version, "is_active": version.is_active}
                 for version in versions]}
 
-    def create(self, name, environment, provider, secret, provider_ref, actor):
+    def create(self, name, environment, secret, actor):
         credential_id = str(uuid.uuid4())
-        if provider == "managed":
-            envelope = ManagedSecretProvider().encrypt(credential_id, 1, secret)
-            provider_ref = None
-        else:
-            if os.getenv("ARGUS_VAULT_ENABLED") != "true":
-                raise CredentialUnavailable()
-            VaultKubernetesProvider().validate(provider_ref)
-            envelope = None
+        envelope = ManagedSecretProvider().encrypt(credential_id, 1, secret)
         with self.manager.get_session() as session:
-            record = CredentialRecord(id=credential_id, name=name, environment=environment, provider=provider, active_version=1)
+            record = CredentialRecord(id=credential_id, name=name, environment=environment, provider="managed", active_version=1)
             session.add(record)
             session.flush()
-            session.add(CredentialSecretRecord(credential_id=credential_id, version=1, envelope=envelope, provider_ref=provider_ref))
+            session.add(CredentialSecretRecord(credential_id=credential_id, version=1, envelope=envelope))
             self.audit(session, record, "CREATE", actor)
             session.commit()
             return self.metadata(record)
@@ -126,8 +119,6 @@ class CredentialService:
             # 任一旧密文不可读都回滚，不产生部分迁移。
             rows = session.scalars(select(CredentialSecretRecord).with_for_update()).all()
             for row in rows:
-                if row.envelope is None:
-                    continue
                 token = provider.decrypt(row.credential_id, row.version, row.envelope)
                 if row.envelope["key_id"] == provider.active_key_id:
                     continue
@@ -146,15 +137,10 @@ class CredentialService:
                 revision = session.get(CredentialSecretRecord, (record.id, record.active_version))
                 if revision is None:
                     raise CredentialUnavailable()
-                provider, version, envelope, reference = record.provider, record.active_version, revision.envelope, revision.provider_ref
-            if provider == "managed":
-                token = ManagedSecretProvider().decrypt(credential_id, version, envelope)
-            elif provider == "vault" and os.getenv("ARGUS_VAULT_ENABLED") == "true":
-                token, version = VaultKubernetesProvider().resolve_with_metadata(reference)
-                if not isinstance(version, int) or isinstance(version, bool) or version < 1:
-                    raise CredentialUnavailable()
-            else:
+                provider, version, envelope = record.provider, record.active_version, revision.envelope
+            if provider != "managed":
                 raise CredentialUnavailable()
+            token = ManagedSecretProvider().decrypt(credential_id, version, envelope)
             return ResolvedCredential(token, credential_id, version, provider)
         except Exception:
             raise CredentialUnavailable() from None

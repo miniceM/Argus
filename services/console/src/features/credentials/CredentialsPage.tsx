@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { components } from "../../api/schema";
-import { Button, Field, SelectInput, TextInput } from "../../components/ui/Primitives";
+import { Button, Field, TextInput } from "../../components/ui/Primitives";
 import { Modal } from "../../components/ui/Overlay";
 
 type Credential = components["schemas"]["CredentialResponse"];
@@ -21,8 +21,6 @@ export function CredentialsPage() {
   const [selected, setSelected] = useState<Credential | null>(null);
   const [name, setName] = useState("");
   const [environment, setEnvironment] = useState("production");
-  const [provider, setProvider] = useState<"managed" | "vault">("managed");
-  const [reference, setReference] = useState("");
   const [secret, setSecret] = useState("");
   const [authorization, setAuthorization] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -32,11 +30,11 @@ export function CredentialsPage() {
   const [usageTarget, setUsageTarget] = useState<Credential | null>(null);
   const [usage, setUsage] = useState<components["schemas"]["CredentialUsage"] | null>(null);
   const close = () => {
-    setSecret(""); setAuthorization(""); setReference(""); setOperation(null); setError(null);
+    setSecret(""); setAuthorization(""); setOperation(null); setError(null);
   };
   const open = (action: Operation, credential: Credential | null = null) => {
     setSelected(credential); setOperation(action); setName(""); setConfirmation("");
-    setSecret(""); setAuthorization(""); setReference(""); setForce(false); setProvider("managed"); setError(null);
+    setSecret(""); setAuthorization(""); setForce(false); setError(null);
   };
   const showUsage = async (credential: Credential) => {
     const result = await api.GET("/api/v1/credentials/{credential_id}/usage", { params: { path: { credential_id: credential.id } } });
@@ -52,8 +50,7 @@ export function CredentialsPage() {
       let response;
       if (operation === "create") {
         response = await api.POST("/api/v1/credentials", { headers, body: {
-          name, environment, provider, type: "bearer_token",
-          ...(provider === "managed" ? { secret } : { provider_ref: reference }),
+          name, environment, provider: "managed", type: "bearer_token", secret,
         }});
       } else if (selected) {
         const params = { path: { credential_id: selected.id } };
@@ -79,7 +76,7 @@ export function CredentialsPage() {
     {error && !operation && <p role="alert" className="text-sm text-fail">{error}</p>}
     {list.isPending && <p role="status">正在加载凭据…</p>}
     {list.isError && <p role="alert" className="text-fail">无法加载凭据。<Button variant="secondary" onClick={() => list.refetch()}>重试</Button></p>}
-    {list.data?.length === 0 && <p className="rounded-lg border border-border bg-surface p-6 text-foreground-secondary">尚无凭据。默认使用 Argus 加密存储，无需部署 Vault。</p>}
+    {list.data?.length === 0 && <p className="rounded-lg border border-border bg-surface p-6 text-foreground-secondary">尚无凭据。凭据使用 Argus 加密存储。</p>}
     {list.data?.map(credential => <article key={credential.id} className="rounded-lg border border-border bg-surface p-4 space-y-3">
       <div><h2 className="font-semibold">{credential.name}</h2><p className="text-sm text-foreground-secondary">Bearer Token · {credential.environment} · {credential.provider} · {credential.enabled ? "已启用" : "已停用"} · 修订 {credential.version}</p><p className="text-xs font-mono text-muted-foreground">{credential.id}</p></div>
       <div className="flex flex-wrap gap-2">
@@ -104,10 +101,8 @@ export function CredentialsPage() {
         {operation === "create" && <>
           <Field label="凭据名称">{({ id }) => <TextInput id={id} required maxLength={128} value={name} onChange={e => setName(e.target.value)} />}</Field>
           <Field label="环境">{({ id }) => <TextInput id={id} required value={environment} onChange={e => setEnvironment(e.target.value)} />}</Field>
-          <Field label="存储方式">{({ id }) => <SelectInput id={id} value={provider} onChange={e => { setProvider(e.target.value as "managed" | "vault"); setSecret(""); setReference(""); }}><option value="managed">Argus 加密存储（默认）</option><option value="vault">Vault（需管理员启用）</option></SelectInput>}</Field>
-          {provider === "vault" && <Field label="Vault 内部映射" hint="仅由部署管理员登记。Agent 用户选择凭据名称，无需填写 Vault 路径。">{({ id }) => <TextInput id={id} required value={reference} onChange={e => setReference(e.target.value)} />}</Field>}
         </>}
-        {(operation === "rotate" || (operation === "create" && provider === "managed")) && <Field label="Agent Token（仅输入一次）" hint="保存后无法查看。旧修订保留为密文。">{({ id }) => <TextInput id={id} type="password" autoComplete="off" required value={secret} onChange={e => setSecret(e.target.value)} />}</Field>}
+        {(operation === "rotate" || operation === "create") && <Field label="Agent Token（仅输入一次）" hint="保存后无法查看。旧修订保留为密文。">{({ id }) => <TextInput id={id} type="password" autoComplete="off" required value={secret} onChange={e => setSecret(e.target.value)} />}</Field>}
         {(operation === "delete" || operation === "disable") && <>
           <p className="text-sm">{operation === "delete" ? "删除仅允许未被任何版本引用的凭据。" : "停用后，引用此凭据的后续调用将在发送请求前失败。"}</p>
           <Field label={`输入凭据名称确认：${selected?.name}`}>{({ id }) => <TextInput id={id} required value={confirmation} onChange={e => setConfirmation(e.target.value)} />}</Field>

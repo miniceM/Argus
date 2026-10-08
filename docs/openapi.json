@@ -3572,44 +3572,22 @@
           },
           "provider": {
             "type": "string",
-            "enum": [
-              "managed",
-              "vault"
-            ],
+            "const": "managed",
             "title": "Provider",
             "default": "managed"
           },
           "secret": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "password",
-                "writeOnly": true
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Secret"
-          },
-          "provider_ref": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 255
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Provider Ref",
-            "description": "Vault 管理员登记的内部映射，普通 API 不返回"
+            "type": "string",
+            "format": "password",
+            "title": "Secret",
+            "writeOnly": true
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "name"
+          "name",
+          "secret"
         ],
         "title": "CredentialCreate"
       },
@@ -3654,10 +3632,7 @@
           },
           "provider": {
             "type": "string",
-            "enum": [
-              "managed",
-              "vault"
-            ],
+            "const": "managed",
             "title": "Provider"
           },
           "enabled": {

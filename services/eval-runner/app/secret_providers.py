@@ -1,20 +1,8 @@
-"""运行时凭据 Provider：Registry 只保存引用，Worker 按身份读取。"""
+"""凭据失败脱敏、Token 校验与显式开发环境引用。"""
 
 from __future__ import annotations
 
 import os
-import re
-import time
-from pathlib import Path
-from typing import Protocol
-from urllib.parse import urlsplit
-
-import httpx
-
-
-class SecretProvider(Protocol):
-    def validate(self, reference: str) -> None: ...
-    def resolve(self, reference: str) -> str: ...
 
 
 class CredentialUnavailable(ValueError):
@@ -48,91 +36,10 @@ class EnvironmentSecretProvider:
         return _token(os.getenv(reference.removeprefix("env://")))
 
 
-class VaultKubernetesProvider:
-    """Vault KV v2，通过 Kubernetes Workload Identity 获取短期读取凭据。"""
-
-    _transport: httpx.BaseTransport | None = None
-
-    def __init__(self):
-        self.address = os.getenv("ARGUS_VAULT_ADDR", "").rstrip("/")
-        self.role = os.getenv("ARGUS_VAULT_ROLE", "")
-        self.mount = os.getenv("ARGUS_VAULT_KV_MOUNT", "secret")
-        self.auth_mount = os.getenv("ARGUS_VAULT_AUTH_MOUNT", "kubernetes")
-        self.jwt_path = os.getenv(
-            "ARGUS_VAULT_JWT_PATH", "/var/run/secrets/kubernetes.io/serviceaccount/token"
-        )
-        self.namespace = os.getenv("ARGUS_VAULT_NAMESPACE")
-
-    def validate(self, reference: str) -> None:
-        if not self.address or not self.role:
-            raise ValueError("Credential provider 'vault://' is not supported without Vault workload configuration")
-        parts = urlsplit(reference)
-        if (
-            parts.scheme != "vault" or parts.netloc != self.mount
-            or parts.query or not parts.fragment or not parts.path.startswith("/")
-            or any(not re.fullmatch(r"[A-Za-z0-9_-]+", segment) for segment in parts.path[1:].split("/"))
-            or not re.fullmatch(r"[A-Za-z0-9_-]+", parts.fragment)
-        ):
-            raise ValueError("Invalid vault:// reference; expected configured-mount/path#field")
-        address = urlsplit(self.address)
-        try:
-            port = address.port
-            if port is not None and not 1 <= port <= 65535:
-                raise ValueError()
-        except ValueError:
-            raise ValueError("ARGUS_VAULT_ADDR has an invalid port") from None
-        if (
-            address.scheme != "https" or not address.hostname or address.username or address.password
-            or address.query or address.fragment or address.path not in ("", "/")
-            or any(char.isspace() or char == "\\" for char in self.address)
-        ):
-            raise ValueError("ARGUS_VAULT_ADDR must be an HTTPS origin without credentials, query or path")
-        if not re.fullmatch(r"[A-Za-z0-9_-]+", self.mount) or not re.fullmatch(r"[A-Za-z0-9_-]+", self.auth_mount):
-            raise ValueError("Invalid Vault mount configuration")
-
-    def resolve(self, reference: str) -> str:
-        return self.resolve_with_metadata(reference)[0]
-
-    def resolve_with_metadata(self, reference: str) -> tuple[str, int | None]:
-        deadline = time.monotonic() + 5
-        def remaining():
-            budget = deadline - time.monotonic()
-            if budget <= 0:
-                raise CredentialUnavailable()
-            return budget
-        try:
-            self.validate(reference)
-            parts = urlsplit(reference)
-            jwt = _token(Path(self.jwt_path).read_text().strip())
-            headers = {"X-Vault-Namespace": self.namespace} if self.namespace else {}
-            # TLS 验证保持开启，不跟随重定向，不自动重试，不缓存 Agent Secret。
-            with httpx.Client(timeout=5, follow_redirects=False, transport=self._transport) as client:
-                login = client.post(
-                    f"{self.address}/v1/auth/{self.auth_mount}/login",
-                    json={"role": self.role, "jwt": jwt}, headers=headers,
-                    timeout=remaining(),
-                )
-                remaining()
-                login.raise_for_status()
-                vault_token = _token(login.json()["auth"]["client_token"])
-                response = client.get(
-                    f"{self.address}/v1/{self.mount}/data{parts.path}",
-                    headers={**headers, "X-Vault-Token": vault_token},
-                    timeout=remaining(),
-                )
-                remaining()
-                response.raise_for_status()
-                data = response.json()["data"]
-                return _token(data["data"][parts.fragment]), data.get("metadata", {}).get("version")
-        except (OSError, ValueError, KeyError, TypeError, httpx.HTTPError, httpx.InvalidURL):
-            raise CredentialUnavailable() from None
-
-
-def provider_for(reference: str, allowed_envs: set[str]) -> SecretProvider:
+def provider_for(reference: str, allowed_envs: set[str]) -> EnvironmentSecretProvider:
     if reference.startswith("env://"):
         return EnvironmentSecretProvider(allowed_envs)
-    if reference.startswith("vault://"):
-        return VaultKubernetesProvider()
-    if reference.startswith("k8s-secret://"):
-        raise ValueError("Credential provider 'k8s-secret://' is not supported for resolution in current version")
-    raise ValueError("Unsupported credential reference scheme. Expected env:// or vault://")
+    if reference.startswith(("vault://", "k8s-secret://")):
+        scheme = reference.split(":", 1)[0]
+        raise ValueError(f"Credential provider '{scheme}://' is not supported for resolution in current version")
+    raise ValueError("Unsupported credential reference scheme. Expected env://")

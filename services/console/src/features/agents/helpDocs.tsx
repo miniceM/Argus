@@ -44,7 +44,7 @@ export const AGENT_VERSION_FIELD_HELPS: Record<string, Omit<FieldHelpProps, "pla
     rules: (
       <span>
         <strong className="text-fail">严禁直接填入明文 Secret</strong>。先在 Credentials 创建凭据，再选择名称。
-        env:// 仅供本地开发/PoC；Vault 是管理员可选的 Provider，普通 Agent 用户无需填写路径。无需鉴权请留空。
+        env:// 仅供本地开发/PoC。无需鉴权请留空。
       </span>
     ),
     example: "生产 Agent Token（Credential 名称）",

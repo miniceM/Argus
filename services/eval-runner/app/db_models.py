@@ -213,8 +213,7 @@ class CredentialSecretRecord(Base):
     __tablename__ = "credential_secrets"
     credential_id: Mapped[str] = mapped_column(String(64), ForeignKey("credentials.id", ondelete="CASCADE"), primary_key=True)
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
-    envelope: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    provider_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    envelope: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 

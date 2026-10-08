@@ -61,42 +61,11 @@ UID 时，应设置文件所有者让 Runner 能读取，不能放宽为组或�
   移除旧密钥前也需确认没有旧进程/在途写入。文件更新应原子替换并保留受限权限。
 - 密钥丢失：只能从独立安全备份恢复；数据库备份本身不能解密。没有明文回退或匿名调用。
 
-## 可选企业 Provider：Vault KV v2 + Kubernetes 身份
-
-仅管理员显式设置 `ARGUS_VAULT_ENABLED=true` 后可创建 Vault Credential，内部映射例如
-`vault://secret/agents/banking#token`。普通 Agent 用户依旧选 Credential 名称/ID，API 不返回
-内部映射。Vault 的实际 KV 修订记录到 Attempt；资源元数据 `version` 是 Argus 映射修订。
-Vault Secret 内容由 Vault 管理员轮换，Argus 的 `/rotate` 只支持 Managed Secret。
-
-Worker 的非秘密配置：
-
-```text
-ARGUS_VAULT_ENABLED=true
-ARGUS_VAULT_ADDR=https://vault.internal.example
-ARGUS_VAULT_ROLE=argus-worker
-ARGUS_VAULT_KV_MOUNT=secret
-ARGUS_VAULT_AUTH_MOUNT=kubernetes
-ARGUS_VAULT_JWT_PATH=/var/run/secrets/kubernetes.io/serviceaccount/token
-```
-
-Vault Enterprise 可设置 `ARGUS_VAULT_NAMESPACE`。地址必须为有效 HTTPS origin/端口。
-通过 Compose override 将上述变量传入 `eval-runner.environment` 并挂载 JWT；Kubernetes 中使用
-受限 ServiceAccount 的 projected JWT，限制 Namespace/role/audience、KV 路径只读，使用短期 Token。
-Worker 每次解析登录并读取，无长期 Vault Token、Secret 缓存或自动重试。并发量受 Worker 派发限制；
-Vault 容量规划需计入每 Attempt 的登录与读取。登录/读取共用 5 秒预算，运行时额外施加
-5 秒异步截止时间；超时线程可能仍清理连接，但不会因此继续发送 Agent 请求。
-
-私有 CA：HTTPX 默认读取 certifi，单独更新系统 CA 不保证生效。将系统信任根与私有 CA 合并
-为 PEM bundle，以只读方式挂载，例如 `/run/certs/vault-ca-bundle.pem`，并在 Runner 的
-Compose override/Kubernetes 环境设置 `SSL_CERT_FILE=/run/certs/vault-ca-bundle.pem`。
-必须保留 TLS 验证，不能使用 `verify=False`。本 PR 测试 MockTransport 的契约、失败和截止预算，
-没有声称已验证真实 Vault/Kubernetes 的策略、负载或证书轮换；上线前由企业部署验收。
-
 ## 历史引用迁移与开发 PoC
 
 已有 AgentVersion 的 `credential_ref` 保留兼容，不改写历史摘要或 Manifest。
 迁移步骤：创建同环境 Credential → 创建新的 AgentVersion，填 `credential_id` 并清空
-`credential_ref` → 用新版本发起评测。二者互斥。历史 Vault 引用仍要求原 Worker 身份配置。
+`credential_ref` → 用新版本发起评测。二者互斥。Vault/Kubernetes 接入留作后续独立集成，本阶段维持 main 对 vault:// 和 k8s-secret:// 的不支持行为。
 历史 `env://` 在默认生产模式拒绝；已经冻结的生产 env 引用运行时也失败，需显式迁移。
 
 开发可在 `.env.poc` 设置：
@@ -111,4 +80,4 @@ DEMO_AUTH_TOKEN=<本地演示 Token>
 其他白名单变量还需 Compose override 显式注入对应值，不能只改白名单。
 这是 Runner 进程的变量，宿主管理员可读；轮换需要更新容器配置，不用于生产隔离承诺。
 
-执行时的凭据解析使用独立的 50 线程池，不与默认后台任务共用；5 秒解析预算从任务实际开始计算，覆盖 Vault 登录与读取。排队另有 5 秒上限，超时以 CREDENTIAL_UNAVAILABLE 终止且保持 PREPARED，不调用 Agent。解析完成后 Worker 按 Launch → Item → Attempt 锁顺序重新核验租约、派发代次、当前 Attempt 和取消状态；失去发送权时不修改旧 Attempt 或发送请求。旧 `vault://` 兼容引用也记录实际 KV 修订；响应缺少有效修订时在 HTTP 派发前失败。
+执行时的凭据解析使用独立的 50 线程池，不与默认后台任务共用；5 秒解析预算从任务实际开始计算，覆盖主密钥读取与解密。排队另有 5 秒上限，超时以 CREDENTIAL_UNAVAILABLE 终止且保持 PREPARED，不调用 Agent。解析完成后 Worker 按 Launch → Item → Attempt 锁顺序重新核验租约、派发代次、当前 Attempt 和取消状态；失去发送权时不修改旧 Attempt 或发送请求。

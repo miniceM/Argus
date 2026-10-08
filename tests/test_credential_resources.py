@@ -153,8 +153,6 @@ def test_authenticated_real_http_worker_uses_rotation_without_rewriting_manifest
 
     client, service, registry, _ = credentials
     manager, queue, _, orchestrator, worker, reconciler = setup_runtime
-    monkeypatch.delenv("ARGUS_VAULT_ADDR", raising=False)
-    monkeypatch.delenv("ARGUS_VAULT_ENABLED", raising=False)
     expected = ["example-first-token"]
     calls = []
 
@@ -262,37 +260,6 @@ def test_corrupted_envelope_aborts_key_rewrap_without_partial_updates(credential
         rows = session.scalars(select(CredentialSecretRecord)).all()
         assert rows[0].envelope["key_id"] == "key-1"
 
-
-@pytest.mark.parametrize("vault_version", [7, None])
-def test_optional_vault_resource_hides_mapping_and_records_real_kv_revision(credentials, tmp_path, monkeypatch, vault_version):
-    import httpx
-    from app.secret_providers import VaultKubernetesProvider
-
-    client, service, _, _ = credentials
-    monkeypatch.setenv("ARGUS_VAULT_ENABLED", "true")
-    monkeypatch.setenv("ARGUS_VAULT_ADDR", "https://vault.example")
-    monkeypatch.setenv("ARGUS_VAULT_ROLE", "argus-worker")
-    jwt = tmp_path / "workload-jwt"
-    jwt.write_text("example-service-account-jwt")
-    monkeypatch.setenv("ARGUS_VAULT_JWT_PATH", str(jwt))
-    def handler(request):
-        if request.url.path.endswith("/login"):
-            return httpx.Response(200, json={"auth": {"client_token": "example-short-lived-vault-token"}})
-        return httpx.Response(200, json={"data": {"data": {"token": "example-vault-agent-token"}, "metadata": {"version": vault_version}}})
-    monkeypatch.setattr(VaultKubernetesProvider, "_transport", httpx.MockTransport(handler))
-    response = create(client, provider="vault", secret=None, provider_ref="vault://secret/agents/private#token")
-    assert response.status_code == 201
-    assert "private" not in response.text and "provider_ref" not in response.json()
-    if vault_version is None:
-        with pytest.raises(CredentialUnavailable):
-            service.resolve(response.json()["id"])
-    else:
-        resolved = service.resolve(response.json()["id"])
-        assert resolved.token == "example-vault-agent-token" and resolved.version == 7
-    monkeypatch.delenv("ARGUS_VAULT_ENABLED")
-    assert create(client, provider="vault", secret=None, provider_ref="vault://secret/agents/private#token").status_code == 503
-    with pytest.raises(CredentialUnavailable):
-        service.resolve(response.json()["id"])
 
 
 @pytest.mark.parametrize("http_statuses", [[200], [401], [500, 200]])
@@ -414,52 +381,6 @@ def test_launch_cannot_use_a_credential_version_from_another_environment(credent
     assert launch.manifest["comparison"]["environment"] == "staging"
 
 
-@pytest.mark.parametrize("mode", ["sync", "worker"])
-@pytest.mark.parametrize("revision", [7, None])
-def test_legacy_vault_attempt_records_actual_revision_or_stops_before_dispatch(credentials, setup_runtime, monkeypatch, tmp_path, mode, revision):
-    import httpx
-    from app.manifest import LaunchService
-    from app.secret_providers import VaultKubernetesProvider
-
-    client, _, registry, _ = credentials
-    jwt = tmp_path / "workload-jwt"
-    jwt.write_text("example-service-account-token")
-    monkeypatch.setenv("ARGUS_VAULT_ADDR", "https://vault.example")
-    monkeypatch.setenv("ARGUS_VAULT_ROLE", "argus-worker")
-    monkeypatch.setenv("ARGUS_VAULT_JWT_PATH", str(jwt))
-    def vault(request):
-        if request.url.path.endswith("/login"):
-            return httpx.Response(200, json={"auth": {"client_token": "example-vault-session-token"}})
-        return httpx.Response(200, json={"data": {"data": {"token": "example-legacy-token"}, "metadata": {"version": revision}}})
-    monkeypatch.setattr(VaultKubernetesProvider, "_transport", httpx.MockTransport(vault))
-    registry.create_version("test-agent", "legacy-vault", "https://agent.example/invoke", credential_ref="vault://secret/agents/banking#token", max_retries=0)
-    manager, queue, _, orchestrator, worker, _ = setup_runtime
-    service = LaunchService(manager, registry)
-    monkeypatch.setattr(main, "launch_service", service)
-    monkeypatch.setattr(main, "orchestrator", orchestrator)
-    launch = service.create_launch(agent_id="test-agent", agent_version="legacy-vault", dataset_name="test", evaluator_ids=["intent_match"], dataset_snapshot={
-        "source": "seed", "dataset_id": "ds", "dataset_version": "v1", "items": [{"id": "0", "input": {}, "expected_output": {"expected_intent": "refund"}}],
-    })
-    with patch("app.execution.get_langfuse_client_safe", return_value=None), patch("app.worker.get_langfuse_client_safe", return_value=None), patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=httpx.Response(200, json={"intent": "refund"})) as invoke:
-        if mode == "sync":
-            assert client.post("/api/v1/experiment-launches/run", json={"launch_id": launch.id}).status_code == 200
-        else:
-            orchestrator.start_launch(launch.id)
-            message = queue.read_group("legacy-vault", count=1)[0]
-            asyncio.run(worker.execute_item_message(*message))
-    assert invoke.await_count == (1 if revision is not None else 0)
-    with manager.get_session() as session:
-        attempts = session.scalars(select(ExecutionAttemptRecord).join(ExperimentItemExecutionRecord, ExecutionAttemptRecord.item_execution_id == ExperimentItemExecutionRecord.id).where(ExperimentItemExecutionRecord.launch_id == launch.id)).all()
-        assert len(attempts) == (1 if revision is not None or mode == "worker" else 0)
-        if revision is None and mode == "worker":
-            assert attempts[0].status == "FAILED"
-            assert attempts[0].request_phase == "PREPARED"
-            assert attempts[0].error_type == "CREDENTIAL_UNAVAILABLE"
-        if revision is not None:
-            assert invoke.await_args.kwargs["headers"]["Authorization"] == "Bearer example-legacy-token"
-            assert (attempts[0].credential_id, attempts[0].credential_version, attempts[0].credential_provider) == (None, revision, "vault")
-
-
 def test_omitted_credential_environment_is_frozen_before_launch_creation(credentials, setup_runtime):
     from app.manifest import LaunchService
 
@@ -527,3 +448,17 @@ def test_saturated_credential_pool_cannot_dispatch_outside_the_worker_lease(cred
         assert attempts[0].request_phase == "PREPARED"
         if state == "saturated":
             assert attempts[0].status == "FAILED"
+
+
+def test_managed_api_contract_has_no_external_provider_configuration(credentials, monkeypatch):
+    client, service, _, _ = credentials
+    from sqlalchemy import inspect
+    assert "provider_ref" not in {column["name"] for column in inspect(service.manager.engine).get_columns("credential_secrets")}
+    monkeypatch.setenv('ARGUS_VAULT_ENABLED', 'true')
+    monkeypatch.setenv('ARGUS_VAULT_ADDR', 'https://vault.example')
+    monkeypatch.setenv('ARGUS_VAULT_ROLE', 'argus-worker')
+    response = create(client, provider='vault', secret=None, provider_ref='vault://secret/agents/private#token')
+    assert response.status_code == 422
+    properties = client.get('/openapi.json').json()['components']['schemas']['CredentialCreate']['properties']
+    assert 'provider_ref' not in properties
+    assert properties['provider']['const'] == 'managed'

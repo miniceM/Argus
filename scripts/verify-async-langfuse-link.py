@@ -244,14 +244,23 @@ def _drive_until_link(
     link_service = app_modules["launch_link_service"]
     db_manager = app_modules["db_manager"]
 
+    # 在运行期导入：本脚本要求 app.config 只能在 _configure_environment 之后导入。
+    from app.evaluation_recovery import WORK_TYPE_EVALUATION, WORK_TYPE_INVOCATION
+
     last_state: dict[str, Any] = {}
     last_reported_reason: str | None = None
     last_link_status: str | None = None
     last_link_reason: str | None = None
     while time.monotonic() < deadline:
         messages = worker.poll_queue(count=10, block_ms=200)
-        for message_id, item_id, generation in messages:
-            asyncio.run(worker.execute_item_message(message_id, item_id, generation))
+        # main 把队列消息扩展为 (message_id, item_id, generation, work_type)：同一条
+        # 队列既跑完整执行也跑"仅重新评测"。必须照 main 的运行循环路由，否则
+        # EVALUATION 消息会被当成完整执行而重新调用 Agent。
+        for message_id, item_id, generation, work_type in messages:
+            if (work_type or WORK_TYPE_INVOCATION) == WORK_TYPE_EVALUATION:
+                asyncio.run(worker.execute_evaluation_message(message_id, item_id, generation))
+            else:
+                asyncio.run(worker.execute_item_message(message_id, item_id, generation))
         if messages:
             outbox_syncer.process_batch(batch_size=10)
             run_score_syncer.process_batch(batch_size=10)

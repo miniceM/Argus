@@ -396,6 +396,85 @@ def test_drive_until_link_surfaces_link_backfill_reason(capsys):
     assert link_service.calls >= 1
 
 
+def test_drive_until_link_routes_queue_messages_by_work_type():
+    """合并 main 后 queue 消息是 4 元组，且必须按 work_type 路由。
+
+    main 把 ``read_group`` 的返回值从 ``(message_id, item_id, generation)``
+    扩展为 ``(message_id, item_id, generation, work_type)``（Issue #84：同一条队列
+    既跑完整执行也跑仅重新评测）。补链验证脚本若仍按 3 元组解包，会在 CI run
+    37712345355 上抛出 ``ValueError: too many values to unpack (expected 3)``；
+    若直接把 EVALUATION 消息丢给 ``execute_item_message``，则会重新调用 Agent，
+    破坏"仅重新评测不重跑 Agent"的语义。
+    """
+    script = _load_verification_script()
+
+    class _Worker:
+        def __init__(self):
+            self.invocations: list[tuple] = []
+            self.evaluations: list[tuple] = []
+
+        @staticmethod
+        def poll_queue(count=10, block_ms=1000):
+            return [
+                ("m-1", "item-1", 2, "INVOCATION"),
+                ("m-2", "item-2", 2, "EVALUATION"),
+            ]
+
+        async def execute_item_message(self, *args):
+            self.invocations.append(args)
+            return True
+
+        async def execute_evaluation_message(self, *args):
+            self.evaluations.append(args)
+            return True
+
+    class _Quiescent:
+        """已经 SYNCED 且已有链接：让驱动循环在第一轮处理完消息后直接返回。"""
+
+        @staticmethod
+        def process_batch(batch_size=1):
+            return 0
+
+        @staticmethod
+        def run_reconcile_cycle():
+            return None
+
+        @staticmethod
+        def reconcile_langfuse_links(_service=None, **_kwargs):
+            return 0
+
+        @staticmethod
+        def ensure_launch_link(_launch_id):
+            return SimpleNamespace(status="UNCHANGED", reason=None, url="ok", run_id="run-1")
+
+    class _SyncedLaunch:
+        id = "launch-1"
+        status = "COMPLETED"
+        langfuse_sync_status = "SYNCED"
+        langfuse_experiment_id = "run-1"
+        langfuse_experiment_url = "https://example.com/run-1"
+        langfuse_sync_error = None
+
+    worker = _Worker()
+    state = script._drive_until_link(
+        {
+            "worker": worker,
+            "outbox_syncer": _Quiescent(),
+            "run_score_syncer": _Quiescent(),
+            "reconciler": _Quiescent(),
+            "launch_link_service": _Quiescent(),
+            "db_manager": _FakeSessionFactory(_SyncedLaunch()),
+        },
+        "launch-1",
+        deadline=time.monotonic() + 5,
+    )
+
+    # 4 元组被正确解包，且两类工作分别路由
+    assert worker.invocations == [("m-1", "item-1", 2)]
+    assert worker.evaluations == [("m-2", "item-2", 2)]
+    assert state["langfuse_experiment_url"] == "https://example.com/run-1"
+
+
 def test_environment_is_configured_before_app_config_is_first_imported(monkeypatch):
     """app.config 必须在环境变量设置完成之后才被首次导入。
 

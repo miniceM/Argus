@@ -69,4 +69,6 @@ argus eval result --gate-id "$GATE_ID" --report artifacts/argus-gate.json
 
 不要用 `continue-on-error`、`allow_failure` 或忽略 shell 退出码来绕过 Gate。授权 Override 及审计仍依赖 Issue #6/#7，本期客户端不提供覆盖结论的开关。
 
-CLI 在创建、并发恢复和轮询时校验完整 Agent/Dataset/Evaluator 版本与显式 Baseline 身份；ISO UTC Dataset 时间戳允许等价表示。终态必须同时确认 progress.evaluating 为 0，才捕获当前 Snapshot；evaluation-only 重试仍在运行时继续等待。控制面缺少该字段则返回 UNKNOWN，需与本 PR 的 API 配套使用。GitHub 模板的 API Token 只注入 Evaluate 步骤，安装和 artifact Action 不接收该凭据。
+CLI 在创建、并发恢复和轮询时校验完整 Agent/Dataset/Evaluator 版本与显式 Baseline 身份；ISO UTC Dataset 时间戳允许等价表示。终态必须同时确认 progress.evaluating 为 0，再通过 `POST /api/v1/experiment-launches/{id}/result-snapshots` 冻结当前已完成的结果后请求 Gate；evaluation-only 重试仍在运行时继续等待。冻结相同结果幂等，变化后的结果生成新的修订；显式 Snapshot/Gate ID 的历史读取不改写。若冻结时任务重新进入运行态，返回 UNKNOWN，不能回退到旧 PASS。控制面缺少进度字段或冻结接口也返回 UNKNOWN，需与本 PR 的 API 配套使用。GitHub 模板的 API Token 只注入 Evaluate 步骤，安装和 artifact Action 不接收该凭据。
+
+GitLab 必须将 `ARGUS_API_TOKEN` 设置为 masked/protected CI Variable，并将 Environment scope 精确设为 `argus-gate`，不得使用默认的 `*`。`install_cli` 在不持有该 Token 的 Job 中安装固定客户端并上传包目录；只有声明 `argus-gate` Environment 的门禁 Job 获取 Token，并直接执行安装好的客户端。发布 Job 不声明此 Environment；安装与发布的 Token 缺失检查可阻断错误的全局配置。流水线运行于受保护分支/标签；Runner 必须支持 Environment-scoped Variables。

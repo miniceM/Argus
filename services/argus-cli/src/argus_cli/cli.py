@@ -243,7 +243,7 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, monotonic=time.mon
                 elif status not in ACTIVE:
                     raise CLIError("UNKNOWN_LAUNCH_STATUS")
                 sleep(min(args.poll_interval, max(0, deadline - monotonic())))
-            summary = request("GET", path + "/summary")
+            summary = request("POST", path + "/result-snapshots")
             snapshot_id = summary.get("snapshot_id")
             if summary.get("launch_id") != launch_id or not isinstance(snapshot_id, str) or not snapshot_id:
                 raise CLIError("INVALID_RESPONSE")

@@ -1,17 +1,35 @@
-# 配置固定 ARGUS_CLI_REF、ARGUS_API_URL、ARGUS_API_TOKEN、AGENT_VERSION、DATASET_VERSION。
-# 凭据通过 GitLab CI Variables 注入；替换 deploy 命令。
-stages: [quality_gate, deploy]
+# 配置固定 ARGUS_CLI_REF、ARGUS_API_URL、AGENT_VERSION、DATASET_VERSION。
+# ARGUS_API_TOKEN 必须为 masked/protected CI Variable，Environment scope 精确设为 argus-gate。
+# 不得使用默认的 * scope；安装依赖和 deploy Job 均不声明该 Environment。
+# 替换 deploy 命令。仅在受保护分支/标签执行此流水线。
+stages: [prepare, quality_gate, deploy]
+install_cli:
+  stage: prepare
+  image: python:3.12
+  script:
+    - python -c 'import os,re; assert re.fullmatch(r"[0-9a-f]{40}", os.environ["ARGUS_CLI_REF"])'
+    - test -z "${ARGUS_API_TOKEN:-}"
+    - python -m pip install --target .argus-cli "argus-release-cli @ git+https://github.com/miniceM/Argus.git@${ARGUS_CLI_REF}#subdirectory=services/argus-cli"
+  artifacts:
+    paths: [.argus-cli/]
+    expire_in: 1 day
 argus_gate:
   stage: quality_gate
   image: python:3.12
+  needs:
+    - job: install_cli
+      artifacts: true
+  environment:
+    name: argus-gate
+    action: access
   timeout: 10m
   allow_failure: false
   script:
-    - python -c 'import os,re; assert re.fullmatch(r"[0-9a-f]{40}", os.environ["ARGUS_CLI_REF"])'
     - test -n "$ARGUS_API_URL"
-    - python -m pip install "argus-release-cli @ git+https://github.com/miniceM/Argus.git@${ARGUS_CLI_REF}#subdirectory=services/argus-cli"
+    - test -n "${ARGUS_API_TOKEN:-}"
     - >-
-      argus eval run --agent banking-agent --agent-version "$AGENT_VERSION"
+      PYTHONPATH="$CI_PROJECT_DIR/.argus-cli" python -m argus_cli eval run
+      --agent banking-agent --agent-version "$AGENT_VERSION"
       --dataset banking-agent-regression --dataset-version "$DATASET_VERSION"
       --evaluator intent_match@1.0.0 --evaluator required_tool_match@1.0.0
       --evaluator pii_safe@1.0.0 --evaluator escalation_match@1.0.0
@@ -25,4 +43,5 @@ deploy:
   stage: deploy
   needs: [argus_gate]
   script:
+    - test -z "${ARGUS_API_TOKEN:-}"
     - echo '门禁已通过，在此接入业务已有发布命令'

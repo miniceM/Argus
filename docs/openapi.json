@@ -1443,6 +1443,46 @@
       }
     },
     "/api/v1/experiment-launches/{launch_id}/result-snapshots": {
+      "post": {
+        "tags": [
+          "Evaluation Results"
+        ],
+        "summary": "Freeze current settled results for a release gate",
+        "operationId": "freeze_run_results_api_v1_experiment_launches__launch_id__result_snapshots_post",
+        "parameters": [
+          {
+            "name": "launch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Launch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummaryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "get": {
         "tags": [
           "Evaluation Results"

@@ -66,7 +66,7 @@ def exercise(args, *, decision="PASS", status="COMPLETED", handler=None):
             return httpx.Response(202, json={"launch_id": "launch-1", "status": "QUEUED"})
         if request.url.path.endswith("/launch-1"):
             return httpx.Response(200, json=launch_response(status))
-        if request.url.path.endswith("/summary"):
+        if request.url.path.endswith("/result-snapshots"):
             return httpx.Response(200, json={"launch_id": "launch-1", "snapshot_id": "snapshot-fixed"})
         if request.url.path.endswith("/evaluate") or "/release-gates/" in request.url.path:
             return httpx.Response(201, json={"id": "gate-1", "decision": decision,
@@ -184,14 +184,13 @@ def test_cli_wait_against_real_api_and_database(setup_runtime, monkeypatch, pass
     from app.manifest import LaunchService
     from app.registry import AgentRegistry
     from fastapi.testclient import TestClient
-    from test_issue_7_release_gates import policy, snapshot, store_snapshot
+    from test_issue_7_release_gates import policy
 
     monkeypatch.setattr(server, "db_manager", setup_runtime[0])
     monkeypatch.setattr(server, "orchestrator", setup_runtime[3])
     registry = AgentRegistry(setup_runtime[0])
     monkeypatch.setattr(server, "launch_service", LaunchService(setup_runtime[0], registry, runner_version="0.1.0"))
-    candidate = snapshot(passed=passed)
-    store_snapshot(setup_runtime[0], candidate)
+    candidate = _live_cli_snapshot(setup_runtime[0], passed=passed)
     draft = policy().model_dump()
     out, err = io.StringIO(), io.StringIO()
     with TestClient(server.app) as client:
@@ -343,7 +342,7 @@ def test_wait_ignores_the_old_snapshot_until_evaluation_only_work_finishes():
     code, _, _, calls, clock = exercise(arguments(command="wait"), handler=handler)
     assert code == 0 and clock.now == 1
     assert sum(request.url.path.endswith("/launch-1") for request in calls) == 2
-    assert sum(request.url.path.endswith("/summary") for request in calls) == 1
+    assert sum(request.url.path.endswith("/result-snapshots") for request in calls) == 1
 
 
 def test_launch_progress_exposes_in_flight_evaluation_only_work(setup_runtime):
@@ -378,7 +377,7 @@ def test_terminal_launch_with_missing_evaluation_progress_never_reads_stale_summ
             return httpx.Response(200, json=value)
     code, result, _, calls, _ = exercise(arguments(command="wait"), handler=handler)
     assert code == 2 and result["error_code"] == "INVALID_RESPONSE"
-    assert not any(request.url.path.endswith("/summary") for request in calls)
+    assert not any(request.url.path.endswith("/result-snapshots") for request in calls)
 
 
 def test_equivalent_utc_dataset_versions_preserve_the_requested_identity():
@@ -390,3 +389,116 @@ def test_equivalent_utc_dataset_versions_preserve_the_requested_identity():
             return httpx.Response(201 if request.method == "POST" else 200, json=value)
     code, _, _, _, _ = exercise(arguments(dataset_version="2026-10-08T00:00:00Z"), handler=handler)
     assert code == 0
+
+def _live_cli_snapshot(manager, *, passed=2):
+    from app.db_models import ExperimentItemExecutionRecord, ExperimentLaunchRecord
+    from app.result_snapshots import create_result_snapshot
+    from test_issue_7_release_gates import snapshot
+
+    value = snapshot(passed=passed)
+    with manager.get_session() as session:
+        launch = ExperimentLaunchRecord(
+            id=value.launch_id, name="cli-fresh-evidence", agent_id="test-agent", agent_version="v1",
+            agent_version_id="test-agent-v1", dataset_id="ds", dataset_name="ds", dataset_version="v1",
+            manifest=value.manifest, status="COMPLETED",
+        )
+        session.add(launch)
+        session.flush()
+        for item in value.items:
+            session.add(ExperimentItemExecutionRecord(
+                id=f"{value.launch_id}-{item['dataset_item_id']}", launch_id=value.launch_id,
+                dataset_item_id=item["dataset_item_id"], execution_status=item["execution_status"],
+                eval_status=item["eval_status"], quality_conclusion=item["quality_conclusion"],
+                quality_evaluation=item["quality_evaluation"], scores=item["scores"], evaluation_status="idle",
+            ))
+        session.flush()
+        frozen = create_result_snapshot(session, launch)
+        session.commit()
+        return frozen
+
+
+def test_cli_freezes_completed_retry_before_gate_and_preserves_the_previous_pass(setup_runtime, monkeypatch):
+    from app import main as server
+    from app.db_models import ExperimentItemExecutionRecord
+    from app.manifest import LaunchService
+    from app.registry import AgentRegistry
+    from fastapi.testclient import TestClient
+    from sqlalchemy import select
+    from test_issue_7_release_gates import policy
+
+    manager = setup_runtime[0]
+    monkeypatch.setattr(server, "db_manager", manager)
+    monkeypatch.setattr(server, "orchestrator", setup_runtime[3])
+    monkeypatch.setattr(server, "launch_service", LaunchService(manager, AgentRegistry(manager), runner_version="0.1.0"))
+    candidate = _live_cli_snapshot(manager)
+    draft = policy().model_dump()
+    options = ["eval", "wait", "--launch-id", candidate.launch_id,
+               "--policy", draft["name"], "--policy-version", draft["version"]]
+    with TestClient(server.app) as client:
+        assert client.post("/api/v1/release-policies", json=draft).status_code == 201
+        original = client.get(f"/api/v1/experiment-launches/{candidate.launch_id}/result-snapshots/{candidate.id}").json()
+        first = io.StringIO()
+        assert main(options, client=client, stdout=first, stderr=io.StringIO()) == 0, first.getvalue()
+        original_gate = json.loads(first.getvalue())
+        with manager.get_session() as session:
+            item = session.scalar(select(ExperimentItemExecutionRecord).where(
+                ExperimentItemExecutionRecord.launch_id == candidate.launch_id,
+                ExperimentItemExecutionRecord.dataset_item_id == "0",
+            ))
+            # 评测重试已提交新结论，周期性 Reconciler 尚未冻结新 Snapshot。
+            item.quality_conclusion = "fail"
+            item.quality_evaluation = {"rules": [{"critical": False, "conclusion": "fail"}]}
+            item.scores = {"intent_match": 0.0}
+            item.evaluation_status = "recovered"
+            session.commit()
+        changed = io.StringIO()
+        assert main(options, client=client, stdout=changed, stderr=io.StringIO()) == 1
+        new_gate = json.loads(changed.getvalue())
+        assert new_gate["decision"] == "FAIL"
+        assert new_gate["candidate_snapshot_id"] != candidate.id
+        assert client.get(f"/api/v1/experiment-launches/{candidate.launch_id}/result-snapshots/{candidate.id}").json() == original
+        assert client.get(f"/api/v1/release-gates/{original_gate['id']}").json() == original_gate
+        unchanged = io.StringIO()
+        assert main(options, client=client, stdout=unchanged, stderr=io.StringIO()) == 1
+        assert json.loads(unchanged.getvalue())["id"] == new_gate["id"]
+
+
+@pytest.mark.parametrize("in_flight", ["evaluation", "execution"])
+def test_refresh_never_falls_back_to_an_old_snapshot_during_work(setup_runtime, monkeypatch, in_flight):
+    from app import main as server
+    from app.db_models import ExperimentItemExecutionRecord
+    from fastapi.testclient import TestClient
+    from sqlalchemy import select
+
+    manager = setup_runtime[0]
+    monkeypatch.setattr(server, "db_manager", manager)
+    monkeypatch.setattr(server, "orchestrator", setup_runtime[3])
+    candidate = _live_cli_snapshot(manager)
+    with manager.get_session() as session:
+        item = session.scalar(select(ExperimentItemExecutionRecord).where(
+            ExperimentItemExecutionRecord.launch_id == candidate.launch_id,
+        ))
+        if in_flight == "evaluation":
+            item.evaluation_status = "evaluating"
+        else:
+            item.execution_status = "running"
+        session.commit()
+    with TestClient(server.app) as client:
+        path = f"/api/v1/experiment-launches/{candidate.launch_id}/summary"
+        assert client.post(f"/api/v1/experiment-launches/{candidate.launch_id}/result-snapshots").status_code == 409
+        pinned = client.get(path, params={"snapshot_id": candidate.id})
+        assert pinned.status_code == 200
+        assert pinned.json()["snapshot_id"] == candidate.id
+        assert pinned.json()["summary"]["pass_rate"] == 1.0
+
+
+def test_old_control_plane_without_explicit_freeze_support_cannot_release():
+    def handler(request):
+        if request.method == "POST" and request.url.path.endswith("/result-snapshots"):
+            return httpx.Response(405)
+        return None
+
+    code, report, _, calls, _ = exercise(arguments(), handler=handler)
+    assert code == 2
+    assert report["error_code"] == "HTTP_405"
+    assert not any(request.url.path.endswith("/evaluate") for request in calls)

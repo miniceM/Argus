@@ -364,7 +364,8 @@ export interface paths {
          */
         get: operations["list_launch_result_snapshots_api_v1_experiment_launches__launch_id__result_snapshots_get"];
         put?: never;
-        post?: never;
+        /** Freeze current settled results for a release gate */
+        post: operations["freeze_run_results_api_v1_experiment_launches__launch_id__result_snapshots_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3189,6 +3190,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResultSnapshotListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    freeze_run_results_api_v1_experiment_launches__launch_id__result_snapshots_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSummaryResponse"];
                 };
             };
             /** @description Validation Error */

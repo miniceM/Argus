@@ -18,6 +18,7 @@ from .db_models import (
     ExperimentLaunchRecord,
     LangfuseSyncTaskRecord,
 )
+from .langfuse_links import LangfuseLaunchLinkService, select_current_run_evidence
 from .langfuse_projection import (
     CombinedSyncState,
     combine_scope_states,
@@ -90,16 +91,20 @@ def aggregate_launch_sync_status(db_mgr: DatabaseManager, launch_id: str) -> str
 
         valid_tasks = [current_tasks_map[it.id] for it in items_needing_sync if current_tasks_map[it.id] is not None]
 
-        # 4. Extract and validate Run IDs from current-generation tasks only
-        run_ids = {
-            t.scores_payload.get("_dataset_run_id")
-            for t in valid_tasks
-            if t.scores_payload and t.scores_payload.get("_dataset_run_id")
-        }
-        if len(run_ids) > 1:
-            raise ValueError(f"Conflicting dataset_run_ids found in launch {launch_id}: {run_ids}")
-        elif len(run_ids) == 1:
-            launch.langfuse_experiment_id = next(iter(run_ids))
+        # 4. Extract and validate Run IDs from current-generation tasks only.
+        # The same selection rule backs the link service, so a link can never point at a
+        # different run than the one aggregation persisted.
+        run_evidence = select_current_run_evidence(items, tasks)
+        if run_evidence.has_conflict:
+            raise ValueError(
+                f"Conflicting dataset_run_ids found in launch {launch_id}: {run_evidence.conflicting_run_ids}"
+            )
+        if run_evidence.run_id:
+            new_run_id = run_evidence.run_id
+            if launch.langfuse_experiment_id != new_run_id:
+                # A new run invalidates any previously derived link.
+                launch.langfuse_experiment_url = None
+                launch.langfuse_experiment_id = new_run_id
 
         # 5. Check task statuses
         task_statuses = [t.status for t in valid_tasks]
@@ -321,8 +326,11 @@ class LangfuseOutboxSyncer:
         syncer_id: str | None = None,
         heartbeat_interval_seconds: float | None = None,
         task_timeout_seconds: float = 300.0,
+        *,
+        link_service: LangfuseLaunchLinkService | None = None,
     ):
         self.db_mgr = db_mgr
+        self.link_service = link_service
         self._lf_provider = langfuse_client
         self.lease_duration_seconds = float(lease_duration_seconds)
         self.max_attempts = int(max_attempts)
@@ -799,6 +807,18 @@ class LangfuseOutboxSyncer:
             aggregate_launch_sync_status(self.db_mgr, payload["launch_id"])
         except Exception as exc:
             logger.exception("Failed to aggregate launch sync status for launch %s: %s", payload["launch_id"], exc)
+
+        # 5. Independent link backfill. A link failure never changes task_succeeded, never
+        # resends traces/scores and never rewrites the sync status.
+        if task_succeeded and self.link_service is not None:
+            try:
+                self.link_service.ensure_launch_link(payload["launch_id"])
+            except Exception as exc:
+                logger.warning(
+                    "Langfuse link backfill failed for launch %s (non-fatal): %s",
+                    payload["launch_id"],
+                    exc,
+                )
 
         return task_succeeded
 

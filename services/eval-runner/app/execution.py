@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -26,10 +27,13 @@ from .evaluator_binding import (
     resolve_langfuse_evaluators,
 )
 from .executor import AttemptAuthorizationError, RemoteAgentExecutor
+from .langfuse_links import resolve_dataset_run_link
 from .manifest import acquire_launch_execution
 from .registry import AgentRegistry, AgentVersionSpec, map_request
 from .runner_identity import current_runner_identity, validate_runner_identity
 from .state_machine import aggregate_launch_status_from_items, assert_terminal_launch_invariants
+
+logger = logging.getLogger("argus.execution")
 
 
 @dataclass
@@ -423,6 +427,7 @@ class LaunchExecutionService:
                 dataset_name = launch.dataset_name
                 dataset_version = launch.dataset_version
                 experiment_name = launch.name
+                launch_dataset_id = launch.dataset_id
 
             spec = AgentVersionSpec(
                 agent_id=agent_spec_dict["agent_id"],
@@ -541,10 +546,34 @@ class LaunchExecutionService:
                         or getattr(result, "dataset_run_id", None)
                         or getattr(result, "id", None)
                     )
-                    run_url = getattr(result, "dataset_run_url", None)
-                    if not run_url and run_id:
-                        base = settings.langfuse_base_url.rstrip("/")
-                        run_url = f"{base}/project/poc-project/datasets/{dataset_name}/runs/{run_id}"
+                    # The Dataset Run page path is /datasets/{dataset_id}/runs/{run_id}:
+                    # never the dataset name, never a hardcoded project, never the internal API host.
+                    #
+                    # An SDK-provided `dataset_run_url` is deliberately never persisted. It is
+                    # derived from LANGFUSE_BASE_URL, which in a self-hosted deployment is a
+                    # container-internal address (e.g. http://langfuse-web:3000) that a browser
+                    # cannot open, and storing it would also permanently defeat compensation:
+                    # backfill only considers launches whose URL is still NULL, and an existing
+                    # safe URL short-circuits. The real Run ID is persisted below, so configuring
+                    # a dashboard later rebuilds the canonical link with no rerun.
+                    run_url = None
+                    dashboard_base = settings.argus_langfuse_dashboard_url
+                    if run_id:
+                        try:
+                            resolution = resolve_dataset_run_link(
+                                lf,
+                                dashboard_base,
+                                run_id=str(run_id),
+                                dataset_name=dataset_name,
+                                run_names=(experiment_name,),
+                                manifest_dataset_id=(manifest.get("dataset") or {}).get("dataset_id"),
+                                launch_dataset_id=launch_dataset_id,
+                                observed_dataset_id=getattr(lf_dataset, "id", None),
+                            )
+                            run_url = resolution.url
+                        except Exception as exc:  # link resolution never fails the experiment
+                            logger.warning("Langfuse link resolution failed for launch %s: %s", launch_id, exc)
+                            run_url = None
 
                     sync_status = "SYNCED"
                     result_summary = _safe_summary(result)

@@ -1,6 +1,15 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Locator } from "@playwright/test";
 
-const AGENT_ID = "demo-banking-agent";
+import type { components } from "../src/api/schema";
+import { buildEvaluatorCatalog, DIAGNOSTIC_IDS } from "./fixtures/evaluators";
+
+type Agent = components["schemas"]["AgentResponse"];
+type Version = components["schemas"]["AgentVersionResponse"];
+type CreateRequest = components["schemas"]["ExperimentLaunchCreateRequest"];
+
+const AGENT_ID = "financial-fraud-detection-assistant-enterprise-prod";
+const LONG_ENDPOINT = `https://agents.example.test/${"immutable-release/".repeat(12)}invoke`;
+const LONG_MAPPING = `{{ input.${"financial_transaction_".repeat(20)}user_message }}`;
 const LAUNCH_ID = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
 
 const ROUTES = [
@@ -12,7 +21,7 @@ const ROUTES = [
   `/agents/${AGENT_ID}/versions/1.0.0`,
 ];
 
-const agent = {
+const agent: Agent = {
   id: AGENT_ID,
   name: "反欺诈风控助手",
   status: "active",
@@ -21,28 +30,35 @@ const agent = {
   launch_count: 1,
   active_launch_count: 0,
   created_at: "2026-09-24T00:00:00Z",
+  updated_at: "2026-09-24T00:00:00Z",
 };
 
-const versions = [
+const versions: Version[] = [
   {
     id: "ver-1",
     agent_id: AGENT_ID,
     version: "1.0.0",
-    endpoint: "http://demo-agent:8080/invoke",
+    endpoint: LONG_ENDPOINT,
+    protocol: "http", method: "POST", timeout_seconds: 30, max_retries: 2,
+    rate_limit_per_minute: 60, max_concurrency: 3, trace_propagation: "w3c",
     is_active: true,
     is_idempotent: true,
-    spec_digest: "sha256:specs987654321",
+    spec_digest: `sha256:${"a".repeat(64)}`,
     environment: "production",
     credential_ref: "env://API_TOKEN",
     artifact_ref: "git:abc1234",
-    request_mapping: { query: "input.user_message" },
+    request_mapping: { query: LONG_MAPPING },
+    request_schema: { type: "object", properties: { query: { type: "string" } } },
+    response_schema: { type: "object", properties: { answer: { type: "string" } } },
     created_at: "2026-09-24T00:00:00Z",
   },
   {
     id: "ver-0",
     agent_id: AGENT_ID,
     version: "0.9.0",
-    endpoint: "http://demo-agent:8080/invoke",
+    endpoint: LONG_ENDPOINT,
+    protocol: "http", method: "POST", timeout_seconds: 30, max_retries: 2,
+    rate_limit_per_minute: 60, max_concurrency: 3, trace_propagation: "w3c",
     is_active: false,
     is_idempotent: false,
     spec_digest: "sha256:specs111111111",
@@ -152,9 +168,16 @@ async function mockApi(page: Page): Promise<void> {
   await page.route("**/api/v1/experiment-launches*", (route) =>
     route.fulfill({ json: [launch] }),
   );
-  await page.route("**/api/v1/agents*", (route) => route.fulfill({ json: [agent] }));
-  await page.route("**/api/v1/agent-versions*", (route) =>
-    route.fulfill({ json: versions }),
+  await page.route("**/api/v1/agents*", (route) => {
+    const id = new URL(route.request().url()).searchParams.get("id");
+    return route.fulfill({ json: id ? agent : [agent] });
+  });
+  await page.route("**/api/v1/agent-versions*", (route) => {
+    const version = new URL(route.request().url()).searchParams.get("version");
+    return route.fulfill({ json: version ? versions.find((v) => v.version === version) : versions });
+  });
+  await page.route("**/api/v1/evaluators", (route) =>
+    route.fulfill({ json: buildEvaluatorCatalog() }),
   );
   await page.route("**/api/v1/datasets*", (route) =>
     route.fulfill({
@@ -211,6 +234,69 @@ async function unreachableControls(page: Page): Promise<string[]> {
   });
 }
 
+async function expectPageReady(page: Page, routePath: string) {
+  const heading = page.getByRole("heading", { level: 1 });
+  await expect(heading).toBeVisible();
+  if (routePath === "/agents") {
+    await expect(heading).toHaveText("Agent Registry");
+    await expect(page.getByRole("cell", { name: new RegExp(agent.name) })).toBeVisible();
+  } else if (routePath === `/agents/${AGENT_ID}`) {
+    await expect(heading).toContainText(agent.name);
+    await expect(page.getByRole("link", { name: "查看配置" })).toHaveCount(2);
+  } else if (routePath.includes("/versions/")) {
+    await expect(heading).toContainText("1.0.0");
+    await expect(page.getByText(LONG_ENDPOINT, { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "归档此版本" })).toBeVisible();
+    await expect(page.locator("pre").first()).toContainText(LONG_MAPPING);
+  } else if (routePath === "/launches/new") {
+    await expect(heading).toContainText("发起新评测任务");
+    await expect(page.getByRole("combobox", { name: /选择版本规格/ })).toHaveValue("1.0.0");
+    await expect(page.getByTestId("evaluator-toggle-intent_match")).toBeChecked();
+  } else if (routePath === "/launches") {
+    await expect(page.locator("tbody tr")).toHaveCount(1);
+  } else {
+    await expect(page.getByTestId("status-badge").first()).toHaveText(/COMPLETED/);
+  }
+}
+
+async function expectNoPageOverflow(page: Page) {
+  const overflow = await page.evaluate(() => ({
+    document: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    main: document.querySelector("main")!.scrollWidth - document.querySelector("main")!.clientWidth,
+  }));
+  expect(overflow.document, "整页不能横向滚动").toBeLessThanOrEqual(1);
+  expect(overflow.main, "核心内容只能纵向滚动，宽表格/JSON 应局部横向滚动").toBeLessThanOrEqual(1);
+}
+
+async function expectReachable(locator: Locator) {
+  await locator.scrollIntoViewIfNeeded();
+  await expect(locator).toBeVisible();
+  await expect(locator).toBeInViewport();
+  const geometry = await locator.evaluate((el) => {
+    const rect = el.getBoundingClientRect();
+    const main = el.closest("main")!.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    return {
+      contained: rect.left >= main.left - 1 && rect.right <= main.right + 1 &&
+        rect.top >= main.top - 1 && rect.bottom <= main.bottom + 1,
+      unobstructed: hit !== null && el.contains(hit),
+    };
+  });
+  expect(geometry, "元素必须位于内容视口内，且不能被其它元素遮挡").toEqual({ contained: true, unobstructed: true });
+}
+
+async function expectSeparated(a: Locator, b: Locator) {
+  const first = await a.boundingBox();
+  const second = await b.boundingBox();
+  expect(first).not.toBeNull();
+  expect(second).not.toBeNull();
+  if (first && second) {
+    const overlapX = Math.min(first.x + first.width, second.x + second.width) - Math.max(first.x, second.x);
+    const overlapY = Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y);
+    expect(overlapX > 1 && overlapY > 1, "标题与主要操作不得相互覆盖").toBe(false);
+  }
+}
+
 test.describe("narrow viewports", () => {
   test.beforeEach(async ({ page }) => {
     await mockApi(page);
@@ -223,7 +309,7 @@ test.describe("narrow viewports", () => {
       }) => {
         await page.setViewportSize({ width, height: 900 });
         await page.goto(routePath);
-        await page.waitForLoadState("networkidle");
+        await expectPageReady(page, routePath);
 
         expect(
           await unreachableControls(page),
@@ -239,7 +325,7 @@ test.describe("narrow viewports", () => {
     }) => {
       await page.setViewportSize({ width: 390, height: 900 });
       await page.goto(routePath);
-      await page.waitForLoadState("networkidle");
+      await expectPageReady(page, routePath);
 
       // Wide tables are fine as long as they scroll inside their own
       // container; a sideways-scrolling page loses the sidebar and the
@@ -253,6 +339,135 @@ test.describe("narrow viewports", () => {
         overflowX,
         `${routePath} scrolls sideways at 390px`,
       ).toBeLessThanOrEqual(1);
+    });
+  }
+});
+
+
+test.describe("Issue #47: 核心页面布局与操作闭环", () => {
+  test.beforeEach(async ({ page }) => { await mockApi(page); });
+
+  for (const width of [1440, 1024]) {
+    test(`Agents → Agent → Version 在 ${width}×720 可读且可操作`, async ({ page, context }) => {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+      await page.setViewportSize({ width, height: 720 });
+      await page.goto("/agents");
+      await expectPageReady(page, "/agents");
+      const heading = page.getByRole("heading", { level: 1 });
+      const register = page.getByRole("button", { name: "注册 Agent", exact: true });
+      await expectReachable(heading);
+      await expectReachable(register);
+      await expectSeparated(heading, register);
+      await expectNoPageOverflow(page);
+      // 横向滚动只在表格 wrapper 中发生，管理链接必须仍可真正点击。
+      const manage = page.getByRole("link", { name: "管理", exact: true });
+      await expectReachable(manage);
+      await manage.click();
+      await expect(page).toHaveURL(`/agents/${AGENT_ID}`);
+      await expectPageReady(page, `/agents/${AGENT_ID}`);
+      const createVersion = page.getByRole("button", { name: "创建新版本" });
+      await expectReachable(heading);
+      await expectReachable(createVersion);
+      await expectSeparated(heading, createVersion);
+      await createVersion.click();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog.getByRole("heading", { name: "创建 AgentVersion 规格快照" })).toBeVisible();
+      await expectReachable(dialog.getByRole("button", { name: "取消" }));
+      await dialog.getByRole("button", { name: "取消" }).click();
+      await expect(dialog).toHaveCount(0);
+      await expectNoPageOverflow(page);
+      const inspect = page.getByRole("row").filter({ has: page.getByRole("cell", { name: "1.0.0", exact: true }) }).getByRole("link", { name: "查看配置" });
+      await expectReachable(inspect);
+      await inspect.click();
+      await expect(page).toHaveURL(`/agents/${AGENT_ID}/versions/1.0.0`);
+      await expectPageReady(page, `/agents/${AGENT_ID}/versions/1.0.0`);
+      const archive = page.getByRole("button", { name: "归档此版本" });
+      await expectReachable(heading);
+      await expectReachable(archive);
+      await expectSeparated(heading, archive);
+      await expectNoPageOverflow(page);
+      await expectReachable(page.getByTitle("显示引用名"));
+      await page.getByTitle("显示引用名").click();
+      await expect(page.getByTestId("secret-ref")).toContainText("env://API_TOKEN");
+      // JSON 长行必须保持在 pre 内局部滚动，而不是裁掉或撑开 main。
+      const mapping = page.locator("pre").first();
+      await mapping.scrollIntoViewIfNeeded();
+      expect(await mapping.evaluate((el) => getComputedStyle(el).overflowX)).toMatch(/auto|scroll/);
+      expect(await mapping.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+      expect(await mapping.evaluate((el) => { el.scrollLeft = el.scrollWidth; return el.scrollLeft; })).toBeGreaterThan(0);
+      const copy = mapping.locator("..").getByRole("button");
+      await expectReachable(copy);
+      await copy.click();
+      await expect(copy).toHaveText("已复制");
+      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(JSON.stringify(versions[0].request_mapping, null, 2));
+      const back = page.getByRole("link", { name: `返回 Agent (${AGENT_ID}) 详情` });
+      await expectReachable(back);
+      await back.click();
+      await expectPageReady(page, `/agents/${AGENT_ID}`);
+    });
+
+    test(`创建表单在 ${width}×720 经纵向滚动填写、提交并跳转`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 720 });
+      let submitted: CreateRequest | undefined;
+      await page.route("**/api/v1/experiment-launches", async (route) => {
+        if (route.request().method() !== "POST") return route.fulfill({ json: [launch] });
+        submitted = route.request().postDataJSON() as CreateRequest;
+        return route.fulfill({ status: 201, json: { ...launch, name: submitted.name } });
+      });
+      await page.goto("/launches/new");
+      await expectPageReady(page, "/launches/new");
+      await expectReachable(page.getByRole("heading", { level: 1 }));
+      await expectNoPageOverflow(page);
+      expect(await page.locator("main").evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+      const name = page.getByRole("textbox", { name: /评测任务名称/ });
+      const environment = page.getByRole("textbox", { name: /Environment/ });
+      const agentSelect = page.getByRole("combobox", { name: "选择 Agent", exact: false });
+      const versionSelect = page.getByRole("combobox", { name: /选择版本规格/ });
+      const dataset = page.getByRole("textbox", { name: /数据集名称/ });
+      const concurrency = page.getByRole("spinbutton", { name: /最大并发执行数/ });
+      for (const control of [name, environment, agentSelect, versionSelect, dataset, concurrency]) {
+        await expectReachable(control);
+      }
+      await expectSeparated(agentSelect, versionSelect);
+      await name.fill(`responsive-${width}`);
+      await environment.fill("staging");
+      await agentSelect.selectOption(AGENT_ID);
+      await versionSelect.selectOption("1.0.0");
+      await expect(versionSelect.locator("option")).toHaveCount(1);
+      await dataset.fill("responsive-regression");
+      await page.getByRole("radio", { name: "指定快照时间戳" }).check();
+      const snapshot = page.getByPlaceholder("例如: 2026-09-20T08:35:12Z");
+      await expectReachable(snapshot);
+      await snapshot.fill("2026-10-01T00:00:00Z");
+      const evaluator = page.getByTestId("evaluator-toggle-intent_match");
+      await expectReachable(evaluator);
+      await expect(evaluator).toBeChecked();
+      await evaluator.uncheck();
+      await expect(evaluator).not.toBeChecked();
+      await concurrency.fill("2");
+      const submit = page.getByRole("button", { name: /创建评测任务/ });
+      const cancel = page.getByRole("link", { name: "取消", exact: true });
+      await expectReachable(cancel);
+      await expectReachable(submit);
+      await expectSeparated(cancel, submit);
+      await expectNoPageOverflow(page);
+      expect(await page.locator("main").evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+      await expect(submit).toBeEnabled();
+      await submit.click();
+      await expect(page).toHaveURL(`/launches/${LAUNCH_ID}`);
+      expect(submitted).toMatchObject({ name: `responsive-${width}`, agent_id: AGENT_ID,
+        agent_version: "1.0.0", dataset_name: "responsive-regression", dataset_version: "2026-10-01T00:00:00Z",
+        environment: "staging", max_concurrency: 2 });
+      // The unchecked evaluator must be absent from both the submitted
+      // selections and the derived quality policy.
+      const expectedSelected = DIAGNOSTIC_IDS.filter((id) => id !== "intent_match");
+      expect(submitted?.evaluator_selections).toEqual(
+        expectedSelected.map((id) => ({ id, version: "1.0.0" })),
+      );
+      expect((submitted?.quality_policy?.rules ?? []).map((rule) => rule.evaluator_id).sort()).toEqual(
+        [...expectedSelected].sort(),
+      );
+      await expectPageReady(page, `/launches/${LAUNCH_ID}`);
     });
   }
 });

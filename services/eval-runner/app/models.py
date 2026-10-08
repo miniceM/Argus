@@ -209,7 +209,7 @@ class AgentVersionSpecValidator(BaseModel):
     usage_cost_mapping: UsageCostMapping | None = None
     request_schema: dict[str, Any] | None = None
     response_schema: dict[str, Any] | None = None
-    credential_ref: str | None = Field(default=None, description="Reference to secret, e.g. env://NAME")
+    credential_ref: str | None = Field(default=None, description="Runtime secret reference: vault://mount/path#field; env://NAME is development-only")
     timeout_seconds: float = Field(default=30.0, ge=1.0, le=600.0)
     max_retries: int = Field(default=2, ge=0, le=10)
     rate_limit_per_minute: int = Field(default=600, ge=1, le=10000)

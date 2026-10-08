@@ -118,7 +118,7 @@ class RemoteAgentExecutor:
 
         call_headers = dict(headers)
         if self.spec.credential_ref:
-            token = resolve_credential(self.spec.credential_ref)
+            token = await asyncio.to_thread(resolve_credential, self.spec.credential_ref)
             if token:
                 call_headers["Authorization"] = f"Bearer {token}"
 
@@ -282,7 +282,7 @@ class RemoteAgentExecutor:
 
         # Inject resolved credential if present
         if self.spec.credential_ref:
-            token = resolve_credential(self.spec.credential_ref)
+            token = await asyncio.to_thread(resolve_credential, self.spec.credential_ref)
             if token:
                 call_headers["Authorization"] = f"Bearer {token}"
 

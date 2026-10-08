@@ -43,11 +43,12 @@ export const AGENT_VERSION_FIELD_HELPS: Record<string, Omit<FieldHelpProps, "pla
       "被测 Agent 接口若需要 Token 鉴权，在此配置密钥的引用标识。Runner 会在运行时动态读取并注入请求头，同时在上报 Langfuse Trace 时自动打码脱敏。",
     rules: (
       <span>
-        <strong className="text-fail">严禁直接填入明文 Secret</strong>。当前版本支持{" "}
-        <code className="font-mono bg-surface-muted px-1 py-0.5 rounded">env://&lt;环境变量名&gt;</code> 格式（读取宿主白名单内的环境变量）。无需鉴权请留空。
+        <strong className="text-fail">严禁直接填入明文 Secret</strong>。生产环境使用{" "}
+        <code className="font-mono bg-surface-muted px-1 py-0.5 rounded">vault://mount/path#field</code>，由 Worker 身份按 Vault 权限读取。{" "}
+        <code className="font-mono bg-surface-muted px-1 py-0.5 rounded">env://&lt;环境变量名&gt;</code> 仅供本地开发/PoC，读取 Runner 容器白名单变量；宿主管理员可读取，轮换需更新容器配置。无需鉴权请留空。
       </span>
     ),
-    example: "env://DEMO_AUTH_TOKEN",
+    example: "vault://secret/agents/banking#token",
   },
   artifactRef: {
     title: "产物标识 (ArtifactRef)",

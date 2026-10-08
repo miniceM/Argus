@@ -48,7 +48,8 @@ describe("CreateVersionDialog Help Indicators (Issue #18)", () => {
     fireEvent.click(secretHelpBtn);
 
     expect(screen.getByText(/严禁直接填入明文 Secret/)).toBeInTheDocument();
-    expect(screen.getByText("env://DEMO_AUTH_TOKEN")).toBeInTheDocument();
+    expect(screen.getByText("vault://secret/agents/banking#token")).toBeInTheDocument();
+    expect(screen.getByText(/仅供本地开发\/PoC/)).toBeInTheDocument();
   });
 });
 

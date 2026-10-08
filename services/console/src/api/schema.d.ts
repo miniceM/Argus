@@ -724,7 +724,7 @@ export interface components {
             } | null;
             /**
              * Credential Ref
-             * @description Reference to secret, e.g. env://NAME
+             * @description Runtime secret reference: vault://mount/path#field; env://NAME is development-only
              */
             credential_ref?: string | null;
             /**

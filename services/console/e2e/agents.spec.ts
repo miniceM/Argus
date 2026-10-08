@@ -150,6 +150,11 @@ test.describe("E2E-01: Agent Registry & Immutable Version UX Flow", () => {
     await page.getByRole("button", { name: "创建新版本" }).click();
     await expect(page.getByRole("heading", { name: "创建 AgentVersion 规格快照" })).toBeVisible();
 
+    await page.getByRole("button", { name: "查看「凭据引用 (SecretRef)」说明" }).click();
+    await expect(page.getByText("vault://mount/path#field", { exact: true })).toBeVisible();
+    await expect(page.getByText(/仅供本地开发\/PoC/)).toBeVisible();
+    await page.getByRole("button", { name: "查看「凭据引用 (SecretRef)」说明" }).click();
+
     await page.fill('input[placeholder="e.g. 1.0.0 或 v2"]', "1.0.0");
     await page.fill('input[type="url"]', "http://demo-agent:8080/invoke");
     await page.getByRole("button", { name: "确认创建版本" }).click();

@@ -1,5 +1,7 @@
 # Argus
 
+Agent 鉴权接入见 [凭据 Provider 与部署边界](docs/secret-providers.md)。
+
 > **企业级 AI Agent 低侵入评测与质量门禁平台**
 >
 > 把 Agent 评测从"每个应用仓库里的测试脚本"升级为统一、可复现、可治理的平台能力。

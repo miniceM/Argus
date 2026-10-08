@@ -25,7 +25,7 @@ class CredentialUnavailable(ValueError):
 def _token(value: object) -> str:
     if not isinstance(value, str) or not value or value != value.strip():
         raise CredentialUnavailable()
-    if not value.isascii() or any(ord(char) < 32 or ord(char) == 127 for char in value):
+    if not value.isascii() or any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in value):
         raise CredentialUnavailable()
     return value
 

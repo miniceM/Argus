@@ -1,7 +1,5 @@
 # Argus
 
-Agent 鉴权接入见 [凭据 Provider 与部署边界](docs/secret-providers.md)。
-
 > **企业级 AI Agent 低侵入评测与质量门禁平台**
 >
 > 把 Agent 评测从"每个应用仓库里的测试脚本"升级为统一、可复现、可治理的平台能力。
@@ -192,6 +190,7 @@ Remote Agent Runner ── W3C Trace Context ──► 业务 Agent
 |---|---|
 | 领域模型、状态机、API 设计细节 | [TECHNICAL_DESIGN.md](./TECHNICAL_DESIGN.md) |
 | 完整 API 合约 | [docs/openapi.json](./docs/openapi.json) 或运行时的 `/docs` |
+| Agent 鉴权与 Vault 接入 | [凭据 Provider 与部署边界](./docs/secret-providers.md) |
 | 端到端演示流程 | [walkthrough.md](./walkthrough.md) |
 | Langfuse `zh-CN` 镜像构建与发布 | [deploy/langfuse/README.md](./deploy/langfuse/README.md) |
 | 最近一次验证记录 | [VALIDATION_REPORT.md](./VALIDATION_REPORT.md) |

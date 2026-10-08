@@ -31,7 +31,7 @@ def test_explicit_development_mode_keeps_whitelisted_environment_support(monkeyp
         resolve_credential("env://UNLISTED_TOKEN")
 
 
-@pytest.mark.parametrize("value", ["", " spaced ", "line\nbreak", "非ASCII凭据"])
+@pytest.mark.parametrize("value", ["", " spaced ", "two parts", "line\nbreak", "非ASCII凭据"])
 def test_invalid_environment_value_cannot_enter_headers_or_errors(monkeypatch, value):
     monkeypatch.setenv("DEMO_AUTH_TOKEN", value)
     with pytest.raises(ValueError, match="CREDENTIAL_UNAVAILABLE") as exc:

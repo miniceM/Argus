@@ -7,11 +7,29 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 
 from .aggregation import aggregate_run, compare_case_results
+from .comparison_contracts import assess_comparability
 from .costs import compare_costs
 from .db_models import ExperimentLaunchRecord, RunResultSnapshotRecord
-from .models import ComparisonResponse, RunSummaryResponse
+from .models import (
+    ComparisonComparability,
+    ComparisonContractDimension,
+    ComparisonDiagnostic,
+    ComparisonFormalVerdict,
+    ComparisonResponse,
+    LangfuseSyncScopeResponse,
+    LangfuseSyncStatusResponse,
+    ResultSnapshotDetailResponse,
+    ResultSnapshotListResponse,
+    ResultSnapshotRevisionResponse,
+    RunSummaryResponse,
+)
 from .result_outputs import ComparisonCaseOutputResponse, fetch_observation_output
-from .result_snapshots import create_result_snapshot, latest_result_snapshot
+from .result_snapshots import (
+    EVIDENCE_COMPLETE,
+    create_result_snapshot,
+    latest_result_snapshot,
+    list_result_snapshots,
+)
 
 router = APIRouter(prefix="/api/v1/experiment-launches", tags=["Evaluation Results"])
 
@@ -20,6 +38,22 @@ def _db_manager():
     from .main import db_manager
 
     return db_manager
+
+
+
+def _sync_status(launch_id: str) -> LangfuseSyncStatusResponse:
+    """Per-scope Langfuse sync state, read independently of the result."""
+    from .langfuse_sync import launch_sync_breakdown
+
+    try:
+        breakdown = launch_sync_breakdown(_db_manager(), launch_id)
+    except Exception:  # pragma: no cover - sync state is never fatal to a report
+        return LangfuseSyncStatusResponse(
+            overall="UNKNOWN",
+            item_trace=LangfuseSyncScopeResponse(status="UNKNOWN", reason="同步状态不可用。"),
+            run_score=LangfuseSyncScopeResponse(status="UNKNOWN", reason="同步状态不可用。"),
+        )
+    return LangfuseSyncStatusResponse(**breakdown.to_payload())
 
 
 def _versions(manifest: dict[str, Any]) -> dict[str, Any]:
@@ -97,10 +131,152 @@ def get_run_summary(
             revision=snapshot.revision,
             created_at=snapshot.created_at,
             manifest_digest=snapshot.manifest_digest,
+            source_result_digest=snapshot.source_result_digest,
+            evidence_state=(snapshot.evidence_state or EVIDENCE_COMPLETE).upper(),
+            evidence_reasons=list(snapshot.evidence_reasons or []),
             versions=_versions(snapshot.manifest),
             summary=snapshot.summary,
             langfuse_score_sync_status=score_sync_status,
+            langfuse_sync=_sync_status(launch_id),
         )
+
+
+def _revision_row(snapshot: RunResultSnapshotRecord, is_latest: bool) -> ResultSnapshotRevisionResponse:
+    summary = snapshot.summary or {}
+    return ResultSnapshotRevisionResponse(
+        snapshot_id=snapshot.id,
+        revision=snapshot.revision,
+        created_at=snapshot.created_at,
+        source_result_digest=snapshot.source_result_digest,
+        manifest_digest=snapshot.manifest_digest,
+        evidence_state=(snapshot.evidence_state or EVIDENCE_COMPLETE).upper(),
+        evidence_reasons=list(snapshot.evidence_reasons or []),
+        total_cases=int(summary.get("total_cases", 0) or 0),
+        quality_pass_count=int(summary.get("quality_pass_count", 0) or 0),
+        quality_fail_count=int(summary.get("quality_fail_count", 0) or 0),
+        quality_unknown_count=int(summary.get("quality_unknown_count", 0) or 0),
+        is_latest=is_latest,
+    )
+
+
+@router.get(
+    "/{launch_id}/result-snapshots",
+    response_model=ResultSnapshotListResponse,
+    summary="List every frozen result revision of a Launch (Issue #85)",
+)
+def list_launch_result_snapshots(launch_id: str) -> ResultSnapshotListResponse:
+    """Every revision ever frozen for this Launch, newest first.
+
+    Issue #85: a re-evaluation creates a new revision and never rewrites an old
+    one, so the history is the unit a user browses and shares.
+    """
+    with _db_manager().get_session() as session:
+        if session.get(ExperimentLaunchRecord, launch_id) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Launch '{launch_id}' not found")
+        snapshots = list_result_snapshots(session, launch_id)
+        return ResultSnapshotListResponse(
+            launch_id=launch_id,
+            latest_snapshot_id=snapshots[0].id if snapshots else None,
+            latest_revision=snapshots[0].revision if snapshots else None,
+            revisions=[_revision_row(snap, index == 0) for index, snap in enumerate(snapshots)],
+        )
+
+
+@router.get(
+    "/{launch_id}/result-snapshots/{snapshot_id}",
+    response_model=ResultSnapshotDetailResponse,
+    summary="Read one immutable result revision by its own id (Issue #85)",
+)
+def get_launch_result_snapshot(launch_id: str, snapshot_id: str) -> ResultSnapshotDetailResponse:
+    """The shareable, fixed view: this id always returns these exact results.
+
+    Nothing here falls back to "latest", so a shared link cannot drift when the
+    Launch is re-evaluated and a newer revision is frozen.
+    """
+    with _db_manager().get_session() as session:
+        launch = session.get(ExperimentLaunchRecord, launch_id)
+        if not launch:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Launch '{launch_id}' not found")
+        snapshot = session.scalars(
+            select(RunResultSnapshotRecord).where(
+                RunResultSnapshotRecord.id == snapshot_id,
+                RunResultSnapshotRecord.launch_id == launch_id,
+            )
+        ).first()
+        if snapshot is None:
+            # Do not reveal whether an ID exists under another Launch.
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Result snapshot not found")
+        evidence_state = (snapshot.evidence_state or EVIDENCE_COMPLETE).upper()
+        return ResultSnapshotDetailResponse(
+            launch_id=launch_id,
+            snapshot_id=snapshot.id,
+            revision=snapshot.revision,
+            created_at=snapshot.created_at,
+            source_result_digest=snapshot.source_result_digest,
+            manifest_digest=snapshot.manifest_digest,
+            evidence_state=evidence_state,
+            evidence_reasons=list(snapshot.evidence_reasons or []),
+            releasable=evidence_state == EVIDENCE_COMPLETE,
+            versions=_versions(snapshot.manifest),
+            summary=snapshot.summary,
+            items=list(snapshot.items or []),
+        )
+
+
+
+def _formal_verdict(
+    *,
+    comparability,
+    classification_counts: Counter,
+    required_cases: int,
+    baseline_snapshot,
+    candidate_snapshot,
+    baseline_bound: bool,
+) -> ComparisonFormalVerdict:
+    """Withhold a run-level verdict unless every required case is supported.
+
+    Issue #86: a formal 'no regression' must never be inferred from a handful of
+    comparable cases, a moved contract, or an incomplete evidence state.
+    """
+    comparable_cases = sum(
+        value for key, value in classification_counts.items() if key != "NOT_COMPARABLE"
+    )
+    withheld: list[str] = list(comparability.reason_codes)
+    if not baseline_bound:
+        withheld.append("BASELINE_NOT_BOUND")
+    for label, snapshot in (("BASELINE", baseline_snapshot), ("CANDIDATE", candidate_snapshot)):
+        state = ((snapshot.evidence_state if snapshot else None) or EVIDENCE_COMPLETE).upper()
+        if state != EVIDENCE_COMPLETE:
+            withheld.append(f"{label}_EVIDENCE_INCOMPLETE")
+    if required_cases and comparable_cases < required_cases:
+        withheld.append("COVERAGE_INCOMPLETE")
+
+    coverage = (comparable_cases / required_cases) if required_cases else 0.0
+    if withheld:
+        return ComparisonFormalVerdict(
+            available=False,
+            verdict=None,
+            reason=None,
+            required_cases=required_cases,
+            comparable_cases=comparable_cases,
+            coverage=coverage,
+            withheld_reasons=list(dict.fromkeys(withheld)),
+        )
+    if classification_counts.get("REGRESSION"):
+        verdict, reason = "REGRESSION", "CASE_REGRESSION"
+    elif classification_counts.get("IMPROVEMENT"):
+        verdict, reason = "IMPROVEMENT", "CASE_IMPROVEMENT"
+    else:
+        verdict, reason = "UNCHANGED", "NO_QUALITY_CHANGE"
+    return ComparisonFormalVerdict(
+        available=True,
+        verdict=verdict,
+        reason=reason,
+        required_cases=required_cases,
+        comparable_cases=comparable_cases,
+        coverage=coverage,
+        withheld_reasons=[],
+    )
 
 
 @router.get("/{launch_id}/comparison", response_model=ComparisonResponse, summary="Compare a Candidate against its frozen Baseline")
@@ -135,6 +311,12 @@ def get_launch_comparison(
                 dataset_identity_error = "DATASET_IDENTITY_UNKNOWN"
             elif candidate_dataset_identity != baseline_dataset_identity:
                 dataset_identity_error = "DATASET_IDENTITY_MISMATCH"
+        # Issue #86: a formal comparison requires identical Measurement, Quality
+        # Policy and Aggregation/Comparison contracts on both sides.
+        comparability = assess_comparability(
+            baseline_snapshot.manifest if baseline_snapshot else None,
+            candidate_snapshot.manifest,
+        )
         evaluator_specs = candidate_snapshot.manifest.get("evaluators", [])
         baseline_evaluators = baseline_snapshot.manifest.get("evaluators", []) if baseline_snapshot else []
         diffs: list[dict[str, Any]] = []
@@ -161,6 +343,11 @@ def get_launch_comparison(
             diff["baseline_experiment_url"] = baseline_launch.langfuse_experiment_url if baseline_launch else None
             diff["candidate_experiment_url"] = candidate_launch.langfuse_experiment_url
             classification_counts[diff["classification"]] += 1
+            diff["basis"] = (
+                "FORMAL"
+                if comparability.comparable and diff["classification"] != "NOT_COMPARABLE"
+                else "DIAGNOSTIC_ONLY"
+            )
             if diff["classification"] != "NOT_COMPARABLE" and base_case and candidate_case:
                 comparable_baseline.append(base_case)
                 comparable_candidate.append(candidate_case)
@@ -210,6 +397,14 @@ def get_launch_comparison(
             summary["pass_rate_delta"] = None
             summary["score_mean_deltas"] = {}
 
+        formal = _formal_verdict(
+            comparability=comparability,
+            classification_counts=classification_counts,
+            required_cases=len(all_case_ids),
+            baseline_snapshot=baseline_snapshot,
+            candidate_snapshot=candidate_snapshot,
+            baseline_bound=baseline_snapshot is not None,
+        )
         return ComparisonResponse(
             launch_id=launch_id,
             candidate_snapshot_id=candidate_snapshot.id,
@@ -218,6 +413,23 @@ def get_launch_comparison(
             versions={"candidate": _versions(candidate_snapshot.manifest), "baseline": _versions(baseline_snapshot.manifest) if baseline_snapshot else None},
             summary=summary,
             classification_counts=dict(classification_counts),
+            comparability=ComparisonComparability(
+                comparable=comparability.comparable,
+                reason_codes=list(comparability.reason_codes),
+                provenance=comparability.provenance,
+                dimensions=[
+                    ComparisonContractDimension(**dim.to_payload()) for dim in comparability.dimensions
+                ],
+                suggestions=list(comparability.suggestions),
+            ),
+            formal=formal,
+            diagnostic=ComparisonDiagnostic(
+                note="仅供诊断，不作为正式发布比较。",
+                comparable_cases=sum(
+                    value for key, value in classification_counts.items() if key != "NOT_COMPARABLE"
+                ),
+                classification_counts=dict(classification_counts),
+            ),
             items=page,
             next_cursor=next_cursor,
         )

@@ -112,7 +112,7 @@ def test_worker_preserves_credential_ref_in_agent_spec(setup_env, monkeypatch):
 
         msgs = queue.read_group("worker-test-1", count=1)
         assert len(msgs) == 1
-        msg_id, item_id, gen = msgs[0]
+        msg_id, item_id, gen, _work = msgs[0]
 
         success = await worker.execute_item_message(msg_id, item_id, gen)
         assert success is True
@@ -189,7 +189,7 @@ def test_non_idempotent_read_timeout_marked_ambiguous_and_requires_force(setup_e
         monkeypatch.setattr(RemoteAgentExecutor, "invoke_once", mock_invoke_read_timeout)
 
         msgs = queue.read_group("worker-test-1", count=1)
-        msg_id, item_id, gen = msgs[0]
+        msg_id, item_id, gen, _work = msgs[0]
         await worker.execute_item_message(msg_id, item_id, gen)
 
         with db_mgr.get_session() as session:
@@ -274,7 +274,7 @@ def test_worker_enforces_distributed_rate_permit(setup_env, monkeypatch):
         monkeypatch.setattr(RemoteAgentExecutor, "invoke_once", mock_invoke)
 
         msgs = queue.read_group("worker-test-1", count=1)
-        msg_id, item_id, gen = msgs[0]
+        msg_id, item_id, gen, _work = msgs[0]
         result = await worker.execute_item_message(msg_id, item_id, gen)
 
         # Should not invoke remote agent because rate permit was rejected
@@ -348,7 +348,7 @@ def test_worker_heartbeat_renews_lease_during_long_invocation(setup_env, monkeyp
         monkeypatch.setattr(RemoteAgentExecutor, "invoke_once", slow_invoke)
 
         msgs = queue.read_group("worker-test-1", count=1)
-        msg_id, item_id, gen = msgs[0]
+        msg_id, item_id, gen, _work = msgs[0]
 
         # Use a worker configured with fast heartbeat for testing
         worker.heartbeat_interval = 0.1
@@ -377,7 +377,7 @@ def test_redis_queue_autoclaim_pending():
     adapter = RedisStreamQueueAdapter(mock_redis)
     recovered = adapter.claim_pending_entries(consumer_name="worker-new", min_idle_ms=30000, count=10)
     assert len(recovered) == 1
-    assert recovered[0] == ("msg-123", "item-recovered", 1)
+    assert recovered[0] == ("msg-123", "item-recovered", 1, "INVOCATION")
 
 
 # 6. Review Comment 1 (P1): Non-blocking worker loop offloads to thread and yields

@@ -48,7 +48,7 @@ def test_launch_manifest_snapshot_freeze(tmp_path):
     assert launch.id is not None
     assert launch.status == "PENDING"
     manifest = launch.manifest
-    assert manifest["schema_version"] == "1.1"
+    assert manifest["schema_version"] == "1.2"
     assert manifest["agent"]["agent_id"] == "banking-agent"
     assert manifest["agent"]["version"] == "v1"
     assert manifest["agent"]["endpoint"] == "http://demo-agent-v1:8080/invoke"
@@ -188,7 +188,18 @@ def test_api_request_model_concurrency_defaults_to_none():
     )
     # Default must be None, NOT hardcoded 4
     assert req.max_concurrency is None
-    assert req.evaluator_ids == default_evaluator_registry.default_item_ids()
+    # Issue #80: neither selection field is pre-filled by the request model, so a
+    # caller can submit explicit evaluator_selections without tripping the
+    # mutual-exclusion guard. LaunchService still falls back to the registry
+    # default item set when both are omitted.
+    assert req.evaluator_ids is None
+    assert req.evaluator_selections is None
+    assert default_evaluator_registry.default_item_ids() == [
+        "escalation_match",
+        "intent_match",
+        "pii_safe",
+        "required_tool_match",
+    ]
 
 
 def test_create_launch_rejects_run_scope_evaluator_by_default(tmp_path):

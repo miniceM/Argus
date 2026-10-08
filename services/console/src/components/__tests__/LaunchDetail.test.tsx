@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";
 import { LaunchDetail } from "../../features/launches/LaunchDetail";
 import { api } from "../../api/client";
 
@@ -11,6 +11,12 @@ vi.mock("../../api/client", () => ({
     POST: vi.fn(),
   },
 }));
+
+// Exposes the current route so a test can assert a shared link was written.
+const LocationDisplay = () => {
+  const location = useLocation();
+  return <output data-testid="router-location">{location.pathname}{location.search}</output>;
+};
 
 describe("LaunchDetail Frozen Manifest Structured Audit View", () => {
   const queryClient = new QueryClient({
@@ -593,11 +599,20 @@ describe("Issue #45 quality pass rate wording", () => {
     renderDetail(launch, items);
 
     const metric = await screen.findByTestId("quality-pass-rate");
-    expect(metric).toHaveTextContent("质量通过率 (Quality Pass Rate)");
-    expect(metric).toHaveTextContent("统计范围：全部用例");
-    expect(metric).toHaveTextContent("2");
-    expect(metric).toHaveTextContent("6");
-    expect(metric).toHaveTextContent("(33.3%)");
+    // Issue #83: the top cell reports the three-way decision split, not a
+    // single ratio that would let a 100% case hide the UNKNOWN ones.
+    expect(metric).toHaveTextContent("质量判定汇总 (Quality Decision Summary)");
+    expect(metric).toHaveTextContent("PASS 2");
+    expect(metric).toHaveTextContent("FAIL 4");
+    expect(metric).toHaveTextContent("UNKNOWN 0");
+    expect(metric).toHaveTextContent("已判定通过率：33.3%");
+    expect(metric).toHaveTextContent("判定覆盖率：100.0%");
+
+    // The all-cases ratio keeps its own denominator and says so.
+    const allCases = await screen.findByTestId("quality-all-cases-ratio");
+    expect(allCases).toHaveTextContent("2 / 6");
+    expect(allCases).toHaveTextContent("(33.3%)");
+    expect(allCases).toHaveTextContent("含 UNKNOWN");
 
     // Execution and quality conclusions stay separate, never derived from the ratio.
     // The launch header renders above the per-item table, so the first badge of
@@ -616,11 +631,13 @@ describe("Issue #45 quality pass rate wording", () => {
     // The ambiguous legacy label is gone.
     expect(screen.queryByText("用例通过率 (Pass Rate)")).not.toBeInTheDocument();
 
-    // The denominator rules are stated in always-visible help text.
+    // The denominator rules are stated in always-visible help text, for both
+    // the decided rate and the all-cases ratio (Issue #83).
     const help = screen.getByTestId("quality-pass-rate-help");
-    expect(help).toHaveTextContent("分母为当前返回的全部用例数");
-    expect(help).toHaveTextContent("仍计入分母，但不计入分子");
-    expect(help).toHaveTextContent("不代表质量结论为 FAIL");
+    expect(help).toHaveTextContent("PASS / FAIL / UNKNOWN");
+    expect(help).toHaveTextContent("UNKNOWN 表示证据不足");
+    expect(help).toHaveTextContent("分母只含有明确结论的用例");
+    expect(help).toHaveTextContent("分母包含全部用例");
     expect(help).toHaveTextContent("不是执行成功率");
   });
 
@@ -654,12 +671,19 @@ describe("Issue #45 quality pass rate wording", () => {
 
     renderDetail(launch, items);
 
+    // 1 PASS + 1 FAIL are decided; the two UNKNOWN items have no verdict, so
+    // they leave the decided denominator but stay visible as UNKNOWN 2. The
+    // all-cases ratio still counts them: 1/4 = 25.0%.
     const metric = await screen.findByTestId("quality-pass-rate");
-    // 1 of 4: the two UNKNOWN items stay in the denominator, which is what the
-    // top-of-page metric has always meant. The comparable-cohort pass_rate in
-    // the comparison report is a different, narrower denominator.
-    expect(metric).toHaveTextContent("(25.0%)");
-    expect(metric).toHaveTextContent("统计范围：全部用例");
+    expect(metric).toHaveTextContent("PASS 1");
+    expect(metric).toHaveTextContent("FAIL 1");
+    expect(metric).toHaveTextContent("UNKNOWN 2");
+    expect(metric).toHaveTextContent("已判定通过率：50.0%");
+    expect(metric).toHaveTextContent("判定覆盖率：50.0%");
+
+    const allCases = await screen.findByTestId("quality-all-cases-ratio");
+    expect(allCases).toHaveTextContent("1 / 4");
+    expect(allCases).toHaveTextContent("(25.0%)");
   });
 
   it("renders 0/N and keeps the quality conclusion UNKNOWN when every item is UNKNOWN", async () => {
@@ -692,9 +716,15 @@ describe("Issue #45 quality pass rate wording", () => {
 
     renderDetail(launch, items);
 
+    // Nothing was decided, so the decided pass rate has no denominator at all
+    // and renders as "—" instead of a fabricated 0%.
     const metric = await screen.findByTestId("quality-pass-rate");
-    expect(metric).toHaveTextContent("(0.0%)");
-    expect(metric).toHaveTextContent("统计范围：全部用例");
+    expect(metric).toHaveTextContent("UNKNOWN 3");
+    expect(screen.getByTestId("decided-pass-rate")).toHaveTextContent("—");
+
+    const allCases = await screen.findByTestId("quality-all-cases-ratio");
+    expect(allCases).toHaveTextContent("0 / 3");
+    expect(allCases).toHaveTextContent("(0.0%)");
     // The badge is not rewritten into FAIL just because the numerator is zero.
     expect(screen.getAllByTestId("quality-badge")[0]).toHaveTextContent("UNKNOWN");
   });
@@ -729,9 +759,17 @@ describe("Issue #45 quality pass rate wording", () => {
 
     renderDetail(launch, items);
 
+    // Three of the four items are PASS once case-folded: 3 PASS + 1 FAIL, so
+    // the decided rate is 3/4 = 75.0% and coverage is 100%.
     const metric = await screen.findByTestId("quality-pass-rate");
-    // Three of the four items are PASS once case-folded: 3/4 = 75.0%.
-    expect(metric).toHaveTextContent("(75.0%)");
+    expect(metric).toHaveTextContent("PASS 3");
+    expect(metric).toHaveTextContent("FAIL 1");
+    expect(metric).toHaveTextContent("UNKNOWN 0");
+    expect(metric).toHaveTextContent("已判定通过率：75.0%");
+
+    const allCases = await screen.findByTestId("quality-all-cases-ratio");
+    expect(allCases).toHaveTextContent("3 / 4");
+    expect(allCases).toHaveTextContent("(75.0%)");
   });
 
   it("keeps cancelled, timed-out and skipped items in the denominator", async () => {
@@ -764,9 +802,15 @@ describe("Issue #45 quality pass rate wording", () => {
 
     renderDetail(launch, items);
 
+    // Each terminal execution state that never reached a comparable quality
+    // verdict is reported as UNKNOWN, and still consumes all-cases denominator.
     const metric = await screen.findByTestId("quality-pass-rate");
-    expect(metric).toHaveTextContent("(25.0%)");
-    expect(metric).toHaveTextContent("统计范围：全部用例");
+    expect(metric).toHaveTextContent("UNKNOWN 2");
+    expect(metric).toHaveTextContent("判定覆盖率：50.0%");
+
+    const allCases = await screen.findByTestId("quality-all-cases-ratio");
+    expect(allCases).toHaveTextContent("1 / 4");
+    expect(allCases).toHaveTextContent("(25.0%)");
   });
 
   it("renders an explicit empty state instead of a fabricated ratio when no items exist", async () => {
@@ -794,9 +838,15 @@ describe("Issue #45 quality pass rate wording", () => {
     renderDetail(launch, []);
 
     const metric = await screen.findByTestId("quality-pass-rate");
-    expect(metric).toHaveTextContent("尚未统计");
     expect(metric).not.toHaveTextContent("NaN");
     expect(metric).not.toHaveTextContent("Infinity");
+    // Nothing decided yet: both ratios render an explicit placeholder.
+    expect(screen.getByTestId("decided-pass-rate")).toHaveTextContent("—");
+    expect(screen.getByTestId("decision-coverage")).toHaveTextContent("—");
+
+    const allCases = await screen.findByTestId("quality-all-cases-ratio");
+    expect(allCases).toHaveTextContent("尚未统计");
+    expect(allCases).not.toHaveTextContent("NaN");
   });
 
   it("keeps the unavailable state when the Items request fails", async () => {
@@ -828,5 +878,294 @@ describe("Issue #45 quality pass rate wording", () => {
       expect(metric).toHaveTextContent("暂不可用");
     });
     expect(metric).not.toHaveTextContent("(0.0%)");
+  });
+});
+
+describe("Issue #84 evaluation-only retry UI", () => {
+  const buildLaunch = (overrides: Record<string, unknown> = {}) => ({
+    id: "launch-84",
+    name: "Eval-Only Retry Launch",
+    status: "PARTIAL_FAILED",
+    quality_conclusion: "unknown",
+    dataset_name: "banking-regression",
+    dataset_version: "2026-09-30T00:00:00Z",
+    agent_id: "banking-agent",
+    agent_version: "v2",
+    langfuse_sync_status: "SYNCED",
+    created_at: "2026-09-30T00:00:00Z",
+    started_at: "2026-09-30T00:00:01Z",
+    completed_at: "2026-09-30T00:00:05Z",
+    manifest: { schema_version: "1.2", dataset: { items_count: 2 } },
+    allowed_actions: ["retry_evaluation"],
+    progress: {
+      total: 2,
+      pending: 0,
+      queued: 0,
+      running: 0,
+      retry_wait: 0,
+      succeeded: 2,
+      failed: 0,
+      timed_out: 0,
+      cancelled: 0,
+      completed: 2,
+      percentage: 100,
+      attempts: 2,
+      retries: 0,
+      recoverable_evaluation_count: 1,
+      allowed_actions: ["retry_evaluation"],
+    },
+    ...overrides,
+  });
+
+  const buildItems = (launchId: string) => [
+    {
+      id: "item-84-a",
+      launch_id: launchId,
+      dataset_item_id: "case-84-a",
+      execution_status: "succeeded",
+      eval_status: "failed",
+      quality_conclusion: "unknown",
+      scores: {},
+      attempt_count: 1,
+      evaluation_status: "none",
+      evaluation_recoverable: true,
+      evaluation_error: null,
+      started_at: "2026-09-30T00:00:01Z",
+    },
+  ];
+
+  const renderDetail = (launch: Record<string, unknown>, items: Array<Record<string, unknown>>) => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path.includes("/items")) return Promise.resolve({ data: items });
+      if (path.includes("/summary") || path.includes("/comparison") || path.includes("/baselines")) {
+        return Promise.resolve({ data: null });
+      }
+      if (path.includes("/api/v1/experiment-launches")) return Promise.resolve({ data: launch });
+      return Promise.resolve({ data: null });
+    });
+    (api.POST as any).mockImplementation((path: string) => {
+      if (path.includes("retry-evaluation")) {
+        return Promise.resolve({
+          data: {
+            launch,
+            submitted: ["case-84-a"],
+            already_running: [],
+            blocked: [],
+            message: "已提交 1 个用例仅重试评测（复用原 Agent 输出，不会再次调用 Agent）。",
+          },
+        });
+      }
+      return Promise.resolve({ data: null });
+    });
+
+    return render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[`/launches/${launch.id}`]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<LaunchDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+  };
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("offers a retry-evaluation action only when retry_evaluation is allowed", async () => {
+    renderDetail(buildLaunch(), buildItems("launch-84"));
+    const button = await screen.findByTestId("retry-evaluation-button");
+    expect(button).toBeInTheDocument();
+    expect(button).toHaveAttribute("title", expect.stringContaining("不会再次调用 Agent"));
+  });
+
+  it("hides the retry-evaluation action when it is not an allowed action", async () => {
+    renderDetail(
+      buildLaunch({
+        allowed_actions: [],
+        progress: { total: 2, completed: 2, allowed_actions: [] },
+      }),
+      buildItems("launch-84"),
+    );
+    // The Launch itself must still render, otherwise the assertion below would
+    // pass for the wrong reason.
+    await waitFor(() => {
+      expect(screen.getByTestId("quality-badge")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("retry-evaluation-button")).not.toBeInTheDocument();
+  });
+
+  it("calls retry-evaluation and reports submitted count plus reuse of the Agent output", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    renderDetail(buildLaunch(), buildItems("launch-84"));
+
+    const button = await screen.findByTestId("retry-evaluation-button");
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledWith(
+        "/api/v1/experiment-launches/{launch_id}/retry-evaluation",
+        expect.objectContaining({ params: { path: { launch_id: "launch-84" } } }),
+      );
+    });
+
+    const notice = await screen.findByTestId("retry-evaluation-notice");
+    expect(notice).toHaveTextContent("已提交 1 个用例");
+    expect(notice).toHaveTextContent("复用原 Agent 输出，不会再次调用 Agent");
+  });
+
+  it("surfaces blocked cases with the reason instead of silently doing nothing", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    const launch = buildLaunch();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path.includes("/items")) return Promise.resolve({ data: buildItems("launch-84") });
+      if (path.includes("/summary") || path.includes("/comparison") || path.includes("/baselines")) {
+        return Promise.resolve({ data: null });
+      }
+      if (path.includes("/api/v1/experiment-launches")) return Promise.resolve({ data: launch });
+      return Promise.resolve({ data: null });
+    });
+    (api.POST as any).mockImplementation((path: string) => {
+      if (path.includes("retry-evaluation")) {
+        return Promise.resolve({
+          data: {
+            launch,
+            submitted: [],
+            already_running: [],
+            blocked: [
+              {
+                item_execution_id: "item-84-a",
+                dataset_item_id: "case-84-a",
+                code: "CHECKPOINT_EXPIRED",
+                message: "检查点已过期，无法仅重试评测。",
+                hint: "请重新执行该用例。",
+              },
+            ],
+            message: "所有候选评测都已在重评中，未产生重复任务。 1 个用例因检查点不可用被阻止。",
+          },
+        });
+      }
+      return Promise.resolve({ data: null });
+    });
+
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[`/launches/${launch.id}`]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<LaunchDetail />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    fireEvent.click(await screen.findByTestId("retry-evaluation-button"));
+
+    const notice = await screen.findByTestId("retry-evaluation-notice");
+    expect(notice).toHaveTextContent("检查点已过期");
+  });
+});
+
+describe("Issue #85 fixed result revision in the Launch detail route", () => {
+  const revision = (over: Record<string, unknown> = {}) => ({
+    snapshot_id: "snap-2",
+    revision: 2,
+    created_at: "2026-09-30T00:00:00Z",
+    source_result_digest: "aaaaaaaabbbbbbbb",
+    manifest_digest: "manifest-digest",
+    evidence_state: "COMPLETE",
+    evidence_reasons: [],
+    total_cases: 6,
+    quality_pass_count: 6,
+    quality_fail_count: 0,
+    quality_unknown_count: 0,
+    is_latest: true,
+    ...over,
+  });
+
+  const launch = {
+    id: "launch-85",
+    name: "Snapshot Launch",
+    status: "COMPLETED",
+    quality_conclusion: "pass",
+    dataset_name: "golden",
+    dataset_version: "v1",
+    agent_id: "test-agent",
+    agent_version: "v2",
+    langfuse_sync_status: "SYNCED",
+    created_at: "2026-09-30T00:00:00Z",
+    manifest: { schema_version: "1.2", dataset: { items_count: 6 } },
+    allowed_actions: [],
+    progress: { total: 6, completed: 6, allowed_actions: [] },
+  };
+
+  const renderAt = (route: string) => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path.endsWith("/result-snapshots")) {
+        return Promise.resolve({
+          data: {
+            launch_id: "launch-85",
+            latest_snapshot_id: "snap-2",
+            latest_revision: 2,
+            revisions: [
+              revision(),
+              revision({
+                snapshot_id: "snap-1",
+                revision: 1,
+                is_latest: false,
+                source_result_digest: "1111111122222222",
+              }),
+            ],
+          },
+        });
+      }
+      if (path.includes("/result-snapshots/")) return Promise.resolve({ data: null });
+      if (path.includes("/items")) return Promise.resolve({ data: [] });
+      if (path.includes("/summary") || path.includes("/comparison") || path.includes("/baselines")) {
+        return Promise.resolve({ data: null });
+      }
+      if (path.includes("/api/v1/experiment-launches")) return Promise.resolve({ data: launch });
+      return Promise.resolve({ data: null });
+    });
+
+    return render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[route]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<LaunchDetail />} />
+          </Routes>
+          <LocationDisplay />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  };
+
+  afterEach(() => vi.clearAllMocks());
+
+  it("shows the latest revision and no 'newer available' hint by default", async () => {
+    renderAt("/launches/launch-85");
+    expect(await screen.findByTestId("snapshot-revision")).toHaveTextContent("Revision 2");
+    expect(screen.queryByTestId("snapshot-newer-available")).not.toBeInTheDocument();
+  });
+
+  it("honours a shared ?snapshot_id link and warns that a newer revision exists", async () => {
+    renderAt("/launches/launch-85?snapshot_id=snap-1");
+    expect(await screen.findByTestId("snapshot-revision")).toHaveTextContent("Revision 1");
+    expect(screen.getByTestId("snapshot-newer-available")).toHaveTextContent("已有更新的 Revision 2");
+    // The share link reflects the pinned revision, not the newest one.
+    expect(screen.getByTestId("snapshot-share-url")).toHaveTextContent("snapshot_id=snap-1");
+  });
+
+  it("writes the chosen revision into the URL so the view can be shared", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    renderAt("/launches/launch-85");
+    const older = await screen.findByTestId("snapshot-revision-1");
+    fireEvent.click(older);
+    await waitFor(() => {
+      expect(screen.getByTestId("router-location")).toHaveTextContent("snapshot_id=snap-1");
+    });
   });
 });

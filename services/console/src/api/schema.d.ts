@@ -161,6 +161,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/experiment-launches/{launch_id}/retry-evaluation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry failed or missing evaluations by reusing stored Agent outputs (Issue #84)
+         * @description Re-judge failed / missing evaluations without calling the Agent again.
+         *
+         *     The stored Agent output (checkpoint) is reused, the frozen Manifest and
+         *     already-successful results are preserved, and the Agent invocation /
+         *     execution attempt counts stay untouched. Submission is idempotent: a
+         *     double-click or a competing request yields at most one effective
+         *     re-evaluation per case.
+         */
+        post: operations["retry_evaluation_launch_api_v1_experiment_launches__launch_id__retry_evaluation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/experiment-launches/{launch_id}": {
         parameters: {
             query?: never;
@@ -270,7 +296,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List all registered Evaluators and their specifications */
+        /**
+         * List registered Evaluators with their immutable versions and release eligibility
+         * @description Return the Evaluator catalog.
+         *
+         *     Each entry carries the stable definition identity plus every immutable
+         *     version the caller may select from. The user must confirm an exact version;
+         *     there is deliberately no ``latest`` alias (Issue #80).
+         */
         get: operations["list_evaluators_api_v1_evaluators_get"];
         put?: never;
         post?: never;
@@ -307,6 +340,52 @@ export interface paths {
         };
         /** Get a stable run-level evaluation summary */
         get: operations["get_run_summary_api_v1_experiment_launches__launch_id__summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/experiment-launches/{launch_id}/result-snapshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List every frozen result revision of a Launch (Issue #85)
+         * @description Every revision ever frozen for this Launch, newest first.
+         *
+         *     Issue #85: a re-evaluation creates a new revision and never rewrites an old
+         *     one, so the history is the unit a user browses and shares.
+         */
+        get: operations["list_launch_result_snapshots_api_v1_experiment_launches__launch_id__result_snapshots_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one immutable result revision by its own id (Issue #85)
+         * @description The shareable, fixed view: this id always returns these exact results.
+         *
+         *     Nothing here falls back to "latest", so a shared link cannot drift when the
+         *     Launch is re-evaluated and a newer revision is frozen.
+         */
+        get: operations["get_launch_result_snapshot_api_v1_experiment_launches__launch_id__result_snapshots__snapshot_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -776,6 +855,16 @@ export interface components {
             result_snapshot_id: string;
             /** Revision */
             revision: number;
+            /**
+             * Result Revision
+             * @default 0
+             */
+            result_revision: number;
+            /**
+             * Result Evidence State
+             * @default COMPLETE
+             */
+            result_evidence_state: string;
             /** Updated By */
             updated_by?: string | null;
             /**
@@ -829,6 +918,83 @@ export interface components {
             baseline: components["schemas"]["OutputSideResponse"];
             candidate: components["schemas"]["OutputSideResponse"];
         };
+        /**
+         * ComparisonComparability
+         * @description Whether a formal comparison is allowed, and what to do about it.
+         */
+        ComparisonComparability: {
+            /** Comparable */
+            comparable: boolean;
+            /** Reason Codes */
+            reason_codes: string[];
+            /** Provenance */
+            provenance: string;
+            /** Dimensions */
+            dimensions: components["schemas"]["ComparisonContractDimension"][];
+            /** Suggestions */
+            suggestions?: string[];
+        };
+        /**
+         * ComparisonContractDimension
+         * @description One independently versioned contract, and whether it matches.
+         */
+        ComparisonContractDimension: {
+            /** Dimension */
+            dimension: string;
+            /** Status */
+            status: string;
+            /** Baseline Digest */
+            baseline_digest?: string | null;
+            /** Candidate Digest */
+            candidate_digest?: string | null;
+            /** Baseline Version */
+            baseline_version?: string | null;
+            /** Candidate Version */
+            candidate_version?: string | null;
+        };
+        /**
+         * ComparisonDiagnostic
+         * @description Best-effort per-case diagnosis. Never a release-grade conclusion.
+         */
+        ComparisonDiagnostic: {
+            /** Note */
+            note: string;
+            /** Comparable Cases */
+            comparable_cases: number;
+            /** Classification Counts */
+            classification_counts: {
+                [key: string]: number;
+            };
+        };
+        /**
+         * ComparisonFormalVerdict
+         * @description The run-level release-grade conclusion, withheld unless fully supported.
+         */
+        ComparisonFormalVerdict: {
+            /** Available */
+            available: boolean;
+            /** Verdict */
+            verdict?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Required Cases
+             * @default 0
+             */
+            required_cases: number;
+            /**
+             * Comparable Cases
+             * @default 0
+             */
+            comparable_cases: number;
+            /**
+             * Coverage
+             * @default 0
+             */
+            coverage: number;
+            /** Withheld Reasons */
+            withheld_reasons?: string[];
+        };
         /** ComparisonResponse */
         ComparisonResponse: {
             /** Launch Id */
@@ -848,6 +1014,9 @@ export interface components {
             classification_counts: {
                 [key: string]: number;
             };
+            comparability: components["schemas"]["ComparisonComparability"];
+            formal: components["schemas"]["ComparisonFormalVerdict"];
+            diagnostic: components["schemas"]["ComparisonDiagnostic"];
             /** Items */
             items: {
                 [key: string]: unknown;
@@ -937,10 +1106,85 @@ export interface components {
              */
             active_launch_count?: number | null;
         };
-        /** EvaluatorResponse */
+        /**
+         * EvaluationResultProvenance
+         * @description Frozen evidence source of one typed result (Issue #82).
+         */
+        EvaluationResultProvenance: {
+            /** Binding Id */
+            binding_id?: string | null;
+            /** Evaluator Id */
+            evaluator_id?: string | null;
+            /** Evaluator Version */
+            evaluator_version?: string | null;
+            /** Definition Digest */
+            definition_digest?: string | null;
+            /** Executor Type */
+            executor_type?: string | null;
+            /** Manifest Schema Version */
+            manifest_schema_version?: string | null;
+            /** Contract Status */
+            contract_status?: string | null;
+        };
+        /**
+         * EvaluationResultResponse
+         * @description One typed, explainable measurement (Issue #82).
+         *
+         *     ``value`` keeps its original JSON type; ``normalized_value`` is populated
+         *     only by an explicitly frozen rule and may legitimately be null.
+         */
+        EvaluationResultResponse: {
+            /** Evaluator Id */
+            evaluator_id: string;
+            /** Evaluator Version */
+            evaluator_version?: string | null;
+            /** Result Type */
+            result_type: string;
+            /** Status */
+            status: string;
+            /** Value */
+            value?: unknown | null;
+            /** Normalized Value */
+            normalized_value?: number | null;
+            /** Comment */
+            comment?: string | null;
+            /** Evidence */
+            evidence?: {
+                [key: string]: unknown;
+            } | null;
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /** Error Code */
+            error_code?: string | null;
+            /** Error Message */
+            error_message?: string | null;
+            provenance?: components["schemas"]["EvaluationResultProvenance"] | null;
+        };
+        /**
+         * EvaluationRetryBlockedItem
+         * @description One case that cannot be re-judged, with the reason (Issue #84).
+         */
+        EvaluationRetryBlockedItem: {
+            /** Item Execution Id */
+            item_execution_id: string;
+            /** Dataset Item Id */
+            dataset_item_id: string;
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Hint */
+            hint?: string | null;
+        };
+        /**
+         * EvaluatorResponse
+         * @description Catalog entry for one Evaluator, carrying its immutable version list.
+         */
         EvaluatorResponse: {
             /** Id */
             id: string;
+            /** Name */
+            name: string;
             /** Version */
             version: string;
             /** Scope */
@@ -966,6 +1210,106 @@ export interface components {
              * @default false
              */
             critical: boolean;
+            /**
+             * Result Type
+             * @default numeric
+             */
+            result_type: string;
+            /**
+             * Definition Source
+             * @default ARGUS_BUILTIN
+             */
+            definition_source: string;
+            /**
+             * Execution Owner
+             * @default ARGUS
+             */
+            execution_owner: string;
+            /** Implementation Ref */
+            implementation_ref?: string | null;
+            /**
+             * Executor Type
+             * @default builtin_python
+             */
+            executor_type: string;
+            /** Content Digest */
+            content_digest: string;
+            /**
+             * Release Eligible
+             * @default false
+             */
+            release_eligible: boolean;
+            /** Eligibility Reasons */
+            eligibility_reasons?: string[];
+            /** Default Version */
+            default_version: string;
+            /** Versions */
+            versions?: components["schemas"]["EvaluatorVersionInfo"][];
+        };
+        /**
+         * EvaluatorSelection
+         * @description An exact Evaluator id + version the user confirmed on the create form.
+         */
+        EvaluatorSelection: {
+            /** Id */
+            id: string;
+            /** Version */
+            version: string;
+        };
+        /**
+         * EvaluatorVersionInfo
+         * @description One immutable Evaluator version exposed in the catalog (Issue #80).
+         */
+        EvaluatorVersionInfo: {
+            /** Version */
+            version: string;
+            /** Result Type */
+            result_type: string;
+            /** Scope */
+            scope: string;
+            /** Threshold */
+            threshold: number;
+            /**
+             * Direction
+             * @default higher_is_better
+             */
+            direction: string;
+            /**
+             * Critical
+             * @default false
+             */
+            critical: boolean;
+            /** Input Contract */
+            input_contract?: {
+                [key: string]: unknown;
+            };
+            /** Output Contract */
+            output_contract?: {
+                [key: string]: unknown;
+            };
+            /** Param Schema */
+            param_schema?: {
+                [key: string]: unknown;
+            };
+            /** Implementation Ref */
+            implementation_ref?: string | null;
+            /** Executor Type */
+            executor_type: string;
+            /** Category Values */
+            category_values?: string[] | null;
+            /** Ordered Category Values */
+            ordered_category_values?: string[] | null;
+            /** Content Digest */
+            content_digest: string;
+            /**
+             * Release Eligible
+             * @default false
+             */
+            release_eligible: boolean;
+            /** Eligibility Reasons */
+            eligibility_reasons?: string[];
+            /** Eligibility Messages */
+            eligibility_messages?: string[];
         };
         /** ExecutionAttemptResponse */
         ExecutionAttemptResponse: {
@@ -1027,12 +1371,36 @@ export interface components {
             trace_id?: string | null;
             /** Observation Id */
             observation_id?: string | null;
+            /** Langfuse Trace Url */
+            langfuse_trace_url?: string | null;
             /** Final Attempt Id */
             final_attempt_id?: string | null;
             /** Scores */
             scores?: {
                 [key: string]: unknown;
             } | null;
+            /** Evaluation Results */
+            evaluation_results?: components["schemas"]["EvaluationResultResponse"][];
+            quality_evaluation?: components["schemas"]["QualityEvaluationResponse"] | null;
+            /**
+             * Evaluation Status
+             * @default none
+             */
+            evaluation_status: string;
+            /**
+             * Evaluation Generation
+             * @default 0
+             */
+            evaluation_generation: number;
+            /** Evaluation Error */
+            evaluation_error?: string | null;
+            /** Evaluation Reused Output Digest */
+            evaluation_reused_output_digest?: string | null;
+            /**
+             * Evaluation Recoverable
+             * @default false
+             */
+            evaluation_recoverable: boolean;
             /**
              * Attempt Count
              * @default 0
@@ -1082,14 +1450,21 @@ export interface components {
             baseline_snapshot_id?: string | null;
             /**
              * Evaluator Ids
-             * @description List of item-scope evaluator IDs to run; must contain at least one evaluator. Run-scope evaluators are not supported by the standalone launch runner.
+             * @description Legacy convenience field: item-scope evaluator IDs resolved to their current default version at submission time and frozen into the Manifest. Prefer `evaluator_selections`, which pins an explicit user-confirmed version per id.
              */
-            evaluator_ids?: string[];
+            evaluator_ids?: string[] | null;
+            /**
+             * Evaluator Selections
+             * @description Exact Evaluator id + immutable version selections confirmed by the user. Each entry is validated for release eligibility and scope server-side.
+             */
+            evaluator_selections?: components["schemas"]["EvaluatorSelection"][] | null;
             /**
              * Max Concurrency
              * @description Optional concurrency override; if omitted, inherits from AgentVersion
              */
             max_concurrency?: number | null;
+            /** @description Issue #83: the judgement rules frozen with this Launch. Omit it to accept the default all-required policy over the selected metrics. An illegal rule (unknown operator, type mismatch, unknown metric) is rejected at creation instead of failing silently at run time. */
+            quality_policy?: components["schemas"]["QualityPolicyRequest"] | null;
             /**
              * Idempotency Key
              * @description Optional idempotency key (can also be passed via Idempotency-Key header)
@@ -1169,6 +1544,11 @@ export interface components {
             action_reasons?: {
                 [key: string]: string;
             };
+            /**
+             * Recoverable Evaluation Count
+             * @default 0
+             */
+            recoverable_evaluation_count: number;
         };
         /** ExperimentLaunchResponse */
         ExperimentLaunchResponse: {
@@ -1293,6 +1673,41 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /**
+         * LangfuseSyncScopeResponse
+         * @description One independently reportable Langfuse sync scope.
+         */
+        LangfuseSyncScopeResponse: {
+            /** Status */
+            status: string;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Task Count
+             * @default 0
+             */
+            task_count: number;
+            /**
+             * Failed Count
+             * @default 0
+             */
+            failed_count: number;
+            /**
+             * Pending Count
+             * @default 0
+             */
+            pending_count: number;
+        };
+        /**
+         * LangfuseSyncStatusResponse
+         * @description Sync state that never lets one scope hide a broken one (Issue #87).
+         */
+        LangfuseSyncStatusResponse: {
+            /** Overall */
+            overall: string;
+            item_trace: components["schemas"]["LangfuseSyncScopeResponse"];
+            run_score: components["schemas"]["LangfuseSyncScopeResponse"];
+        };
         /** OutputSideResponse */
         OutputSideResponse: {
             /**
@@ -1323,6 +1738,239 @@ export interface components {
             };
             /** Trace Url */
             trace_url?: string | null;
+        };
+        /**
+         * QualityEvaluationResponse
+         * @description The per-case quality decision recorded under the frozen policy.
+         */
+        QualityEvaluationResponse: {
+            /** Conclusion */
+            conclusion: string;
+            /** Policy Id */
+            policy_id?: string | null;
+            /** Policy Version */
+            policy_version?: string | null;
+            /** Policy Digest */
+            policy_digest?: string | null;
+            /** Decided By */
+            decided_by?: string | null;
+            /**
+             * Releasable
+             * @default false
+             */
+            releasable: boolean;
+            /** Unknown Reasons */
+            unknown_reasons?: string[];
+            /** Rules */
+            rules?: components["schemas"]["QualityRuleEvaluationResponse"][];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * QualityPolicyRequest
+         * @description The independent quality policy frozen with a new Launch (Issue #83).
+         */
+        QualityPolicyRequest: {
+            /** Rules */
+            rules: components["schemas"]["QualityRuleRequest"][];
+        };
+        /**
+         * QualityRuleEvaluationResponse
+         * @description One rule's outcome for one case, with the reason in plain language.
+         */
+        QualityRuleEvaluationResponse: {
+            /** Evaluator Id */
+            evaluator_id: string;
+            /** Result Type */
+            result_type?: string | null;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
+            /**
+             * Critical
+             * @default false
+             */
+            critical: boolean;
+            /** Operator */
+            operator?: string | null;
+            /** Expected */
+            expected?: unknown | null;
+            /** Observed Value */
+            observed_value?: unknown | null;
+            /** Observed Status */
+            observed_status?: string | null;
+            /**
+             * Conclusion
+             * @default unknown
+             */
+            conclusion: string;
+            /** Reason Code */
+            reason_code?: string | null;
+            /** Explanation */
+            explanation?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * QualityRuleRequest
+         * @description One user-authored judgement rule over a selected metric (Issue #83).
+         */
+        QualityRuleRequest: {
+            /** Evaluator Id */
+            evaluator_id: string;
+            /**
+             * Operator
+             * @description Comparison operator. numeric accepts >= / <=, boolean and categorical accept ==. A metric with no operator is recorded as evidence only.
+             */
+            operator?: string | null;
+            /**
+             * Threshold
+             * @description numeric 规则的阈值
+             */
+            threshold?: number | null;
+            /**
+             * Expected Value
+             * @description boolean / categorical 规则的显式期望取值
+             */
+            expected_value?: unknown | null;
+            /**
+             * Result Type
+             * @description 被引用指标的结果类型
+             * @default numeric
+             */
+            result_type: string;
+            /**
+             * Required
+             * @description 是否为必要规则；必要规则的证据不足会得到 UNKNOWN
+             * @default true
+             */
+            required: boolean;
+            /**
+             * Critical
+             * @description 是否为关键规则
+             * @default false
+             */
+            critical: boolean;
+            /** Note */
+            note?: string | null;
+        };
+        /**
+         * ResultSnapshotDetailResponse
+         * @description The immutable contents of one revision, addressed by its own id.
+         */
+        ResultSnapshotDetailResponse: {
+            /** Launch Id */
+            launch_id: string;
+            /** Snapshot Id */
+            snapshot_id: string;
+            /** Revision */
+            revision: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Source Result Digest */
+            source_result_digest: string;
+            /** Manifest Digest */
+            manifest_digest: string;
+            /** Evidence State */
+            evidence_state: string;
+            /** Evidence Reasons */
+            evidence_reasons?: string[];
+            /**
+             * Releasable
+             * @default false
+             */
+            releasable: boolean;
+            /** Versions */
+            versions: {
+                [key: string]: unknown;
+            };
+            summary: components["schemas"]["RunCostSummaryResponse"];
+            /** Items */
+            items?: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** ResultSnapshotListResponse */
+        ResultSnapshotListResponse: {
+            /** Launch Id */
+            launch_id: string;
+            /** Latest Snapshot Id */
+            latest_snapshot_id?: string | null;
+            /** Latest Revision */
+            latest_revision?: number | null;
+            /** Revisions */
+            revisions?: components["schemas"]["ResultSnapshotRevisionResponse"][];
+        };
+        /**
+         * ResultSnapshotRevisionResponse
+         * @description One frozen revision of a Launch (Issue #85).
+         */
+        ResultSnapshotRevisionResponse: {
+            /** Snapshot Id */
+            snapshot_id: string;
+            /** Revision */
+            revision: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Source Result Digest */
+            source_result_digest: string;
+            /** Manifest Digest */
+            manifest_digest: string;
+            /** Evidence State */
+            evidence_state: string;
+            /** Evidence Reasons */
+            evidence_reasons?: string[];
+            /**
+             * Total Cases
+             * @default 0
+             */
+            total_cases: number;
+            /**
+             * Quality Pass Count
+             * @default 0
+             */
+            quality_pass_count: number;
+            /**
+             * Quality Fail Count
+             * @default 0
+             */
+            quality_fail_count: number;
+            /**
+             * Quality Unknown Count
+             * @default 0
+             */
+            quality_unknown_count: number;
+            /**
+             * Is Latest
+             * @default false
+             */
+            is_latest: boolean;
+        };
+        /**
+         * RetryEvaluationResponse
+         * @description Result of an evaluation-only retry submission (Issue #84).
+         */
+        RetryEvaluationResponse: {
+            launch: components["schemas"]["ExperimentLaunchResponse"];
+            /** Submitted */
+            submitted?: string[];
+            /** Already Running */
+            already_running?: string[];
+            /** Blocked */
+            blocked?: components["schemas"]["EvaluationRetryBlockedItem"][];
+            /**
+             * Message
+             * @default
+             */
+            message: string;
         };
         /** RetryFailedRequest */
         RetryFailedRequest: {
@@ -1380,6 +2028,18 @@ export interface components {
             created_at: string;
             /** Manifest Digest */
             manifest_digest: string;
+            /**
+             * Source Result Digest
+             * @default
+             */
+            source_result_digest: string;
+            /**
+             * Evidence State
+             * @default COMPLETE
+             */
+            evidence_state: string;
+            /** Evidence Reasons */
+            evidence_reasons?: string[];
             /** Versions */
             versions: {
                 [key: string]: unknown;
@@ -1390,6 +2050,7 @@ export interface components {
              * @default PENDING
              */
             langfuse_score_sync_status: string;
+            langfuse_sync?: components["schemas"]["LangfuseSyncStatusResponse"] | null;
         };
         /** SystemInfoResponse */
         SystemInfoResponse: {
@@ -1950,6 +2611,37 @@ export interface operations {
             };
         };
     };
+    retry_evaluation_launch_api_v1_experiment_launches__launch_id__retry_evaluation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetryEvaluationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_launch_detail_api_v1_experiment_launches__launch_id__get: {
         parameters: {
             query?: never;
@@ -2263,6 +2955,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunSummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_launch_result_snapshots_api_v1_experiment_launches__launch_id__result_snapshots_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultSnapshotListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_launch_result_snapshot_api_v1_experiment_launches__launch_id__result_snapshots__snapshot_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+                snapshot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultSnapshotDetailResponse"];
                 };
             };
             /** @description Validation Error */

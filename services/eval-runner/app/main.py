@@ -20,6 +20,7 @@ from .api_results import router as results_router
 from .api_system import router as system_router
 from .config import find_path, settings
 from .db import DatabaseManager, MigrationRunner
+from .evaluation_recovery import WORK_TYPE_EVALUATION, WORK_TYPE_INVOCATION
 from .execution import LaunchExecutionService
 from .langfuse_links import LangfuseLaunchLinkService, LangfuseLinkResolver
 from .langfuse_run_scores import LangfuseRunScoreSyncer
@@ -116,10 +117,15 @@ async def lifespan(app: FastAPI):
         semaphore = asyncio.Semaphore(settings.worker_concurrency)
         running_tasks = set()
 
-        async def _process_item(m_id: str, i_id: str, g: int):
+        async def _process_item(m_id: str, i_id: str, g: int, work_type: str):
             async with semaphore:
                 try:
-                    await worker.execute_item_message(m_id, i_id, g)
+                    if work_type == WORK_TYPE_EVALUATION:
+                        # Issue #84: evaluation-only recovery reuses the stored
+                        # Agent output and never invokes the Agent.
+                        await worker.execute_evaluation_message(m_id, i_id, g)
+                    else:
+                        await worker.execute_item_message(m_id, i_id, g)
                 except Exception:
                     pass
 
@@ -136,8 +142,8 @@ async def lifespan(app: FastAPI):
                     await asyncio.sleep(0.05)
                     continue
 
-                for msg_id, item_id, gen in msgs:
-                    task = asyncio.create_task(_process_item(msg_id, item_id, gen))
+                for msg_id, item_id, gen, work_type in msgs:
+                    task = asyncio.create_task(_process_item(msg_id, item_id, gen, work_type or WORK_TYPE_INVOCATION))
                     running_tasks.add(task)
                     task.add_done_callback(running_tasks.discard)
 

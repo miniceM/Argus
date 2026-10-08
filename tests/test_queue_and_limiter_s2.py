@@ -19,9 +19,10 @@ def test_memory_queue_adapter_roundtrip():
 
     msgs = queue.read_group("worker-1", count=2, block_ms=0)
     assert len(msgs) == 2
-    msg_id1, item_id1, gen1 = msgs[0]
+    msg_id1, item_id1, gen1, work1 = msgs[0]
     assert item_id1 == "item-1"
     assert gen1 == 1
+    assert work1 == "INVOCATION"
 
     queue.ack(msg_id1)
     # Remaining 1 unread

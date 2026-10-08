@@ -19,6 +19,55 @@ def _item_evaluator_specs(specs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [spec for spec in specs if spec.get("scope", "item") == "item"]
 
 
+def _numeric_value_from_typed(result: dict[str, Any]) -> float | None:
+    """The aggregatable number of one typed result, or None.
+
+    Only a *succeeded numeric* result contributes. Booleans, categories, text,
+    failures, skips and missing values are excluded by construction so they can
+    never drag a mean toward zero (Issue #82).
+    """
+    if str(result.get("status", "")).lower() != "succeeded":
+        return None
+    if str(result.get("result_type", "")).lower() != "numeric":
+        return None
+    return _finite_number(result.get("value"))
+
+
+def _item_numeric_values(item: dict[str, Any]) -> dict[str, float]:
+    """Numeric measurement per evaluator for one item.
+
+    Typed results are authoritative when present; historical items that only
+    carry the legacy ``scores`` map fall back to it.
+    """
+    typed = item.get("evaluation_results")
+    if isinstance(typed, list) and typed:
+        values: dict[str, float] = {}
+        for result in typed:
+            if not isinstance(result, dict):
+                continue
+            value = _numeric_value_from_typed(result)
+            if value is not None:
+                values[str(result.get("evaluator_id"))] = value
+        return values
+    scores = item.get("scores") or {}
+    return {
+        str(key): number
+        for key, raw in scores.items()
+        if (number := _finite_number(raw)) is not None
+    }
+
+
+def _item_result_types(item: dict[str, Any]) -> dict[str, str]:
+    """Declared result type per evaluator, used to label non-aggregatable metrics."""
+    types: dict[str, str] = {}
+    typed = item.get("evaluation_results")
+    if isinstance(typed, list):
+        for result in typed:
+            if isinstance(result, dict) and result.get("evaluator_id"):
+                types[str(result["evaluator_id"])] = str(result.get("result_type") or "unknown")
+    return types
+
+
 def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, Any]]) -> dict[str, Any]:
     """Build deterministic run-level metrics without conflating execution and quality failures."""
     evaluator_specs = _item_evaluator_specs(evaluator_specs)
@@ -31,6 +80,19 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
         and str(item.get("quality_conclusion", "")).lower() in _COMPARABLE_QUALITY
     ]
     passed = sum(str(item.get("quality_conclusion", "")).lower() == "pass" for item in evaluated)
+    # Issue #83: the three-way quality split. UNKNOWN is a first-class outcome,
+    # never folded into FAIL, so the Console can say "not enough evidence"
+    # instead of "the Agent is bad".
+    quality_pass_count = sum(
+        str(item.get("quality_conclusion", "")).lower() == "pass" for item in items
+    )
+    quality_fail_count = sum(
+        str(item.get("quality_conclusion", "")).lower() == "fail" for item in items
+    )
+    quality_unknown_count = sum(
+        str(item.get("quality_conclusion", "")).lower() not in {"pass", "fail"} for item in items
+    )
+    decided_count = quality_pass_count + quality_fail_count
     execution_errors = sum(
         str(item.get("execution_status", "")).lower() in {"failed", "timed_out"} for item in items
     )
@@ -43,13 +105,20 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
     score_values: dict[str, list[float]] = {str(spec["id"]): [] for spec in evaluator_specs}
     critical_failed_cases: set[str] = set()
     spec_by_id = {str(spec["id"]): spec for spec in evaluator_specs}
+    result_types: dict[str, str] = {
+        str(spec["id"]): str(spec.get("result_type") or "numeric") for spec in evaluator_specs
+    }
     for item in items:
         if str(item.get("execution_status", "")).lower() != "succeeded" or str(item.get("eval_status", "")).lower() != "succeeded":
             continue
-        scores = item.get("scores") or {}
+        numeric_values = _item_numeric_values(item)
+        item_types = _item_result_types(item)
         case_id = str(item.get("dataset_item_id", item.get("id", "")))
         for evaluator_id, spec in spec_by_id.items():
-            value = _finite_number(scores.get(evaluator_id))
+            # The observed typed result type is more precise than the spec.
+            if evaluator_id in item_types:
+                result_types[evaluator_id] = item_types[evaluator_id]
+            value = numeric_values.get(evaluator_id)
             if value is not None:
                 score_values[evaluator_id].append(value)
             if spec.get("critical") and (value is None or value < float(spec.get("threshold", 1.0))):
@@ -59,7 +128,12 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
         evaluator_id: sum(values) / len(values) if values else None
         for evaluator_id, values in score_values.items()
     }
+    # Valid sample count per evaluator: how many items actually contributed a
+    # number. A non-aggregatable type (text / category / boolean) always shows 0.
     score_counts = {evaluator_id: len(values) for evaluator_id, values in score_values.items()}
+    result_type_by_evaluator = {
+        evaluator_id: result_types.get(evaluator_id, "numeric") for evaluator_id in score_values
+    }
 
     latencies = sorted(
         latency
@@ -142,12 +216,25 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
         "failed_quality_cases": sum(str(item.get("quality_conclusion", "")).lower() == "fail" for item in evaluated),
         "pass_rate": passed / len(evaluated) if evaluated else None,
         "evaluation_coverage": len(evaluated) / total if total else None,
+        # Issue #83: named denominators. `decided_pass_rate` is PASS/(PASS+FAIL)
+        # — an UNKNOWN case leaves the denominator instead of dragging it down —
+        # and `decision_coverage` is (PASS+FAIL)/total. Both are null when their
+        # denominator is zero, so "no data" never renders as 0% or 100%.
+        "quality_pass_count": quality_pass_count,
+        "quality_fail_count": quality_fail_count,
+        "quality_unknown_count": quality_unknown_count,
+        "decided_case_count": decided_count,
+        "decided_pass_rate": (quality_pass_count / decided_count) if decided_count else None,
+        "decision_coverage": (decided_count / total) if total else None,
         "execution_error_count": execution_errors,
         "execution_error_rate": execution_errors / total if total else None,
         "evaluator_error_count": evaluator_errors,
         "critical_failure_count": len(critical_failed_cases),
         "score_means": score_means,
         "score_counts": score_counts,
+        # Issue #82: lets the Console explain *why* a metric has no mean
+        # (text / category / boolean are not aggregatable).
+        "score_result_types": result_type_by_evaluator,
         "p95_latency_ms": p95,
         "total_cost": total_cost,
         "cost_per_case": cost_per_case,
@@ -160,6 +247,42 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
         "cost_partial": bool(total and cost_case_count < total),
         "cost_unavailable_reason": cost_reason,
     }
+
+
+def _comparable_values(item: dict[str, Any]) -> tuple[dict[str, float], list[str]]:
+    """Split one item's results into delta-comparable numbers and the rest.
+
+    Issue #86: only a numeric typed result, or a value a *frozen* normalization
+    rule mapped onto a number, may produce a delta. Unordered categories and
+    free text are reported for diagnosis but never turned into an invented
+    numeric difference.
+    """
+    typed = item.get("evaluation_results")
+    if not isinstance(typed, list) or not typed:
+        return dict(_item_numeric_values(item)), []
+
+    values: dict[str, float] = {}
+    non_numeric: list[str] = []
+    for result in typed:
+        if not isinstance(result, dict):
+            continue
+        evaluator_id = str(result.get("evaluator_id"))
+        if str(result.get("status", "")).lower() != "succeeded":
+            non_numeric.append(evaluator_id)
+            continue
+        # A frozen normalization rule is the only sanctioned way to order a
+        # non-numeric value.
+        normalized = _finite_number(result.get("normalized_value"))
+        if normalized is not None:
+            values[evaluator_id] = normalized
+            continue
+        if str(result.get("result_type", "")).lower() == "numeric":
+            number = _finite_number(result.get("value"))
+            if number is not None:
+                values[evaluator_id] = number
+                continue
+        non_numeric.append(evaluator_id)
+    return values, sorted(set(non_numeric))
 
 
 def _contract(specs: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -195,6 +318,7 @@ def compare_case_results(
         "baseline_scores": baseline.get("scores") or {},
         "candidate_scores": candidate.get("scores") or {},
         "score_deltas": {},
+        "non_numeric_evaluators": [],
     }
 
     if not baseline or not candidate:
@@ -219,12 +343,18 @@ def compare_case_results(
     if any(str(item.get("eval_status", "")).lower() != "succeeded" for item in (baseline, candidate)):
         result.update(classification="NOT_COMPARABLE", reason="EVALUATION_NOT_COMPLETED")
         return result
-    baseline_scores = baseline.get("scores") or {}
-    candidate_scores = candidate.get("scores") or {}
+    baseline_scores, baseline_non_numeric = _comparable_values(baseline)
+    candidate_scores, candidate_non_numeric = _comparable_values(candidate)
+    result["non_numeric_evaluators"] = sorted(set(baseline_non_numeric) | set(candidate_non_numeric))
+    result["baseline_scores"] = baseline_scores
+    result["candidate_scores"] = candidate_scores
     has_regression = False
     has_improvement = False
     for spec in evaluator_specs:
         evaluator_id = str(spec["id"])
+        if evaluator_id in result["non_numeric_evaluators"]:
+            # Diagnosed qualitatively; no numeric delta may be invented.
+            continue
         before = _finite_number(baseline_scores.get(evaluator_id))
         after = _finite_number(candidate_scores.get(evaluator_id))
         if before is None or after is None:

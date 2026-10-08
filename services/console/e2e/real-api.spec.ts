@@ -25,22 +25,30 @@ test.describe("Real API Acceptance E2E (Zero Mock)", () => {
     await page.goto("/launches/new");
     await expect(page.getByRole("heading", { name: /发起新评测任务/ })).toBeVisible();
 
-    // Verify real Evaluators loaded from GET /api/v1/evaluators
-    await expect(page.getByText("intent_match", { exact: true })).toBeVisible();
-    await expect(page.getByText("run_pass_rate", { exact: true })).toBeVisible();
-    await expect(page.getByRole("radio", { name: /逐项诊断/ })).toBeChecked();
-    await expect(page.getByRole("radio", { name: /复合结论/ })).toBeEnabled();
+    // Verify real Evaluators loaded from GET /api/v1/evaluators. The metric id
+    // also appears on its quality rule, so scope to the catalog.
+    const catalog = page.getByTestId("evaluator-catalog");
+    await expect(catalog.getByText("intent_match", { exact: true })).toBeVisible();
+    await expect(catalog.getByText("run_pass_rate", { exact: true })).toBeVisible();
+    // Issue #83: no composite conclusion mode, and a policy is configured here.
+    await expect(page.getByRole("radio", { name: /逐项诊断/ })).toHaveCount(0);
+    await expect(page.getByRole("radio", { name: /复合结论/ })).toHaveCount(0);
     await expect(page.getByText("已选 4 项")).toBeVisible();
+    await expect(page.getByTestId("quality-policy-editor")).toBeVisible();
+    for (const id of ["escalation_match", "intent_match", "pii_safe", "required_tool_match"]) {
+      await expect(page.getByTestId(`quality-rule-${id}`)).toBeVisible();
+    }
 
     // Critical Invariant: run_pass_rate (run scope) must be disabled and not selected!
-    await expect(page.getByText(/聚合指标，暂不支持在单次 Launch 中直接运行/).first()).toBeVisible();
+    await expect(page.getByText(/派生运行指标，不能作为用例指标选择/).first()).toBeVisible();
 
     // Fill custom Launch Name
     const customName = `real-e2e-${Date.now()}`;
     await page.getByPlaceholder("例如：release-v1.0-benchmark").fill(customName);
 
-    // Concurrency adjustment
-    await page.getByRole("spinbutton").fill("2");
+    // Concurrency adjustment. #83 adds one numeric rule input per metric, so
+    // the concurrency spinner is addressed by its own label.
+    await page.getByLabel("最大并发执行数 (Concurrency)").fill("2");
 
     // 4. Submit Launch Creation to Real Backend (POST /api/v1/experiment-launches)
     await page.getByRole("button", { name: /创建评测任务/ }).click();
@@ -53,7 +61,7 @@ test.describe("Real API Acceptance E2E (Zero Mock)", () => {
     await expect(page.getByTestId("langfuse-sync-badge")).toBeVisible();
 
     // 6. Verify 4-Dimension Frozen Manifest rendered from real backend database
-    await expect(page.getByTestId("manifest-schema-version")).toContainText("Schema v1.1");
+    await expect(page.getByTestId("manifest-schema-version")).toContainText("Schema v1.2");
 
     // Dimension 1: Agent snapshot (banking-agent)
     await expect(page.getByText("banking-agent").first()).toBeVisible();
@@ -65,9 +73,15 @@ test.describe("Real API Acceptance E2E (Zero Mock)", () => {
     await expect(page.getByText("intent_match").first()).toBeVisible();
     await expect(page.getByText("3. 评测门禁指标 (4)")).toBeVisible();
     for (const id of ["escalation_match", "intent_match", "pii_safe", "required_tool_match"]) {
-      await expect(page.getByText(id, { exact: true })).toBeVisible();
+      await expect(page.getByText(id, { exact: true }).first()).toBeVisible();
     }
     await expect(page.getByText("overall_pass", { exact: true })).toHaveCount(0);
+
+    // Dimension 3b: Issue #81 frozen execution identity, produced by the real backend.
+    await expect(page.getByTestId("binding-verification-intent_match")).toHaveText("已冻结校验");
+    await page.getByText("查看冻结摘要与制品标识").first().click();
+    await expect(page.getByText(/^sha256:[0-9a-f]{64}$/).first()).toBeVisible();
+    await expect(page.getByText("builtin:intent_match@1.0.0")).toBeVisible();
 
     // Dimension 4: Runner and Concurrency
     await expect(page.getByTestId("runner-version")).toBeVisible();

@@ -7,7 +7,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .evaluators import default_evaluator_registry
 from .security import validate_credential_ref, validate_endpoint_url
 
 
@@ -310,20 +309,64 @@ class ExperimentLaunchCreateRequest(BaseModel):
     dataset_version: str | None = None
     environment: str = Field(default="production", min_length=1, max_length=64)
     baseline_snapshot_id: str | None = Field(default=None, min_length=1, max_length=64)
-    evaluator_ids: list[str] = Field(
-        default_factory=default_evaluator_registry.default_item_ids,
-        min_length=1,
-        description="List of item-scope evaluator IDs to run; must contain at least one evaluator. Run-scope evaluators are not supported by the standalone launch runner.",
+    evaluator_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            "Legacy convenience field: item-scope evaluator IDs resolved to their current "
+            "default version at submission time and frozen into the Manifest. Prefer "
+            "`evaluator_selections`, which pins an explicit user-confirmed version per id."
+        ),
+    )
+    evaluator_selections: list[EvaluatorSelection] | None = Field(
+        default=None,
+        description=(
+            "Exact Evaluator id + immutable version selections confirmed by the user. "
+            "Each entry is validated for release eligibility and scope server-side."
+        ),
     )
     max_concurrency: int | None = Field(default=None, ge=1, le=50, description="Optional concurrency override; if omitted, inherits from AgentVersion")
+    quality_policy: QualityPolicyRequest | None = Field(
+        default=None,
+        description=(
+            "Issue #83: the judgement rules frozen with this Launch. Omit it to "
+            "accept the default all-required policy over the selected metrics. "
+            "An illegal rule (unknown operator, type mismatch, unknown metric) is "
+            "rejected at creation instead of failing silently at run time."
+        ),
+    )
 
 
     idempotency_key: str | None = Field(default=None, description="Optional idempotency key (can also be passed via Idempotency-Key header)")
 
 
 
+class EvaluatorVersionInfo(BaseModel):
+    """One immutable Evaluator version exposed in the catalog (Issue #80)."""
+
+    version: str
+    result_type: str
+    scope: str
+    threshold: float
+    direction: str = "higher_is_better"
+    critical: bool = False
+    input_contract: dict[str, Any] = Field(default_factory=dict)
+    output_contract: dict[str, Any] = Field(default_factory=dict)
+    param_schema: dict[str, Any] = Field(default_factory=dict)
+    implementation_ref: str | None = None
+    executor_type: str
+    category_values: list[str] | None = None
+    ordered_category_values: list[str] | None = None
+    content_digest: str
+    release_eligible: bool = False
+    eligibility_reasons: list[str] = Field(default_factory=list)
+    eligibility_messages: list[str] = Field(default_factory=list)
+
+
 class EvaluatorResponse(BaseModel):
+    """Catalog entry for one Evaluator, carrying its immutable version list."""
+
     id: str
+    name: str
     version: str
     scope: str
     threshold: float
@@ -332,6 +375,94 @@ class EvaluatorResponse(BaseModel):
     composed_of: list[str] = Field(default_factory=list)
     direction: str = "higher_is_better"
     critical: bool = False
+    # Issue #80: identity / provenance / eligibility
+    result_type: str = "numeric"
+    definition_source: str = "ARGUS_BUILTIN"
+    execution_owner: str = "ARGUS"
+    implementation_ref: str | None = None
+    executor_type: str = "builtin_python"
+    content_digest: str
+    release_eligible: bool = False
+    eligibility_reasons: list[str] = Field(default_factory=list)
+    default_version: str
+    versions: list[EvaluatorVersionInfo] = Field(default_factory=list)
+
+
+class QualityRuleRequest(BaseModel):
+    """One user-authored judgement rule over a selected metric (Issue #83)."""
+
+    evaluator_id: str = Field(..., min_length=1, max_length=128)
+    operator: str | None = Field(
+        default=None,
+        description=(
+            "Comparison operator. numeric accepts >= / <=, boolean and categorical "
+            "accept ==. A metric with no operator is recorded as evidence only."
+        ),
+    )
+    threshold: float | None = Field(default=None, description="numeric 规则的阈值")
+    expected_value: Any | None = Field(
+        default=None, description="boolean / categorical 规则的显式期望取值"
+    )
+    result_type: str = Field(default="numeric", description="被引用指标的结果类型")
+    required: bool = Field(default=True, description="是否为必要规则；必要规则的证据不足会得到 UNKNOWN")
+    critical: bool = Field(default=False, description="是否为关键规则")
+    note: str | None = None
+
+
+class QualityPolicyRequest(BaseModel):
+    """The independent quality policy frozen with a new Launch (Issue #83)."""
+
+    rules: list[QualityRuleRequest] = Field(..., min_length=1)
+
+
+class QualityRuleEvaluationResponse(BaseModel):
+    """One rule's outcome for one case, with the reason in plain language."""
+
+    model_config = ConfigDict(extra="allow")
+
+    evaluator_id: str
+    result_type: str | None = None
+    required: bool = True
+    critical: bool = False
+    operator: str | None = None
+    expected: Any | None = None
+    observed_value: Any | None = None
+    observed_status: str | None = None
+    conclusion: str = "unknown"
+    reason_code: str | None = None
+    explanation: str | None = None
+
+
+class QualityEvaluationResponse(BaseModel):
+    """The per-case quality decision recorded under the frozen policy."""
+
+    model_config = ConfigDict(extra="allow")
+
+    conclusion: str
+    policy_id: str | None = None
+    policy_version: str | None = None
+    policy_digest: str | None = None
+    decided_by: str | None = None
+    releasable: bool = False
+    unknown_reasons: list[str] = Field(default_factory=list)
+    rules: list[QualityRuleEvaluationResponse] = Field(default_factory=list)
+
+
+class EvaluatorSelection(BaseModel):
+    """An exact Evaluator id + version the user confirmed on the create form."""
+
+    id: str = Field(..., min_length=1, max_length=128)
+    version: str = Field(..., min_length=1, max_length=64)
+
+
+class EvaluatorSelectionErrorResponse(BaseModel):
+    """Structured rejection returned when a selection cannot be used (Issue #80)."""
+
+    code: str = Field(..., description="Machine-readable error code")
+    message: str = Field(..., description="Human-readable explanation")
+    evaluator_id: str | None = None
+    version: str | None = None
+    eligibility_reasons: list[str] = Field(default_factory=list)
 
 
 class BaselineCreateRequest(BaseModel):
@@ -345,6 +476,11 @@ class BaselineResponse(BaseModel):
     environment: str
     result_snapshot_id: str
     revision: int
+    # Issue #85: the binding revision above is the *pointer* revision. The
+    # result revision below is the frozen report it points at. Both are
+    # returned explicitly so a success response never leaves "latest" implied.
+    result_revision: int = 0
+    result_evidence_state: str = "COMPLETE"
     updated_by: str | None = None
     updated_at: datetime
     launch_id: str
@@ -443,9 +579,121 @@ class RunSummaryResponse(BaseModel):
     revision: int
     created_at: datetime
     manifest_digest: str
+    # Issue #85: the digest of the frozen items themselves (typed results plus
+    # their provenance), so a shared link identifies exactly these results.
+    source_result_digest: str = ""
+    # Issue #85: this revision's own evidence verdict. COMPLETE means it may be
+    # used as formal release / Baseline evidence; DIAGNOSTIC means it only
+    # explains a failure.
+    evidence_state: str = "COMPLETE"
+    evidence_reasons: list[str] = Field(default_factory=list)
     versions: dict[str, Any]
     summary: RunCostSummaryResponse
     langfuse_score_sync_status: str = "PENDING"
+    # Issue #87: quality results and sync state are separate facts. A Langfuse
+    # outage never changes the Snapshot, its digest or the quality conclusion,
+    # and the two sync scopes are reported independently.
+    langfuse_sync: LangfuseSyncStatusResponse | None = None
+
+
+class ResultSnapshotRevisionResponse(BaseModel):
+    """One frozen revision of a Launch (Issue #85)."""
+
+    snapshot_id: str
+    revision: int
+    created_at: datetime
+    source_result_digest: str
+    manifest_digest: str
+    evidence_state: str
+    evidence_reasons: list[str] = Field(default_factory=list)
+    total_cases: int = 0
+    quality_pass_count: int = 0
+    quality_fail_count: int = 0
+    quality_unknown_count: int = 0
+    is_latest: bool = False
+
+
+class ResultSnapshotListResponse(BaseModel):
+    launch_id: str
+    latest_snapshot_id: str | None = None
+    latest_revision: int | None = None
+    revisions: list[ResultSnapshotRevisionResponse] = Field(default_factory=list)
+
+
+class ResultSnapshotDetailResponse(BaseModel):
+    """The immutable contents of one revision, addressed by its own id."""
+
+    launch_id: str
+    snapshot_id: str
+    revision: int
+    created_at: datetime
+    source_result_digest: str
+    manifest_digest: str
+    evidence_state: str
+    evidence_reasons: list[str] = Field(default_factory=list)
+    releasable: bool = False
+    versions: dict[str, Any]
+    summary: RunCostSummaryResponse
+    items: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class LangfuseSyncScopeResponse(BaseModel):
+    """One independently reportable Langfuse sync scope."""
+
+    status: str
+    reason: str | None = None
+    task_count: int = 0
+    failed_count: int = 0
+    pending_count: int = 0
+
+
+class LangfuseSyncStatusResponse(BaseModel):
+    """Sync state that never lets one scope hide a broken one (Issue #87)."""
+
+    overall: str
+    item_trace: LangfuseSyncScopeResponse
+    run_score: LangfuseSyncScopeResponse
+
+
+class ComparisonContractDimension(BaseModel):
+    """One independently versioned contract, and whether it matches."""
+
+    dimension: str
+    status: str
+    baseline_digest: str | None = None
+    candidate_digest: str | None = None
+    baseline_version: str | None = None
+    candidate_version: str | None = None
+
+
+class ComparisonComparability(BaseModel):
+    """Whether a formal comparison is allowed, and what to do about it."""
+
+    comparable: bool
+    reason_codes: list[str]
+    provenance: str
+    dimensions: list[ComparisonContractDimension]
+    suggestions: list[str] = Field(default_factory=list)
+
+
+class ComparisonFormalVerdict(BaseModel):
+    """The run-level release-grade conclusion, withheld unless fully supported."""
+
+    available: bool
+    verdict: str | None = None
+    reason: str | None = None
+    required_cases: int = 0
+    comparable_cases: int = 0
+    coverage: float = 0.0
+    withheld_reasons: list[str] = Field(default_factory=list)
+
+
+class ComparisonDiagnostic(BaseModel):
+    """Best-effort per-case diagnosis. Never a release-grade conclusion."""
+
+    note: str
+    comparable_cases: int
+    classification_counts: dict[str, int]
 
 
 class ComparisonResponse(BaseModel):
@@ -455,7 +703,12 @@ class ComparisonResponse(BaseModel):
     baseline_binding_revision: int | None = None
     versions: dict[str, Any]
     summary: ComparisonSummaryResponse
+    # Diagnostic case counts, kept at the top level for existing readers;
+    # `diagnostic` is the labelled home for the same numbers.
     classification_counts: dict[str, int]
+    comparability: ComparisonComparability
+    formal: ComparisonFormalVerdict
+    diagnostic: ComparisonDiagnostic
     items: list[dict[str, Any]]
     next_cursor: int | None = None
 
@@ -484,6 +737,8 @@ class ExperimentLaunchProgressResponse(BaseModel):
     retries: int = 0
     allowed_actions: list[str] = Field(default_factory=list)
     action_reasons: dict[str, str] = Field(default_factory=dict)
+    # Issue #84: how many cases can be re-judged without re-calling the Agent.
+    recoverable_evaluation_count: int = 0
 
 
 class ExperimentLaunchResponse(BaseModel):
@@ -543,6 +798,29 @@ class RetryFailedRequest(BaseModel):
     force: bool = Field(default=False, description="Force retry even if ambiguous non-idempotent outcomes exist")
 
 
+class EvaluationRetryBlockedItem(BaseModel):
+    """One case that cannot be re-judged, with the reason (Issue #84)."""
+
+    item_execution_id: str
+    dataset_item_id: str
+    code: str
+    message: str
+    hint: str | None = None
+
+
+class RetryEvaluationResponse(BaseModel):
+    """Result of an evaluation-only retry submission (Issue #84)."""
+
+    launch: ExperimentLaunchResponse
+    # Cases whose failed/missing evaluation was dispatched for recovery.
+    submitted: list[str] = Field(default_factory=list)
+    # Cases already being re-evaluated (idempotent double-click / race).
+    already_running: list[str] = Field(default_factory=list)
+    # Cases that cannot be re-judged (missing/expired/corrupt checkpoint, etc.).
+    blocked: list[EvaluationRetryBlockedItem] = Field(default_factory=list)
+    message: str = ""
+
+
 class ExecutionAttemptResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -561,6 +839,43 @@ class ExecutionAttemptResponse(BaseModel):
     completed_at: datetime | None = None
 
 
+class EvaluationResultProvenance(BaseModel):
+    """Frozen evidence source of one typed result (Issue #82)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    binding_id: str | None = None
+    evaluator_id: str | None = None
+    evaluator_version: str | None = None
+    definition_digest: str | None = None
+    executor_type: str | None = None
+    manifest_schema_version: str | None = None
+    contract_status: str | None = None
+
+
+class EvaluationResultResponse(BaseModel):
+    """One typed, explainable measurement (Issue #82).
+
+    ``value`` keeps its original JSON type; ``normalized_value`` is populated
+    only by an explicitly frozen rule and may legitimately be null.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    evaluator_id: str
+    evaluator_version: str | None = None
+    result_type: str
+    status: str
+    value: Any | None = None
+    normalized_value: float | None = None
+    comment: str | None = None
+    evidence: dict[str, Any] | None = None
+    duration_ms: float | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    provenance: EvaluationResultProvenance | None = None
+
+
 class ExperimentItemExecutionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -574,8 +889,28 @@ class ExperimentItemExecutionResponse(BaseModel):
     eval_error: str | None = None
     trace_id: str | None = None
     observation_id: str | None = None
+    # Issue #82: the Console links a result to its Langfuse trace.
+    langfuse_trace_url: str | None = None
     final_attempt_id: str | None = None
     scores: dict[str, Any] | None = None
+    # Issue #82: authoritative typed results; `scores` is only a projection.
+    evaluation_results: list[EvaluationResultResponse] = Field(default_factory=list)
+    # Issue #83: the frozen policy's per-rule decision. Null for items judged
+    # before QualityPolicy existed — their verdict stands, it is just not
+    # re-explained under a policy they never had.
+    quality_evaluation: QualityEvaluationResponse | None = None
+    # Issue #84: the independent evaluation-recovery lifecycle. `eval_status`
+    # stays the measurement outcome; these describe whether a re-evaluation is
+    # idle / running / recovered / failed, and which output digest it reused.
+    evaluation_status: str = "none"
+    evaluation_generation: int = 0
+    evaluation_error: str | None = None
+    evaluation_reused_output_digest: str | None = None
+    # Whether a recoverable Agent output checkpoint exists for this case, so the
+    # Console can explain "reuse the original Agent output" before offering a
+    # re-evaluation. A missing/expired/corrupt checkpoint must block recovery
+    # (and is never silently downgraded to re-invoking the Agent).
+    evaluation_recoverable: bool = False
     attempt_count: int = 0
     final_attempt_http_status: int | None = None
     final_attempt_latency_ms: int | None = None

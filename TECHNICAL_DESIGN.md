@@ -337,6 +337,350 @@ Langfuse 原生对象不需要复制。企业侧只新增少量对象。
 }
 ```
 
+#### 8.3.1 冻结的 Evaluator 执行身份（Manifest schema 1.2）
+
+Manifest 的 `evaluators[]` 在 schema 1.2 起不再是「id + version」，而是**冻结绑定**（`EvaluatorBinding`）：创建时冻结、执行前再次校验，保证「同一配置 = 同一实现 = 同一结果」。
+
+```json
+{
+  "id": "intent_match",
+  "version": "1.0.0",
+  "binding_id": "bind_9f2c...",
+  "definition_digest": "sha256:...",
+  "implementation_ref": "builtin:intent_match@1.0.0",
+  "executor_type": "builtin_python",
+  "implementation_artifact": {
+    "kind": "python_source",
+    "locator": "app.evaluators:intent_match",
+    "digest": "sha256:..."
+  },
+  "runner": {"runner_version": "0.1.0", "build_id": "..."},
+  "binding_digest": "sha256:...",
+  "contract_status": "FROZEN_VERIFIED",
+  "verification_status": "RECORDED"
+}
+```
+
+约束：
+
+- `binding_digest` 由影响结果的字段规范化后计算（`sort_keys` 序列化），字段顺序不影响摘要，任一影响结果的变化都会改变摘要。
+- 实现制品摘要必须来自**构建产物**（内置 Python 为实现源码 + 固定 `implementation_ref` + 版本化依赖的 SHA-256），不接受可变 tag 或任意环境变量字符串。
+- 执行/恢复前统一经 `EvaluatorExecutor` 的 resolve / validate / execute 边界；版本缺失、制品不可解析、摘要不匹配或执行器不支持时**明确失败**（`EVALUATOR_VERSION_UNAVAILABLE` / `EVALUATOR_ARTIFACT_UNRESOLVABLE` / `EVALUATOR_ARTIFACT_DIGEST_MISMATCH` / `EVALUATOR_BINDING_DIGEST_MISMATCH` / `EVALUATOR_EXECUTOR_UNSUPPORTED`），质量结论保持 `UNKNOWN`，**不回退到其他版本**。
+- schema 1.0 / 1.1 的历史 Manifest 显式读取并标记 `HISTORICAL_CONTRACT_UNRECORDED`（「历史契约未记录」）：仍可执行，但不宣称满足新的冻结资格。
+
+#### 8.3.2 类型化评测结果（EvaluationResult）
+
+`ExperimentItemExecution.scores` 只是**受限 numeric 投影**，不是事实来源。事实来源是 `evaluation_results` 表中每条类型化、可解释的结果：每个被选中的冻结 Binding 恰好产出一条。
+
+支持的 `result_type`：`boolean` / `numeric` / `categorical` / `text`。每条结果记录：
+
+- `status`：`succeeded` / `failed` / `skipped` / `no_result`；
+- `value`：保留原始 JSON 类型（布尔就是布尔，文本就是文本），**不强制转 float**；
+- `normalized_value`：可空，**仅**由冻结契约里的显式规则生成（`boolean` → 1/0；**有序** category → 冻结序数；`numeric` 为其自身）。文本与无序分类永不做数值化；
+- `provenance`：`binding_id` / `definition_digest` / `manifest_schema_version` / `contract_status` 等冻结来源；来源不匹配即不作为有效发布测量；
+- `duration_ms`、`evidence`、`error_code` / `error_message`。
+
+约束（与 Issue #82 验收对应）：
+
+- 真实 numeric `0` 就是 `0`；**缺失 / NaN / Infinity / 类型不符 / 失败 / 跳过**各自保留独立状态与原因，**绝不补 0**（`EVALUATION_VALUE_MISSING` / `EVALUATION_VALUE_NOT_FINITE` / `EVALUATION_TYPE_MISMATCH` / `EVALUATION_CATEGORY_NOT_ALLOWED` / `EVALUATION_FAILED` / `EVALUATION_SKIPPED`）。
+- 单个 Binding 失败**不丢弃**其他已成功的结果；失败时质量结论保持 `UNKNOWN`（fail-closed，§5.4）。
+- categorical 必须落在冻结的 `category_values` 枚举内；boolean 不隐式当数字。
+- 历史 numeric `scores` 经**显式 legacy adapter** 读取，provenance 标记 `LEGACY_SCORES_ADAPTER`（unknown），不做任何非数值补造。
+- 运行汇总的均值**只**统计 succeeded numeric，并报告有效样本数；文本 / 分类 / 布尔不进入均值（`score_means` 为 null、`score_counts` 为 0）。
+
+内置确定性 Provider（非默认选择，不影响 Demo 基线）覆盖其余类型：`answer_present`（boolean）、`resolution_bucket`（有序 categorical）、`answer_excerpt`（text）。
+
+#### 8.3.3 独立质量策略（QualityPolicy）
+
+质量结论**不再**由内建复合指标 `overall_pass` 决定。创建 Launch 时用户逐指标确认一条 `QualityRule`，整组规则作为不可变策略冻结进 Manifest：
+
+```json
+{
+  "quality_policy": {
+    "policy_id": "custom",
+    "version": "1.0",
+    "schema_version": "1.0",
+    "unknown_handling": "unknown_not_releasable",
+    "policy_digest": "sha256:…",
+    "rules": [
+      { "evaluator_id": "intent_match", "operator": ">=", "threshold": 0.8, "result_type": "numeric", "required": true, "critical": false },
+      { "evaluator_id": "call_cost",   "operator": "<=", "threshold": 0.2, "result_type": "numeric", "required": true, "critical": false },
+      { "evaluator_id": "pii_safe",    "operator": "==", "expected_value": true, "result_type": "boolean", "required": true, "critical": true }
+    ]
+  }
+}
+```
+
+规则语义（服务端 `quality_policy.py` 为唯一事实来源，Console 侧 `qualityPolicy.ts` 为同构镜像）：
+
+| result_type | 允许运算符 | 取值 | 缺失时 |
+|---|---|---|---|
+| `numeric` | `>=` / `<=` | `threshold`（有限数值） | 证据不足 |
+| `boolean` | `==` | `expected_value`（**显式** `true` / `false`） | 证据不足 |
+| `categorical` | `==` | `expected_value`（须落在冻结 `category_values`） | 证据不足 |
+| `text` | 无 | — | 只能作为证据，永不参与判定 |
+
+结论真值表（`evaluate_quality_policy`）：
+
+```text
+任一必要规则证据不足（缺失 / failed / skipped / 无结果）
+    → UNKNOWN           # 证据不足优先，已知违规仍逐条记录
+否则任一必要规则违规
+    → FAIL
+否则
+    → PASS
+```
+
+约束（与 Issue #83 验收对应）：
+
+- **不通过 ≠ 证据不足**：Agent 执行失败、评测未产出、必要指标缺失一律 `UNKNOWN`，不记为 `FAIL`。
+- 非法规则在**创建时**即拒绝（`QUALITY_POLICY_*` 稳定错误码 + 中文恢复提示），Launch 不可能冻结出无法判定的策略。
+- **可选诊断规则**违规不改变整体结论，只在明细中呈现，便于定位。
+- 每条用例持久化 `quality_evaluation`（`QualityDecision`），含逐条 `RuleEvaluation`（期望条件、实测值、结论、`reason_code`、自然语言 `explanation`）。
+- Manifest 同时写入 `measurement_digest`：**只**覆盖测量口径（指标版本、结果类型、契约），不含阈值与判定方向，因此**只改策略不会让测量摘要漂移**（供 #86 分层摘要使用）。
+- 历史 Manifest 未冻结策略时回落到 `legacy_quality_policy`（复现 #83 之前的 `>=` 阈值语义），并在 `decided_by` 标记 `LEGACY_MANIFEST_POLICY`；Console 显示为"历史契约"，不展示空的规则列表。
+- Console 顶部不再输出单一"质量通过率"，改为 **PASS / FAIL / UNKNOWN 三个计数** + `已判定通过率 = PASS/(PASS+FAIL)` + `判定覆盖率 = (PASS+FAIL)/total`；分母为 0 时渲染 `—` 而非伪造 0%。全用例 PASS 占比单独展示并标注分母含 UNKNOWN。
+
+#### 8.3.4 仅重试评测与执行检查点（Issue #84）
+
+Agent 已成功返回、但评测失败 / 未产出时，允许**只重试评测**：复用已持久化的 Agent 输出，
+**永不再次调用 Agent**。执行与评测成为两条独立的生命周期。
+
+```text
+Agent 调用 ──► 200 ──► 写入执行检查点 ──► 评测（generation N）
+                          │                    │
+                          │                    ├─ 成功 ──► 结果落库
+                          │                    └─ 失败 ──► eval_status=failed, UNKNOWN
+                          │                                    │
+                          │                       POST /retry-evaluation
+                          │                                    ▼
+                          └──◄── 复用同一 output_digest ◄── 评测（generation N+1）
+```
+
+执行检查点（`execution_checkpoints`，迁移 `011`）：
+
+| 列 | 含义 |
+|---|---|
+| `agent_output` / `output_digest` | 成功响应的规范化输出与其 `canonical_output_digest` |
+| `dataset_input` / `expected_output` | 重放评测所需的输入与期望值 |
+| `binding_provenance` | 生成该输出时使用的 Evaluator Binding 指纹 |
+| `manifest_digest` | 生成该输出时的 Manifest 摘要 |
+| `final_attempt_id` / `trace_id` / `observation_id` / `langfuse_trace_url` | 可追溯引用 |
+| `expires_at` | 保留期，默认 `ARGUS_EXECUTION_CHECKPOINT_TTL_SECONDS=604800`（7 天） |
+
+约束：
+
+- 检查点按 `(item_execution_id, dispatch_generation)` **幂等**：同一代重放只刷新不重复写入。
+- 加载检查点时校验存在性、保留期、`output_digest` 与 Binding 指纹；任一不符即以稳定错误码拒绝
+  （`CHECKPOINT_MISSING` / `EXPIRED` / `CORRUPT` / `OUTPUT_MISSING` / `DISABLED` / `BINDING_MISMATCH`，
+  各带中文原因与恢复提示），此时该用例保持 `UNKNOWN`，**不回退为重新调用 Agent**。
+- **重试不改变策略与 Binding**：`POST /retry-evaluation` 不接受策略 / 版本参数，
+  仍使用已冻结 Manifest；重评时只重新判定缺失或失败的指标，已成功的结果按原 provenance 原样保留
+  （`only_binding_ids` 子集重评 + `summarize_typed_results` 复用 #83 判定真值表），
+  因此重评后的结论与首次评测**同口径**。
+- **独立评测代次与租约**：`evaluation_generation` 单调递增，`evaluation_status` 独立于
+  `execution_status`（`none/evaluating/recovered/failed`）；租约采用
+  `(evaluation_generation, evaluation_lease_token, evaluation_status=RUNNING)` 三元 CAS。
+  旧代次、丢租约或已取消的结果一律标记 `discarded`，**不得**覆盖当前结果、Snapshot 或有效投影。
+- **提交幂等**：重复点击 / 竞争请求下，每个用例至多一次有效重评；已在重评中的返回
+  `already_running`，全部候选不可恢复时返回 409。
+- **执行尝试次数不变**：`execution_attempts` 只由真实 Agent 调用写入；重评仅新增
+  `evaluation_attempts` 审计行（记录 `target_bindings` 与 `reused_output_digest`），
+  因此"Agent 调用次数 = 1"是可验证的不变量。
+- **租约过期可恢复**：`reconciler.reconcile_expired_evaluation_leases()` 将
+  `evaluating` 且租约过期的用例重新入队为 `EVALUATION` 工作（**不**重新调用 Agent）。
+- **不新增 Langfuse 出站任务**：`langfuse_sync_tasks` 以 `(item_id, dispatch_generation, task_type)`
+  唯一；重评**不**创建新出站任务，避免唯一键冲突，其带类型的投影留给 #87 处理。
+  重评不产生第二份 Trace。
+
+状态机（`state_machine.py`）新增 `retry_evaluation` 动作：在 Launch 未取消、无在途执行、
+且存在可恢复用例时即可用——**即使 Launch 已处于终态**也允许，因为重评不改变 Launch 的执行终态。
+
+API：`POST /experiment-launches/{launch_id}/retry-evaluation` →
+`RetryEvaluationResponse`（`submitted` / `already_running` / `blocked[]`（含 `code`/`message`/`hint`）/`message`）。
+用例列表额外返回 `evaluation_status`、`evaluation_generation`、`evaluation_error`、
+`evaluation_reused_output_digest`、`evaluation_recoverable`，Launch 进度返回 `recoverable_evaluation_count`。
+
+Console：Launch 详情新增独立的「重试评测失败 (Retry Evaluation)」按钮（与「重试失败用例」分离），
+用例表新增「评测恢复」列展示 `重评中 / 已恢复 / 重评失败` 徽标与原因，并始终声明
+"复用原 Agent 输出，不会再次调用 Agent"。由于重评期间 Launch 仍处终态，用例轮询额外由
+`evaluation_status === evaluating` 驱动，确保重评结束后界面自动刷新。
+
+#### 8.3.5 固定结果修订与 Baseline 版本（Issue #85）
+
+用户分享或选为 Baseline 的是**某一个固定修订**，之后的重评不会改变它。
+
+#### 证据完整性（Evidence Completeness）
+
+Issue #84 的"仅重试评测"让 Launch 在重评期间仍处于终态，因此"Launch 已结束"不再等于
+"评测已结束"。每个 Snapshot 在冻结时**用自己的用例结果**给出证据结论：
+
+| evidence_state | 含义 | 可否作正式 Baseline / 发布依据 |
+|---|---|---|
+| `COMPLETE` | 每个用例都执行成功、评测成功且质量结论为 PASS/FAIL | ✅ |
+| `DIAGNOSTIC` | 存在执行失败、评测失败或 UNKNOWN | ❌ 仅用于解释失败 |
+
+`evidence_reasons` 给出具体原因（如 `1/6 个用例评测失败或未产出结果`）。
+
+冻结门槛（`create_result_snapshot`）：
+
+- Launch 处于终态，且**所有用例执行状态已结算**（无 pending/queued/running/retry_wait）；
+- **并且**没有任何用例处于 `evaluation_status = evaluating`——评测仍在进行时，
+  绝不生成声称完整的报告；
+- 失败终态（`PARTIAL_FAILED` / `FAILED`）允许生成 `DIAGNOSTIC` 快照，用于解释失败。
+
+#### 修订不可变性与摘要口径
+
+- Snapshot 写入后**只增不改**：重复冻结相同结果按
+  `(launch_id, source_result_digest)` 幂等返回既有行，不产生重复修订。
+- `source_result_digest` = 规范化 `result_items` 的 SHA-256，覆盖**类型化结果及其
+  provenance**（binding_id / definition_digest / executor_type / contract_status）、
+  质量判定、状态、耗时与 Trace 引用——不只是旧的 numeric `scores`。
+  因此**仅 provenance 变化**（例如换了冻结 Binding）也会产生新修订。
+- 重评改变结果 → 新摘要 → 新修订；旧修订的 `items` / `summary` / digest **逐字节不变**。
+
+#### Baseline 资格只看快照自身
+
+`validate_baseline_snapshot` **刻意不读取 Launch 的当前状态**：
+
+- Launch 之后进入执行重试或评测恢复，**不得**追溯性地使已捕获的 Baseline 失效；
+- 活动中的 Launch 状态**不能**充当历史证据；
+- 资格判据全部来自快照自身：`evidence_state == COMPLETE`，且汇总中
+  `execution_error_count` / `evaluator_error_count` / `quality_unknown_count` 均为 0，
+  且 `evaluated_cases == total_cases > 0`。
+
+历史快照没有 `evidence_state`（迁移 `012` 之前）时按 `COMPLETE` 处理并回落到同样的完整性
+检查——#85 禁止为旧行补造它从未携带的证据。
+
+并发写入仍由 `expected_revision` CAS 保护，冲突返回 409，不静默覆盖。
+Candidate 在创建时冻结 `baseline_snapshot_id` 与 `baseline_binding_revision`，
+之后切换 Baseline 不影响既有 Candidate。
+
+#### API
+
+```text
+GET /experiment-launches/{launch_id}/result-snapshots          # 修订列表（最新在前）
+GET /experiment-launches/{launch_id}/result-snapshots/{id}     # 固定修订详情（可分享）
+GET /experiment-launches/{launch_id}/summary?snapshot_id=...   # 按修订读取汇总
+```
+
+固定修订详情**从不回落到 latest**，并返回 `evidence_state` / `evidence_reasons` /
+`releasable`。Baseline 响应同时给出 `revision`（绑定指针修订）与 `result_revision`
+（冻结结果修订），成功响应不留下"latest"的歧义。
+
+Console：Launch 详情新增「结果报告 (Result Snapshot)」面板，显示当前修订号、Snapshot id、
+冻结时间、结果摘要、证据徽标与原因，并提供历史修订切换；所选修订写入 URL 查询参数
+`snapshot_id`，因此分享链接固定。查看历史修订时会提示"已有更新的 Revision N"。
+「设为当前环境 Baseline」按钮的可用性改由**该修订的证据状态**决定，
+诊断版本显示"当前版本证据不足，不可设为 Baseline"并说明原因。
+
+#### 8.3.6 比较契约分层与不可比较原因（Issue #86）
+
+**问题**：早期实现把 threshold、params、critical 混在同一个 contract 里比较，
+只能整体判"契约变了"。结果是**收紧阈值会被报成 Agent 回归**——判定规则变了，
+被测对象并没有变。
+
+**分层契约**：三个契约独立版本化、各自 digest，任何一个变化都会被单独点名。
+
+| 层 | 覆盖 | Manifest 字段 |
+|---|---|---|
+| Measurement | 影响测量的版本、schema、参数、实现制品、归一化语义、输入输出契约 | `contract_digests.measurement` |
+| QualityPolicy | threshold、operator、critical、required、UNKNOWN 处置 | `contract_digests.quality_policy` |
+| Aggregation/Comparison | 分母、覆盖率要求、分类算法、direction 语义、category 有序性、text 处理 | `contract_digests.aggregation_comparison` |
+
+Measurement digest 沿用 `manifest_measurement_digest`（剔除 threshold / direction /
+critical）；QualityPolicy digest 复用 `QualityPolicy.policy_digest`；比较口径 digest 由
+`comparison_contracts.aggregation_comparison_digest()` 对固定 canonical payload 计算。
+三者写入 Manifest schema 1.2 的 `contract_digests` 块。
+
+**兼容性规则**：正式比较要求三层 digest **全部相等**且证据完整。
+Candidate 的 Agent 版本变化、Launch id 变化属于"被比较对象"，不参与可比性判定。
+Dataset 身份变化独立报告 `DATASET_CHANGED`。
+
+**历史契约**：#81–#85 的 Manifest 只有 Measurement 与 QualityPolicy digest，
+比较口径从未 digest，一律记为 `UNKNOWN`，产出 `CONTRACT_PROVENANCE_UNKNOWN`。
+**不凭当前 Catalog 回填**——旧报告仍可阅读（能证明相同的维度照常显示"一致"），
+但新正式资格验证不能补造证据。
+
+**原因码**：`DATASET_CHANGED`、`MEASUREMENT_CHANGED`、`QUALITY_POLICY_CHANGED`、
+`AGGREGATION_COMPARISON_CHANGED`、`CONTRACT_PROVENANCE_UNKNOWN`。
+
+**正式结论 vs 诊断结论**：API 分字段返回，互不冒充。
+
+```text
+comparability: { comparable, reason_codes[], provenance, dimensions[], suggestions[] }
+formal:       { available, verdict, required_cases, comparable_cases, coverage, withheld_reasons[] }
+diagnostic:   { note, comparable_cases, classification_counts }
+items[].basis: "FORMAL" | "DIAGNOSTIC_ONLY"
+```
+
+`formal.available` 仅在以下条件同时满足时为真：三层契约一致、Baseline 已绑定、
+两侧 `evidence_state == COMPLETE`、且**全部必要 Case 均可比**（首期默认
+`coverage == 1`）。否则 `verdict` 为 `null` 并给出 `withheld_reasons`。
+"少量可比 Case 的漂亮结果"永远不能宣称完整无回归。
+
+**非数值结果**：`compare_case_results` 以 typed 结果为准。只有
+`result_type == numeric` 的值、或由**冻结归一化规则**映射出的 `normalized_value`
+才产生 delta；无序 category 与 text 进入 `non_numeric_evaluators` 仅供诊断，
+绝不生成无依据的均值或差值。
+
+Console：Comparison Report 顶部新增「正式比较」结论块；不可比较时显示横幅
+「判定规则不同，无法正式比较」，逐层列出维度状态（MATCH / CHANGED / UNKNOWN）与
+两侧版本、digest 摘要，并给出可执行建议（"使用相同质量策略重新评测"），
+不覆盖旧 Snapshot。Case 表在该状态下逐行标注「仅诊断」。
+
+#### 8.3.7 Langfuse 单向投影与独立同步状态（Issue #87）
+
+**边界**：Argus Snapshot 是发布结果的权威来源，Langfuse 是**单向分析投影**。
+投影只读冻结结果，**不回读在线 Score 改写本地质量结论或比较**。Langfuse 不可用时，
+Snapshot 内容、`source_result_digest`、质量结论与后续 Gate 消费的证据全部不变。
+
+**Typed 投影映射**（`langfuse_projection.py`）。Langfuse Score 是数值型，
+因此每种 typed 结果都有明确的、可解释的处理：
+
+| 结果 | 处理 | 说明 |
+|---|---|---|
+| `numeric` | 直接写入数值 | 唯一的直接映射 |
+| `boolean` | 写入 1 / 0 | `evidence.original_value` 保留原始布尔，`0` 不会被误读为"测得 0" |
+| `categorical` + 冻结归一化 | 写入映射后的数值 | **有序值仅按冻结映射比较** |
+| `categorical` 无映射 | `NOT_APPLICABLE` | `CATEGORY_HAS_NO_FROZEN_NUMERIC_MAPPING` |
+| `text` | `NOT_APPLICABLE` | `TEXT_RESULT_NOT_SUPPORTED_AS_NUMERIC_SCORE`，原文保留在 evidence |
+| 非 succeeded | `NOT_APPLICABLE` | `EVALUATION_RESULT_NOT_SUCCEEDED` |
+
+**绝不**把 text 或无序 category 强转 0 / float，也**绝不**因此宣称已同步。
+
+**投影 provenance**：每条 Score 携带 `metadata`，含 `source=ARGUS_FROZEN_SNAPSHOT`、
+`snapshot_id`、`revision`、`policy_digest`、`definition_digest`、`attempt` 与
+`binding_id` / `contract_status`，可回溯到产生它的冻结结果与判定规则。
+
+**稳定幂等键**：`score:{item_id}:gen{dispatch_generation}:{evaluator_id}`。
+键同时覆盖**逻辑结果身份**（item + evaluator）与**评测 revision**（dispatch generation）：
+
+- 同一 revision 重复投递 → 同一条 Score（Langfuse upsert，不产生重复）；
+- 重评产生新 generation → 新 Score，**旧 revision 的投影保留**；
+- lease 失效被其它 Worker 接管时，claim_token + lease CAS 保证不会重复有效提交；
+  超时退出的 Worker 主动放弃写回，等 lease 过期后由下一次 reclaim 接手。
+
+**两个同步范围独立报告**（`langfuse_sync`）。Item/Trace 投影与 Run Score Outbox
+是两套独立的失败面，因此分别报告：
+
+```text
+langfuse_sync: {
+  overall:       SYNCED | PENDING | FAILED | RETRY_EXHAUSTED | NOT_APPLICABLE,
+  item_trace:    { status, reason, task_count, failed_count, pending_count },
+  run_score:     { status, reason, task_count, failed_count, pending_count },
+}
+```
+
+`overall` 取两者中**更差**的状态（`RETRY_EXHAUSTED > FAILED > PENDING > SYNCED > NOT_APPLICABLE`）。
+因此 Item/Trace 已同步而 Run Score 失败时**不会**显示为 SYNCED，UI 必须点名落后的范围。
+`RETRY_EXHAUSTED` 与 `FAILED` 区分开：前者不会自行恢复。全部任务 SKIPPED 或无任务时
+收敛为 `NOT_APPLICABLE`，不会永久停留在"同步中"。
+
+Console：Comparison Report 新增「Langfuse 同步」面板，逐范围显示状态徽标与文本原因，
+并显式声明"同步失败不会改变上方质量结论、结果修订或 digest"。同步状态与执行、质量结论
+分区展示，互不冒充。
+
 ### 8.4 ExperimentItemExecution
 
 表示单个 Dataset Item 的执行状态：
@@ -798,6 +1142,11 @@ Release Gate 必须同时考虑：
 - Judge uncertainty。
 
 不能仅比较平均分。
+
+门禁判定必须 **fail-closed**（§8.3.3）：`unknown_handling` 默认为 `unknown_not_releasable`，
+因此**证据不足的用例一律阻止发布**，不会被折算成"通过"或被平均分稀释。
+`已判定通过率` 的分母只含有明确结论的用例，必须与 `UNKNOWN` 数量一起呈现；
+只看通过率而不看 UNKNOWN 数量的门禁是无效的。
 
 ---
 

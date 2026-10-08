@@ -7,6 +7,7 @@ import { queryKeys } from "../../api/query-keys";
 import { formatApiError } from "../../api/errors";
 import { Button, Panel } from "../../components/ui/Primitives";
 import { ComparisonCaseDrawer } from "./ComparisonCaseDrawer";
+import { LangfuseSyncPanel } from "./langfuseSyncStatus";
 
 type GeneratedRunSummary = import("../../api/schema").components["schemas"]["RunSummaryResponse"];
 type GeneratedComparison = import("../../api/schema").components["schemas"]["ComparisonResponse"];
@@ -39,10 +40,36 @@ type ComparisonSummary = GeneratedComparison["summary"] & {
   baseline: RunMetrics | null;
   comparable_cohort: { baseline: RunMetrics; candidate: RunMetrics } | null;
 };
+type ContractDimension = {
+  dimension: string;
+  status: string;
+  baseline_digest?: string | null;
+  candidate_digest?: string | null;
+  baseline_version?: string | null;
+  candidate_version?: string | null;
+};
+type Comparability = {
+  comparable: boolean;
+  reason_codes: string[];
+  provenance: string;
+  dimensions: ContractDimension[];
+  suggestions: string[];
+};
+type FormalVerdict = {
+  available: boolean;
+  verdict?: string | null;
+  reason?: string | null;
+  required_cases?: number;
+  comparable_cases?: number;
+  coverage?: number;
+  withheld_reasons: string[];
+};
 type ComparisonItem = {
   dataset_item_id?: string | null;
   classification: string;
   reason?: string | null;
+  basis?: string | null;
+  non_numeric_evaluators?: string[] | null;
   baseline_scores?: Record<string, number> | null;
   candidate_scores?: Record<string, number> | null;
   score_deltas?: Record<string, number> | null;
@@ -55,7 +82,45 @@ type Comparison = Omit<GeneratedComparison, "versions" | "items"> & {
   versions: { baseline: FrozenVersions | null; candidate: FrozenVersions };
   items: ComparisonItem[];
   next_cursor?: number | null;
+  comparability?: Comparability;
+  formal?: FormalVerdict;
 };
+
+
+const DIMENSION_LABELS: Record<string, string> = {
+  MEASUREMENT: "测量版本",
+  QUALITY_POLICY: "质量策略",
+  AGGREGATION_COMPARISON: "比较口径",
+};
+const DIMENSION_STATUS_LABELS: Record<string, string> = {
+  MATCH: "一致",
+  CHANGED: "已变化",
+  UNKNOWN: "证据缺失",
+};
+const REASON_LABELS: Record<string, string> = {
+  DATASET_CHANGED: "Dataset 不同",
+  MEASUREMENT_CHANGED: "测量版本不同",
+  QUALITY_POLICY_CHANGED: "判定规则不同",
+  AGGREGATION_COMPARISON_CHANGED: "比较口径不同",
+  CONTRACT_PROVENANCE_UNKNOWN: "历史契约证据缺失",
+};
+const WITHHELD_LABELS: Record<string, string> = {
+  BASELINE_NOT_BOUND: "尚未绑定 Baseline",
+  BASELINE_EVIDENCE_INCOMPLETE: "Baseline 证据不足",
+  CANDIDATE_EVIDENCE_INCOMPLETE: "Candidate 证据不足",
+  COVERAGE_INCOMPLETE: "证据不足",
+};
+const VERDICT_LABELS: Record<string, string> = {
+  REGRESSION: "Regression",
+  IMPROVEMENT: "Improvement",
+  UNCHANGED: "无变化",
+};
+const reasonText = (code: string) => REASON_LABELS[code] ?? code;
+const withheldText = (code: string) => WITHHELD_LABELS[code] ?? REASON_LABELS[code] ?? code;
+const dimensionLabel = (dimension: string) => DIMENSION_LABELS[dimension] ?? dimension;
+const dimensionStatusText = (status: string) => DIMENSION_STATUS_LABELS[status] ?? status;
+const verdictText = (verdict: string) => VERDICT_LABELS[verdict] ?? verdict;
+const shortDigest = (digest?: string | null) => (digest ? digest.replace(/^sha256:/, "").slice(0, 12) : "—");
 
 const TERMINAL = new Set(["COMPLETED", "PARTIAL_FAILED", "FAILED", "CANCELLED"]);
 const FILTERS = ["ALL", "REGRESSION", "IMPROVEMENT", "UNCHANGED", "NOT_COMPARABLE"] as const;
@@ -252,6 +317,7 @@ export const ComparisonReport: React.FC<{
     },
   });
 
+  const activeBaseline = activeBaselineQuery.data ?? null;
   const metrics = summaryQuery.data?.summary;
   const comparison = comparisonQuery.data?.pages[0];
   const comparisonSummary = comparison?.summary as ComparisonSummary | undefined;
@@ -297,6 +363,8 @@ export const ComparisonReport: React.FC<{
     { label: "Run Cost / Case", baseline: money(fullRunBaseline?.cost_per_case, fullRunBaseline?.cost_currency), candidate: money(fullRunCandidate.cost_per_case, fullRunCandidate.cost_currency), delta: "—" },
     { label: "Run Cost Coverage", baseline: costCoverage(fullRunBaseline), candidate: costCoverage(fullRunCandidate), delta: "—" },
   ] : [];
+  const comparability = comparison?.comparability;
+  const formal = comparison?.formal;
   const costExplanations = [
     { label: "全量 Baseline", reason: fullRunBaseline?.cost_unavailable_reason },
     { label: "全量 Candidate", reason: fullRunCandidate?.cost_unavailable_reason },
@@ -312,24 +380,45 @@ export const ComparisonReport: React.FC<{
           <h2 className="text-base font-bold text-foreground">Regression Summary / Baseline Comparison</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             结果修订 {summaryQuery.data?.revision ?? "…"} · Snapshot: {snapshotId ?? "解析中"} · Environment: {environment} · Langfuse Run Score: {summaryQuery.data?.langfuse_score_sync_status ?? "加载中"}
+            {summaryQuery.data && (
+              <span className="ml-2" data-testid="summary-evidence-state">
+                证据 {summaryQuery.data.evidence_state === "COMPLETE" ? "完整" : "诊断"}
+              </span>
+            )}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {snapshotId && <Button variant="secondary" className="text-xs" onClick={showLatestSnapshot}>查看最新修订</Button>}
-        {launchStatus === "COMPLETED" && summaryQuery.data && (
+        {summaryQuery.data?.evidence_state === "COMPLETE" ? (
           <Button
             variant="secondary"
             className="text-xs"
             onClick={() => setBaselineMutation.mutate()}
             disabled={setBaselineMutation.isPending}
+            title="将当前固定版本设为该环境的 Baseline"
           >
             <ShieldCheck className="h-3.5 w-3.5" />
             {setBaselineMutation.isPending ? "绑定中…" : "设为当前环境 Baseline"}
           </Button>
-        )}
+        ) : summaryQuery.data ? (
+          <span
+            className="text-xs text-muted-foreground"
+            data-testid="baseline-ineligible-hint"
+            title={summaryQuery.data.evidence_reasons?.join("; ") ?? ""}
+          >
+            当前版本证据不足，不可设为 Baseline
+          </span>
+        ) : null}
         </div>
       </div>
 
+      {activeBaseline && (
+        <p className="text-xs text-muted-foreground" data-testid="baseline-revision-line">
+          当前 Baseline：结果修订 Revision {activeBaseline.result_revision} · 绑定修订 {activeBaseline.revision} ·
+          Snapshot {activeBaseline.result_snapshot_id?.slice(0, 8)}… · 证据{" "}
+          {activeBaseline.result_evidence_state === "COMPLETE" ? "完整" : "诊断"}
+        </p>
+      )}
       {setBaselineMutation.error && <p role="alert" className="text-xs text-fail">{formatApiError(setBaselineMutation.error)}</p>}
       {summaryQuery.error && <p role="alert" className="text-xs text-fail">{formatApiError(summaryQuery.error)}</p>}
       {comparisonQuery.error && <p role="alert" className="text-xs text-fail">{formatApiError(comparisonQuery.error)}</p>}
@@ -386,7 +475,104 @@ export const ComparisonReport: React.FC<{
           ) : comparisonSummary && (
             <p className="rounded border border-border p-3 text-xs text-muted-foreground">无可比样本，质量差异未计算。</p>
           )}
-          {costExplanations.length > 0 && (
+          {summaryQuery.data?.langfuse_sync && (
+          <LangfuseSyncPanel sync={summaryQuery.data.langfuse_sync} />
+        )}
+        {comparability && !comparability.comparable && (
+          <div
+            data-testid="comparison-comparability-banner"
+            role="status"
+            className="space-y-3 rounded-lg border border-warning/40 bg-warning/5 p-4"
+          >
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">判定规则不同，无法正式比较</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                以下维度在两侧不一致，本次结果不会给出正式 Regression / Improvement 结论，也不会被当作「无回归」。
+              </p>
+            </div>
+            <ul className="flex flex-wrap gap-2">
+              {comparability.reason_codes.map((code) => (
+                <li
+                  key={code}
+                  data-testid={`comparability-reason-${code}`}
+                  className="rounded-full border border-border bg-canvas px-2 py-0.5 text-micro text-foreground"
+                >
+                  {reasonText(code)}
+                </li>
+              ))}
+            </ul>
+            <div className="space-y-1">
+              {comparability.dimensions.map((dim) => (
+                <div
+                  key={dim.dimension}
+                  data-testid={`comparability-dimension-${dim.dimension}`}
+                  className="flex flex-wrap items-center gap-2 text-micro"
+                >
+                  <span className="font-medium text-foreground">{dimensionLabel(dim.dimension)}</span>
+                  <span className={dim.status === "MATCH" ? "text-muted-foreground" : "text-warning"}>
+                    {dimensionStatusText(dim.status)}
+                  </span>
+                  <span className="font-mono text-muted-foreground">
+                    {dim.baseline_version ?? "—"} → {dim.candidate_version ?? "—"}
+                  </span>
+                  {dim.status === "CHANGED" && (
+                    <span className="font-mono text-muted-foreground">
+                      {shortDigest(dim.baseline_digest)} → {shortDigest(dim.candidate_digest)}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            {comparability.suggestions.length > 0 && (
+              <ul className="space-y-1">
+                {comparability.suggestions.map((hint, index) => (
+                  <li key={hint} data-testid={`comparability-suggestion-${index}`} className="text-micro text-muted-foreground">
+                    建议：{hint}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {formal && (
+          <div
+            data-testid="comparison-formal-verdict"
+            className="rounded-lg border border-border bg-canvas/70 p-4"
+          >
+            <div className="text-micro font-medium text-muted-foreground">正式比较</div>
+            {formal.available ? (
+              <div className="mt-1 flex flex-wrap items-baseline gap-2">
+                <span className="text-lg font-semibold text-foreground">
+                  {verdictText(formal.verdict ?? "")}
+                </span>
+                <span className="text-micro text-muted-foreground">
+                  全部 {formal.required_cases ?? 0} 个必要 Case 均在同一契约下判定
+                </span>
+              </div>
+            ) : (
+              <div className="mt-1 space-y-1">
+                <div className="text-sm font-semibold text-foreground">无法给出正式结论</div>
+                <ul className="flex flex-wrap gap-2">
+                  {(formal.withheld_reasons ?? []).map((code) => (
+                    <li
+                      key={code}
+                      data-testid={`formal-withheld-${code}`}
+                      className="rounded-full border border-border bg-canvas px-2 py-0.5 text-micro text-muted-foreground"
+                    >
+                      {withheldText(code)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+        {comparison && !formal?.available && (
+          <p data-testid="comparison-diagnostic-label" className="text-micro text-muted-foreground">
+            以下 Case 分类仅供诊断，不作为正式发布比较。
+          </p>
+        )}
+        {costExplanations.length > 0 && (
             <p role="status" className="rounded border border-border p-3 text-xs text-muted-foreground">
               {costExplanations.map(({ label, reason }) => (
                 <span key={label} className="block">
@@ -429,7 +615,18 @@ export const ComparisonReport: React.FC<{
                 {displayRows.map((row) => (
                   <tr key={`${row.dataset_item_id}-${row.classification}`}>
                     <td className="px-3 py-2 font-mono">{row.dataset_item_id}</td>
-                    <td className="px-3 py-2"><strong>{row.classification}</strong><span className="ml-1 text-muted-foreground">{row.reason}</span></td>
+                    <td className="px-3 py-2">
+                      <strong>{row.classification}</strong>
+                      <span className="ml-1 text-muted-foreground">{row.reason}</span>
+                      {row.basis && row.basis !== "FORMAL" && (
+                        <span
+                          data-testid={`comparison-item-basis-${row.basis}`}
+                          className="ml-2 rounded-full border border-border bg-canvas px-2 py-0.5 text-micro text-muted-foreground"
+                        >
+                          仅诊断
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 font-mono">{JSON.stringify(row.baseline_scores ?? {})}</td>
                     <td className="px-3 py-2 font-mono">{JSON.stringify(row.candidate_scores ?? {})}<span className="ml-1 text-muted-foreground">Δ {JSON.stringify(row.score_deltas ?? {})}</span></td>
                     <td className="px-3 py-2">

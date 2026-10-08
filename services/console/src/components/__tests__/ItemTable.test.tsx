@@ -74,3 +74,89 @@ describe("ItemTable Case-Insensitive Matching and Filtering", () => {
     expect(screen.getByText("case-002")).toBeInTheDocument();
   });
 });
+
+describe("Issue #84 Evaluation Recovery column", () => {
+  const buildItem = (overrides: Record<string, unknown> = {}) => ({
+    id: "item-84",
+    launch_id: "launch-84",
+    dataset_item_id: "case-84",
+    execution_status: "succeeded",
+    eval_status: "failed",
+    quality_conclusion: "unknown",
+    execution_error: null,
+    evaluation_error: "EVALUATOR_TIMEOUT: pii_safe 评估超时",
+    trace_id: null,
+    observation_id: null,
+    final_attempt_id: "att-84",
+    scores: {},
+    attempt_count: 1,
+    final_attempt_http_status: 200,
+    final_attempt_latency_ms: 50,
+    started_at: "2026-09-30T00:00:00Z",
+    completed_at: "2026-09-30T00:00:01Z",
+    ...overrides,
+  });
+
+  it("shows no badge for a case that was never re-judged", () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ItemTable items={([buildItem({ evaluation_error: null })] as any) as any} />
+      </QueryClientProvider>
+    );
+    // "未重评" (none) must not render a badge at all.
+    expect(screen.queryByText("未重评")).not.toBeInTheDocument();
+    expect(screen.queryByText("重评中")).not.toBeInTheDocument();
+  });
+
+  it("renders the failed evaluation error and states the Agent is not called again", () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ItemTable items={[buildItem()] as any} />
+      </QueryClientProvider>
+    );
+    expect(screen.getByTestId("evaluation-recovery-case-84")).toHaveTextContent(
+      "EVALUATOR_TIMEOUT",
+    );
+  });
+
+  it("marks a re-judge in progress and explains output reuse when the checkpoint is available", () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ItemTable
+          items={
+            [
+              buildItem({
+                evaluation_error: null,
+                evaluation_status: "evaluating",
+                evaluation_recoverable: true,
+              }),
+            ] as any
+          }
+        />
+      </QueryClientProvider>
+    );
+    expect(screen.getByText("重评中")).toBeInTheDocument();
+    expect(screen.getByTestId("evaluation-recovery-case-84")).toHaveTextContent(
+      "复用原 Agent 输出，不会再次调用 Agent",
+    );
+  });
+
+  it("marks a recovered evaluation as 已恢复", () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ItemTable
+          items={
+            [
+              buildItem({
+                evaluation_error: null,
+                evaluation_status: "recovered",
+                evaluation_recoverable: false,
+              }),
+            ] as any
+          }
+        />
+      </QueryClientProvider>
+    );
+    expect(screen.getByText("已恢复")).toBeInTheDocument();
+  });
+});

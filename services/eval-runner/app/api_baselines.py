@@ -28,6 +28,10 @@ def _response(db_manager, binding, snapshot) -> BaselineResponse:
             environment=binding.environment,
             result_snapshot_id=snapshot.id,
             revision=binding.revision,
+            # Issue #85: report the frozen result revision explicitly next to
+            # the binding revision, so a success response never implies "latest".
+            result_revision=snapshot.revision,
+            result_evidence_state=(snapshot.evidence_state or "COMPLETE").upper(),
             updated_by=binding.updated_by,
             updated_at=binding.updated_at,
             launch_id=launch.id,

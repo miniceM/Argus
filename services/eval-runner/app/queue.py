@@ -10,29 +10,37 @@ class QueueAdapter(abc.ABC):
     """Abstract interface for ItemExecution queue delivery."""
 
     @abc.abstractmethod
-    def enqueue_item(self, item_execution_id: str, generation: int) -> str:
+    def enqueue_item(
+        self, item_execution_id: str, generation: int, work_type: str = "INVOCATION"
+    ) -> str:
         """Enqueue a single item execution notification."""
         ...
 
     @abc.abstractmethod
-    def enqueue_items(self, items: list[tuple[str, int]]) -> list[str]:
-        """Batch enqueue item executions."""
+    def enqueue_items(
+        self, items: list[tuple[str, int]], work_type: str = "INVOCATION"
+    ) -> list[str]:
+        """Batch enqueue item executions.
+
+        ``work_type`` distinguishes invocation work (the Agent call) from
+        evaluation-only recovery work (Issue #84) on the same queue.
+        """
         ...
 
     @abc.abstractmethod
     def read_group(
         self, consumer_name: str, count: int = 10, block_ms: int = 1000
-    ) -> list[tuple[str, str, int]]:
+    ) -> list[tuple[str, str, int, str]]:
         """Read pending/new items for consumer group.
 
-        Returns: list of (message_id, item_execution_id, generation)
+        Returns: list of (message_id, item_execution_id, generation, work_type)
         """
         ...
 
     @abc.abstractmethod
     def claim_pending_entries(
         self, consumer_name: str, min_idle_ms: int = 30000, count: int = 10
-    ) -> list[tuple[str, str, int]]:
+    ) -> list[tuple[str, str, int, str]]:
         """Claims abandoned pending messages from crashed workers.
 
         Returns: list of (message_id, item_execution_id, generation)
@@ -54,24 +62,28 @@ class MemoryQueueAdapter(QueueAdapter):
     """Thread-safe in-memory queue adapter for local testing."""
 
     def __init__(self):
-        self._queue: list[tuple[str, str, int]] = []  # (msg_id, item_id, gen)
+        self._queue: list[tuple[str, str, int, str]] = []  # (msg_id, item_id, gen, work_type)
         self._acked: set[str] = set()
         self._read_idx = 0
 
-    def enqueue_item(self, item_execution_id: str, generation: int) -> str:
-        return self.enqueue_items([(item_execution_id, generation)])[0]
+    def enqueue_item(
+        self, item_execution_id: str, generation: int, work_type: str = "INVOCATION"
+    ) -> str:
+        return self.enqueue_items([(item_execution_id, generation)], work_type=work_type)[0]
 
-    def enqueue_items(self, items: list[tuple[str, int]]) -> list[str]:
+    def enqueue_items(
+        self, items: list[tuple[str, int]], work_type: str = "INVOCATION"
+    ) -> list[str]:
         msg_ids = []
         for item_id, gen in items:
             msg_id = f"mem-{int(time.time()*1000)}-{uuid.uuid4().hex[:6]}"
-            self._queue.append((msg_id, item_id, gen))
+            self._queue.append((msg_id, item_id, gen, work_type))
             msg_ids.append(msg_id)
         return msg_ids
 
     def read_group(
         self, consumer_name: str, count: int = 10, block_ms: int = 1000
-    ) -> list[tuple[str, str, int]]:
+    ) -> list[tuple[str, str, int, str]]:
         res = []
         while self._read_idx < len(self._queue) and len(res) < count:
             msg = self._queue[self._read_idx]
@@ -115,15 +127,23 @@ class RedisStreamQueueAdapter(QueueAdapter):
                 # If error is not BUSYGROUP, re-raise to fail closed
                 raise
 
-    def enqueue_item(self, item_execution_id: str, generation: int) -> str:
-        return self.enqueue_items([(item_execution_id, generation)])[0]
+    def enqueue_item(
+        self, item_execution_id: str, generation: int, work_type: str = "INVOCATION"
+    ) -> str:
+        return self.enqueue_items([(item_execution_id, generation)], work_type=work_type)[0]
 
-    def enqueue_items(self, items: list[tuple[str, int]]) -> list[str]:
+    def enqueue_items(
+        self, items: list[tuple[str, int]], work_type: str = "INVOCATION"
+    ) -> list[str]:
         pipe = self.client.pipeline()
         for item_id, gen in items:
             pipe.xadd(
                 self.stream_key,
-                {"item_execution_id": item_id, "dispatch_generation": str(gen)},
+                {
+                    "item_execution_id": item_id,
+                    "dispatch_generation": str(gen),
+                    "work_type": work_type,
+                },
             )
         return [str(res) for res in pipe.execute()]
 
@@ -156,8 +176,9 @@ class RedisStreamQueueAdapter(QueueAdapter):
                         }
                         item_id = fields.get("item_execution_id", "")
                         gen = int(fields.get("dispatch_generation", 1))
+                        work_type = fields.get("work_type") or "INVOCATION"
                         m_id = msg_id.decode() if isinstance(msg_id, bytes) else str(msg_id)
-                        results.append((m_id, item_id, gen))
+                        results.append((m_id, item_id, gen, work_type))
                 return results
             except Exception as exc:
                 if "NOGROUP" in str(exc) and attempt == 0:
@@ -192,8 +213,9 @@ class RedisStreamQueueAdapter(QueueAdapter):
                     }
                     item_id = fields.get("item_execution_id", "")
                     gen = int(fields.get("dispatch_generation", 1))
+                    work_type = fields.get("work_type") or "INVOCATION"
                     m_id = msg_id.decode() if isinstance(msg_id, bytes) else str(msg_id)
-                    results.append((m_id, item_id, gen))
+                    results.append((m_id, item_id, gen, work_type))
                 return results
             except Exception as exc:
                 if "NOGROUP" in str(exc) and attempt == 0:

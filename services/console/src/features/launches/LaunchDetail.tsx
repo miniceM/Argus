@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
@@ -13,6 +13,7 @@ import {
   Play,
   RefreshCw,
   Rocket,
+  Scale,
   Sliders,
   Zap,
 } from "lucide-react";
@@ -31,6 +32,9 @@ import { useLaunchPolling } from "./useLaunchPolling";
 import { ErrorState, LoadingState } from "../../components/StateViews";
 import { Button, PageHeader, Panel, buttonClassName } from "../../components/ui/Primitives";
 import { Modal } from "../../components/ui/Overlay";
+import { Badge } from "../../components/Badge";
+import { bindingVerification } from "./frozenIdentity";
+import { ResultSnapshotPanel } from "./resultSnapshot";
 
 type LaunchResponse = import("../../api/schema").components["schemas"]["ExperimentLaunchResponse"];
 type ItemExecution = import("../../api/schema").components["schemas"]["ExperimentItemExecutionResponse"];
@@ -78,6 +82,24 @@ interface ManifestData {
     type?: string;
     scope?: string;
     threshold?: number;
+    // Issue #81: frozen execution identity. Older Manifests simply omit them and
+    // are reported as "历史契约未记录" instead of being treated as verified.
+    binding_id?: string;
+    binding_digest?: string;
+    binding_schema_version?: string;
+    definition_digest?: string;
+    content_digest?: string;
+    implementation_ref?: string | null;
+    executor_type?: string;
+    contract_status?: string;
+    verification_status?: string;
+    implementation_artifact?: {
+      kind?: string;
+      locator?: string;
+      digest?: string;
+      runtime?: string;
+    } | null;
+    runner?: { runner_version?: string; build_id?: string; mapping_engine_version?: string };
   }>;
   execution_policy?: {
     timeout_seconds?: number;
@@ -90,6 +112,27 @@ interface ManifestData {
     concurrency?: number;
     mapping_engine_version?: string;
   };
+  // Issue #83: the quality policy frozen with this Launch. Older Manifests omit
+  // it (or carry the pre-#83 placeholder) and are reported as such.
+  quality_policy?: {
+    policy_id?: string;
+    version?: string;
+    schema_version?: string;
+    description?: string | null;
+    unknown_handling?: string;
+    policy_digest?: string;
+    rules?: Array<{
+      evaluator_id?: string;
+      operator?: string | null;
+      threshold?: number | null;
+      expected_value?: unknown;
+      result_type?: string;
+      required?: boolean;
+      critical?: boolean;
+      note?: string | null;
+    }>;
+  } | null;
+  measurement_digest?: string | null;
   created_at?: string;
 }
 
@@ -194,6 +237,29 @@ export const LaunchDetail: React.FC = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [showRetryModal, setShowRetryModal] = useState(false);
   const [forceRetry, setForceRetry] = useState(false);
+  // Issue #84: feedback for the evaluation-only retry (submitted / blocked).
+  const [evalRetryNotice, setEvalRetryNotice] = useState<string | null>(null);
+
+  // Issue #85: which frozen revision the user is looking at. It is carried in
+  // the query string so the link can be shared and always resolves to the same
+  // report, and so the historical view survives a reload.
+  const [searchParams, setSearchParams] = useSearchParams();
+  // The same `snapshot_id` parameter ComparisonReport already uses, so one
+  // shared URL pins the report, the comparison and the case drawer together.
+  const selectedSnapshotId = searchParams.get("snapshot_id");
+  const selectSnapshot = React.useCallback(
+    (snapshotId: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("snapshot_id", snapshotId);
+          return next;
+        },
+        { replace: false },
+      );
+    },
+    [setSearchParams],
+  );
 
   useEffect(() => {
     setShowRawManifest(false);
@@ -269,9 +335,24 @@ export const LaunchDetail: React.FC = () => {
       return res.data as ItemExecution[];
     },
     enabled: Boolean(launchId && launch?.id === launchId),
-    // Items are only refreshed while the launch executes; a pending link never
-    // multiplies item traffic.
-    refetchInterval: () => (launch && isLaunchExecutionActive(launch.status) ? 1500 : false),
+    refetchInterval: (query) => {
+      // Issue #84: an evaluation-only retry does not move the Launch out of a
+      // terminal status, so poll while any case is being re-judged. Polling
+      // stops as soon as the recovery settles and the fresh result is shown.
+      const current = query.state.data as ItemExecution[] | undefined;
+      if (
+        Array.isArray(current) &&
+        current.some((i) => (i.evaluation_status || "").toLowerCase() === "evaluating")
+      ) {
+        return 1500;
+      }
+      // Issue #44: items only refresh while the launch executes; waiting for a
+      // pending Langfuse link never multiplies item traffic.
+      if (launch && isLaunchExecutionActive(launch.status)) {
+        return 1500;
+      }
+      return false;
+    },
   });
 
   const items: ItemExecution[] = Array.isArray(rawItems) ? rawItems : [];
@@ -355,6 +436,35 @@ export const LaunchDetail: React.FC = () => {
     },
   });
 
+  // 7. Retry Evaluation Mutation (Issue #84): re-judge failed / missing
+  //    evaluations by reusing the stored Agent output. It never calls the
+  //    Agent again, so it is offered independently of "retry failed cases".
+  const retryEvaluationMutation = useMutation({
+    mutationFn: async () => {
+      if (!launchId) return;
+      setActionError(null);
+      setEvalRetryNotice(null);
+      const res = await api.POST("/api/v1/experiment-launches/{launch_id}/retry-evaluation", {
+        params: { path: { launch_id: launchId } },
+      });
+      if (res.error) throw res.error;
+      return res.data;
+    },
+    onSuccess: (data) => {
+      const submitted = data?.submitted?.length ?? 0;
+      const blocked = data?.blocked ?? [];
+      let notice = `已提交 ${submitted} 个用例仅重试评测（复用原 Agent 输出，不会再次调用 Agent）。`;
+      if (blocked.length > 0) {
+        notice += ` ${blocked.length} 个用例因检查点不可用被阻止：${blocked[0].message}`;
+      }
+      setEvalRetryNotice(notice);
+      invalidateAll();
+    },
+    onError: (err) => {
+      setActionError(formatApiError(err));
+    },
+  });
+
   if (isLaunchLoading) return <LoadingState message="正在加载评测任务与不可变快照..." />;
   if (launchError) {
     return (
@@ -392,6 +502,27 @@ export const LaunchDetail: React.FC = () => {
   const passedItems = itemsError
     ? null
     : items.filter((i) => i.quality_conclusion?.toLowerCase() === "pass").length;
+  // Issue #83: PASS / FAIL / UNKNOWN are counted separately so a high all-cases
+  // ratio can never hide the fact that some cases had no usable evidence.
+  const decisionCounts = itemsError
+    ? null
+    : items.reduce(
+        (acc, item) => {
+          const conclusion = (item.quality_conclusion || "unknown").toLowerCase();
+          if (conclusion === "pass") acc.pass += 1;
+          else if (conclusion === "fail") acc.fail += 1;
+          else acc.unknown += 1;
+          return acc;
+        },
+        { pass: 0, fail: 0, unknown: 0 },
+      );
+  const decidedCount = decisionCounts ? decisionCounts.pass + decisionCounts.fail : 0;
+  const decidedPassRate = decidedCount > 0 && decisionCounts
+    ? ((decisionCounts.pass / decidedCount) * 100).toFixed(1)
+    : null;
+  const decisionCoverage = decisionCounts && totalItems ? (decidedCount / totalItems) * 100 : null;
+  const manifestPolicyData = manifest.quality_policy ?? null;
+  const frozenPolicyRules = manifestPolicyData?.rules ?? [];
 
   // Duration calculation
   let durationText = "-";
@@ -467,6 +598,19 @@ export const LaunchDetail: React.FC = () => {
                 </Button>
               )}
 
+              {allowedActions.includes("retry_evaluation") && (
+                <Button
+                  variant="secondary"
+                  onClick={() => retryEvaluationMutation.mutate()}
+                  disabled={retryEvaluationMutation.isPending}
+                  className="text-xs"
+                  data-testid="retry-evaluation-button"
+                  title="仅重新评测失败的指标，复用原 Agent 输出，不会再次调用 Agent"
+                >
+                  <span>{retryEvaluationMutation.isPending ? "重评中..." : "重试评测失败 (Retry Evaluation)"}</span>
+                </Button>
+              )}
+
               {langfuseLink.kind === "link" ? (
                 <a
                   href={langfuseLink.href}
@@ -491,6 +635,16 @@ export const LaunchDetail: React.FC = () => {
           )}
         />
       </div>
+
+      {evalRetryNotice && (
+        <div
+          className="p-3 text-xs bg-pass-subtle border border-pass-border rounded-lg text-pass font-medium"
+          data-testid="retry-evaluation-notice"
+          role="status"
+        >
+          {evalRetryNotice}
+        </div>
+      )}
 
       {actionError && (
         <div className="p-3 text-xs bg-fail-subtle border border-fail-border rounded-lg text-fail font-medium">
@@ -555,37 +709,49 @@ export const LaunchDetail: React.FC = () => {
           )}
         </div>
 
-        {/* Two different ratios share the word "pass" on this page. This cell is
-            the live all-cases quality ratio; the comparison panel below reports
-            a narrower comparable-cohort ratio. The label and the footnote name
-            the denominator so neither can be read as execution success. */}
+        {/* Two different ratios share the word "pass" on this page. The
+            decided rate below only counts cases whose evidence was sufficient,
+            and it is always shown together with the UNKNOWN count so a 100%
+            decided rate can never hide the cases that had no verdict. The
+            all-cases ratio is kept separately and always names its denominator. */}
         <div data-testid="quality-pass-rate">
           <span
             id="quality-pass-rate-label"
             aria-describedby="quality-pass-rate-help"
             className="text-xs font-medium text-muted-foreground block mb-1.5"
           >
-            质量通过率 (Quality Pass Rate)
+            质量判定汇总 (Quality Decision Summary)
           </span>
-          <span className="text-base font-bold font-mono text-foreground">
-            {itemsError ? (
-              <span className="text-xs text-fail">暂不可用</span>
-            ) : totalItems !== null && totalItems > 0 ? (
-              <>
-                <span className="text-pass">{passedItems}</span>
-                <span className="text-muted-foreground font-normal"> / </span>
-                <span>{totalItems}</span>
-                <span className="text-xs text-muted-foreground font-normal ml-2">
-                  ({(((passedItems ?? 0) / totalItems) * 100).toFixed(1)}%)
+          {itemsError || !decisionCounts ? (
+            <span className="text-xs text-fail">暂不可用</span>
+          ) : (
+            <>
+              <span className="flex flex-wrap items-center gap-1.5 font-mono text-xs font-bold">
+                <span className="text-pass" data-testid="quality-count-pass">PASS {decisionCounts.pass}</span>
+                <span className="text-fail" data-testid="quality-count-fail">FAIL {decisionCounts.fail}</span>
+                <span
+                  className={decisionCounts.unknown > 0 ? "text-timeout" : "text-muted-foreground"}
+                  data-testid="quality-count-unknown"
+                >
+                  UNKNOWN {decisionCounts.unknown}
                 </span>
-              </>
-            ) : (
-              <span className="text-xs text-muted-foreground">尚未统计</span>
-            )}
-          </span>
-          <span className="block mt-1 text-micro text-muted-foreground">
-            统计范围：全部用例
-          </span>
+              </span>
+              <span className="block mt-1 text-micro text-muted-foreground font-mono">
+                已判定通过率：
+                <span data-testid="decided-pass-rate">
+                  {decidedPassRate === null ? "—" : `${decidedPassRate}%`}
+                </span>
+                {" · "}
+                判定覆盖率：
+                <span data-testid="decision-coverage">
+                  {decisionCoverage === null ? "—" : `${decisionCoverage.toFixed(1)}%`}
+                </span>
+              </span>
+              <span className="block mt-0.5 text-micro text-muted-foreground">
+                已判定通过率 = PASS / (PASS + FAIL)；UNKNOWN 表示证据不足，不计入分子或分母。
+              </span>
+            </>
+          )}
         </div>
 
         <div>
@@ -601,7 +767,24 @@ export const LaunchDetail: React.FC = () => {
         data-testid="quality-pass-rate-help"
         className="text-micro text-muted-foreground"
       >
-        质量通过率说明：分子为质量结论 PASS 的用例数，分母为当前返回的全部用例数。执行失败、超时、取消、评测跳过或不可评测的用例仍计入分母，但不计入分子，不代表质量结论为 FAIL。该比例不是执行成功率。
+        质量判定汇总说明：PASS / FAIL / UNKNOWN 分别统计三类质量结论，UNKNOWN 表示证据不足（必要指标缺失、失败、被跳过或无结果），既不是通过也不是不通过。
+        「已判定通过率」的分母只含有明确结论的用例，因此必须与 UNKNOWN 数量一起阅读；「全部用例 PASS 占比」的分母包含全部用例，两者的差异即证据不足的规模。该比例不是执行成功率。
+      </p>
+
+      {/* The all-cases ratio is deliberately kept out of the summary cell above:
+          it shares the word "pass" but has a different denominator. */}
+      <p className="text-micro text-muted-foreground" data-testid="quality-all-cases-ratio">
+        全部用例 PASS 占比：
+        {itemsError || !totalItems ? (
+          <span className="text-muted-foreground">尚未统计</span>
+        ) : totalItems > 0 ? (
+          <span className="font-mono">
+            {passedItems} / {totalItems} ({(((passedItems ?? 0) / totalItems) * 100).toFixed(1)}%)
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+        <span className="ml-1">（分母为全部用例，含 UNKNOWN）</span>
       </p>
 
       {/* Real-time Progress Board */}
@@ -660,6 +843,78 @@ export const LaunchDetail: React.FC = () => {
           </div>
         </div>
       )}
+
+      {launchId && (
+        <ResultSnapshotPanel
+          launchId={launchId}
+          selectedSnapshotId={selectedSnapshotId}
+          onSelect={selectSnapshot}
+        />
+      )}
+
+      {/* Issue #83: the quality policy frozen with this Launch. A historical
+          Launch created before the policy existed is reported as such instead
+          of being shown an empty rule list. */}
+      <div className="ui-panel p-5 shadow-xs space-y-3" data-testid="frozen-quality-policy">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+          <div className="flex items-center gap-2">
+            <Scale className="w-4 h-4 text-primary" />
+            <h3 className="text-sm font-bold text-foreground">冻结质量策略 (Frozen Quality Policy)</h3>
+          </div>
+          {manifestPolicyData?.policy_id && (
+            <span className="font-mono text-micro text-muted-foreground break-all">
+              {manifestPolicyData.policy_id}
+              {manifestPolicyData.version ? `@${manifestPolicyData.version}` : ""}
+            </span>
+          )}
+        </div>
+
+        {!manifestPolicyData || frozenPolicyRules.length === 0 ? (
+          <p className="text-xs text-muted-foreground" data-testid="frozen-quality-policy-legacy">
+            该任务在质量策略独立配置之前创建（历史契约），质量结论沿用当时的复合判定口径，
+            无法按当前策略逐条解释。
+          </p>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-3 text-micro text-muted-foreground font-mono">
+              <span data-testid="frozen-policy-digest">
+                策略摘要：{manifestPolicyData.policy_digest ?? "未记录"}
+              </span>
+              {manifest.measurement_digest && (
+                <span data-testid="frozen-measurement-digest">
+                  测量口径摘要：{manifest.measurement_digest}
+                </span>
+              )}
+            </div>
+            {manifestPolicyData.description && (
+              <p className="text-micro text-muted-foreground">{manifestPolicyData.description}</p>
+            )}
+            <ul className="space-y-1.5">
+              {frozenPolicyRules.map((rule) => {
+                const expression = rule.operator === ">=" || rule.operator === "<="
+                  ? `${rule.operator} ${rule.threshold ?? "—"}`
+                  : rule.operator === "=="
+                    ? `== ${rule.expected_value === null || rule.expected_value === undefined ? "—" : String(rule.expected_value)}`
+                    : "仅作为证据";
+                return (
+                  <li
+                    key={`${rule.evaluator_id}-${expression}`}
+                    className="flex flex-wrap items-center gap-2 text-xs"
+                  >
+                    <span className="font-mono font-semibold text-foreground">{rule.evaluator_id}</span>
+                    <span className="text-muted-foreground">结果类型 {rule.result_type ?? "numeric"}</span>
+                    <span className="font-mono text-muted-foreground">{expression}</span>
+                    <Badge tone={rule.required ? "pass" : "neutral"}>
+                      {rule.required ? "必要" : "可选诊断"}
+                    </Badge>
+                    {rule.critical && <Badge tone="timeout">关键</Badge>}
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+      </div>
 
       {/* Frozen Manifest 4-Dimension Snapshot Overview */}
       <div className="ui-panel p-5 shadow-xs space-y-4">
@@ -757,19 +1012,68 @@ export const LaunchDetail: React.FC = () => {
               <Zap className="w-4 h-4 text-timeout" />
               <span>3. 评测门禁指标 ({manifestEvaluators.length})</span>
             </div>
-            <div className="flex flex-wrap gap-1">
+            <ul className="space-y-1.5">
               {manifestEvaluators.map((ev) => {
-                const evalId = ev.id || ev.name;
+                const evalId = ev.id || ev.name || "unknown";
+                const verification = bindingVerification(ev);
                 return (
-                  <span
+                  <li
                     key={evalId}
-                    className="px-2 py-0.5 rounded text-micro font-mono bg-surface border border-border text-foreground-secondary"
+                    className="px-2 py-1.5 rounded border border-border bg-surface space-y-1"
                   >
-                    {evalId}
-                  </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-micro font-semibold text-foreground">{evalId}</span>
+                      <span className="font-mono text-micro text-muted-foreground">
+                        {ev.version ? `v${ev.version}` : "历史契约未记录版本"}
+                      </span>
+                      {ev.implementation_ref && (
+                        <span className="truncate font-mono text-micro text-muted-foreground" title={ev.implementation_ref}>
+                          {ev.implementation_ref}
+                        </span>
+                      )}
+                      <Badge tone={verification.tone} data-testid={`binding-verification-${evalId}`}>
+                        {verification.label}
+                      </Badge>
+                    </div>
+                    {(ev.binding_digest || ev.definition_digest || ev.implementation_artifact?.digest) && (
+                      <details className="text-micro text-muted-foreground">
+                        <summary className="cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-focus rounded-sm">
+                          查看冻结摘要与制品标识
+                        </summary>
+                        <dl className="mt-1 space-y-0.5 font-mono break-all">
+                          <div>
+                            <dt className="inline text-muted-foreground">Binding: </dt>
+                            <dd className="inline">{ev.binding_id ?? "历史契约未记录"}</dd>
+                          </div>
+                          <div>
+                            <dt className="inline text-muted-foreground">Binding Digest: </dt>
+                            <dd className="inline">{ev.binding_digest ?? "历史契约未记录"}</dd>
+                          </div>
+                          <div>
+                            <dt className="inline text-muted-foreground">Definition Digest: </dt>
+                            <dd className="inline">{ev.definition_digest ?? ev.content_digest ?? "历史契约未记录"}</dd>
+                          </div>
+                          <div>
+                            <dt className="inline text-muted-foreground">Artifact: </dt>
+                            <dd className="inline">
+                              {ev.implementation_artifact?.digest ?? "历史契约未记录"}
+                              {ev.implementation_artifact?.locator ? ` (${ev.implementation_artifact.locator})` : ""}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="inline text-muted-foreground">Executor: </dt>
+                            <dd className="inline">{ev.executor_type ?? "历史契约未记录"}</dd>
+                          </div>
+                        </dl>
+                      </details>
+                    )}
+                  </li>
                 );
               })}
-            </div>
+            </ul>
+            <p className="text-micro text-muted-foreground">
+              冻结身份在创建时校验、执行前再次校验；版本或制品不可用时评测会明确停止并保持 UNKNOWN，不会改用其他版本。
+            </p>
           </div>
 
           {/* Dimension 4: Execution Policy & Runner */}

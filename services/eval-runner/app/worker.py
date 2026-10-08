@@ -16,7 +16,8 @@ from app.db_models import (  # noqa: E402
 from app.execution import get_langfuse_client_safe  # noqa: E402
 
 from .db import DatabaseManager
-from .evaluators import default_evaluator_registry, evaluate_item_quality
+from .evaluation_result_store import persist_typed_results
+from .evaluator_binding import EvaluatorBindingError, evaluate_frozen_item, resolve_execution_plan
 from .executor import RemoteAgentExecutor
 from .limiter import DistributedAgentLimiter
 from .metrics import runtime_metrics
@@ -50,7 +51,7 @@ class ExecutionWorker:
         self.local_concurrency = asyncio.Semaphore(10)
         self.heartbeat_interval = 5.0
 
-    def poll_queue(self, count: int = 10, block_ms: int = 1000) -> list[tuple[str, str, int]]:
+    def poll_queue(self, count: int = 10, block_ms: int = 1000) -> list[tuple[str, str, int, str]]:
         """Synchronously reads/claims items from the queue adapter, meant to be run in asyncio.to_thread."""
         return self.queue.read_group(self.worker_id, count=count, block_ms=block_ms)
 
@@ -236,6 +237,8 @@ class ExecutionWorker:
         current_attempt_id: str | None = None,
         attempt_updates: dict[str, Any] | None = None,
         scores: dict[str, Any] | None = None,
+        typed_results: list[Any] | None = None,
+        quality_evaluation: dict[str, Any] | None = None,
         execution_error: str | None = None,
         eval_error: str | None = None,
         retry_available_at: datetime | None = None,
@@ -297,6 +300,10 @@ class ExecutionWorker:
             item.final_attempt_id = current_attempt_id
             item.active_attempt_id = None
             item.scores = scores
+            # Only overwrite a recorded decision with a real one: a retry that
+            # never reached evaluation must not erase the earlier reasons.
+            if quality_evaluation is not None:
+                item.quality_evaluation = quality_evaluation
             item.execution_error = execution_error
             item.eval_error = eval_error
             item.available_at = retry_available_at
@@ -329,6 +336,18 @@ class ExecutionWorker:
                     session.rollback()
                     return False
 
+            # Phase 3.5: persist the authoritative typed results (Issue #82).
+            # This runs in the same transaction as the item update, so a
+            # committed item always has its typed evidence, and an empty
+            # result set never blanks previously stored measurements.
+            if launch_id and typed_results:
+                persist_typed_results(
+                    session,
+                    item_execution_id=item_id,
+                    launch_id=launch_id,
+                    results=typed_results,
+                )
+
             # Phase 4: Atomic insertion of Langfuse Outbox task if applicable
             if (
                 not is_retry_wait
@@ -341,6 +360,19 @@ class ExecutionWorker:
                 payload_scores = dict(scores or {})
                 if dataset_source:
                     payload_scores["_dataset_source"] = dataset_source
+                # Issue #87: the Langfuse projection reads the *typed* frozen
+                # results, so a text or unordered category is reported as not
+                # applicable instead of being coerced into a number. Keys
+                # starting with "_" are never uploaded as scores.
+                if typed_results:
+                    payload_scores["_typed_results"] = [
+                        result.to_payload() for result in typed_results
+                    ]
+                # The frozen policy identity travels with the projection so a
+                # Langfuse score can be traced back to the decision rules used.
+                launch_row = session.get(ExperimentLaunchRecord, launch_id)
+                frozen_policy = (launch_row.manifest or {}).get("quality_policy") or {}
+                payload_scores["_policy_digest"] = frozen_policy.get("policy_digest")
                 outbox_task = LangfuseSyncTaskRecord(
                     id=task_id,
                     launch_id=launch_id,
@@ -400,8 +432,14 @@ class ExecutionWorker:
         message_id: str,
         item_id: str,
         generation: int,
+        work_type: str | None = None,
     ) -> bool:
-        """Full pipeline: reserve local slot -> claim -> authorize attempt -> invoke -> finalize -> ack."""
+        """Full pipeline: reserve local slot -> claim -> authorize attempt -> invoke -> finalize -> ack.
+
+        ``work_type`` is accepted (and ignored) so a raw queue message tuple can
+        be splatted straight into this method; ``main`` routes evaluation-only
+        work to :meth:`execute_evaluation_message` before calling here.
+        """
         async with self.local_concurrency:
             claim_info = self.claim_item(item_id, generation)
             if not claim_info:
@@ -425,6 +463,26 @@ class ExecutionWorker:
                 matched = next((it for it in items_seed if str(it.get("id")) == item_rec.dataset_item_id), {})
                 dataset_input = matched.get("input", {})
                 expected_output = matched.get("expected_output", {})
+
+                # Issue #81: validate the frozen Evaluator identity before dispatching
+                # an item, so an unrecoverable artifact never reaches the Agent.
+                try:
+                    resolve_execution_plan(manifest)
+                except EvaluatorBindingError as binding_exc:
+                    # Fence the item exactly like a Runner identity mismatch: the
+                    # frozen implementation cannot be honored, so no Agent call and
+                    # no score may be produced (Issue #81).
+                    finalized = self.finalize_item(
+                        item_id=item_id,
+                        generation=generation,
+                        lease_token=token,
+                        status="FAILED",
+                        eval_status="skipped",
+                        quality_conclusion="unknown",
+                        execution_error=binding_exc.code,
+                    )
+                    self.queue.ack(message_id)
+                    return finalized
 
                 identity_error = validate_runner_identity(manifest.get("runner"), self.runner_identity)
                 if identity_error:
@@ -717,32 +775,50 @@ class ExecutionWorker:
                         if lease_lost.is_set():
                             return False
 
+                        # Issue #84: persist the recoverable Agent output BEFORE
+                        # evaluating, so a failed evaluation can be retried later
+                        # without ever calling the Agent again — even if Langfuse
+                        # is unavailable or has not synced.
+                        self._persist_execution_checkpoint(
+                            item_id=item_id,
+                            launch_id=launch_id,
+                            dataset_item_id=claim_info["dataset_item_id"],
+                            generation=generation,
+                            output=inv_res.body,
+                            dataset_input=dataset_input,
+                            expected_output=expected_output,
+                            manifest=manifest,
+                            final_attempt_id=current_attempt_id,
+                            trace_id=trace_id,
+                            trace_url=trace_url,
+                            observation_id=obs_id,
+                        )
+
                         # Successful execution -> evaluate quality (ASYNC offloaded via asyncio.to_thread)
-                        item_eval_specs = [
-                            ev for ev in manifest.get("evaluators", [])
-                            if ev.get("scope", "item") == "item"
-                        ]
-
                         def _do_evaluation():
-                            scores: dict[str, float] = {}
-                            eval_st = "succeeded" if item_eval_specs else "skipped"
-                            qual_conc = "unknown"
-                            eval_err = None
-                            try:
-                                for ev in item_eval_specs:
-                                    ev_fn = default_evaluator_registry.get_evaluator_fn(ev["id"], ev.get("version"))
-                                    ev_res = ev_fn(output=inv_res.body, expected_output=expected_output)
-                                    scores[ev["id"]] = float(getattr(ev_res, "value", 0.0))
-                                if item_eval_specs:
-                                    qual_conc = evaluate_item_quality(
-                                        scores, item_eval_specs, manifest.get("quality_policy")
-                                    )
-                            except Exception as exc:
-                                eval_st = "failed"
-                                eval_err = str(exc)
-                            return scores, eval_st, qual_conc, eval_err
+                            # Issue #81: shared frozen evaluation boundary; no per-id lookup.
+                            result = evaluate_frozen_item(
+                                manifest,
+                                output=inv_res.body,
+                                expected_output=expected_output,
+                            )
+                            return (
+                                result.scores,
+                                result.eval_status,
+                                result.quality_conclusion,
+                                result.eval_error,
+                                result.typed_results,
+                                result.quality_decision,
+                            )
 
-                        scores_dict, eval_status, quality_conclusion, eval_error = await asyncio.to_thread(_do_evaluation)
+                        (
+                            scores_dict,
+                            eval_status,
+                            quality_conclusion,
+                            eval_error,
+                            typed_results,
+                            quality_decision,
+                        ) = await asyncio.to_thread(_do_evaluation)
 
                         if lease_lost.is_set():
                             # Lost lease ownership during evaluation -> discard results
@@ -758,6 +834,10 @@ class ExecutionWorker:
                             current_attempt_id=current_attempt_id,
                             attempt_updates=att_updates,
                             scores=scores_dict,
+                            typed_results=list(typed_results),
+                            quality_evaluation=quality_decision.payload()
+                            if quality_decision is not None
+                            else None,
                             eval_error=eval_error,
                             trace_id=trace_id,
                             trace_url=trace_url,
@@ -870,3 +950,81 @@ class ExecutionWorker:
             self.queue.ack(message_id)
             return True
 
+
+
+    def _persist_execution_checkpoint(
+        self,
+        *,
+        item_id: str,
+        launch_id: str,
+        dataset_item_id: str,
+        generation: int,
+        output: Any,
+        dataset_input: Any,
+        expected_output: Any,
+        manifest: dict[str, Any],
+        final_attempt_id: str | None,
+        trace_id: str | None,
+        trace_url: str | None,
+        observation_id: str | None,
+    ) -> None:
+        """Write the recoverable Agent output for a successful execution (#84).
+
+        Best-effort: a checkpoint failure must never turn a successful execution
+        into a failure. When retention is disabled this is simply a no-op and
+        evaluation-only recovery is unavailable for that deployment.
+        """
+        from .execution_checkpoint import write_execution_checkpoint
+
+        try:
+            with self.db_mgr.get_session() as session:
+                write_execution_checkpoint(
+                    session,
+                    item_execution_id=item_id,
+                    launch_id=launch_id,
+                    dataset_item_id=dataset_item_id,
+                    dispatch_generation=generation,
+                    output=output,
+                    input_payload=dataset_input,
+                    expected_output=expected_output,
+                    manifest=manifest,
+                    final_attempt_id=final_attempt_id,
+                    trace_id=trace_id,
+                    observation_id=observation_id,
+                    langfuse_trace_url=trace_url,
+                )
+                session.commit()
+        except Exception:  # noqa: BLE001 - recovery metadata must not fail execution
+            pass
+
+    async def execute_evaluation_message(
+        self,
+        message_id: str,
+        item_id: str,
+        evaluation_generation: int,
+    ) -> bool:
+        """Evaluation-only recovery: re-judge a stored Agent output (Issue #84).
+
+        This path never invokes the Agent and never touches the execution
+        attempt or ``dispatch_generation``. It claims a generation-scoped
+        evaluation lease, re-runs only the failed / missing Bindings against the
+        verified checkpoint, and finalizes under a compare-and-set so a late or
+        superseded result can never overwrite the current one.
+        """
+        async with self.local_concurrency:
+            from .evaluation_recovery import recover_evaluation
+
+            # Take the fenced lease first; a duplicate / competing delivery is a
+            # no-op here and the message is simply acked.
+            outcome = await asyncio.to_thread(
+                recover_evaluation,
+                self.db_mgr,
+                item_id=item_id,
+                evaluation_generation=evaluation_generation,
+                worker_id=self.worker_id,
+            )
+            if not outcome.get("claimed"):
+                self.queue.ack(message_id)
+                return False
+            self.queue.ack(message_id)
+            return bool(outcome.get("finalized"))

@@ -26,16 +26,41 @@ def validate_baseline_snapshot(
     launch: ExperimentLaunchRecord,
     agent_id: str,
 ) -> None:
+    """Decide Baseline eligibility from the snapshot's own frozen evidence.
+
+    Issue #85: the Launch's *current* status is deliberately NOT consulted. A
+    Launch that later enters an execution retry or an evaluation-only retry
+    (#84) must not retroactively invalidate a Baseline that was captured from
+    an already-complete revision, and an active Launch must never stand in for
+    historical evidence. Eligibility is therefore a property of the snapshot.
+    """
     if snapshot.agent_id != agent_id or launch.agent_id != agent_id:
         raise ValueError("Baseline result snapshot belongs to a different Agent")
-    if launch.status != "COMPLETED":
-        raise ValueError("Only fully completed Launches can be bound as a Baseline")
+
+    # Legacy rows predate Issue #85 and carry no explicit verdict. They were
+    # only ever created from settled executions, and #85 forbids inventing
+    # evidence a legacy row never had, so they fall back to the same
+    # completeness checks rather than being trusted blindly.
+    evidence_state = (snapshot.evidence_state or "COMPLETE").upper()
+    if evidence_state != "COMPLETE":
+        reasons = "; ".join(snapshot.evidence_reasons or []) or "证据完整性未达标 (evidence is not complete)"
+        raise ValueError(
+            f"只有证据完整的结果快照可作为正式 Baseline，当前快照为 {evidence_state}：{reasons}"
+        )
+
     summary = snapshot.summary or {}
     total = int(summary.get("total_cases", 0))
     if total <= 0 or int(summary.get("evaluated_cases", 0)) != total:
         raise ValueError("Baseline requires a non-empty run with complete successful evaluation coverage")
     if int(summary.get("execution_error_count", 0)) or int(summary.get("evaluator_error_count", 0)):
         raise ValueError("Baseline cannot contain execution or Evaluator errors")
+    # Issue #83: UNKNOWN is missing evidence, not a pass. A snapshot whose
+    # quality evidence is incomplete must never become a formal Baseline.
+    unknown_count = int(summary.get("quality_unknown_count", 0) or 0)
+    if unknown_count:
+        raise ValueError(
+            f"Baseline cannot contain UNKNOWN (insufficient evidence) cases: {unknown_count} case(s) are UNKNOWN"
+        )
 
 
 def set_baseline(

@@ -184,13 +184,21 @@ test.describe("Issue #45: quality pass rate wording", () => {
   test("separates 6/6 execution success from 2/6 quality pass and explains the denominator", async ({ page }) => {
     await page.goto(`/launches/${launchId}`);
 
+    // Issue #83: the header now reports the three conclusions separately, so a
+    // high decided rate can never hide the cases that had no verdict.
     const metric = page.getByTestId("quality-pass-rate");
     await expect(metric).toBeVisible();
-    await expect(metric).toContainText("质量通过率 (Quality Pass Rate)");
-    await expect(metric).toContainText("统计范围：全部用例");
-    await expect(metric).toContainText("2");
-    await expect(metric).toContainText("6");
-    await expect(metric).toContainText("(33.3%)");
+    await expect(metric).toContainText("质量判定汇总 (Quality Decision Summary)");
+    await expect(metric).toContainText("PASS 2");
+    await expect(metric).toContainText("FAIL 4");
+    await expect(metric).toContainText("UNKNOWN 0");
+    await expect(metric).toContainText("已判定通过率：33.3%");
+
+    // The all-cases ratio keeps the wider denominator and names it.
+    const allCases = page.getByTestId("quality-all-cases-ratio");
+    await expect(allCases).toContainText("2 / 6");
+    await expect(allCases).toContainText("(33.3%)");
+    await expect(allCases).toContainText("含 UNKNOWN");
 
     // The ambiguous legacy label is gone from the page.
     await expect(page.getByText("用例通过率 (Pass Rate)")).toHaveCount(0);
@@ -206,9 +214,10 @@ test.describe("Issue #45: quality pass rate wording", () => {
     // The denominator rules are readable without hovering.
     const help = page.getByTestId("quality-pass-rate-help");
     await expect(help).toBeVisible();
-    await expect(help).toContainText("分母为当前返回的全部用例数");
-    await expect(help).toContainText("仍计入分母，但不计入分子");
-    await expect(help).toContainText("不代表质量结论为 FAIL");
+    await expect(help).toContainText("PASS / FAIL / UNKNOWN");
+    await expect(help).toContainText("UNKNOWN 表示证据不足");
+    await expect(help).toContainText("分母只含有明确结论的用例");
+    await expect(help).toContainText("分母包含全部用例");
     await expect(help).toContainText("不是执行成功率");
   });
 
@@ -271,6 +280,6 @@ test.describe("Issue #45: quality pass rate wording", () => {
     await expect(help).toContainText("不可比或无有效质量结论的用例不参与该比例");
 
     // The header keeps its own, different denominator.
-    await expect(page.getByTestId("quality-pass-rate")).toContainText("(33.3%)");
+    await expect(page.getByTestId("quality-all-cases-ratio")).toContainText("(33.3%)");
   });
 });

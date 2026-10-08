@@ -4,6 +4,11 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { QualityBadge } from "../../components/QualityBadge";
 import { Button, Panel } from "../../components/ui/Primitives";
 import { AttemptDrawer } from "./AttemptDrawer";
+import { EvaluationResultList } from "./EvaluationResultList";
+import type { QualityEvaluation } from "./qualityDecision";
+import type { EvaluationResult } from "./evaluationResults";
+import { frozenFailureRecovery, isFrozenIdentityFailure } from "./frozenIdentity";
+import { EvaluationRecoveryBadge, recoveryExplanation } from "./evaluationRecovery";
 
 type ItemExecution = import("../../api/schema").components["schemas"]["ExperimentItemExecutionResponse"];
 
@@ -11,8 +16,32 @@ interface ItemTableProps {
   items: ItemExecution[];
 }
 
+/**
+ * Issue #83 — a one-line reason for the row: which rules decided it, and
+ * whether the cause was a real violation or missing evidence.
+ */
+const ruleSummary = (evaluation: QualityEvaluation): string => {
+  const rules = evaluation.rules ?? [];
+  if (rules.length === 0) return "无逐条判定记录";
+  const conclusion = (evaluation.conclusion || "unknown").toLowerCase();
+  const named = (rule: { evaluator_id: string; required?: boolean }) =>
+    `${rule.evaluator_id}${rule.required === false ? "（可选）" : ""}`;
+  if (conclusion === "unknown") {
+    const missing = rules.filter((r) => (r.conclusion || "").toLowerCase() === "unknown");
+    return `证据不足：${missing.map(named).join("、") || "必要规则"}`;
+  }
+  const violated = rules.filter((r) => (r.conclusion || "").toLowerCase() === "fail");
+  return `违反规则：${violated.map(named).join("、")}`;
+};
+
 export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
-  const [selectedItem, setSelectedItem] = useState<{ id: string; caseId: string } | null>(null);
+  const [selectedItem, setSelectedItem] = useState<{
+    id: string;
+    caseId: string;
+    evaluationResults?: EvaluationResult[] | null;
+    traceUrl?: string | null;
+    qualityEvaluation?: QualityEvaluation | null;
+  } | null>(null);
   const [filterQuality, setFilterQuality] = useState<string>("ALL");
 
   const filteredItems = items.filter((item) => {
@@ -20,6 +49,7 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
     const st = item.execution_status?.toLowerCase();
     if (filterQuality === "PASS") return q === "pass";
     if (filterQuality === "FAIL") return q === "fail";
+    if (filterQuality === "UNKNOWN") return q === "unknown";
     if (filterQuality === "FAILED") return st === "failed" || st === "timed_out";
     if (filterQuality === "RETRY_WAIT") return st === "retry_wait";
     if (filterQuality === "CANCELLED") return st === "cancelled";
@@ -73,6 +103,17 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
           >
             未通过 ({items.filter((i) => i.quality_conclusion?.toLowerCase() === "fail").length})
           </Button>
+          {/* Issue #83: 证据不足 is its own bucket. Hiding it inside 未通过 would
+              turn "we could not tell" into "the agent failed the requirement". */}
+          <Button
+            type="button"
+            variant={filterQuality === "UNKNOWN" ? "primary" : "secondary"}
+            aria-pressed={filterQuality === "UNKNOWN"}
+            onClick={() => setFilterQuality("UNKNOWN")}
+            className="min-h-7 px-2.5 py-1 text-xs"
+          >
+            证据不足 ({items.filter((i) => (i.quality_conclusion || "unknown").toLowerCase() === "unknown").length})
+          </Button>
           {failedCount > 0 && (
             <Button
               type="button"
@@ -118,7 +159,8 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
                 <th className="px-5 py-3.5">用例标识 (Dataset Item ID)</th>
                 <th className="px-5 py-3.5">执行状态 (Execution)</th>
                 <th className="px-5 py-3.5">质量门禁 (Quality)</th>
-                <th className="px-5 py-3.5">评测得分 (Scores)</th>
+                <th className="px-5 py-3.5">评测恢复 (Evaluation Recovery)</th>
+                <th className="px-5 py-3.5">评测结果 (Evaluation Results)</th>
                 <th className="px-5 py-3.5">最终 HTTP</th>
                 <th className="px-5 py-3.5">最终耗时</th>
                 <th className="px-5 py-3.5">尝试次数 (Attempts)</th>
@@ -148,6 +190,16 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
                           {errorText}
                         </p>
                       )}
+                      {/* Issue #81: a frozen-identity failure names the stable error
+                          code and the recovery path, instead of only a raw string. */}
+                      {isFrozenIdentityFailure(errorText) && (
+                        <p
+                          className="text-micro text-timeout font-normal max-w-sm mt-0.5"
+                          data-testid={`frozen-recovery-${item.dataset_item_id}`}
+                        >
+                          {frozenFailureRecovery(errorText)}
+                        </p>
+                      )}
                     </td>
 
                     <td className="px-5 py-3.5">
@@ -156,33 +208,48 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
 
                     <td className="px-5 py-3.5">
                       <QualityBadge quality={item.quality_conclusion} />
+                      {/* Issue #83: name the cause in the row itself, so a
+                          证据不足 case is never read as a plain 不通过. */}
+                      {item.quality_evaluation &&
+                        (item.quality_conclusion || "unknown").toLowerCase() !== "pass" && (
+                          <p
+                            className="text-micro text-muted-foreground mt-0.5 max-w-56"
+                            data-testid={`quality-summary-${item.dataset_item_id}`}
+                          >
+                            {ruleSummary(item.quality_evaluation as QualityEvaluation)}
+                          </p>
+                        )}
+                    </td>
+
+                    {/* Issue #84: evaluation recovery is shown separately from
+                        execution and quality, and always says it reuses the
+                        original Agent output. */}
+                    <td className="px-5 py-3.5">
+                      <EvaluationRecoveryBadge status={item.evaluation_status} />
+                      {recoveryExplanation(item) && (
+                        <p
+                          className="text-micro text-muted-foreground mt-0.5 max-w-56"
+                          data-testid={`evaluation-recovery-${item.dataset_item_id}`}
+                        >
+                          {recoveryExplanation(item)}
+                        </p>
+                      )}
                     </td>
 
                     <td className="px-5 py-3.5">
-                      {item.scores && Object.keys(item.scores).length > 0 ? (
-                        <div className="flex flex-wrap gap-1.5">
-                          {Object.entries(item.scores).map(([k, v]) => (
-                            <span
-                              key={k}
-                              className="inline-flex items-center px-2 py-0.5 rounded text-micro font-mono bg-surface-muted text-foreground-secondary border border-border"
-                            >
-                              <span className="text-muted-foreground mr-1">{k}:</span>
-                              <span
-                                className={`font-semibold ${
-                                  Number(v) >= 1
-                                    ? "text-pass-strong"
-                                    : Number(v) > 0
-                                    ? "text-timeout"
-                                    : "text-fail"
-                                }`}
-                              >
-                                {typeof v === "number" ? v.toFixed(2) : String(v)}
-                              </span>
-                            </span>
-                          ))}
-                        </div>
+                      {item.evaluation_results && item.evaluation_results.length > 0 ? (
+                        <EvaluationResultList results={item.evaluation_results} />
+                      ) : item.scores && Object.keys(item.scores).length > 0 ? (
+                        <EvaluationResultList
+                          results={Object.entries(item.scores).map(([id, value]) => ({
+                            evaluator_id: id,
+                            result_type: "numeric",
+                            status: "succeeded",
+                            value,
+                          }))}
+                        />
                       ) : (
-                        <span className="text-xs text-muted-foreground font-mono">-</span>
+                        <span className="text-xs text-muted-foreground font-mono">—</span>
                       )}
                     </td>
 
@@ -220,7 +287,14 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
                         type="button"
                         variant="secondary"
                         onClick={() =>
-                          setSelectedItem({ id: item.id, caseId: item.dataset_item_id })
+                          setSelectedItem({
+                          id: item.id,
+                          caseId: item.dataset_item_id,
+                          evaluationResults:
+                            (item.evaluation_results as EvaluationResult[] | undefined) ?? null,
+                          traceUrl: item.langfuse_trace_url ?? null,
+                          qualityEvaluation: (item.quality_evaluation as QualityEvaluation | undefined) ?? null,
+                        })
                         }
                         className="min-h-7 px-2.5 py-1 text-xs font-mono"
                         title="查看 Attempt 调用历史"
@@ -235,7 +309,14 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
                         type="button"
                         variant="quiet"
                         onClick={() =>
-                          setSelectedItem({ id: item.id, caseId: item.dataset_item_id })
+                          setSelectedItem({
+                          id: item.id,
+                          caseId: item.dataset_item_id,
+                          evaluationResults:
+                            (item.evaluation_results as EvaluationResult[] | undefined) ?? null,
+                          traceUrl: item.langfuse_trace_url ?? null,
+                          qualityEvaluation: (item.quality_evaluation as QualityEvaluation | undefined) ?? null,
+                        })
                         }
                         className="min-h-7 px-2 text-xs"
                       >
@@ -256,6 +337,9 @@ export const ItemTable: React.FC<ItemTableProps> = ({ items }) => {
         onClose={() => setSelectedItem(null)}
         itemExecutionId={selectedItem?.id || null}
         caseId={selectedItem?.caseId || null}
+        evaluationResults={selectedItem?.evaluationResults}
+        traceUrl={selectedItem?.traceUrl}
+        qualityEvaluation={selectedItem?.qualityEvaluation}
       />
     </div>
   );

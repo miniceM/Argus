@@ -310,20 +310,24 @@ def test_outbox_processing_lease_expiry_reclaim(setup_runtime):
         trace_id="trace-123",
         observation_id="obs-123",
     )
-    mock_lf.api.scores.create.assert_called_once_with(
-        id=f"score:{item_id}:gen1:accuracy",
-        name="accuracy",
-        value=1.0,
-        trace_id="trace-123",
-        observation_id="obs-123",
-    )
+    # Issue #87: every projection carries its frozen provenance, so a Langfuse
+    # score can be traced back to the snapshot, policy and binding that made it.
+    score_kwargs = mock_lf.api.scores.create.call_args.kwargs
+    assert score_kwargs["id"] == f"score:{item_id}:gen1:accuracy"
+    assert score_kwargs["name"] == "accuracy"
+    assert score_kwargs["value"] == 1.0
+    assert score_kwargs["trace_id"] == "trace-123"
+    assert score_kwargs["observation_id"] == "obs-123"
+    assert score_kwargs["metadata"]["source"] == "ARGUS_FROZEN_SNAPSHOT"
+    assert "snapshot_id" in score_kwargs["metadata"]
+    assert "policy_digest" in score_kwargs["metadata"]
 
 
 # 13. Finalize CAS requires active_attempt_id and Attempt status RUNNING
 def test_finalize_active_attempt_id_cas_and_running_status_enforced(setup_runtime):
     db_mgr, q, lim, orch, w, rec = setup_runtime
     lid, msgs = create_launch_helper(setup_runtime)
-    msg_id, item_id, gen = msgs[0]
+    msg_id, item_id, gen, _work = msgs[0]
 
     # Claim and authorize attempt
     claim_info = w.claim_item(item_id, gen)
@@ -665,7 +669,7 @@ def test_clock_timestamp_lock_wait_expiration_fails_on_postgres():
 def test_finalize_persists_attempt_usage_cost_atomically(setup_runtime):
     db_mgr, _, _, _, worker, _ = setup_runtime
     _, messages = create_launch_helper(setup_runtime)
-    _, item_id, generation = messages[0]
+    _, item_id, generation, _work = messages[0]
     claim = worker.claim_item(item_id, generation)
     assert claim is not None
     token = claim["lease_token"]

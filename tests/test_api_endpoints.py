@@ -208,7 +208,8 @@ def test_purge_api_without_launches_requires_exact_name(client):
 
 
 def test_create_launch_rejects_empty_evaluators(client):
-    # Empty evaluator_ids list must be rejected with 422 Unprocessable Entity
+    # Empty evaluator_ids list must be rejected. Issue #80 turns this into a
+    # structured 400 so the client receives a machine-readable code.
     r = client.post(
         "/api/v1/experiment-launches",
         json={
@@ -218,7 +219,8 @@ def test_create_launch_rejects_empty_evaluators(client):
             "evaluator_ids": [],
         },
     )
-    assert r.status_code == 422
+    assert r.status_code == 400
+    assert r.json()["detail"]["code"] == "EVALUATOR_SELECTION_EMPTY"
 
 
 def test_create_launch_rejects_run_scope_evaluator(client):
@@ -233,8 +235,11 @@ def test_create_launch_rejects_run_scope_evaluator(client):
         },
     )
     assert r.status_code == 400
-    detail = r.json().get("detail", "")
-    assert "run-scope" in detail.lower() or "not supported" in detail.lower()
+    detail = r.json()["detail"]
+    # Issue #80: structured rejection with a stable code and readable message.
+    assert detail["code"] == "EVALUATOR_SCOPE_UNSUPPORTED"
+    assert detail["evaluator_id"] == "run_pass_rate"
+    assert "not supported" in detail["message"].lower()
 
 
 

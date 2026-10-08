@@ -19,7 +19,13 @@ from .db_models import (
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
 )
-from .evaluators import default_evaluator_registry, evaluate_item_quality
+from .evaluation_result_store import persist_typed_results
+from .evaluator_binding import (
+    EvaluatorBindingError,
+    evaluate_frozen_item,
+    resolve_execution_plan,
+    resolve_langfuse_evaluators,
+)
 from .executor import AttemptAuthorizationError, RemoteAgentExecutor
 from .langfuse_links import is_safe_browser_url, resolve_dataset_run_link
 from .manifest import acquire_launch_execution
@@ -236,31 +242,45 @@ async def _execute_single_item(
         eval_status = "skipped"
         quality_conclusion = "unknown"
 
+    typed_results: list[Any] = []
+    quality_evaluation: dict[str, Any] | None = None
     if execution_status == "succeeded" and agent_output is not None:
-        item_eval_specs = [
-            ev_spec for ev_spec in manifest.get("evaluators", [])
-            if ev_spec.get("scope", "item") == "item"
-        ]
-        if not item_eval_specs:
-            eval_status = "skipped"
-            quality_conclusion = "unknown"
-        else:
-            try:
-                for ev_spec in item_eval_specs:
-                    ev_id = ev_spec["id"]
-                    ev_fn = default_evaluator_registry.get_evaluator_fn(ev_id, ev_spec.get("version"))
-                    ev_res = ev_fn(output=agent_output, expected_output=expected_output)
-                    scores_dict[ev_id] = float(getattr(ev_res, "value", 0.0))
+        # Issue #84: persist the recoverable Agent output before evaluating, so a
+        # failed evaluation can be retried later without calling the Agent again.
+        from .execution_checkpoint import write_execution_checkpoint
 
-                quality_conclusion = evaluate_item_quality(
-                    scores_dict,
-                    item_eval_specs,
-                    manifest.get("quality_policy"),
+        try:
+            with db_mgr.get_session() as session:
+                write_execution_checkpoint(
+                    session,
+                    item_execution_id=item_exec_id,
+                    launch_id=launch_id,
+                    dataset_item_id=item_id,
+                    dispatch_generation=1,
+                    output=agent_output,
+                    input_payload=dataset_input,
+                    expected_output=expected_output,
+                    manifest=manifest,
+                    final_attempt_id=last_attempt_id,
+                    trace_id=trace_id,
+                    observation_id=observation_id,
+                    langfuse_trace_url=trace_url,
                 )
-            except Exception as exc:
-                eval_status = "failed"
-                eval_error = str(exc)
-                quality_conclusion = "unknown"
+                session.commit()
+        except Exception:  # noqa: BLE001 - recovery metadata must not fail execution
+            pass
+
+        # Issue #81: one shared, pre-validated frozen evaluation boundary.
+        frozen_result = evaluate_frozen_item(
+            manifest, output=agent_output, expected_output=expected_output
+        )
+        eval_status = frozen_result.eval_status
+        eval_error = frozen_result.eval_error
+        scores_dict = frozen_result.scores
+        quality_conclusion = frozen_result.quality_conclusion
+        typed_results = list(frozen_result.typed_results)
+        if frozen_result.quality_decision is not None:
+            quality_evaluation = frozen_result.quality_decision.payload()
 
     completed_at = datetime.utcnow()
     with db_mgr.get_session() as session:
@@ -272,6 +292,7 @@ async def _execute_single_item(
             "execution_error": execution_error,
             "eval_error": eval_error,
             "scores": scores_dict,
+            "quality_evaluation": quality_evaluation,
             "trace_id": trace_id,
             "langfuse_trace_url": trace_url,
             "observation_id": observation_id,
@@ -288,6 +309,13 @@ async def _execute_single_item(
             )
             .values(**values_to_update)
         )
+        if typed_results:
+            persist_typed_results(
+                session,
+                item_execution_id=item_exec_id,
+                launch_id=launch_id,
+                results=typed_results,
+            )
         session.commit()
 
 
@@ -297,6 +325,7 @@ async def _execute_single_item(
         "eval_status": eval_status,
         "quality_conclusion": quality_conclusion,
         "scores": scores_dict,
+        "quality_evaluation": quality_evaluation,
         "output": agent_output,
         "error": execution_error or eval_error,
     }
@@ -362,6 +391,15 @@ class LaunchExecutionService:
             )
             if identity_error:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=identity_error)
+            # Issue #81: refuse to start when the frozen Evaluator identity can no
+            # longer be honored (Issue #81: never fall back to another version).
+            try:
+                resolve_execution_plan(preflight_launch.manifest)
+            except EvaluatorBindingError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=exc.to_payload(),
+                ) from exc
 
         # 1. Acquire atomic execution lock
         acquired = acquire_launch_execution(self.db_manager, launch_id)
@@ -461,17 +499,11 @@ class LaunchExecutionService:
 
             # 4. Run items with Langfuse experiment if dataset is available
             if lf and lf_dataset and hasattr(lf_dataset, "run_experiment"):
-                frozen_eval_specs = manifest.get("evaluators", [])
-                frozen_item_evaluators = [
-                    default_evaluator_registry.get_evaluator_fn(ev["id"], ev.get("version"))
-                    for ev in frozen_eval_specs
-                    if ev.get("scope", "item") == "item"
-                ]
-                frozen_run_evaluators = [
-                    default_evaluator_registry.get_evaluator_fn(ev["id"], ev.get("version"))
-                    for ev in frozen_eval_specs
-                    if ev.get("scope") == "run"
-                ]
+                # Issue #81: Langfuse runs the *same* validated frozen implementations
+                # the item path uses; no per-evaluator lookup, no latest fallback.
+                frozen_item_evaluators, frozen_run_evaluators = resolve_langfuse_evaluators(
+                    manifest
+                )
 
                 async def remote_task(*, item: Any, **_: Any) -> dict[str, Any]:
                     item_id = str(getattr(item, "id", ""))

@@ -9,10 +9,26 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
+from .comparison_contracts import (
+    COMPARISON_CONTRACT_SCHEMA_VERSION,
+    aggregation_comparison_digest,
+)
 from .dataset import DatasetResolver
 from .db import DatabaseManager
 from .db_models import ExperimentLaunchRecord
-from .evaluators import default_evaluator_registry
+from .evaluator_binding import (
+    MANIFEST_BINDING_SCHEMA_VERSION,
+    EvaluatorBinding,
+    freeze_binding,
+    manifest_measurement_digest,
+)
+from .evaluators import EvaluatorSelectionError, default_evaluator_registry
+from .quality_policy import (
+    QUALITY_POLICY_SCHEMA_VERSION,
+    QualityRule,
+    default_quality_policy,
+    freeze_quality_policy,
+)
 from .registry import AgentRegistry
 from .runner_identity import current_runner_identity, validate_runner_identity
 
@@ -54,6 +70,7 @@ class LaunchService:
         idempotency_key: str | None = None,
         max_concurrency: int | None = None,
         evaluator_ids: list[str] | None = None,
+        evaluator_selections: list[dict[str, Any]] | None = None,
         items_count: int | None = None,
         item_ids: list[str] | None = None,
         created_by: str | None = None,
@@ -61,6 +78,7 @@ class LaunchService:
         dataset_snapshot: dict[str, Any] | None = None,
         dataset_client: Any | None = None,
         allow_run_scope: bool = False,
+        quality_policy_rules: list[dict[str, Any]] | None = None,
     ) -> ExperimentLaunchRecord:
         from .baselines import normalize_environment
 
@@ -69,10 +87,90 @@ class LaunchService:
         identity_error = validate_runner_identity(runner_identity.model_dump(), runner_identity)
         if identity_error:
             raise ValueError(f"{identity_error}: runner build identity is unavailable")
-        if evaluator_ids is not None and len(evaluator_ids) == 0:
-            raise ValueError("evaluator_ids must not be empty. A launch must have at least one evaluator.")
+        # ---- Issue #80: normalize the request into explicit (id, version) selections ----
+        if evaluator_selections is not None and evaluator_ids is not None:
+            raise EvaluatorSelectionError(
+                "Provide either evaluator_selections or evaluator_ids, not both.",
+                code="EVALUATOR_SELECTION_AMBIGUOUS",
+            )
 
-        eval_list = sorted(evaluator_ids) if evaluator_ids is not None else default_evaluator_registry.default_item_ids()
+        if evaluator_selections is not None:
+            if len(evaluator_selections) == 0:
+                raise EvaluatorSelectionError(
+                    "evaluator_selections must not be empty. A launch must have at least one evaluator.",
+                    code="EVALUATOR_SELECTION_EMPTY",
+                )
+            requested = [
+                (str(item["id"]), str(item["version"])) for item in evaluator_selections
+            ]
+        elif evaluator_ids is not None:
+            if len(evaluator_ids) == 0:
+                raise EvaluatorSelectionError(
+                    "evaluator_ids must not be empty. A launch must have at least one evaluator.",
+                    code="EVALUATOR_SELECTION_EMPTY",
+                )
+            requested = [(evaluator_id, None) for evaluator_id in evaluator_ids]
+        else:
+            requested = [
+                (evaluator_id, None)
+                for evaluator_id in default_evaluator_registry.default_item_ids()
+            ]
+
+        seen: set[str] = set()
+        for evaluator_id, _ver in requested:
+            if evaluator_id in seen:
+                raise EvaluatorSelectionError(
+                    f"Duplicate evaluator selection: '{evaluator_id}'.",
+                    code="EVALUATOR_SELECTION_DUPLICATE",
+                    evaluator_id=evaluator_id,
+                )
+            seen.add(evaluator_id)
+
+        # Issue #80: every selection goes through the single server-side
+        # release-eligibility gate, so a hand-crafted request cannot bypass the UI.
+        eval_specs = [
+            default_evaluator_registry.resolve_for_release(
+                evaluator_id,
+                version,
+                required_scope=None if allow_run_scope else "item",
+            )
+            for evaluator_id, version in requested
+        ]
+        eval_specs.sort(key=lambda spec: spec["id"])
+
+        # ---- Issue #81: freeze the *execution identity*, not only id/version ----
+        # A Launch is only reproducible when the implementation artifact and the
+        # Runner identity that produced it are recorded and re-verified later.
+        eval_specs = [
+            freeze_binding(
+                default_evaluator_registry.definition(spec["id"]),
+                default_evaluator_registry.version(spec["id"], spec["version"]),
+                runner_identity=runner_identity.model_dump(),
+                composed_of=default_evaluator_registry.definition(spec["id"]).composed_of,
+            ).to_payload()
+            for spec in eval_specs
+        ]
+
+        # ---- Issue #83: freeze an independent, digested QualityPolicy --------
+        # Judgement is a separate, versioned decision from measurement. When the
+        # user does not supply rules, every selected diagnostic becomes a
+        # required rule following its own frozen direction, so a new Launch never
+        # needs the composite `overall_pass` metric to reach a verdict.
+        frozen_bindings = {
+            spec["id"]: EvaluatorBinding.from_payload(spec) for spec in eval_specs
+        }
+        item_bindings = [
+            binding for binding in frozen_bindings.values() if binding.scope == "item"
+        ]
+        if quality_policy_rules is not None:
+            policy = freeze_quality_policy(
+                policy_id=str(quality_policy_rules and "custom") or "custom",
+                version=QUALITY_POLICY_SCHEMA_VERSION,
+                rules=[QualityRule.from_payload(rule) for rule in quality_policy_rules],
+                bindings=frozen_bindings,
+            )
+        else:
+            policy = default_quality_policy(item_bindings)
 
         # Request payload for idempotency checking (calculated upfront)
         payload_data = {
@@ -82,9 +180,12 @@ class LaunchService:
             "dataset_version": dataset_version,
             "environment": normalized_environment,
             "baseline_snapshot_id": baseline_snapshot_id,
-            "evaluator_ids": eval_list,
+            "evaluator_selections": [
+                {"id": spec["id"], "version": spec["version"]} for spec in eval_specs
+            ],
             "max_concurrency": max_concurrency,
             "name": name,
+            "quality_policy_digest": policy.policy_digest,
         }
         payload_digest = compute_payload_digest(payload_data)
 
@@ -112,15 +213,6 @@ class LaunchService:
                 f"Agent '{agent_id}' 处于不可用状态 '{getattr(agent_rec, 'status', 'not_found')}'，不可创建新的评测任务"
             )
 
-        eval_specs = [default_evaluator_registry.resolve(eid) for eid in eval_list]
-        if not allow_run_scope:
-            run_scoped = [e["id"] for e in eval_specs if e.get("scope") != "item"]
-            if run_scoped:
-                raise ValueError(
-                    f"Run-scope evaluators ({', '.join(run_scoped)}) are not supported by the standalone launch runner. "
-                    "Only item-scope evaluators are supported."
-                )
-
         # Concurrency policy: inherit from AgentVersion if None, enforce limit if specified
         if max_concurrency is not None:
             if max_concurrency > ver_rec.max_concurrency:
@@ -146,7 +238,7 @@ class LaunchService:
 
         # Build 4D Manifest snapshot
         manifest = {
-            "schema_version": "1.1",
+            "schema_version": MANIFEST_BINDING_SCHEMA_VERSION,
             "dataset": resolved_snapshot,
             "comparison": {
                 "environment": normalized_environment,
@@ -170,10 +262,12 @@ class LaunchService:
                 "is_idempotent": ver_rec.is_idempotent,
             },
             "evaluators": eval_specs,
-            "quality_policy": {
-                "mode": "all_selected_must_pass",
-                "threshold_rule": "score >= threshold",
-            },
+            # Issue #83: the real, digested policy replaces the old placeholder.
+            "quality_policy": policy.to_payload(),
+            # What was measured, kept separate from how it is judged.
+            "measurement_digest": manifest_measurement_digest(
+                {"schema_version": MANIFEST_BINDING_SCHEMA_VERSION, "evaluators": eval_specs}
+            ),
             "runner": {
                 **runner_identity.model_dump(),
             },
@@ -182,6 +276,24 @@ class LaunchService:
                 "timeout_seconds": ver_rec.timeout_seconds,
                 "max_retries": ver_rec.max_retries,
                 "rate_limit_per_minute": ver_rec.rate_limit_per_minute,
+            },
+        }
+
+        # ---- Issue #86: freeze the three comparison contracts independently ----
+        # Measurement, judgement and comparison semantics move independently, so
+        # each gets its own versioned digest. A comparison may then name the one
+        # that moved instead of reporting an Agent regression.
+        measurement_digest = manifest["measurement_digest"]
+        manifest["contract_digests"] = {
+            "schema_version": COMPARISON_CONTRACT_SCHEMA_VERSION,
+            "measurement": {"digest": measurement_digest, "version": MANIFEST_BINDING_SCHEMA_VERSION},
+            "quality_policy": {
+                "digest": policy.policy_digest,
+                "version": f"{policy.policy_id}@{policy.version}",
+            },
+            "aggregation_comparison": {
+                "digest": aggregation_comparison_digest(),
+                "version": manifest["comparison"]["comparison_policy_version"],
             },
         }
 

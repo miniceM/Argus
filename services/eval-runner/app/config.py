@@ -145,6 +145,13 @@ class Settings:
     argus_worker_enabled: bool = os.getenv("ARGUS_WORKER_ENABLED", "true").lower() in ("true", "1", "yes")
     argus_reconciler_enabled: bool = os.getenv("ARGUS_RECONCILER_ENABLED", "true").lower() in ("true", "1", "yes")
     worker_concurrency: int = int(os.getenv("ARGUS_WORKER_CONCURRENCY", "10"))
+    # Issue #84: how long a recoverable Agent output stays available for an
+    # evaluation-only retry. The checkpoint holds the business response only
+    # (never a second copy of the full Langfuse trace), so retention is short
+    # and explicit. 0 disables evaluation-only recovery entirely.
+    execution_checkpoint_ttl_seconds: int = int(
+        os.getenv("ARGUS_EXECUTION_CHECKPOINT_TTL_SECONDS", "604800")
+    )
 
     @property
     def environment(self) -> str:

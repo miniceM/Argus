@@ -18,6 +18,10 @@ const summaryFor = (snapshotId: string, launchId = "candidate-launch") => ({
   revision: snapshotId.endsWith("new") ? 2 : 1,
   created_at: "2026-09-28T00:00:00Z",
   manifest_digest: "manifest-digest",
+  // Issue #85: a report states its own evidence completeness.
+  source_result_digest: "source-result-digest",
+  evidence_state: "COMPLETE",
+  evidence_reasons: [],
   versions: {
     agent: { id: "banking-agent", version: "2.4.0" },
     dataset: { name: "banking-golden", version: "2026-09" },
@@ -38,6 +42,13 @@ const summaryFor = (snapshotId: string, launchId = "candidate-launch") => ({
     cost_per_case: null,
   },
   langfuse_score_sync_status: "SYNCED",
+  // Issue #87: quality result and sync state are separate facts, and the two
+  // sync scopes never hide each other.
+  langfuse_sync: {
+    overall: "SYNCED",
+    item_trace: { status: "SYNCED", reason: null, task_count: 3, failed_count: 0, pending_count: 0 },
+    run_score: { status: "SYNCED", reason: null, task_count: 1, failed_count: 0, pending_count: 0 },
+  },
 });
 
 const metrics = (overrides: Record<string, unknown> = {}) => ({
@@ -94,10 +105,38 @@ const comparisonPage = (snapshotId: string, caseId: string, nextCursor: number |
     },
   },
   classification_counts: { REGRESSION: 1, IMPROVEMENT: 1, UNCHANGED: 0, NOT_COMPARABLE: 0 },
+  // Issue #86: comparability, the formal verdict and the diagnostic section are
+  // separate fields so a diagnostic can never be read as a release conclusion.
+  comparability: {
+    comparable: true,
+    reason_codes: [],
+    provenance: "FROZEN",
+    dimensions: [
+      { dimension: "MEASUREMENT", status: "MATCH", baseline_digest: "sha256:m", candidate_digest: "sha256:m", baseline_version: "binding-1.2", candidate_version: "binding-1.2" },
+      { dimension: "QUALITY_POLICY", status: "MATCH", baseline_digest: "sha256:p", candidate_digest: "sha256:p", baseline_version: "policy@1.0", candidate_version: "policy@1.0" },
+      { dimension: "AGGREGATION_COMPARISON", status: "MATCH", baseline_digest: "sha256:a", candidate_digest: "sha256:a", baseline_version: "comparison-v2", candidate_version: "comparison-v2" },
+    ],
+    suggestions: [],
+  },
+  formal: {
+    available: true,
+    verdict: "REGRESSION",
+    reason: "CASE_REGRESSION",
+    required_cases: 10,
+    comparable_cases: 10,
+    coverage: 1,
+    withheld_reasons: [],
+  },
+  diagnostic: {
+    note: "仅供诊断，不作为正式发布比较。",
+    comparable_cases: 10,
+    classification_counts: { REGRESSION: 1, IMPROVEMENT: 1, UNCHANGED: 0, NOT_COMPARABLE: 0 },
+  },
   items: [{
     dataset_item_id: caseId,
     classification: "REGRESSION",
     reason: "SCORE_CHANGED",
+    basis: "FORMAL",
     baseline_scores: { correctness: 0.9 },
     candidate_scores: { correctness: 0.7 },
     score_deltas: { correctness: -0.2 },
@@ -143,6 +182,9 @@ const ComparisonReportRoute = ({ launchStatus }: { launchStatus: string }) => {
   );
 };
 
+let comparabilityOverride: any = null;
+let formalOverride: any = null;
+
 describe("ComparisonReport", () => {
   let queryClient: QueryClient;
   let latestSummaryReads: number;
@@ -155,6 +197,8 @@ describe("ComparisonReport", () => {
     latestSummaryReads = 0;
     costReason = null;
     fullRunCostUnavailable = false;
+    comparabilityOverride = null;
+    formalOverride = null;
     window.history.replaceState({}, "", "/launches/candidate-launch");
     (api.GET as any).mockImplementation((path: string, options: any) => {
       const launchId = options.params.path.launch_id;
@@ -199,6 +243,13 @@ describe("ComparisonReport", () => {
             page.summary.comparable_cohort.candidate.cost_coverage = 0;
             page.summary.cost_comparison.candidate_cost_per_case = null;
             page.summary.cost_comparison.candidate_coverage = 0;
+          }
+        }
+        if (comparabilityOverride) page.comparability = comparabilityOverride;
+        if (formalOverride) page.formal = { ...page.formal, ...formalOverride };
+        if (formalOverride || comparabilityOverride) {
+          for (const item of page.items) {
+            item.basis = page.formal.available ? "FORMAL" : "DIAGNOSTIC_ONLY";
           }
         }
         return Promise.resolve({ data: page });
@@ -526,5 +577,299 @@ describe("ComparisonReport", () => {
       ))).toBe(true);
     });
     expect(screen.queryByRole("dialog", { name: "Case 双侧结果" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ComparisonReport Issue #85 Baseline version visibility", () => {
+  beforeEach(() => {
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path.includes("/baselines")) {
+        return Promise.resolve({
+          data: {
+            agent_id: "banking-agent",
+            environment: "production",
+            result_snapshot_id: "baseline-snapshot",
+            // The binding revision is the pointer; the result revision is the
+            // frozen report it points at. Both must be visible.
+            revision: 3,
+            result_revision: 1,
+            result_evidence_state: "COMPLETE",
+            updated_by: "alice",
+            updated_at: "2026-09-29T00:00:00Z",
+            launch_id: "baseline-launch",
+            agent_version: "2.4.0",
+            dataset_name: "banking-golden",
+            summary: {},
+          },
+        });
+      }
+      if (path.endsWith("/summary")) return Promise.resolve({ data: summaryFor("candidate-snapshot") });
+      if (path.includes("/comparison")) return Promise.resolve({ data: { items: [], next_cursor: null, classification_counts: {} } });
+      return Promise.resolve({ data: null });
+    });
+  });
+
+  it("names both the result revision and the binding revision of the current Baseline", async () => {
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter initialEntries={["/launches/candidate-launch?snapshot_id=candidate-snapshot"]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<ComparisonReportRoute launchStatus="COMPLETED" />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const line = await screen.findByTestId("baseline-revision-line");
+    expect(line).toHaveTextContent("结果修订 Revision 1");
+    expect(line).toHaveTextContent("绑定修订 3");
+    expect(line).toHaveTextContent("Snapshot baseline…");
+  });
+
+  it("still offers the Baseline action for a COMPLETE revision even when the Launch is no longer COMPLETED", async () => {
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter initialEntries={["/launches/candidate-launch?snapshot_id=candidate-snapshot"]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<ComparisonReportRoute launchStatus="RUNNING" />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // Issue #85: eligibility is the snapshot's own evidence, not the Launch's
+    // current status, so a recovered/retried Launch keeps the offer.
+    expect(await screen.findByRole("button", { name: "设为当前环境 Baseline" })).toBeInTheDocument();
+  });
+
+  it("withholds the Baseline action and explains why for a diagnostic revision", async () => {
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path.endsWith("/summary")) {
+        return Promise.resolve({
+          data: {
+            ...summaryFor("candidate-snapshot"),
+            evidence_state: "DIAGNOSTIC",
+            evidence_reasons: ["1/6 个用例评测失败或未产出结果"],
+          },
+        });
+      }
+      if (path.includes("/comparison")) {
+        return Promise.resolve({ data: { items: [], next_cursor: null, classification_counts: {} } });
+      }
+      return Promise.resolve({ data: null });
+    });
+
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter initialEntries={["/launches/candidate-launch?snapshot_id=candidate-snapshot"]}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<ComparisonReportRoute launchStatus="COMPLETED" />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("summary-evidence-state")).toHaveTextContent("诊断");
+    });
+    expect(screen.queryByRole("button", { name: "设为当前环境 Baseline" })).not.toBeInTheDocument();
+    const hint = screen.getByTestId("baseline-ineligible-hint");
+    expect(hint).toHaveTextContent("当前版本证据不足，不可设为 Baseline");
+    expect(hint).toHaveAttribute("title", expect.stringContaining("评测失败"));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #86 — comparability, formal verdict and diagnostic separation
+// ---------------------------------------------------------------------------
+
+describe("ComparisonReport comparability (Issue #86)", () => {
+  let queryClient: QueryClient;
+
+  beforeEach(() => {
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.clearAllMocks();
+    window.history.replaceState({}, "", "/launches/candidate-launch");
+    (api.POST as any).mockResolvedValue({ data: { revision: 4 } });
+    (api.GET as any).mockImplementation((path: string, options: any) => {
+      const launchId = options.params.path.launch_id;
+      if (path.endsWith("/summary")) {
+        return Promise.resolve({ data: summaryFor("candidate-snapshot", launchId) });
+      }
+      if (path.includes("/baselines")) {
+        return Promise.resolve({ error: {}, response: { status: 404 } });
+      }
+      if (path.endsWith("/comparison/case")) {
+        return Promise.resolve({ data: caseOutput("candidate-snapshot", launchId) });
+      }
+      if (path.endsWith("/comparison")) {
+        const page = comparisonPage("candidate-snapshot", "case-1", null, launchId);
+        if (comparabilityOverride) page.comparability = comparabilityOverride;
+        if (formalOverride) page.formal = { ...page.formal, ...formalOverride };
+        if (formalOverride || comparabilityOverride) {
+          for (const item of page.items) {
+            item.basis = page.formal.available ? "FORMAL" : "DIAGNOSTIC_ONLY";
+          }
+        }
+        return Promise.resolve({ data: page });
+      }
+      return Promise.resolve({ data: null });
+    });
+  });
+
+  const renderReport = () => render(
+    <MemoryRouter initialEntries={[window.location.pathname]}>
+      <QueryClientProvider client={queryClient}>
+        <Routes>
+          <Route path="/launches/:launchId" element={<ComparisonReportRoute launchStatus="COMPLETED" />} />
+        </Routes>
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+
+  const dimensions = (states: Record<string, string>, overrides: Record<string, any> = {}) => [
+    { dimension: "MEASUREMENT", status: states.MEASUREMENT, baseline_digest: "sha256:m1", candidate_digest: "sha256:m2", baseline_version: "binding-1.2", candidate_version: "binding-1.3", ...overrides.MEASUREMENT },
+    { dimension: "QUALITY_POLICY", status: states.QUALITY_POLICY, baseline_digest: "sha256:p1", candidate_digest: "sha256:p2", baseline_version: "policy@1.0", candidate_version: "policy@1.1", ...overrides.QUALITY_POLICY },
+    { dimension: "AGGREGATION_COMPARISON", status: states.AGGREGATION_COMPARISON, baseline_digest: "sha256:a1", candidate_digest: "sha256:a2", baseline_version: "comparison-v2", candidate_version: "comparison-v2", ...overrides.AGGREGATION_COMPARISON },
+  ];
+
+  it("states a formal verdict when every contract matches", async () => {
+    renderReport();
+
+    const verdict = await screen.findByTestId("comparison-formal-verdict");
+    expect(verdict).toHaveTextContent("正式比较");
+    expect(verdict).toHaveTextContent("Regression");
+    expect(screen.queryByTestId("comparison-comparability-banner")).toBeNull();
+  });
+
+  it("refuses a formal comparison and names the changed dimension when only the policy moved", async () => {
+    comparabilityOverride = {
+      comparable: false,
+      reason_codes: ["QUALITY_POLICY_CHANGED"],
+      provenance: "FROZEN",
+      dimensions: dimensions({ MEASUREMENT: "MATCH", QUALITY_POLICY: "CHANGED", AGGREGATION_COMPARISON: "MATCH" }),
+      suggestions: ["使用相同质量策略（阈值、operator、critical、UNKNOWN 处置）重新评测后再比较。"],
+    };
+    formalOverride = { available: false, verdict: null, reason: null, withheld_reasons: ["QUALITY_POLICY_CHANGED"] };
+
+    renderReport();
+
+    const banner = await screen.findByTestId("comparison-comparability-banner");
+    expect(banner).toHaveTextContent("判定规则不同，无法正式比较");
+    expect(within(banner).getByTestId("comparability-reason-QUALITY_POLICY_CHANGED")).toBeInTheDocument();
+
+    // The changed dimension is shown with both sides' versions.
+    const changed = within(banner).getByTestId("comparability-dimension-QUALITY_POLICY");
+    expect(changed).toHaveTextContent("质量策略");
+    expect(changed).toHaveTextContent("policy@1.0");
+    expect(changed).toHaveTextContent("policy@1.1");
+    // The unchanged measurement dimension is still shown as unchanged.
+    expect(within(banner).getByTestId("comparability-dimension-MEASUREMENT")).toHaveTextContent("一致");
+
+    // Actionable advice, and no regression claim.
+    expect(within(banner).getByTestId("comparability-suggestion-0")).toHaveTextContent("相同质量策略");
+    const verdict = await screen.findByTestId("comparison-formal-verdict");
+    expect(verdict).toHaveTextContent("无法给出正式结论");
+    expect(screen.getByTestId("comparison-diagnostic-label")).toHaveTextContent("仅供诊断");
+  });
+
+  it("reports an unknown aggregation contract instead of guessing it for a legacy Baseline", async () => {
+    comparabilityOverride = {
+      comparable: false,
+      reason_codes: ["CONTRACT_PROVENANCE_UNKNOWN"],
+      provenance: "LEGACY_PARTIAL",
+      dimensions: dimensions(
+        { MEASUREMENT: "MATCH", QUALITY_POLICY: "MATCH", AGGREGATION_COMPARISON: "UNKNOWN" },
+        { AGGREGATION_COMPARISON: { baseline_digest: null, candidate_digest: null, baseline_version: "comparison-v1", candidate_version: "comparison-v2" } },
+      ),
+      suggestions: ["两侧使用相同的比较口径（分母、覆盖率要求与分类算法）后重新比较。"],
+    };
+    formalOverride = { available: false, verdict: null, reason: null, withheld_reasons: ["CONTRACT_PROVENANCE_UNKNOWN"] };
+
+    renderReport();
+
+    const banner = await screen.findByTestId("comparison-comparability-banner");
+    expect(within(banner).getByTestId("comparability-reason-CONTRACT_PROVENANCE_UNKNOWN")).toBeInTheDocument();
+    expect(within(banner).getByTestId("comparability-dimension-AGGREGATION_COMPARISON")).toHaveTextContent("证据缺失");
+    expect(within(banner).getByTestId("comparability-dimension-MEASUREMENT")).toHaveTextContent("一致");
+  });
+
+  it("withholds the verdict when the required cases are not all comparable", async () => {
+    formalOverride = {
+      available: false,
+      verdict: null,
+      reason: null,
+      required_cases: 10,
+      comparable_cases: 8,
+      coverage: 0.8,
+      withheld_reasons: ["COVERAGE_INCOMPLETE"],
+    };
+
+    renderReport();
+
+    const verdict = await screen.findByTestId("comparison-formal-verdict");
+    expect(verdict).toHaveTextContent("无法给出正式结论");
+    expect(verdict).toHaveTextContent("证据不足");
+    expect(screen.getByTestId("comparison-item-basis-DIAGNOSTIC_ONLY")).toHaveTextContent("仅诊断");
+  });
+
+  it("keeps the case table readable and marks diagnostic-only rows", async () => {
+    comparabilityOverride = {
+      comparable: false,
+      reason_codes: ["MEASUREMENT_CHANGED"],
+      provenance: "FROZEN",
+      dimensions: dimensions({ MEASUREMENT: "CHANGED", QUALITY_POLICY: "MATCH", AGGREGATION_COMPARISON: "MATCH" }),
+      suggestions: ["使用相同的测量版本（Evaluator 实现、输入输出契约与参数）重新评测两侧。"],
+    };
+    formalOverride = { available: false, verdict: null, reason: null, withheld_reasons: ["MEASUREMENT_CHANGED"] };
+
+    renderReport();
+
+    await screen.findByTestId("comparison-comparability-banner");
+    expect(screen.getByTestId("comparison-diagnostic-label")).toHaveTextContent("仅供诊断");
+    expect(screen.getByTestId("comparison-item-basis-DIAGNOSTIC_ONLY")).toBeInTheDocument();
+  });
+});
+
+describe("ComparisonReport Langfuse sync state (Issue #87)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.history.replaceState({}, "", "/launches/candidate-launch");
+    (api.POST as any).mockResolvedValue({ data: { revision: 4 } });
+    (api.GET as any).mockImplementation((path: string, options: any) => {
+      const launchId = options.params.path.launch_id;
+      if (path.endsWith("/summary")) {
+        return Promise.resolve({ data: summaryFor("candidate-snapshot", launchId) });
+      }
+      if (path.includes("/baselines")) {
+        return Promise.resolve({ error: {}, response: { status: 404 } });
+      }
+      if (path.endsWith("/comparison")) {
+        return Promise.resolve({ data: comparisonPage("candidate-snapshot", "case-1", null, launchId) });
+      }
+      return Promise.resolve({ data: null });
+    });
+  });
+
+  it("shows the two sync scopes separately from the quality conclusion", async () => {
+    render(
+      <MemoryRouter initialEntries={["/launches/candidate-launch"]}>
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <Routes>
+            <Route path="/launches/:launchId" element={<ComparisonReportRoute launchStatus="COMPLETED" />} />
+          </Routes>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+
+    // The report rewrites the URL with the resolved snapshot, which remounts
+    // the panel, so every assertion waits for the live DOM.
+    await screen.findByTestId("langfuse-sync-item-trace");
+    await waitFor(() => {
+      expect(screen.getByTestId("langfuse-sync-item-trace")).toHaveTextContent("Item / Trace");
+      expect(screen.getByTestId("langfuse-sync-run-score")).toHaveTextContent("Run Score");
+      // The quality conclusion is untouched by the sync state.
+      expect(screen.getByTestId("langfuse-sync-disclaimer")).toHaveTextContent("不会改变");
+    });
   });
 });

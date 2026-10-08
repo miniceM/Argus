@@ -1,4 +1,5 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
+import { buildEvaluatorCatalog, DIAGNOSTIC_IDS } from "./fixtures/evaluators";
 
 test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Attempt Drawer", () => {
   test("creates launch, runs evaluation, verifies decoupled dual badges and lazy attempts", async ({ page }) => {
@@ -92,66 +93,9 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
       });
     });
 
-    // Evaluators specs: default diagnostics, their composite, and unsupported run scope.
+    // Evaluators catalog: default diagnostics, their composite, and unsupported run scope.
     await page.route("**/api/v1/evaluators", async (route) => {
-      await route.fulfill({
-        json: [
-          {
-            id: "escalation_match",
-            version: "1.0.0",
-            scope: "item",
-            threshold: 1.0,
-            description: "升级处理诊断",
-            default_selected: true,
-            composed_of: [],
-          },
-          {
-            id: "intent_match",
-            version: "1.0.0",
-            scope: "item",
-            threshold: 1.0,
-            description: "意图匹配评测器",
-            default_selected: true,
-            composed_of: [],
-          },
-          {
-            id: "pii_safe",
-            version: "1.0.0",
-            scope: "item",
-            threshold: 1.0,
-            description: "敏感数据保护评测器",
-            default_selected: true,
-            composed_of: [],
-          },
-          {
-            id: "required_tool_match",
-            version: "1.0.0",
-            scope: "item",
-            threshold: 1.0,
-            description: "工具调用诊断",
-            default_selected: true,
-            composed_of: [],
-          },
-          {
-            id: "overall_pass",
-            version: "1.0.0",
-            scope: "item",
-            threshold: 1.0,
-            description: "Legacy composite",
-            default_selected: false,
-            composed_of: ["escalation_match", "intent_match", "pii_safe", "required_tool_match"],
-          },
-          {
-            id: "run_pass_rate",
-            version: "1.0.0",
-            scope: "run",
-            threshold: 1.0,
-            description: "整体通过率门禁指标",
-            default_selected: false,
-            composed_of: [],
-          },
-        ],
-      });
+      await route.fulfill({ json: buildEvaluatorCatalog() });
     });
 
     // Launch run endpoint (Resource-based POST /api/v1/experiment-launches/{id}/run)
@@ -177,11 +121,13 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
       }
       if (route.request().method() === "POST") {
         interceptedCreationPayload = route.request().postDataJSON();
-        launchObj.manifest.evaluators = interceptedCreationPayload.evaluator_ids.map((id: string) => ({
-          id,
-          version: "1.0.0",
-          scope: "item",
-        }));
+        launchObj.manifest.evaluators = interceptedCreationPayload.evaluator_selections.map(
+          (selection: { id: string; version: string }) => ({
+            id: selection.id,
+            version: selection.version,
+            scope: "item",
+          }),
+        );
         await route.fulfill({ status: 201, json: launchObj });
         return;
       }
@@ -251,36 +197,48 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     await page.goto("/launches/new");
     await expect(page.getByRole("heading", { name: "发起新评测任务" })).toBeVisible();
 
-    // Verify Evaluators selection and scope restriction
-    await expect(page.getByText("intent_match", { exact: true })).toBeVisible();
-    await expect(page.getByText("pii_safe", { exact: true })).toBeVisible();
-    await expect(page.getByText("run_pass_rate", { exact: true })).toBeVisible();
-    await expect(page.getByText(/聚合指标，暂不支持在单次 Launch 中直接运行/)).toBeVisible();
-    await expect(page.getByRole("radio", { name: /逐项诊断/ })).toBeChecked();
-    await expect(page.getByRole("radio", { name: /复合结论/ })).not.toBeChecked();
-
-    // Switching modes is exclusive; returning to diagnostics restores its defaults.
-    await page.getByRole("radio", { name: /复合结论/ }).check();
-    await expect(page.getByRole("radio", { name: /复合结论/ })).toBeChecked();
-    await page.getByRole("radio", { name: /逐项诊断/ }).check();
+    // Verify Evaluators selection and scope restriction. #83: the metric id now
+    // appears both on its card and on its quality rule, so scope the assertion
+    // to the catalog rather than to the whole page.
+    const catalog = page.getByTestId("evaluator-catalog");
+    await expect(catalog.getByText("intent_match", { exact: true })).toBeVisible();
+    await expect(catalog.getByText("pii_safe", { exact: true })).toBeVisible();
+    await expect(catalog.getByText("run_pass_rate", { exact: true })).toBeVisible();
+    await expect(page.getByText(/派生运行指标，不能作为用例指标选择/)).toBeVisible();
+    // #83 removes the composite conclusion mode from the create flow entirely.
+    await expect(page.getByRole("radio", { name: /逐项诊断/ })).toHaveCount(0);
+    await expect(page.getByRole("radio", { name: /复合结论/ })).toHaveCount(0);
     await expect(page.getByText("已选 4 项")).toBeVisible();
 
-    // Keyboard users can reach and operate native evaluator checkboxes without submitting.
-    const diagnosticMode = page.getByRole("radio", { name: /逐项诊断/ });
-    await diagnosticMode.focus();
-    await page.keyboard.press("Tab");
-    const firstEvaluator = page.getByRole("checkbox", { name: /escalation_match/ });
+    // Keyboard users can reach and operate native evaluator checkboxes without
+    // submitting. #83 removed the diagnostic/composite radio that used to sit
+    // before them, so focus starts from the first metric checkbox.
+    const firstEvaluator = page.getByTestId("evaluator-toggle-escalation_match");
+    await firstEvaluator.focus();
     await expect(firstEvaluator).toBeFocused();
     await expect(firstEvaluator).toHaveCSS("outline-style", "solid");
 
+    // Each selected card also exposes its exact version selector and contract disclosure right
+    // after the checkbox (#80), so the keyboard path must reach every stop without a mouse.
+    const tabUntilFocused = async (target: Locator, maxTabs = 4) => {
+      for (let i = 0; i < maxTabs; i += 1) {
+        if (await target.evaluate((el) => el === document.activeElement)) return;
+        await page.keyboard.press("Tab");
+      }
+      await expect(target).toBeFocused();
+    };
+
     for (const id of ["escalation_match", "intent_match", "pii_safe", "required_tool_match"]) {
-      const checkbox = page.getByRole("checkbox", { name: new RegExp(id) });
+      const checkbox = page.getByTestId(`evaluator-toggle-${id}`);
       await expect(checkbox).toBeFocused();
-      if (id !== "required_tool_match") await page.keyboard.press("Tab");
+      if (id === "required_tool_match") break;
+      await page.keyboard.press("Tab");
+      await expect(page.getByLabel(`${id} 版本`)).toBeFocused();
+      await tabUntilFocused(page.getByTestId(`evaluator-toggle-${DIAGNOSTIC_IDS[DIAGNOSTIC_IDS.indexOf(id) + 1]}`));
     }
 
     // Toggle the last diagnostic so keyboard testing doesn't alter the initial request order.
-    const lastEvaluator = page.getByRole("checkbox", { name: /required_tool_match/ });
+    const lastEvaluator = page.getByTestId("evaluator-toggle-required_tool_match");
     await page.keyboard.press("Space");
     await expect(lastEvaluator).not.toBeChecked();
     await expect(page.getByText("已选 3 项")).toBeVisible();
@@ -291,8 +249,10 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     await expect(page.getByText("已选 4 项")).toBeVisible();
     expect(interceptedCreationPayload).toBeNull();
 
-    const concurrencyInput = page.getByRole("spinbutton");
-    await page.keyboard.press("Tab");
+    // #83 adds one numeric threshold input per metric, so the concurrency
+    // spinner is addressed by its own accessible name.
+    const concurrencyInput = page.getByLabel("最大并发执行数 (Concurrency)");
+    await tabUntilFocused(concurrencyInput, 24);
     await expect(concurrencyInput).toBeFocused();
 
     // Adjust Concurrency
@@ -303,13 +263,17 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
 
     // Verify Creation Payload Contract: must NOT include run_pass_rate, dataset_version undefined when latest
     expect(interceptedCreationPayload).not.toBeNull();
-    expect(interceptedCreationPayload.evaluator_ids).toEqual([
-      "escalation_match",
-      "intent_match",
-      "pii_safe",
-      "required_tool_match",
+    expect(interceptedCreationPayload.evaluator_selections).toEqual([
+      { id: "escalation_match", version: "1.0.0" },
+      { id: "intent_match", version: "1.0.0" },
+      { id: "pii_safe", version: "1.0.0" },
+      { id: "required_tool_match", version: "1.0.0" },
     ]);
-    expect(interceptedCreationPayload.evaluator_ids).not.toContain("run_pass_rate");
+    expect(
+      interceptedCreationPayload.evaluator_selections.map((s: { id: string }) => s.id),
+    ).not.toContain("run_pass_rate");
+    // The legacy id-only contract must never be sent: it would silently drift to a newer default.
+    expect(interceptedCreationPayload.evaluator_ids).toBeUndefined();
     expect(interceptedCreationPayload.dataset_version).toBeUndefined();
     expect(interceptedCreationPayload.max_concurrency).toBe(2);
 
@@ -318,7 +282,7 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     await expect(page.getByRole("heading", { name: launchId })).toBeVisible();
     await expect(page.getByText("3. 评测门禁指标 (4)")).toBeVisible();
     for (const id of ["escalation_match", "intent_match", "pii_safe", "required_tool_match"]) {
-      await expect(page.getByText(id, { exact: true })).toBeVisible();
+      await expect(page.getByText(id, { exact: true }).first()).toBeVisible();
     }
     await expect(page.getByText("overall_pass", { exact: true })).toHaveCount(0);
 

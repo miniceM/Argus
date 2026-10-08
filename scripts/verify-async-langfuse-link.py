@@ -261,9 +261,13 @@ def _drive_until_link(
                 asyncio.run(worker.execute_evaluation_message(message_id, item_id, generation))
             else:
                 asyncio.run(worker.execute_item_message(message_id, item_id, generation))
-        if messages:
-            outbox_syncer.process_batch(batch_size=10)
-            run_score_syncer.process_batch(batch_size=10)
+        # Drive both syncers every round: their own `next_retry_at` decides what is due.
+        # Gating them on a non-empty batch meant the Run Score tasks created by the
+        # reconciliation below never ran once the six sample messages drained, and an
+        # item sync task that failed back to PENDING was never retried — both surfaced
+        # only as this loop timing out.
+        outbox_syncer.process_batch(batch_size=10)
+        run_score_syncer.process_batch(batch_size=10)
         reconciler.run_reconcile_cycle()
         # Explicit compensation pass: a SYNCED launch must end up with a valid link.
         reconciler.reconcile_langfuse_links(link_service)

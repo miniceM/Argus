@@ -26,6 +26,7 @@ from .langfuse_links import LangfuseLaunchLinkService, LangfuseLinkResolver
 from .langfuse_run_scores import LangfuseRunScoreSyncer
 from .langfuse_sync import LangfuseOutboxSyncer
 from .limiter import DistributedAgentLimiter, MemoryAgentLimiter, RedisDistributedLimiter
+from .link_lease import build_link_loop_lease
 from .manifest import LaunchService
 from .metrics import metrics_router
 from .models import BootstrapResult, ExperimentRequest, ExperimentResult
@@ -54,26 +55,28 @@ def init_queue_and_limiter(
     redis_url: str | None,
     db_mode: str,
     db_url: str,
-) -> tuple[QueueAdapter, DistributedAgentLimiter]:
-    """Initialize queue adapter and limiter.
+) -> tuple[QueueAdapter, DistributedAgentLimiter, Any | None]:
+    """Initialize queue adapter, limiter and the shared Redis client.
 
-    - If redis_url is provided, uses Redis Streams queue adapter and distributed limiter.
-    - If in test mode or running on SQLite, falls back to in-memory queue and limiter.
+    - If redis_url is provided, uses Redis Streams queue adapter and distributed limiter,
+      and returns the client so cross-instance coordination can reuse the connection.
+    - If in test mode or running on SQLite, falls back to in-memory queue and limiter
+      and returns ``None`` for the client.
     - Otherwise (production PostgreSQL without Redis), fails closed to prevent uncoordinated multi-instance execution.
     """
     if redis_url:
         import redis
         redis_client = redis.Redis.from_url(redis_url)
-        return RedisStreamQueueAdapter(redis_client), RedisDistributedLimiter(redis_client)
+        return RedisStreamQueueAdapter(redis_client), RedisDistributedLimiter(redis_client), redis_client
 
     if db_mode == "test" or db_url.startswith("sqlite"):
-        return MemoryQueueAdapter(), MemoryAgentLimiter()
+        return MemoryQueueAdapter(), MemoryAgentLimiter(), None
 
     raise RuntimeError("ARGUS_REDIS_URL must be configured in production mode")
 
 
 # 3. Initialize Queue & Limiter
-queue_adapter, limiter = init_queue_and_limiter(
+queue_adapter, limiter, redis_client = init_queue_and_limiter(
     redis_url=settings.argus_redis_url,
     db_mode=settings.argus_db_mode,
     db_url=db_manager.db_url,
@@ -180,12 +183,18 @@ async def lifespan(app: FastAPI):
             except Exception:
                 await asyncio.sleep(2.0)
 
+    # Several Runner replicas may run at once in production, so only the lease holder
+    # resolves links; otherwise every replica would look up the same missing launches
+    # and hammer Langfuse with identical remote calls. Unfenced when Redis is absent.
+    link_lease = build_link_loop_lease(redis_client)
+
     async def _link_loop():
         # Independent from execution recovery: remote link lookups must never delay
         # lease recovery or backlog processing.
         while not stop_event.is_set():
             try:
-                await asyncio.to_thread(reconciler.reconcile_langfuse_links, launch_link_service)
+                if link_lease.try_acquire():
+                    await asyncio.to_thread(reconciler.reconcile_langfuse_links, launch_link_service)
             except asyncio.CancelledError:
                 break
             except Exception:
@@ -203,6 +212,7 @@ async def lifespan(app: FastAPI):
     yield
 
     stop_event.set()
+    link_lease.release()
     if worker_task:
         worker_task.cancel()
     if reconciler_task:

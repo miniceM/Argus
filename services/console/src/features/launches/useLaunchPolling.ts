@@ -10,8 +10,15 @@ import { isSafeLangfuseUrl, type LangfuseLinkLaunch } from "./langfuseLink";
  * Bounded waiting window for a link that arrives after the launch already
  * reported SYNCED. It keeps polling for a while, then stops so a permanently
  * misconfigured environment cannot cause infinite browser requests.
+ *
+ * This must stay above the compensator's *whole* escalating backoff ladder
+ * (`ExecutionReconciler._LINK_BACKOFF_STEPS` = 5/10/20/40/60s, cumulative 135s).
+ * A shorter window stops polling before the last retries have even run, so a link
+ * that is persisted at ~75s is never fetched by the already-open list or detail
+ * view and the user has to reload to see it. `test_console_polling_window_
+ * outlasts_the_backoff_ladder` asserts the two stay in sync.
  */
-export const LINK_BACKFILL_WINDOW_MS = 60_000;
+export const LINK_BACKFILL_WINDOW_MS = 180_000;
 
 export type BackfillTracker = Map<string, { key: string; deadline: number }>;
 

@@ -74,6 +74,30 @@ def test_history_backfill_recovers_run_id_from_task_only(setup_runtime):
     assert row.run_id == "r1"
 
 
+def test_console_polling_window_outlasts_the_backoff_ladder(setup_runtime):
+    """前端的补链轮询窗口必须长于后端整条退避阶梯。
+
+    阶梯按 5/10/20/40/60 秒递增，累计到 135 秒，而补偿器每 5 秒跑一轮。窗口一旦
+    短于阶梯，最后几次重试落库时列表页与详情页早已停止轮询，用户必须手动刷新才能
+    看到本该自动出现的链接。两侧的常量分属不同语言，这里直接钉住它们的相对关系。
+    """
+    import re
+    from pathlib import Path
+
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "services" / "console" / "src" / "features" / "launches" / "useLaunchPolling.ts"
+    ).read_text()
+    match = re.search(r"LINK_BACKFILL_WINDOW_MS = ([\d_]+)", source)
+    assert match, "LINK_BACKFILL_WINDOW_MS not found in useLaunchPolling.ts"
+    window_ms = int(match.group(1).replace("_", ""))
+
+    ladder_seconds = sum(setup_runtime[5]._LINK_BACKOFF_STEPS)
+    assert window_ms > ladder_seconds * 1000, (
+        f"polling window {window_ms}ms must outlast the {ladder_seconds}s backoff ladder"
+    )
+
+
 def test_run_id_only_launch_is_rebuilt_after_a_dashboard_is_configured(setup_runtime):
     """没有 dashboard 时只保留 Run ID，配置之后补偿器必须能无重跑补齐链接。
 

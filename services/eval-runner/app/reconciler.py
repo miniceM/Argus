@@ -480,6 +480,11 @@ class ExecutionReconciler:
         return updated
 
     # -- Langfuse link backfill -------------------------------------------
+    # Escalating retry ladder. Its cumulative horizon (5/15/35/75/135s) is what the
+    # Console backfill polling window has to outlast, otherwise the link is persisted
+    # after the open view already stopped polling. See LINK_BACKFILL_WINDOW_MS in
+    # services/console/src/features/launches/useLaunchPolling.ts; the two are asserted
+    # to stay in sync by test_console_polling_window_outlasts_the_backoff_ladder.
     _LINK_BACKOFF_STEPS = (5.0, 10.0, 20.0, 40.0, 60.0)
     _LINK_BACKOFF_MAX_ENTRIES = 1024
 

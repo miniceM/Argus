@@ -143,7 +143,114 @@ describe("LaunchesList High-Density Table & Information Hierarchy (Issue #26)", 
     );
     expect(langfuseLink).toHaveAttribute("target", "_blank");
     expect(langfuseLink).toHaveAttribute("rel", "noopener noreferrer");
-    expect(screen.getAllByText("Langfuse 未就绪")).toHaveLength(LAUNCH_STATUSES.length - 1);
+
+    // Reasons are specific instead of a single "not ready" label.
+    expect(screen.getAllByText("Langfuse 地址无效")).toHaveLength(1); // javascript: URL
+    expect(screen.getAllByText("Langfuse 同步中")).toHaveLength(LAUNCH_STATUSES.length - 2);
+    expect(screen.queryByText("Langfuse 未就绪")).not.toBeInTheDocument();
+  });
+
+  it("states the concrete reason for every Langfuse link state", async () => {
+    const link = "https://cloud.example.com/project/p1/datasets/d1/runs/r1";
+    const cases = [
+      {
+        id: "l-linked",
+        status: "COMPLETED",
+        langfuse_sync_status: "SYNCED",
+        langfuse_experiment_id: "r1",
+        langfuse_experiment_url: link,
+        expectLink: true,
+      },
+      {
+        id: "l-seed-run",
+        status: "COMPLETED",
+        langfuse_sync_status: "SYNCED",
+        langfuse_experiment_id: "r1",
+        langfuse_experiment_url: link,
+        manifest: { dataset: { source: "seed" } },
+        expectLink: true,
+      },
+      {
+        id: "l-not-started",
+        status: "PENDING",
+        langfuse_sync_status: "PENDING",
+        expectText: "尚未创建 Langfuse Run",
+      },
+      {
+        id: "l-syncing",
+        status: "RUNNING",
+        langfuse_sync_status: "SYNCING",
+        expectText: "Langfuse 同步中",
+      },
+      {
+        id: "l-failed",
+        status: "COMPLETED",
+        langfuse_sync_status: "FAILED",
+        expectText: "Langfuse 同步失败",
+      },
+      {
+        id: "l-seed-no-run",
+        status: "COMPLETED",
+        langfuse_sync_status: "NOT_APPLICABLE",
+        manifest: { dataset: { source: "seed" } },
+        expectText: "未创建 Langfuse Run",
+      },
+      {
+        id: "l-na",
+        status: "COMPLETED",
+        langfuse_sync_status: "NOT_APPLICABLE",
+        expectText: "Langfuse 同步不适用",
+      },
+      {
+        id: "l-synced-no-link",
+        status: "COMPLETED",
+        langfuse_sync_status: "SYNCED",
+        langfuse_experiment_id: "r9",
+        expectText: "已同步，链接暂不可用",
+      },
+      {
+        id: "l-synced-no-run",
+        status: "COMPLETED",
+        langfuse_sync_status: "SYNCED",
+        expectText: "未取得 Langfuse Run 信息",
+      },
+      {
+        id: "l-unknown",
+        status: "COMPLETED",
+        langfuse_sync_status: "SKIPPED",
+        expectText: "Langfuse 链接暂不可用",
+      },
+    ];
+
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path === "/api/v1/experiment-launches") {
+        return Promise.resolve({
+          data: cases.map((c) => ({ ...mockLaunches[0], ...c })),
+        });
+      }
+      if (path === "/api/v1/agents") return Promise.resolve({ data: mockAgents });
+      return Promise.resolve({ data: null });
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <LaunchesList />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(screen.getByRole("table")).toBeInTheDocument());
+
+    for (const c of cases) {
+      if (c.expectLink) {
+        expect(screen.getByRole("link", { name: `查看 Launch ${c.id} 详情` })).toBeInTheDocument();
+      }
+      if (c.expectText) {
+        expect(screen.getAllByText(c.expectText as string).length).toBeGreaterThan(0);
+      }
+    }
+    expect(screen.getAllByRole("link", { name: "在 Langfuse 中查看" })).toHaveLength(2);
   });
 
   it("displays truncated Launch ID, provides copy button with accessible label and clipboard action", async () => {

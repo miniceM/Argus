@@ -57,8 +57,6 @@ services:
       AGENT_REGISTRY_PATH: /app/config/agents.yaml
       DATASET_SEED_PATH: /app/data/dataset.json
       RUNNER_VERSION: 0.2.0
-    # 不要在这里写死 jp.cloud.langfuse.com 的 IP：Langfuse Cloud 会轮换地址，
-    # 过期映射会让容器内 TLS 直接失败，E2E 在 /admin/bootstrap 卡满 120s 后返回 500。
     volumes: [./config:/app/config:ro, ./data:/app/data:ro, ./migrations:/app/migrations:ro, ./scripts:/app/scripts:ro]
     ports: ["18080:8080"]
     healthcheck:

@@ -110,8 +110,8 @@ class RemoteAgentExecutor:
             )
         )
 
-    async def prepare_credential(self):
-        if self._credential_prepared:
+    async def prepare_credential(self, *, force_refresh: bool = False):
+        if self._credential_prepared and not force_refresh:
             return
         try:
             if self.spec.credential_id:
@@ -301,13 +301,6 @@ class RemoteAgentExecutor:
 
         total_started = time.monotonic()
         total_attempts = 0
-        call_headers = dict(headers)
-
-        # Inject resolved credential if present
-        await self.prepare_credential()
-        if self.resolved_credential:
-            call_headers["Authorization"] = f"Bearer {self.resolved_credential.token}"
-
         timeout = httpx.Timeout(
             self.spec.timeout_seconds,
             connect=min(5.0, self.spec.timeout_seconds),
@@ -318,6 +311,13 @@ class RemoteAgentExecutor:
         async with httpx.AsyncClient(timeout=timeout, transport=client_transport) as client:
             for attempt in range(self.spec.max_retries + 1):
                 total_attempts = attempt + 1
+                # 同步 executor 可被多个 Item 共用；每个实际 HTTP Attempt 读取当前凭据。
+                await self._limiter.acquire()
+                await self.prepare_credential(force_refresh=True)
+                call_headers = dict(headers)
+                if self.resolved_credential:
+                    call_headers["Authorization"] = f"Bearer {self.resolved_credential.token}"
+                # 拷贝 Header 与同步授权回调之间不让出控制权，修订与发送的 Token 一致。
                 attempt_id: str | None = None
                 if on_attempt_start:
                     attempt_id = on_attempt_start(total_attempts)
@@ -326,7 +326,6 @@ class RemoteAgentExecutor:
                             f"Attempt {total_attempts} authorization denied. Invocation aborted to prevent unrecorded HTTP calls."
                         )
 
-                await self._limiter.acquire()
                 attempt_started = time.monotonic()
 
                 try:

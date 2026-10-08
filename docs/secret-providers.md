@@ -40,7 +40,7 @@ UID 时，应设置文件所有者让 Runner 能读取，不能放宽为组或�
 写操作 `POST /api/v1/credentials`、`/{id}/rotate`、`/{id}/disable`、`/rewrap` 与
 `DELETE /{id}` 需独立 Bearer 管理授权。未配置授权/主密钥则拒绝写入；错误响应不回显输入。
 创建、轮换、停用、删除和重包裹留存不含 Secret 的审计动作、修订和管理 Token 指纹。
-重包裹的每条审计记录对应实际处理的历史修订；同步执行和 Worker 执行均在 Attempt 记录实际使用的凭据 ID、Provider 与修订。
+重包裹的每条审计记录对应实际处理的历史修订；同步执行和 Worker 执行均在 Attempt 记录实际使用的凭据 ID、Provider 与修订。同步执行每次发送（含不同 Item 和重试）均重新解析，轮换或停用在后续请求生效；Worker 已准备好的单次 Attempt 保持原修订。
 该指纹不代表具体用户身份。生产部署仍需网关鉴权和 HTTPS 保护整个 Console/API；本 PR
 没有实现 SSO、租户 RBAC 或细粒度读取授权，这些继续由治理 Issue #6 承接。
 浏览器只在当前操作表单保留 Token，成功或关闭后清空，不写 localStorage。

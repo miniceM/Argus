@@ -338,3 +338,60 @@ def test_rewrap_audits_each_historical_secret_revision(credentials, setup_runtim
     with setup_runtime[0].get_session() as session:
         rows = session.scalars(select(CredentialAuditRecord).where(CredentialAuditRecord.action == "REWRAP")).all()
         assert sorted(row.version for row in rows) == [1, 2]
+
+
+@pytest.mark.parametrize("langfuse", [False, True])
+@pytest.mark.parametrize("change", ["item_rotate", "retry_rotate", "item_disable", "retry_disable"])
+def test_sync_api_refreshes_credentials_for_each_future_attempt(credentials, setup_runtime, monkeypatch, langfuse, change):
+    from types import SimpleNamespace
+
+    import httpx
+    from app.manifest import LaunchService
+
+    client, service, registry, _ = credentials
+    manager = setup_runtime[0]
+    record = create(client).json()
+    retry = change.startswith("retry")
+    registry.create_version("test-agent", "sync-fresh", "https://agent.example/invoke", credential_id=record["id"],
+                            environment="production", max_retries=1 if retry else 0, max_concurrency=1)
+    svc = LaunchService(manager, registry)
+    monkeypatch.setattr(main, "launch_service", svc)
+    monkeypatch.setattr(main, "orchestrator", setup_runtime[3])
+    items = [{"id": str(index), "input": {}, "expected_output": {"expected_intent": "refund"}}
+             for index in range(1 if retry else 2)]
+    launch = svc.create_launch(agent_id="test-agent", agent_version="sync-fresh", dataset_name="test", evaluator_ids=["intent_match"], dataset_snapshot={
+        "source": "seed", "dataset_id": "ds", "dataset_version": "v1", "items": items,
+    })
+
+    class Dataset:
+        async def run_experiment(self, *, task, **kwargs):
+            for item in items:
+                await task(item=SimpleNamespace(**item))
+            return SimpleNamespace()
+
+    fake_lf = SimpleNamespace(get_dataset=lambda *args, **kwargs: Dataset()) if langfuse else None
+    sent = []
+
+    async def invoke(*args, **kwargs):
+        sent.append(kwargs["headers"]["Authorization"])
+        if len(sent) == 1:
+            if change.endswith("rotate"):
+                service.rotate(record["id"], "example-second-token", "credential-admin:test")
+            else:
+                assert client.post(f"/api/v1/credentials/{record['id']}/disable", json={"confirm_name": record["name"], "force": True}).status_code == 200
+        return httpx.Response(500 if retry and len(sent) == 1 else 200, json={"intent": "refund"})
+
+    with patch("app.execution.get_langfuse_client_safe", return_value=fake_lf), patch("httpx.AsyncClient.post", side_effect=invoke):
+        response = client.post("/api/v1/experiment-launches/run", json={"launch_id": launch.id})
+    assert response.status_code == 200, response.text
+    expected = ["Bearer example-first-token"]
+    if change.endswith("rotate"):
+        expected.append("Bearer example-second-token")
+    assert sent == expected
+    with manager.get_session() as session:
+        attempts = session.scalars(select(ExecutionAttemptRecord).join(ExperimentItemExecutionRecord, ExecutionAttemptRecord.item_execution_id == ExperimentItemExecutionRecord.id).where(ExperimentItemExecutionRecord.launch_id == launch.id).order_by(ExecutionAttemptRecord.started_at)).all()
+        assert [attempt.credential_version for attempt in attempts] == ([1, 2] if change.endswith("rotate") else [1])
+        assert all(attempt.credential_id == record["id"] and attempt.credential_provider == "managed" for attempt in attempts)
+        if change.endswith("disable"):
+            rows = session.scalars(select(ExperimentItemExecutionRecord).where(ExperimentItemExecutionRecord.launch_id == launch.id)).all()
+            assert any(item.execution_status == "failed" for item in rows)

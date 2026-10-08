@@ -140,4 +140,13 @@
 - typecheck、build、Token lint 通过；Vitest 27 文件 / 397 项通过。
 - `launches-filter.spec.ts`：5 项通过。
 - 灵敏度验证：临时忽略 Agent 参数，Agent case 因期望 3 行而实际 6 行失败；恢复后 5 项再次通过。未修改产品逻辑。
-- 环境：Python 3.12.13 虚拟环境；本机 Node 22 缺少 `libsimdutf.31.dylib` 无法启动，使用可用 Node 24.13.0。其余 Issue 与完整门禁待执行。
+- 环境：Python 3.12.4 虚拟环境；本机 Node 22 缺少 `libsimdutf.31.dylib` 无法启动，使用可用 Node 24.13.0。其余 Issue 与完整门禁待执行。
+
+
+### #47
+
+- `responsive.spec.ts`：22 项通过（原 18 项保留并补页面 ready 检查，新增 4 项桌面/窄桌面闭环）。
+- typecheck、Token lint 通过；Vitest 27 文件 / 397 项通过。
+- 灵敏度验证：临时恢复错误的 Version 数组响应，390px Version case 因标题缺少 `1.0.0` 失败；临时遮挡页面，1440px journey 因 `unobstructed: false` 失败。两项扰动均已恢复。
+- 首次新增场景暴露的是测试 locator 的 Environment 名称及复制按钮变更名称问题；已按真实 accessible name 修正，不是产品 Bug。无需改动业务 UI。
+- Homebrew Node 22 无法启动，但已取得隔离的 Node 22.22.0，最终完整门禁将使用此运行时，未修改系统安装。

@@ -74,6 +74,24 @@ def test_history_backfill_recovers_run_id_from_task_only(setup_runtime):
     assert row.run_id == "r1"
 
 
+def test_run_id_only_launch_is_rebuilt_after_a_dashboard_is_configured(setup_runtime):
+    """没有 dashboard 时只保留 Run ID，配置之后补偿器必须能无重跑补齐链接。
+
+    这正是同步路径放弃 SDK 回退链接的前提：URL 留空，launch 才会继续留在补链
+    候选集合里。
+    """
+    db, reconciler = setup_runtime[0], setup_runtime[5]
+    lid, _ = seed_terminal_launch(
+        setup_runtime, dataset_id=None, store_run_id="r1", task_status=None
+    )
+    assert _launch_row(db, lid).url is None
+    assert lid in reconciler._link_candidate_ids(None, 50)
+
+    service = make_service(db, FakeLangfuseSDK(dataset_ids={DATASET: "ds-real"}), DASHBOARD)
+    assert reconciler.reconcile_langfuse_links(service) == 1
+    assert _launch_row(db, lid).url == EXPECTED_URL
+
+
 def test_history_backfill_is_idempotent(setup_runtime):
     db, reconciler = setup_runtime[0], setup_runtime[5]
     lid, _ = seed_terminal_launch(setup_runtime)

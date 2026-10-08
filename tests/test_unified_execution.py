@@ -180,7 +180,14 @@ def test_unified_execution_keeps_synced_when_link_resolution_fails(client):
     assert run_data["langfuse_sync_error"] is None
 
 
-def test_unified_execution_without_dashboard_keeps_safe_sdk_link(client):
+def test_unified_execution_without_dashboard_does_not_persist_an_sdk_link(client):
+    """未配置 dashboard 时不落 SDK 链接，补偿器才能在配置后重建。
+
+    SDK 的 `dataset_run_url` 由 LANGFUSE_BASE_URL 派生：自托管部署里它是容器内地址
+    （http://langfuse-web:3000/...），浏览器根本打不开。更关键的是，一旦落库，补链
+    只挑 URL 为 NULL 的 launch、且对已有安全 URL 直接返回 UNCHANGED，这个链接就会
+    永久留下，注释承诺的"配置 dashboard 后重建"永远不会发生。
+    """
     r_create = client.post(
         "/api/v1/experiment-launches",
         json={
@@ -201,7 +208,7 @@ def test_unified_execution_without_dashboard_keeps_safe_sdk_link(client):
             "escalated": False,
         },
     )
-    lf = FakeLangfuseClient(sdk_run_url="https://langfuse.example.com/project/p/datasets/d/runs/run-real")
+    lf = FakeLangfuseClient(sdk_run_url="http://langfuse-web:3000/project/poc-project/datasets/ds/runs/run-real")
     patched_settings = dataclasses.replace(settings, argus_langfuse_dashboard_url=None)
 
     with patch.object(httpx.AsyncClient, "post", AsyncMock(return_value=mock_agent_response)), \
@@ -212,9 +219,10 @@ def test_unified_execution_without_dashboard_keeps_safe_sdk_link(client):
         run_data = r_run.json()
 
     assert run_data["langfuse_sync_status"] == "SYNCED"
-    assert run_data["langfuse_experiment_url"] == (
-        "https://langfuse.example.com/project/p/datasets/d/runs/run-real"
-    )
+    # 真实 Run ID 必须保留：这是配置 dashboard 后无重跑补齐链接的全部依据
+    assert run_data["langfuse_experiment_id"] == "run-real"
+    assert run_data["langfuse_experiment_url"] is None
+    assert run_data["links"]["langfuse_experiment"] is None
 
 
 def test_unified_execution_langfuse_run_experiment_failure_marks_launch_failed(client):

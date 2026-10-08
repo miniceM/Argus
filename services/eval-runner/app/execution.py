@@ -27,7 +27,7 @@ from .evaluator_binding import (
     resolve_langfuse_evaluators,
 )
 from .executor import AttemptAuthorizationError, RemoteAgentExecutor
-from .langfuse_links import is_safe_browser_url, resolve_dataset_run_link
+from .langfuse_links import resolve_dataset_run_link
 from .manifest import acquire_launch_execution
 from .registry import AgentRegistry, AgentVersionSpec, map_request
 from .runner_identity import current_runner_identity, validate_runner_identity
@@ -548,8 +548,15 @@ class LaunchExecutionService:
                     )
                     # The Dataset Run page path is /datasets/{dataset_id}/runs/{run_id}:
                     # never the dataset name, never a hardcoded project, never the internal API host.
+                    #
+                    # An SDK-provided `dataset_run_url` is deliberately never persisted. It is
+                    # derived from LANGFUSE_BASE_URL, which in a self-hosted deployment is a
+                    # container-internal address (e.g. http://langfuse-web:3000) that a browser
+                    # cannot open, and storing it would also permanently defeat compensation:
+                    # backfill only considers launches whose URL is still NULL, and an existing
+                    # safe URL short-circuits. The real Run ID is persisted below, so configuring
+                    # a dashboard later rebuilds the canonical link with no rerun.
                     run_url = None
-                    sdk_run_url = getattr(result, "dataset_run_url", None)
                     dashboard_base = settings.argus_langfuse_dashboard_url
                     if run_id:
                         try:
@@ -567,10 +574,6 @@ class LaunchExecutionService:
                         except Exception as exc:  # link resolution never fails the experiment
                             logger.warning("Langfuse link resolution failed for launch %s: %s", launch_id, exc)
                             run_url = None
-                        if run_url is None and dashboard_base is None and is_safe_browser_url(sdk_run_url):
-                            # No dashboard configured: keep a safe SDK-provided link, and let
-                            # historical compensation rebuild it once one is configured.
-                            run_url = str(sdk_run_url)
 
                     sync_status = "SYNCED"
                     result_summary = _safe_summary(result)

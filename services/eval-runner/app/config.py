@@ -111,6 +111,13 @@ def _load_langfuse_base_url() -> str:
             "Stripped invisible characters (BOM/zero-width) from LANGFUSE_BASE_URL; "
             "otherwise every Langfuse SDK call fails with a missing-scheme error."
         )
+    if configured and sanitized != configured:
+        # The SDK reads LANGFUSE_BASE_URL straight from the environment through
+        # `get_client()` and normalizes nothing, so cleaning only the settings value
+        # would leave every request using the original value: the log would claim the
+        # URL was sanitized while the SDK still failed with a missing-scheme error.
+        # Write the cleaned value back before the first client is created.
+        os.environ["LANGFUSE_BASE_URL"] = sanitized
     return sanitized or default
 
 

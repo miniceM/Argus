@@ -102,17 +102,43 @@ def test_sdk_client_accepts_sanitized_base_url(monkeypatch, reloaded_config):
     """端到端复现 Cloud E2E 故障：SDK 只从环境读取 base URL，且不做任何净化。
 
     带 BOM 时 `get_client()` 会构造出无法发起请求的 base URL，
-    随后每个 API 调用都抛 UnsupportedProtocol。
+    随后每个 API 调用都抛 UnsupportedProtocol。这里刻意**不**手工回写环境变量：
+    生产代码必须在第一个客户端创建前自己完成，否则日志声称已净化、SDK 仍失败。
     """
     from langfuse import get_client
 
     monkeypatch.setenv("LANGFUSE_BASE_URL", f"{BOM}{CLEAN}")
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
-    reloaded = importlib.reload(reloaded_config)
-    os.environ["LANGFUSE_BASE_URL"] = reloaded.settings.langfuse_base_url
+    importlib.reload(reloaded_config)
 
     assert get_client()._base_url == CLEAN
+
+
+def test_sanitized_base_url_is_written_back_to_the_environment(monkeypatch, reloaded_config):
+    """净化结果必须回写到 SDK 真正读取的环境变量。
+
+    只清洗 settings 是不够的：`get_client()` 重新读取未经改动的 `os.environ`，
+    于是 settings 里是干净 URL，而所有 SDK 请求仍带着 BOM。
+    """
+    monkeypatch.setenv("LANGFUSE_BASE_URL", f"{BOM}{CLEAN}")
+    importlib.reload(reloaded_config)
+    assert os.environ["LANGFUSE_BASE_URL"] == CLEAN
+
+
+def test_base_url_surrounding_whitespace_is_written_back(monkeypatch, reloaded_config):
+    """首尾空白同样会让 SDK 拿到非法 scheme，必须一并回写净化后的值。"""
+    monkeypatch.setenv("LANGFUSE_BASE_URL", f"  {CLEAN}\n")
+    reloaded = importlib.reload(reloaded_config)
+    assert reloaded.settings.langfuse_base_url == CLEAN
+    assert os.environ["LANGFUSE_BASE_URL"] == CLEAN
+
+
+def test_clean_base_url_is_left_untouched(monkeypatch, reloaded_config):
+    """本就干净的配置不得被改写，避免无谓地污染进程环境。"""
+    monkeypatch.setenv("LANGFUSE_BASE_URL", CLEAN)
+    importlib.reload(reloaded_config)
+    assert os.environ["LANGFUSE_BASE_URL"] == CLEAN
 
 
 def test_genuinely_invalid_url_is_still_rejected(monkeypatch, reloaded_config):

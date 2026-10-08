@@ -502,3 +502,18 @@ def test_old_control_plane_without_explicit_freeze_support_cannot_release():
     assert code == 2
     assert report["error_code"] == "HTTP_405"
     assert not any(request.url.path.endswith("/evaluate") for request in calls)
+
+
+def test_overlong_idempotency_key_is_unknown_before_any_http_request():
+    code, report, _, calls, _ = exercise(arguments(idempotency_key='x'*129))
+    assert code == 2
+    assert report['error_code'] == 'INVALID_IDEMPOTENCY_KEY'
+    assert calls == []
+
+
+def test_idempotency_key_at_database_limit_is_preserved():
+    key = 'x'*128
+    code, _, _, calls, _ = exercise(arguments(idempotency_key=key))
+    assert code == 0
+    create = next(request for request in calls if request.method == 'POST' and request.url.path.endswith('/experiment-launches'))
+    assert create.headers['Idempotency-Key'] == key

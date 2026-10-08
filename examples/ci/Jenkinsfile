@@ -24,12 +24,13 @@ pipeline {
           sh '''
             set +x
             set -eu
+            RELEASE_KEY=$(python3.12 -c 'import hashlib,os; print("argus-jenkins-" + hashlib.sha256((os.environ["JOB_NAME"] + ":" + os.environ["BUILD_NUMBER"]).encode()).hexdigest())')
             .argus-venv/bin/argus eval run --agent banking-agent --agent-version "$AGENT_VERSION" \
               --dataset banking-agent-regression --dataset-version "$DATASET_VERSION" \
               --evaluator intent_match@1.0.0 --evaluator required_tool_match@1.0.0 \
               --evaluator pii_safe@1.0.0 --evaluator escalation_match@1.0.0 \
               --policy banking-production --policy-version 1.0.0 \
-              --idempotency-key "$JOB_NAME-$BUILD_NUMBER" --wait --timeout 300 --report artifacts/argus-gate.json
+              --idempotency-key "$RELEASE_KEY" --wait --timeout 300 --report artifacts/argus-gate.json
           '''
         }
       }

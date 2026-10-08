@@ -120,6 +120,8 @@ def _validate(args):
         raise CLIError("INVALID_POLL_INTERVAL")
     selections = []
     if args.command == "run":
+        if args.idempotency_key is not None and len(args.idempotency_key) > 128:
+            raise CLIError("INVALID_IDEMPOTENCY_KEY")
         _exact(args.agent_version)
         _exact(args.dataset_version)
         for entry in args.evaluator:

@@ -34,7 +34,7 @@ argus_gate:
       --evaluator intent_match@1.0.0 --evaluator required_tool_match@1.0.0
       --evaluator pii_safe@1.0.0 --evaluator escalation_match@1.0.0
       --policy banking-production --policy-version 1.0.0
-      --idempotency-key "$CI_PROJECT_PATH-$CI_PIPELINE_ID" --wait --timeout 300 --report artifacts/argus-gate.json
+      --idempotency-key "argus-gl-$CI_PROJECT_ID-$CI_PIPELINE_ID" --wait --timeout 300 --report artifacts/argus-gate.json
   artifacts:
     when: always
     paths: [artifacts/argus-gate.json]

@@ -58,6 +58,39 @@ const items = Array.from({ length: 6 }, (_, index) => ({
   started_at: "2026-09-20T00:00:01Z",
 }));
 
+// A frozen result snapshot plus a comparable cohort, so the Baseline comparison
+// area renders for real instead of degrading. Needed because the header metric
+// and the cohort metric deliberately use different denominators.
+const snapshotId = "snapshot-quality-045";
+
+const snapshotRevision = {
+  snapshot_id: snapshotId,
+  revision: 1,
+  is_latest: true,
+  created_at: "2026-09-20T00:00:06Z",
+  evidence_state: "COMPLETE",
+  quality_pass_count: 2,
+  quality_fail_count: 4,
+  quality_unknown_count: 0,
+};
+
+const snapshotDetail = {
+  launch_id: launchId,
+  snapshot_id: snapshotId,
+  revision: 1,
+  is_latest: true,
+  created_at: "2026-09-20T00:00:06Z",
+  evidence_state: "COMPLETE",
+  quality_pass_count: 2,
+  quality_fail_count: 4,
+  quality_unknown_count: 0,
+  releasable: true,
+  items: items.map((it) => ({
+    ...it,
+    scores: it.scores,
+  })),
+};
+
 async function mockQualityApi(page: Page) {
   await page.route("**/api/v1/system/info", (route) =>
     route.fulfill({
@@ -71,6 +104,22 @@ async function mockQualityApi(page: Page) {
   // would win; keeping every branch here removes that ordering hazard.
   await page.route("**/api/v1/experiment-launches**", async (route) => {
     const pathname = new URL(route.request().url()).pathname;
+
+    if (pathname.endsWith("/result-snapshots")) {
+      await route.fulfill({
+        json: {
+          revisions: [snapshotRevision],
+          latest_snapshot_id: snapshotId,
+          latest_revision: 1,
+        },
+      });
+      return;
+    }
+
+    if (pathname.includes("/result-snapshots/")) {
+      await route.fulfill({ json: snapshotDetail });
+      return;
+    }
 
     // The result-snapshot endpoints are out of scope here. Fail them explicitly
     // so the comparison panel degrades on its own and the assertions stay
@@ -91,11 +140,6 @@ async function mockQualityApi(page: Page) {
     await route.fulfill({ json: launch });
   });
 }
-
-// A frozen result snapshot plus a comparable cohort, so the Baseline comparison
-// area renders for real instead of degrading. Needed because the header metric
-// and the cohort metric deliberately use different denominators.
-const snapshotId = "snapshot-quality-045";
 
 const runSummary = {
   launch_id: launchId,
@@ -246,6 +290,20 @@ test.describe("Issue #45: quality pass rate wording", () => {
     );
     await page.route("**/api/v1/experiment-launches**", async (route) => {
       const pathname = new URL(route.request().url()).pathname;
+      if (pathname.endsWith("/result-snapshots")) {
+        await route.fulfill({
+          json: {
+            revisions: [snapshotRevision],
+            latest_snapshot_id: snapshotId,
+            latest_revision: 1,
+          },
+        });
+        return;
+      }
+      if (pathname.includes("/result-snapshots/")) {
+        await route.fulfill({ json: snapshotDetail });
+        return;
+      }
       if (pathname.endsWith("/summary")) {
         await route.fulfill({ json: runSummary });
         return;

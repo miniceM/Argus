@@ -280,21 +280,25 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     // 2. Navigates to Launch Detail
     await page.waitForURL(`**/launches/${launchId}`);
     await expect(page.getByRole("heading", { name: launchId })).toBeVisible();
+
+    // Verify initial PENDING state and Run button visible
+    await expect(page.getByTestId("status-badge").first()).toContainText("PENDING");
+    await expect(page.getByTestId("langfuse-sync-badge")).toContainText("PENDING");
+
+    // Switch to Audit tab to inspect 4-dimension frozen manifest
+    await page.getByRole("tab", { name: /快照与审计/ }).click();
     await expect(page.getByText("3. 评测门禁指标 (4)")).toBeVisible();
     for (const id of ["escalation_match", "intent_match", "pii_safe", "required_tool_match"]) {
       await expect(page.getByText(id, { exact: true }).first()).toBeVisible();
     }
     await expect(page.getByText("overall_pass", { exact: true })).toHaveCount(0);
 
-    // Verify initial PENDING state and Run button visible
-    await expect(page.getByTestId("status-badge").first()).toContainText("PENDING");
     await expect(page.getByTestId("manifest-schema-version")).toContainText("Schema v1.0");
-    await expect(page.getByTestId("langfuse-sync-badge")).toContainText("PENDING");
     await expect(page.getByTestId("dataset-snapshot-digest")).toContainText("sha256:e2edi");
     await expect(page.getByTestId("runner-version")).toContainText("0.1.0");
     await expect(page.getByText("sha256-mapping-engine-v1")).toBeVisible();
 
-    const runBtn = page.getByRole("button", { name: "立即执行评测" });
+    const runBtn = page.getByRole("button", { name: /启动评测|立即执行评测/ });
     await expect(runBtn).toBeVisible();
 
     // 3. Click Run Evaluation
@@ -311,6 +315,7 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     await expect(langfuseLink).toHaveAttribute("href", langfuseUrl);
 
     // 6. Verify Cases Table and Aggregated Attempts
+    await page.getByRole("tab", { name: /用例排查与 Trace/ }).click();
     await expect(page.getByText("case-transfer-01")).toBeVisible();
     await expect(page.getByText("2 次尝试")).toBeVisible();
     expect(attemptsFetched).toBe(false); // Proves lazy loading! Attempts not fetched until requested!
@@ -328,7 +333,7 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     await expect(page.getByText("Upstream agent gateway timed out")).toBeVisible();
 
     await expect(page.getByText("第 2 次调用尝试")).toBeVisible();
-    await expect(page.getByText("HTTP 200")).toBeVisible();
+    await expect(page.getByRole("dialog").getByText("HTTP 200")).toBeVisible();
     await expect(page.getByText("已成功传播 traceparent").first()).toBeVisible();
   });
 });

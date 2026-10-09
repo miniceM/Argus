@@ -60,6 +60,9 @@ test.describe("Real API Acceptance E2E (Zero Mock)", () => {
     await expect(page.getByTestId("status-badge").first()).toContainText("PENDING");
     await expect(page.getByTestId("langfuse-sync-badge")).toBeVisible();
 
+    // Switch to Audit tab to inspect 4-dimension frozen manifest
+    await page.getByRole("tab", { name: /快照与审计/ }).click();
+
     // 6. Verify 4-Dimension Frozen Manifest rendered from real backend database
     await expect(page.getByTestId("manifest-schema-version")).toContainText("Schema v1.2");
 
@@ -88,6 +91,6 @@ test.describe("Real API Acceptance E2E (Zero Mock)", () => {
     await expect(page.getByText("Concurrency:").first()).toBeVisible();
 
     // Run button is present in PENDING state
-    await expect(page.getByRole("button", { name: /立即执行评测/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /启动评测|立即执行评测/ })).toBeVisible();
   });
 });

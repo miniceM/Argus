@@ -80,7 +80,7 @@ describe("LaunchDetail Frozen Manifest Structured Audit View", () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={["/launches/launch-freeze-001"]}>
+        <MemoryRouter initialEntries={["/launches/launch-freeze-001?tab=audit"]}>
           <Routes>
             <Route path="/launches/:launchId" element={<LaunchDetail />} />
           </Routes>

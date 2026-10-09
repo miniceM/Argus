@@ -382,7 +382,7 @@ test.describe("Issue #83: independent quality policy", () => {
 
   test("shows the frozen policy and separates PASS / FAIL / UNKNOWN on the detail page", async ({ page }) => {
     await mockDetail(page, [baseItem, failItem, unknownItem]);
-    await page.goto("/launches/launch-83");
+    await page.goto("/launches/launch-83?tab=audit");
 
     // The frozen policy is visible with its identity, not just a JSON blob.
     const frozen = page.getByTestId("frozen-quality-policy");
@@ -406,7 +406,7 @@ test.describe("Issue #83: independent quality policy", () => {
 
   test("explains an UNKNOWN case as insufficient evidence rather than a rule violation", async ({ page }) => {
     await mockDetail(page, [unknownItem]);
-    await page.goto("/launches/launch-83");
+    await page.goto("/launches/launch-83?tab=cases");
 
     // The row itself says 证据不足, so it cannot be misread as 不通过.
     await expect(page.getByTestId("quality-summary-case-unknown")).toContainText("证据不足");
@@ -430,7 +430,7 @@ test.describe("Issue #83: independent quality policy", () => {
 
   test("names the violated rule for a FAIL case", async ({ page }) => {
     await mockDetail(page, [failItem]);
-    await page.goto("/launches/launch-83");
+    await page.goto("/launches/launch-83?tab=cases");
 
     await expect(page.getByTestId("quality-summary-case-fail")).toContainText("违反规则");
     await page.getByRole("button", { name: "明细" }).first().click();

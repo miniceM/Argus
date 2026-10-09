@@ -119,6 +119,7 @@ test.describe("E2E-02: Frozen Manifest Absolute Immutability Verification", () =
     await expect(page.getByTestId("quality-badge").first()).toContainText("PASS");
 
     // CRITICAL: The page MUST display the frozen endpoint from manifest, NOT currentLatestEndpoint
+    await page.getByRole("tab", { name: /不可变快照与审计/ }).click();
     await expect(page.getByText(frozenEndpoint)).toBeVisible();
     await expect(page.getByText(currentLatestEndpoint)).not.toBeVisible();
 

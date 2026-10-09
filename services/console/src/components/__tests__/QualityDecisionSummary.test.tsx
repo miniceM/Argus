@@ -80,7 +80,11 @@ const item = (index: number, spec: Record<string, unknown>) => ({
   ...spec,
 });
 
-const renderDetail = (launchPayload: Record<string, unknown>, items: Array<Record<string, unknown>>) => {
+const renderDetail = (
+  launchPayload: Record<string, unknown>,
+  items: Array<Record<string, unknown>>,
+  initialPath?: string,
+) => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   (api.GET as any).mockImplementation((path: string) => {
     if (path.includes("/items")) return Promise.resolve({ data: items });
@@ -92,7 +96,7 @@ const renderDetail = (launchPayload: Record<string, unknown>, items: Array<Recor
   });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[`/launches/${launchPayload.id}`]}>
+      <MemoryRouter initialEntries={[initialPath || `/launches/${launchPayload.id}`]}>
         <Routes>
           <Route path="/launches/:launchId" element={<LaunchDetail />} />
         </Routes>
@@ -199,7 +203,7 @@ describe("Issue #83 quality decision summary", () => {
   });
 
   it("surfaces the frozen policy with its digest and each rule", async () => {
-    renderDetail(launch(), [item(0, { quality_conclusion: "pass" })]);
+    renderDetail(launch(), [item(0, { quality_conclusion: "pass" })], `/launches/launch-83?tab=audit`);
 
     const panel = await screen.findByTestId("frozen-quality-policy");
     expect(panel).toHaveTextContent("default-all-required@1.0");
@@ -222,7 +226,7 @@ describe("Issue #83 quality decision summary", () => {
         quality_policy: { mode: "all_pass" },
       },
     });
-    renderDetail(legacy, [item(0, { quality_conclusion: "pass" })]);
+    renderDetail(legacy, [item(0, { quality_conclusion: "pass" })], `/launches/launch-83?tab=audit`);
 
     expect(await screen.findByTestId("frozen-quality-policy-legacy")).toBeInTheDocument();
   });
@@ -233,9 +237,11 @@ describe("Issue #83 per-rule explanations in the item drawer", () => {
   afterEach(() => cleanup());
 
   it("explains an UNKNOWN case as insufficient evidence, not as a rule violation", async () => {
-    renderDetail(launch(), [
-      item(0, { quality_conclusion: "unknown", quality_evaluation: unknownEvaluation }),
-    ]);
+    renderDetail(
+      launch(),
+      [item(0, { quality_conclusion: "unknown", quality_evaluation: unknownEvaluation })],
+      `/launches/launch-83?tab=cases`,
+    );
 
     fireEvent.click(await screen.findByRole("button", { name: "明细" }));
 
@@ -252,7 +258,11 @@ describe("Issue #83 per-rule explanations in the item drawer", () => {
   });
 
   it("names the violated rule for a FAIL case", async () => {
-    renderDetail(launch(), [item(0, { quality_conclusion: "fail", quality_evaluation: failEvaluation })]);
+    renderDetail(
+      launch(),
+      [item(0, { quality_conclusion: "fail", quality_evaluation: failEvaluation })],
+      `/launches/launch-83?tab=cases`,
+    );
 
     fireEvent.click(await screen.findByRole("button", { name: "明细" }));
 
@@ -265,9 +275,11 @@ describe("Issue #83 per-rule explanations in the item drawer", () => {
   });
 
   it("summarises the cause in the item row so 证据不足 is visible without the drawer", async () => {
-    renderDetail(launch(), [
-      item(0, { quality_conclusion: "unknown", quality_evaluation: unknownEvaluation }),
-    ]);
+    renderDetail(
+      launch(),
+      [item(0, { quality_conclusion: "unknown", quality_evaluation: unknownEvaluation })],
+      `/launches/launch-83?tab=cases`,
+    );
 
     const summary = await screen.findByTestId("quality-summary-case-0");
     expect(summary).toHaveTextContent("证据不足");
@@ -275,10 +287,14 @@ describe("Issue #83 per-rule explanations in the item drawer", () => {
   });
 
   it("offers 证据不足 as its own filter bucket", async () => {
-    renderDetail(launch(), [
-      item(0, { quality_conclusion: "pass" }),
-      item(1, { quality_conclusion: "unknown", quality_evaluation: unknownEvaluation }),
-    ]);
+    renderDetail(
+      launch(),
+      [
+        item(0, { quality_conclusion: "pass" }),
+        item(1, { quality_conclusion: "unknown", quality_evaluation: unknownEvaluation }),
+      ],
+      `/launches/launch-83?tab=cases`,
+    );
 
     await screen.findByTestId("quality-pass-rate");
     const filter = screen.getByRole("button", { name: /证据不足 \(1\)/ });

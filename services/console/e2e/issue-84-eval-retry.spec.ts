@@ -169,7 +169,7 @@ async function mockLaunchApi(
 
 test.describe("Issue #84 evaluation-only retry", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto(`/launches/${LAUNCH_ID}`);
+    await page.goto(`/launches/${LAUNCH_ID}?tab=cases`);
   });
 
   test("a failed evaluation is UNKNOWN with a reason and offers retry-evaluation, not retry-case", async ({

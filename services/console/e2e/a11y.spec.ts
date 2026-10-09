@@ -300,7 +300,7 @@ test.describe("WCAG 2.2 AA: overlay surfaces", () => {
   });
 
   test("attempt drawer", async ({ page }) => {
-    await auditOpen(page, `/launches/${LAUNCH_ID}`, () =>
+    await auditOpen(page, `/launches/${LAUNCH_ID}?tab=cases`, () =>
       page.getByRole("button", { name: /次尝试/ }).first().click(),
     );
   });

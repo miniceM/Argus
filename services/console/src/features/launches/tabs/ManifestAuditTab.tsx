@@ -20,11 +20,11 @@ import { Badge } from "../../../components/Badge";
 import { JsonViewer } from "../../../components/JsonViewer";
 import { SnapshotEvidenceBadge } from "../resultSnapshot";
 import { bindingVerification } from "../frozenIdentity";
+import { useCopyFeedback } from "../useCopyFeedback";
 
 type LaunchResponse = import("../../../api/schema").components["schemas"]["ExperimentLaunchResponse"];
 type SnapshotRevision = import("../../../api/schema").components["schemas"]["ResultSnapshotRevisionResponse"];
 type SnapshotList = import("../../../api/schema").components["schemas"]["ResultSnapshotListResponse"];
-type SnapshotDetail = import("../../../api/schema").components["schemas"]["ResultSnapshotDetailResponse"];
 
 interface ManifestAuditTabProps {
   launch: LaunchResponse;
@@ -37,26 +37,21 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
   activeSnapshot,
   onSelectSnapshot,
 }) => {
-  const [showRawJson, setShowRawJson] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
-
-  const launchId = launch.id;
   const manifest = (launch.manifest || {}) as any;
   const manifestAgent = manifest.agent || {};
-  const manifestPolicy = manifest.execution_policy || manifestAgent.execution_policy || {};
   const manifestEvaluators = manifest.evaluators || [];
   const manifestRunner = manifest.runner || {};
-  const manifestPolicyData = manifest.quality_policy ?? null;
+  const manifestPolicy = manifest.execution_policy || manifest.policy || {};
+  const manifestPolicyData = manifest.quality_policy || {};
   const frozenPolicyRules = manifestPolicyData?.rules ?? [];
 
   // Fetch revisions list
   const historyQuery = useQuery({
-    queryKey: [...queryKeys.launches.all, "result-snapshots", launchId],
-    enabled: Boolean(launchId),
+    queryKey: [...queryKeys.launches.all, "result-snapshots", launch.id],
+    enabled: Boolean(launch.id),
     queryFn: async () => {
       const res = await api.GET("/api/v1/experiment-launches/{launch_id}/result-snapshots", {
-        params: { path: { launch_id: launchId } },
+        params: { path: { launch_id: launch.id } },
       });
       if (res.error) throw res.error;
       return (res.data ?? null) as SnapshotList | null;
@@ -64,53 +59,39 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
   });
 
   const revisions: SnapshotRevision[] = historyQuery.data?.revisions ?? [];
-  const activeRev = activeSnapshot ?? null;
+  const [showRawJson, setShowRawJson] = useState(false);
+  const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
+  const copyJson = useCopyFeedback(2000);
 
-  // Detail query for active snapshot
+  // Fetch complete snapshot detail for JSON export
   const detailQuery = useQuery({
-    queryKey: [...queryKeys.launches.all, "result-snapshot", launchId, activeRev?.snapshot_id ?? "none"],
-    enabled: Boolean(launchId && activeRev?.snapshot_id),
+    queryKey: [...queryKeys.launches.all, "result-snapshot", launch.id, activeSnapshot?.snapshot_id ?? "none"],
+    enabled: Boolean(launch.id && activeSnapshot?.snapshot_id),
     queryFn: async () => {
       const res = await api.GET(
         "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}",
-        { params: { path: { launch_id: launchId, snapshot_id: activeRev!.snapshot_id } } },
+        { params: { path: { launch_id: launch.id, snapshot_id: activeSnapshot!.snapshot_id } } },
       );
       if (res.error) throw res.error;
-      return (res.data ?? null) as SnapshotDetail | null;
+      return res.data as any;
     },
   });
 
-  const [copyError, setCopyError] = useState(false);
-
-  // Copy JSON (N07: await promise and provide failure feedback on rejection)
-  const handleCopyJson = async () => {
+  const handleCopyJson = () => {
     const payload = detailQuery.data;
-    if (!payload || !navigator?.clipboard?.writeText) {
-      setCopyError(true);
-      setTimeout(() => setCopyError(false), 2000);
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-      setCopied(true);
-      setCopyError(false);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopyError(true);
-      setTimeout(() => setCopyError(false), 2000);
-    }
+    if (!payload) return;
+    void copyJson.copy(JSON.stringify(payload, null, 2));
   };
-
   // Download JSON
   const handleDownloadJson = () => {
-    if (!detailQuery.data || !activeRev) return;
+    if (!detailQuery.data || !activeSnapshot) return;
     const payload = detailQuery.data;
     const jsonStr = JSON.stringify(payload, null, 2);
     const blob = new Blob([jsonStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `snapshot-${launchId}-${activeRev.snapshot_id}.json`;
+    a.download = `snapshot-${launch.id}-${activeSnapshot.snapshot_id}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -120,10 +101,10 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
     setTimeout(() => setDownloadNotice(null), 3000);
   };
 
-  const isExportDisabled = Boolean(!activeRev || detailQuery.isLoading || detailQuery.error || !detailQuery.data);
+  const isExportDisabled = Boolean(!activeSnapshot || detailQuery.isLoading || detailQuery.error || !detailQuery.data);
 
-  const shareUrl = activeRev
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/launches/${launchId}?snapshot_id=${activeRev.snapshot_id}`
+  const shareUrl = activeSnapshot
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/launches/${launch.id}?snapshot_id=${activeSnapshot.snapshot_id}`
     : "";
 
   return (
@@ -149,17 +130,17 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
               variant="secondary"
               className="h-7 text-xs px-2.5"
               onClick={handleCopyJson}
-              disabled={isExportDisabled}
-              title={copyError ? "剪贴板写入失败，请检查浏览器权限" : undefined}
+              disabled={isExportDisabled || copyJson.isPending}
+              title={copyJson.isError ? "剪贴板写入失败，请检查浏览器权限" : undefined}
             >
-              {copied ? (
+              {copyJson.isSuccess ? (
                 <Check className="w-3.5 h-3.5 text-pass" />
-              ) : copyError ? (
+              ) : copyJson.isError ? (
                 <AlertCircle className="w-3.5 h-3.5 text-fail" />
               ) : (
                 <Copy className="w-3.5 h-3.5" />
               )}
-              <span>{copied ? "已复制 JSON" : copyError ? "复制失败" : "复制 JSON"}</span>
+              <span>{copyJson.isSuccess ? "已复制 JSON" : copyJson.isError ? "复制失败" : "复制 JSON"}</span>
             </Button>
             <Button
               variant="secondary"
@@ -430,27 +411,27 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
               每次终态重试或评测更新均会固定为独立 Revision，保障历史版本防篡改
             </p>
           </div>
-          {activeRev && <SnapshotEvidenceBadge state={activeRev.evidence_state} />}
+          {activeSnapshot && <SnapshotEvidenceBadge state={activeSnapshot.evidence_state} />}
         </div>
 
-        {activeRev && (
+        {activeSnapshot && (
           <div className="space-y-2 text-xs">
             <div className="flex items-baseline gap-2 flex-wrap">
               <span className="text-muted-foreground">当前查看版本:</span>
               <strong className="text-foreground" data-testid="snapshot-revision">
-                Revision {activeRev.revision}
+                Revision {activeSnapshot.revision}
               </strong>
-              {activeRev.is_latest && (
+              {activeSnapshot.is_latest && (
                 <span className="text-micro text-pass font-semibold" data-testid="snapshot-latest-tag">
                   (最新)
                 </span>
               )}
             </div>
             <p className="text-micro text-muted-foreground font-mono" data-testid="snapshot-id">
-              Snapshot ID: {activeRev.snapshot_id}
+              Snapshot ID: {activeSnapshot.snapshot_id}
             </p>
             <p className="text-micro text-muted-foreground" data-testid="snapshot-quality-counts">
-              PASS {activeRev.quality_pass_count} · FAIL {activeRev.quality_fail_count} · UNKNOWN {activeRev.quality_unknown_count}
+              PASS {activeSnapshot.quality_pass_count} · FAIL {activeSnapshot.quality_fail_count} · UNKNOWN {activeSnapshot.quality_unknown_count}
             </p>
             <p className="text-micro text-muted-foreground font-mono break-all" data-testid="snapshot-share-url">
               固定分享链接: {shareUrl}
@@ -467,10 +448,10 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
                   <button
                     type="button"
                     onClick={() => onSelectSnapshot?.(row.snapshot_id)}
-                    aria-current={row.snapshot_id === activeRev?.snapshot_id ? "true" : undefined}
+                    aria-current={row.snapshot_id === activeSnapshot?.snapshot_id ? "true" : undefined}
                     data-testid={`snapshot-revision-${row.revision}`}
                     className={`w-full text-left text-xs px-3 py-2 rounded-lg border transition cursor-pointer flex items-center justify-between ${
-                      row.snapshot_id === activeRev?.snapshot_id
+                      row.snapshot_id === activeSnapshot?.snapshot_id
                         ? "border-primary bg-primary-subtle text-primary font-semibold"
                         : "border-border bg-surface-subtle text-muted-foreground hover:bg-surface-muted"
                     }`}

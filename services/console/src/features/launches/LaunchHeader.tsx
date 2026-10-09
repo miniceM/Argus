@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { Link } from "react-router-dom";
 import {
   AlertCircle,
@@ -13,6 +13,7 @@ import {
 import { Button, buttonClassName } from "../../components/ui/Primitives";
 import { StatusBadge } from "../../components/StatusBadge";
 import { QualityBadge } from "../../components/QualityBadge";
+import { useCopyFeedback } from "./useCopyFeedback";
 import { SyncStatusBadge } from "../../components/SyncStatusBadge";
 import type { LangfuseLinkView } from "./langfuseLink";
 
@@ -84,24 +85,9 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
     ? `${launch.id.slice(0, 8)}…${launch.id.slice(-4)}`
     : launch.id;
 
-  const [copied, setCopied] = useState(false);
-  const [copyError, setCopyError] = useState(false);
-
-  const handleCopyId = async () => {
-    if (!navigator?.clipboard?.writeText) {
-      setCopyError(true);
-      setTimeout(() => setCopyError(false), 2000);
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(launch.id);
-      setCopied(true);
-      setCopyError(false);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopyError(true);
-      setTimeout(() => setCopyError(false), 2000);
-    }
+  const copyId = useCopyFeedback(2000);
+  const handleCopyId = () => {
+    void copyId.copy(launch.id);
   };
 
   return (
@@ -191,12 +177,12 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
                   title={`点击复制完整 ID: ${launch.id}`}
                 >
                   <span>ID: {shortUuid}</span>
-                  {copied ? (
+                  {copyId.isSuccess ? (
                     <span className="inline-flex items-center gap-0.5 text-pass font-sans text-micro">
                       <Check className="w-3 h-3 text-pass" />
                       <span>已复制</span>
                     </span>
-                  ) : copyError ? (
+                  ) : copyId.isError ? (
                     <span className="inline-flex items-center gap-0.5 text-fail font-sans text-micro" role="alert">
                       <AlertCircle className="w-3 h-3 text-fail" />
                       <span>复制失败</span>

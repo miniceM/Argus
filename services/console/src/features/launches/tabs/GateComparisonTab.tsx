@@ -7,6 +7,7 @@ import { formatApiError } from "../../../api/errors";
 import { Button } from "../../../components/ui/Primitives";
 import { ComparisonCaseDrawer } from "../ComparisonCaseDrawer";
 import { LangfuseSyncPanel } from "../langfuseSyncStatus";
+import { resolveMetricDirection, evaluateMetricChange } from "../metricComparison";
 
 type GeneratedRunSummary = import("../../../api/schema").components["schemas"]["RunSummaryResponse"];
 type GeneratedComparison = import("../../../api/schema").components["schemas"]["ComparisonResponse"];
@@ -342,38 +343,8 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
       const cScore = cohort?.candidate.score_means?.[evalId];
       const evalMeta = manifestEvaluators.find((e) => e.id === evalId);
       const rule = qualityPolicyRules.find((r) => r.evaluator_id === evalId);
-      // N05: 严格按契约声明判断类型，不使用数值大小擅自决定类型
-      const isNumeric =
-        rule?.result_type === "numeric" ||
-        evalMeta?.result_type === "numeric" ||
-        evalId.toLowerCase().includes("cost") ||
-        evalId.toLowerCase().includes("duration") ||
-        evalId.toLowerCase().includes("latency");
-
-      // N05: 显式 direction 优先，名称启发式绝不覆盖明确的 higher_is_better
-      let isLowerBetter = false;
-      let hasKnownDirection = false;
-
-      if (evalMeta?.direction === "higher_is_better") {
-        isLowerBetter = false;
-        hasKnownDirection = true;
-      } else if (evalMeta?.direction === "lower_is_better") {
-        isLowerBetter = true;
-        hasKnownDirection = true;
-      } else if (rule?.operator === ">" || rule?.operator === ">=") {
-        isLowerBetter = false;
-        hasKnownDirection = true;
-      } else if (rule?.operator === "<" || rule?.operator === "<=") {
-        isLowerBetter = true;
-        hasKnownDirection = true;
-      } else if (
-        evalId.toLowerCase().includes("cost") ||
-        evalId.toLowerCase().includes("duration") ||
-        evalId.toLowerCase().includes("latency")
-      ) {
-        isLowerBetter = true;
-        hasKnownDirection = true;
-      }
+      const metricDir = resolveMetricDirection(evalMeta, rule);
+      const isNumeric = metricDir.isNumeric;
 
       let baselineText = "—";
       let candidateText = "—";
@@ -394,27 +365,11 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
 
       const req = rulesMap.get(evalId) || "—";
 
-      let statusLabel = "—";
-      let statusTone: "pass" | "fail" | "neutral" = "neutral";
+      const metricEval = evaluateMetricChange(bScore, cScore, metricDir);
+      let statusLabel = metricEval.statusLabel;
+      let statusTone: "pass" | "fail" | "neutral" = metricEval.statusTone;
 
-      if (bScore != null && cScore != null) {
-        if (cScore === bScore) {
-          statusLabel = "持平";
-          statusTone = "pass";
-        } else if (hasKnownDirection) {
-          const isImproved = isLowerBetter ? cScore < bScore : cScore > bScore;
-          if (isImproved) {
-            statusLabel = "提升";
-            statusTone = "pass";
-          } else {
-            statusLabel = isLowerBetter ? "退化" : "下降";
-            statusTone = "fail";
-          }
-        } else {
-          statusLabel = "变化";
-          statusTone = "neutral";
-        }
-      } else if (cScore != null) {
+      if (bScore == null && cScore != null) {
         statusLabel = "已测量";
         statusTone = "neutral";
       }

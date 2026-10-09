@@ -76,7 +76,7 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
 
   const revisions: SnapshotRevision[] = history.data?.revisions ?? [];
   const selected = revisions.find((row) => row.snapshot_id === selectedSnapshotId) ?? null;
-  const active = selected ?? revisions[0] ?? null;
+  const active = selectedSnapshotId ? selected : (revisions[0] ?? null);
   const isHistorical = Boolean(selected) && Boolean(history.data?.latest_snapshot_id) &&
     selected?.snapshot_id !== history.data?.latest_snapshot_id;
 
@@ -180,7 +180,7 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
         </div>
       )}
 
-      {revisions.length > 1 && (
+      {(revisions.length > 1 || !active) && revisions.length > 0 && (
         <div className="mt-4">
           <h4 className="text-xs font-medium text-muted-foreground mb-1.5">历史版本 (Revision History)</h4>
           <ul className="flex flex-col gap-1" data-testid="snapshot-history">
@@ -197,8 +197,8 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
                       : "border-border bg-surface text-muted-foreground hover:bg-surface-hover"
                   }`}
                 >
-                  Revision {row.revision}
-                  {row.is_latest ? " (最新)" : ""} · PASS {row.quality_pass_count} / FAIL{" "}
+                  <span className="font-semibold text-foreground mr-1.5">Revision {row.revision}</span>
+                  {row.is_latest ? "(最新) · " : ""}PASS {row.quality_pass_count} / FAIL{" "}
                   {row.quality_fail_count} / UNKNOWN {row.quality_unknown_count}
                 </button>
               </li>

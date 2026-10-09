@@ -42,6 +42,8 @@ interface CasesTraceTabProps {
   } | null;
   currentFilter?: string;
   onFilterChange?: (filter: string) => void;
+  expandedCaseId?: string | null;
+  onExpandedCaseChange?: (caseId: string | null) => void;
 }
 
 const ruleSummary = (evaluation: QualityEvaluation): string => {
@@ -67,6 +69,8 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
   snapshotCounts,
   currentFilter,
   onFilterChange,
+  expandedCaseId,
+  onExpandedCaseChange,
 }) => {
   const [internalFilter, setInternalFilter] = useState<string>(initialFilter);
   const filterQuality = currentFilter ?? internalFilter;
@@ -74,7 +78,9 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
     setInternalFilter(filter);
     onFilterChange?.(filter);
   };
-  const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
+  const [internalExpandedCaseId, setInternalExpandedCaseId] = useState<string | null>(null);
+  const activeExpandedCaseId = expandedCaseId !== undefined ? expandedCaseId : internalExpandedCaseId;
+
   const [selectedAttemptItem, setSelectedAttemptItem] = useState<{
     id: string;
     caseId: string;
@@ -114,7 +120,9 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
 
   // Toggle case expansion
   const toggleExpand = (caseId: string) => {
-    setExpandedCaseId((curr) => (curr === caseId ? null : caseId));
+    const next = activeExpandedCaseId === caseId ? null : caseId;
+    setInternalExpandedCaseId(next);
+    onExpandedCaseChange?.(next);
   };
 
   return (
@@ -201,7 +209,7 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
       {/* 用例列表卡片容器 */}
       <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-xs divide-y divide-border text-xs">
         {filteredItems.map((item) => {
-          const isExpanded = expandedCaseId === item.dataset_item_id;
+          const isExpanded = activeExpandedCaseId === item.dataset_item_id;
           const conclusion = (item.quality_conclusion || "unknown").toLowerCase();
           const isPass = conclusion === "pass";
           const isFail = conclusion === "fail";
@@ -456,37 +464,90 @@ const CaseDetailPanel: React.FC<{
   const datasetItem = datasetItems.find((d: any) => d.id === item.dataset_item_id);
   const frozenInput = datasetItem?.input;
 
+  const baselineOutput = caseOutputQuery.data?.baseline;
   const candidateOutput = caseOutputQuery.data?.candidate;
   const outputStatus = candidateOutput?.output_status;
+  const baselineOutputStatus = baselineOutput?.output_status;
 
   return (
     <div className="mt-4 pt-4 border-t border-border space-y-4 text-muted-foreground">
-      {/* 输入与输出对照网格 */}
+      {/* 冻结输入面板 */}
+      <div className="p-3 bg-surface-subtle rounded-lg border border-border space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="font-semibold text-foreground">用户提问 / 冻结输入 (Input)</span>
+          <span className="text-micro text-muted-foreground font-mono">
+            {frozenInput ? "已冻结" : "未在快照中嵌入输入"}
+          </span>
+        </div>
+        {frozenInput ? (
+          <div className="text-foreground">
+            {typeof frozenInput === "string" ? (
+              <p className="leading-relaxed">{frozenInput}</p>
+            ) : (
+              <JsonViewer data={frozenInput} title="Input JSON" />
+            )}
+          </div>
+        ) : (
+          <p className="text-micro text-muted-foreground italic">
+            原始输入存储在测试数据集中（Dataset: {item.dataset_item_id}）。
+          </p>
+        )}
+      </div>
+
+      {/* Baseline 与 Candidate 双侧输出对照网格 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {/* 输入面板 */}
+        {/* 基准版本输出面板 (Baseline Output) */}
         <div className="p-3 bg-surface-subtle rounded-lg border border-border space-y-2">
           <div className="flex items-center justify-between">
-            <span className="font-semibold text-foreground">用户提问 / 冻结输入 (Input)</span>
-            <span className="text-micro text-muted-foreground font-mono">
-              {frozenInput ? "已冻结" : "未在快照中嵌入输入"}
-            </span>
+            <span className="font-semibold text-foreground">基准版本输出 (Baseline Output)</span>
+            {baselineOutputStatus && (
+              <span className="px-1.5 py-0.5 rounded text-micro font-mono bg-surface border border-border">
+                {baselineOutputStatus}
+              </span>
+            )}
           </div>
-          {frozenInput ? (
-            <div className="text-foreground">
-              {typeof frozenInput === "string" ? (
-                <p className="leading-relaxed">{frozenInput}</p>
+
+          {caseOutputQuery.isLoading && (
+            <div className="flex items-center gap-2 text-micro text-muted-foreground py-2">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary" />
+              <span>正在按快照引用懒加载基准输出...</span>
+            </div>
+          )}
+
+          {baselineOutput && (
+            <div className="space-y-2">
+              {baselineOutputStatus === "AVAILABLE" && baselineOutput.output != null ? (
+                <div className="text-foreground">
+                  {typeof baselineOutput.output === "string" ? (
+                    <p className="leading-relaxed font-mono whitespace-pre-wrap text-xs">
+                      {baselineOutput.output}
+                    </p>
+                  ) : (
+                    <JsonViewer data={baselineOutput.output} title="Baseline Output JSON" />
+                  )}
+                </div>
+              ) : baselineOutputStatus === "NO_REFERENCE" ? (
+                <p className="text-micro text-muted-foreground italic">
+                  未记录基准输出引用。
+                </p>
+              ) : baselineOutputStatus === "NOT_FOUND" ? (
+                <p className="text-micro text-muted-foreground italic">
+                  基准版本远程 Observation 已过期或不存在。
+                </p>
               ) : (
-                <JsonViewer data={frozenInput} title="Input JSON" />
+                <p className="text-micro text-muted-foreground italic">基准输出暂不可用。</p>
               )}
             </div>
-          ) : (
+          )}
+
+          {!caseOutputQuery.isLoading && !baselineOutput && (
             <p className="text-micro text-muted-foreground italic">
-              原始输入存储在测试数据集中（Dataset: {item.dataset_item_id}）。
+              当前未关联基准版本输出。
             </p>
           )}
         </div>
 
-        {/* 候选输出面板 (懒加载) */}
+        {/* 候选输出面板 (Candidate Output) */}
         <div className="p-3 bg-surface-subtle rounded-lg border border-border space-y-2">
           <div className="flex items-center justify-between">
             <span className="font-semibold text-foreground">Agent 真实答复 (Candidate Output)</span>
@@ -500,7 +561,7 @@ const CaseDetailPanel: React.FC<{
           {caseOutputQuery.isLoading && (
             <div className="flex items-center gap-2 text-micro text-muted-foreground py-2">
               <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary" />
-              <span>正在按快照引用懒加载真实输出...</span>
+              <span>正在按快照引用懒加载候选输出...</span>
             </div>
           )}
 

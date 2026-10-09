@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";
 import { LaunchDetail } from "../LaunchDetail";
@@ -564,4 +564,157 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     const btn = await screen.findByRole("button", { name: "下载原始 JSON" });
     await waitFor(() => expect(btn).toBeDisabled());
   });
+  const seedHistoricalFailures = () => {
+    const old = { ...mockSnapshotList.revisions[0], snapshot_id: "S1", revision: 1,
+      quality_pass_count: 0, quality_fail_count: 2, quality_unknown_count: 0, is_latest: false };
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}/result-snapshots": { data: {
+        latest_snapshot_id: "S2", latest_revision: 2,
+        revisions: [{ ...mockSnapshotList.revisions[0], snapshot_id: "S2", revision: 2 }, old] } },
+      "/api/v1/experiment-launches/{launch_id}/summary": { data: {
+        ...mockSummary, snapshot_id: "S1", summary: { ...mockSummary.summary,
+          pass_rate: 0, quality_pass_count: 0, quality_fail_count: 2, quality_unknown_count: 0 } } },
+      "/api/v1/experiment-launches/{launch_id}/comparison": { data: { ...mockComparison, candidate_snapshot_id: "S1" } },
+      "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}": { data: {
+        launch_id: mockLaunch.id, ...old, releasable: true, versions: mockSummary.versions,
+        summary: { quality_pass_count: 0, quality_fail_count: 2, quality_unknown_count: 0, total_cases: 2 },
+        items: mockItems.map(i=>({...i, quality_conclusion: "fail", scores: {pii_safe:0},
+          quality_evaluation: {conclusion:"fail",rules:[]}})) } },
+    });
+  };
+
+  it("R126: S1 fail filter must show the actual frozen failed Case IDs", async () => {
+    seedHistoricalFailures();
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=S1&tab=cases`);
+    fireEvent.click(await screen.findByRole("button", { name: "未通过 (2)" }));
+    expect(screen.getByTestId("case-row-expand-item-001")).toBeInTheDocument();
+    expect(screen.getByTestId("case-row-expand-item-002")).toBeInTheDocument();
+  });
+
+  it("R126: frozen PASS plus UNKNOWN must not become Header gate PASS", async () => {
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}/result-snapshots": {data:{...mockSnapshotList,revisions:[{
+        ...mockSnapshotList.revisions[0], evidence_state:"DIAGNOSTIC", quality_pass_count:1,quality_fail_count:0,quality_unknown_count:1 }]}},
+      "/api/v1/experiment-launches/{launch_id}/summary": {data:{...mockSummary,evidence_state:"DIAGNOSTIC",summary:{...mockSummary.summary,
+        quality_pass_count:1,quality_fail_count:0,quality_unknown_count:1,pass_rate:1}}},
+    });
+    renderComponent();
+    await screen.findByRole("tab",{name:/用例排查与 Trace/});
+    expect(screen.queryByText("门禁准入通过 (PASS)")).not.toBeInTheDocument();
+  });
+
+  it("R126: no overall policy must show no fabricated 90 percent requirement", async () => {
+    renderComponent();
+    await screen.findByText("综合质量通过率 (Overall Pass)");
+    expect(screen.queryByText("≥ 90.0%")).not.toBeInTheDocument();
+  });
+
+  it("R126: no latency policy must show no fabricated 500ms requirement", async () => {
+    renderComponent();
+    await screen.findByText("综合质量通过率 (Overall Pass)");
+    expect(screen.queryByText("< 500 ms")).not.toBeInTheDocument();
+  });
+
+  it("R126: non-cost numeric thresholds and score means retain their units", async () => {
+    const launch = structuredClone(mockLaunch) as any;
+    launch.manifest.quality_policy.rules=[{evaluator_id:"duration_ms",result_type:"numeric",operator:"<=",threshold:500,required:true}];
+    launch.manifest.evaluators=[{id:"duration_ms",version:"1",direction:"lower_is_better"}];
+    const c=structuredClone(mockComparison) as any;
+    c.summary.comparable_cohort.baseline.score_means={duration_ms:400};
+    c.summary.comparable_cohort.candidate.score_means={duration_ms:200};
+    overrideGet({"/api/v1/experiment-launches/{launch_id}":{data:launch},
+      "/api/v1/experiment-launches/{launch_id}/comparison":{data:c}});
+    renderComponent();
+    const cell=await screen.findByText("duration_ms",{selector:"td"});
+    const row=cell.closest("tr")!;
+    expect(row).not.toHaveTextContent("50000.0%");
+    expect(row).not.toHaveTextContent("20000.0%");
+  });
+
+  it("R126: cost decrease with lower-is-better is not a failed improvement", async () => {
+    const launch=structuredClone(mockLaunch) as any;
+    launch.manifest.quality_policy.rules=[{evaluator_id:"call_cost",result_type:"numeric",operator:"<=",threshold:0.2,required:true}];
+    launch.manifest.evaluators=[{id:"call_cost",version:"1",direction:"lower_is_better"}];
+    const c=structuredClone(mockComparison) as any;
+    c.summary.comparable_cohort.baseline.score_means={call_cost:0.3};
+    c.summary.comparable_cohort.candidate.score_means={call_cost:0.1};
+    overrideGet({"/api/v1/experiment-launches/{launch_id}":{data:launch},
+      "/api/v1/experiment-launches/{launch_id}/comparison":{data:c}});
+    renderComponent();
+    const cell=await screen.findByText("call_cost",{selector:"td"});
+    expect(within(cell.closest("tr")!).queryByText("下降")).not.toBeInTheDocument();
+  });
+
+  it("R126: snapshot detail error must disable result download", async () => {
+    overrideGet({"/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}":{
+      error:{detail:"snapshot store unavailable"},response:{status:503}}});
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=snap-v2-001&tab=audit`);
+    const btn=await screen.findByRole("button",{name:"下载原始 JSON"});
+    await waitFor(()=>expect(api.GET).toHaveBeenCalledWith(
+      "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}",expect.anything()));
+    expect(btn).toBeDisabled();
+  });
+
+  it("R126: invalid audit snapshot must not read latest snapshot detail", async () => {
+    overrideGet({"/api/v1/experiment-launches/{launch_id}/summary":{
+      error:{detail:"Snapshot WRONG not found"},response:{status:404}}});
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=WRONG&tab=audit`);
+    await screen.findByRole("button",{name:"下载原始 JSON"});
+    expect((api.GET as any).mock.calls.filter((call:any[])=>call[0].includes("/result-snapshots/"))).toHaveLength(0);
+  });
+
+  it("R126: clipboard must not report success before its promise resolves", async () => {
+    Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:vi.fn(()=>new Promise(()=>{}))}});
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=snap-v2-001&tab=audit`);
+    fireEvent.click(await screen.findByRole("button",{name:"复制 JSON"}));
+    expect(screen.queryByRole("button",{name:"已复制 JSON"})).not.toBeInTheDocument();
+  });
+
+  it("R126: cancel must require confirmation before issuing the mutation", async () => {
+    overrideGet({"/api/v1/experiment-launches/{launch_id}":{data:{...mockLaunch,status:"RUNNING",allowed_actions:["cancel"]}}});
+    (api.POST as any).mockResolvedValue({data:{}});
+    renderComponent();
+    const cancelBtn=await screen.findByRole("button",{name:"取消评测 (Cancel)"});
+    await act(async()=>{fireEvent.click(cancelBtn);});
+    await waitFor(()=>expect(api.POST).not.toHaveBeenCalled());
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("R126: same-snapshot tab roundtrip must preserve expanded Case", async () => {
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=snap-v2-001&tab=cases`);
+    fireEvent.click(await screen.findByTestId("case-row-expand-item-001"));
+    await screen.findByText("v2 output masked text");
+    fireEvent.click(screen.getByRole("tab",{name:/门禁与版本对比/}));
+    fireEvent.click(screen.getByRole("tab",{name:/用例排查与 Trace/}));
+    expect(screen.queryByText("v2 output masked text")).toBeInTheDocument();
+  });
+
+  it("R126: expanded Case must expose both frozen Baseline and Candidate output", async () => {
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=snap-v2-001&tab=cases`);
+    fireEvent.click(await screen.findByTestId("case-row-expand-item-001"));
+    await screen.findByText("v2 output masked text");
+    expect(screen.getByText("v1 output text")).toBeInTheDocument();
+  });
+
+  it("R126: refresh pending after CAS409 must block resubmission with stale revision", async () => {
+    const original=(api.GET as any).getMockImplementation();
+    let blocked=false;
+    (api.GET as any).mockImplementation((path:string,options:any)=>{
+      if(blocked && path==="/api/v1/agents/{agent_id}/baselines")return new Promise(()=>{});
+      return original(path,options);
+    });
+    (api.POST as any).mockImplementation(()=>{blocked=true;return Promise.resolve({error:{detail:"conflict"},response:{status:409}});});
+    renderComponent();
+    fireEvent.click(await screen.findByRole("button",{name:"设为新 Baseline"}));
+    fireEvent.click(screen.getByRole("button",{name:"确认设为 Baseline"}));
+    await screen.findByText(/HTTP 409/);
+    expect(screen.getByRole("button",{name:"确认设为 Baseline"})).toBeDisabled();
+  });
+
+  it("R126: active evaluation recovery must not be hidden as an idle terminal run", () => {
+    render(<ExecutionProgressPanel status="COMPLETED" progress={{total:2,percentage:100,succeeded:2,evaluating:1} as any} />);
+    const grid=document.querySelector('[data-card="running"]')?.parentElement;
+    expect(grid).not.toHaveClass("hidden");
+  });
+
 });

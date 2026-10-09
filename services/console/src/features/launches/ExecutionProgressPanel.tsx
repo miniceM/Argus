@@ -108,8 +108,10 @@ export const ExecutionProgressPanel: React.FC<ExecutionProgressPanelProps> = ({
   statusReason,
 }) => {
   const isExecuting = isLaunchExecutionActive(status);
+  const isEvaluating = Boolean((progress as any)?.evaluating && (progress as any).evaluating > 0);
+  const isActive = isExecuting || isEvaluating;
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
-  const isExpanded = userOverride !== null ? userOverride : isExecuting;
+  const isExpanded = userOverride !== null ? userOverride : isActive;
 
   if (!progress || progress.total === 0) return null;
 

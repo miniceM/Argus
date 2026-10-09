@@ -63,7 +63,7 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
   });
 
   const revisions: SnapshotRevision[] = historyQuery.data?.revisions ?? [];
-  const activeRev = activeSnapshot ?? revisions[0] ?? null;
+  const activeRev = activeSnapshot ?? null;
 
   // Detail query for active snapshot
   const detailQuery = useQuery({
@@ -80,24 +80,28 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
   });
 
   // Copy JSON
-  const handleCopyJson = () => {
-    const payload = detailQuery.data || (activeRev ? { ...activeRev, manifest } : manifest);
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+  const handleCopyJson = async () => {
+    const payload = detailQuery.data;
+    if (!payload || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // copy failed
     }
   };
 
   // Download JSON
   const handleDownloadJson = () => {
-    const payload = detailQuery.data || (activeRev ? { ...activeRev, manifest } : manifest);
+    if (!detailQuery.data || !activeRev) return;
+    const payload = detailQuery.data;
     const jsonStr = JSON.stringify(payload, null, 2);
     const blob = new Blob([jsonStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `manifest-${launchId}-rev${activeRev?.revision ?? 1}.json`;
+    a.download = `snapshot-${launchId}-${activeRev.snapshot_id}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -106,6 +110,8 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
     setDownloadNotice("已成功生成并下载原始快照 JSON 文件！");
     setTimeout(() => setDownloadNotice(null), 3000);
   };
+
+  const isExportDisabled = Boolean(!activeRev || detailQuery.isLoading || detailQuery.error || !detailQuery.data);
 
   const shareUrl = activeRev
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/launches/${launchId}?snapshot_id=${activeRev.snapshot_id}`
@@ -134,6 +140,7 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
               variant="secondary"
               className="h-7 text-xs px-2.5"
               onClick={handleCopyJson}
+              disabled={isExportDisabled}
             >
               {copied ? <Check className="w-3.5 h-3.5 text-pass" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copied ? "已复制 JSON" : "复制 JSON"}</span>
@@ -142,6 +149,7 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
               variant="secondary"
               className="h-7 text-xs px-2.5"
               onClick={handleDownloadJson}
+              disabled={isExportDisabled}
             >
               <Download className="w-3.5 h-3.5" />
               <span>下载原始 JSON</span>

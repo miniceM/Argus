@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { AlertCircle } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useIsFetching } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { queryKeys } from "../../api/query-keys";
 import { formatApiError } from "../../api/errors";
@@ -31,6 +31,20 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
 }) => {
   const queryClient = useQueryClient();
   const [conflictError, setConflictError] = useState<string | null>(null);
+  const [isRefreshingBaseline, setIsRefreshingBaseline] = useState(false);
+
+  const isBaselineFetching = useIsFetching({
+    queryKey: queryKeys.baselines.detail(agentId, environment),
+  }) > 0;
+
+  const prevBaselineRev = useRef(activeBaseline?.revision);
+  useEffect(() => {
+    if (activeBaseline?.revision !== prevBaselineRev.current) {
+      prevBaselineRev.current = activeBaseline?.revision;
+      setConflictError(null);
+      setIsRefreshingBaseline(false);
+    }
+  }, [activeBaseline?.revision]);
 
   const setBaselineMutation = useMutation({
     mutationFn: async () => {
@@ -49,7 +63,8 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
 
       if (res.error) {
         if (res.response?.status === 409) {
-          queryClient.invalidateQueries({
+          setIsRefreshingBaseline(true);
+          void queryClient.invalidateQueries({
             queryKey: queryKeys.baselines.detail(agentId, environment),
           });
           throw new Error("Baseline 绑定版本发生并发冲突 (HTTP 409)，请重新确认最新状态后再试。");
@@ -81,7 +96,7 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
       onClose={onClose}
       title="固化设为新 Baseline (Set as Baseline)"
       tone="neutral"
-      dismissable={!setBaselineMutation.isPending}
+      dismissable={!setBaselineMutation.isPending && !isRefreshingBaseline}
       footer={
         <>
           <Button
@@ -89,7 +104,7 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
             variant="secondary"
             className="text-xs"
             onClick={onClose}
-            disabled={setBaselineMutation.isPending}
+            disabled={setBaselineMutation.isPending || isRefreshingBaseline || isBaselineFetching}
           >
             取消
           </Button>
@@ -97,7 +112,7 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
             type="button"
             variant="primary"
             className="text-xs font-semibold"
-            disabled={setBaselineMutation.isPending || !activeSnapshot}
+            disabled={setBaselineMutation.isPending || isRefreshingBaseline || isBaselineFetching || Boolean(conflictError) || !activeSnapshot}
             onClick={() => setBaselineMutation.mutate()}
           >
             {setBaselineMutation.isPending ? "正在固化绑定..." : "确认设为 Baseline"}

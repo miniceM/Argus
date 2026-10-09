@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import clsx from "clsx";
 import { ArrowDown, ArrowUp, AlertCircle, CheckCircle2, Minus } from "lucide-react";
 
@@ -67,8 +67,6 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
   formal,
   onNavigateTab,
 }) => {
-  const [layoutMode, setLayoutMode] = useState<"cards" | "strip">("cards");
-
   // 1. Quality Pass Rate calculation
   const total = totalItems ?? 0;
   const passed = passedItems ?? 0;
@@ -197,42 +195,13 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
 
   return (
     <section aria-label="核心决策指标" className="space-y-3">
-      {/* 顶部标题与模式切换按钮 */}
-      <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
-        <span className="font-semibold text-foreground">核心决策指标 (KPI Overview)</span>
-        <div className="flex items-center gap-1 bg-surface border border-border p-0.5 rounded-lg">
-          <button
-            type="button"
-            onClick={() => setLayoutMode("cards")}
-            data-testid="btn-kpi-mode-cards"
-            className={clsx(
-              "px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer",
-              layoutMode === "cards"
-                ? "bg-primary-subtle text-primary border border-primary-border"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            模式 A: 独立微卡片
-          </button>
-          <button
-            type="button"
-            onClick={() => setLayoutMode("strip")}
-            data-testid="btn-kpi-mode-strip"
-            className={clsx(
-              "px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer",
-              layoutMode === "strip"
-                ? "bg-primary-subtle text-primary border border-primary-border"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            模式 B: 一体化分栏条
-          </button>
-        </div>
+      {/* 顶部标题 */}
+      <div className="text-xs font-semibold text-foreground px-1">
+        核心决策指标 (KPI Overview)
       </div>
 
-      {/* 排版模式 A：独立微卡片 */}
-      {layoutMode === "cards" ? (
-        <div data-testid="kpi-cards-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      {/* 核心指标微卡片 */}
+      <div data-testid="kpi-cards-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
           {/* KPI 1: 综合质量通过率 */}
           <div
             data-testid="quality-pass-rate"
@@ -368,56 +337,6 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
             </div>
           </div>
         </div>
-      ) : (
-        /* 排版模式 B：一体化分栏条 */
-        <div
-          data-testid="kpi-strip-bar"
-          className="bg-surface border border-border rounded-xl shadow-xs divide-y sm:divide-y-0 sm:divide-x divide-border grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
-        >
-          <div className="p-4.5 space-y-2">
-            <div className="text-xs font-medium text-muted-foreground">综合质量通过率</div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold font-mono text-foreground">{passRateText}</span>
-              <span className="text-xs font-mono text-muted-foreground">{passRateFraction}</span>
-            </div>
-            <div className="text-xs text-muted-foreground font-medium flex items-center gap-1">
-              <span>{passRateDeltaText || "已判定 " + (decidedPassRate ? `${decidedPassRate}%` : "—")}</span>
-            </div>
-          </div>
-
-          <div className="p-4.5 space-y-2">
-            <div className="text-xs font-medium text-muted-foreground">正式回归用例数</div>
-            <div className="flex items-baseline gap-1.5">
-              <span
-                className={clsx(
-                  "text-2xl font-bold font-mono",
-                  regressionStatusTone === "pass" ? "text-pass" : regressionStatusTone === "timeout" ? "text-timeout" : "text-foreground"
-                )}
-              >
-                {regressionValueText}
-              </span>
-            </div>
-            <div className="text-xs text-muted-foreground">{regressionSubText}</div>
-          </div>
-
-          <div className="p-4.5 space-y-2">
-            <div className="text-xs font-medium text-muted-foreground">P95 响应时延</div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-bold font-mono text-foreground">{p95Text}</span>
-              {p95Text !== "—" && <span className="text-xs font-mono text-muted-foreground">ms</span>}
-            </div>
-            <div className="text-xs text-muted-foreground font-medium">{p95DeltaText || "耗时正常"}</div>
-          </div>
-
-          <div className="p-4.5 space-y-2">
-            <div className="text-xs font-medium text-muted-foreground">单用例平均成本</div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-bold font-mono text-foreground">{costText}</span>
-            </div>
-            <div className="text-xs text-muted-foreground">{costSubText}</div>
-          </div>
-        </div>
-      )}
 
       {/* 辅助说明段落 */}
       <div className="space-y-1 pt-1">

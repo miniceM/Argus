@@ -164,12 +164,17 @@ export const LaunchDetail: React.FC = () => {
     : (revisions[0] ?? null);
   const effectiveSnapshotId = selectedSnapshotId || activeSnapshot?.snapshot_id || null;
 
+  const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+
   useEffect(() => {
     setActionError(null);
     setShowRetryModal(false);
     setForceRetry(false);
     setShowBaselineModal(false);
+    setShowCancelModal(false);
     setCasesFilter("ALL");
+    setExpandedCaseId(null);
   }, [launchId, effectiveSnapshotId]);
 
   // Sync snapshot_id into URL if none was specified and one exists
@@ -195,8 +200,8 @@ export const LaunchDetail: React.FC = () => {
   // 3. Fetch Items with S2 Polling
   const {
     data: rawItems,
-    isLoading: isItemsLoading,
-    error: itemsError,
+    isLoading: isRawItemsLoading,
+    error: rawItemsError,
     refetch: refetchItems,
   } = useQuery<ItemExecution[]>({
     queryKey: queryKeys.launches.items(launchId || ""),
@@ -233,7 +238,30 @@ export const LaunchDetail: React.FC = () => {
     },
   });
 
-  const items: ItemExecution[] = Array.isArray(rawItems) ? rawItems : [];
+  // 3.1 Fetch Snapshot Detail for frozen items when viewing an immutable snapshot
+  const snapshotDetailQuery = useQuery({
+    queryKey: [...queryKeys.launches.all, "result-snapshot", launchId, activeSnapshot?.snapshot_id ?? "none"],
+    enabled: Boolean(launchId && activeSnapshot?.snapshot_id),
+    queryFn: async () => {
+      if (!launchId || !activeSnapshot?.snapshot_id) return null;
+      const res = await api.GET(
+        "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}",
+        { params: { path: { launch_id: launchId, snapshot_id: activeSnapshot.snapshot_id } } },
+      );
+      if (res.error) throw res.error;
+      return res.data as any;
+    },
+  });
+
+  const rawItemsList: ItemExecution[] = Array.isArray(rawItems) ? rawItems : [];
+  const frozenItemsList: ItemExecution[] | null = Array.isArray(snapshotDetailQuery.data?.items)
+    ? (snapshotDetailQuery.data.items as ItemExecution[])
+    : null;
+  const items: ItemExecution[] = frozenItemsList ?? rawItemsList;
+  const isItemsLoading = effectiveSnapshotId
+    ? (snapshotDetailQuery.isLoading || (snapshotDetailQuery.data?.items == null && isRawItemsLoading))
+    : isRawItemsLoading;
+  const itemsError = (Boolean(effectiveSnapshotId) && snapshotDetailQuery.error) || rawItemsError;
 
   // Invalidate all queries
   const invalidateAll = () => {
@@ -242,6 +270,7 @@ export const LaunchDetail: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.launches.items(launchId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.launches.list() });
       queryClient.invalidateQueries({ queryKey: [...queryKeys.launches.all, "result-snapshots", launchId] });
+      queryClient.invalidateQueries({ queryKey: [...queryKeys.launches.all, "result-snapshot", launchId] });
     }
   };
 
@@ -457,16 +486,38 @@ export const LaunchDetail: React.FC = () => {
     : null;
   const decisionCoverage = decisionCounts && totalItems ? (decidedCount / totalItems) * 100 : null;
 
-  // Derive frozen quality conclusion for LaunchHeader
-  let frozenQualityConclusion = launch.quality_conclusion;
+  // Derive frozen quality conclusion for LaunchHeader (fail-closed, UNKNOWN-safe)
+  let frozenQualityConclusion: string | null = null;
   if (hasFrozenQualityCounts) {
     if (frozenFailCount > 0) {
       frozenQualityConclusion = "fail";
-    } else if (frozenPassCount > 0) {
+    } else if (frozenUnknownCount > 0) {
+      frozenQualityConclusion = "unknown";
+    } else if (
+      frozenPassCount > 0 &&
+      (activeSnap?.evidence_state === "COMPLETE" || summaryQuery.data?.evidence_state === "COMPLETE") &&
+      activeSnap?.releasable !== false
+    ) {
       frozenQualityConclusion = "pass";
     } else {
       frozenQualityConclusion = "unknown";
     }
+  } else if (!effectiveSnapshotId) {
+    if (decisionCounts) {
+      if (decisionCounts.fail > 0) {
+        frozenQualityConclusion = "fail";
+      } else if (decisionCounts.unknown > 0) {
+        frozenQualityConclusion = "unknown";
+      } else if (decisionCounts.pass > 0) {
+        frozenQualityConclusion = launch.quality_conclusion?.toLowerCase() === "fail" ? "fail" : "pass";
+      } else {
+        frozenQualityConclusion = launch.quality_conclusion ?? "unknown";
+      }
+    } else {
+      frozenQualityConclusion = launch.quality_conclusion ?? null;
+    }
+  } else {
+    frozenQualityConclusion = "unknown";
   }
 
   const isSnapshotNotFound = Boolean(
@@ -490,7 +541,7 @@ export const LaunchDetail: React.FC = () => {
           summaryQuery.refetch();
         }}
         onRun={() => runMutation.mutate()}
-        onCancel={() => cancelMutation.mutate()}
+        onCancel={() => setShowCancelModal(true)}
         onResume={() => resumeMutation.mutate()}
         onRetryFailed={() => {
           setForceRetry(false);
@@ -504,15 +555,6 @@ export const LaunchDetail: React.FC = () => {
         isRetryFailedPending={retryFailedMutation.isPending}
         isRetryEvaluationPending={retryEvaluationMutation.isPending}
       />
-
-      {/* 结果快照版本控制面板 (Result Snapshot Revision) */}
-      {launchId && (
-        <ResultSnapshotPanel
-          launchId={launchId}
-          selectedSnapshotId={selectedSnapshotId}
-          onSelect={selectSnapshot}
-        />
-      )}
 
       {/* 快照请求异常与未找到警示 (Alert) */}
       {summaryQuery.error && currentTab !== "compare" && (
@@ -583,6 +625,15 @@ export const LaunchDetail: React.FC = () => {
         cancelRequestedAt={launch.cancel_requested_at}
         statusReason={launch.status_reason}
       />
+
+      {/* 3.5 结果快照版本控制面板 (Issue #85) */}
+      {launchId && (
+        <ResultSnapshotPanel
+          launchId={launchId}
+          selectedSnapshotId={selectedSnapshotId}
+          onSelect={selectSnapshot}
+        />
+      )}
 
       {/* 4. Tab 导航条 (WAI-ARIA Compliant) */}
       <div
@@ -671,6 +722,7 @@ export const LaunchDetail: React.FC = () => {
               }
             }}
             qualityPolicyRules={manifest.quality_policy?.rules ?? []}
+            manifestEvaluators={manifest.evaluators || []}
           />
         </div>
       )}
@@ -692,6 +744,8 @@ export const LaunchDetail: React.FC = () => {
               manifestDataset={manifest.dataset}
               currentFilter={casesFilter}
               onFilterChange={setCasesFilter}
+              expandedCaseId={expandedCaseId}
+              onExpandedCaseChange={setExpandedCaseId}
               snapshotCounts={
                 hasFrozenQualityCounts
                   ? {
@@ -734,6 +788,43 @@ export const LaunchDetail: React.FC = () => {
           invalidateAll();
         }}
       />
+
+      {/* 7. 模态框：取消评测二次确认弹窗 */}
+      <Modal
+        open={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        title="确认取消评测任务"
+        tone="danger"
+        dismissable={!cancelMutation.isPending}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowCancelModal(false)}
+              disabled={cancelMutation.isPending}
+            >
+              放弃
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              disabled={cancelMutation.isPending}
+              onClick={() => {
+                cancelMutation.mutate(undefined, {
+                  onSettled: () => setShowCancelModal(false),
+                });
+              }}
+            >
+              {cancelMutation.isPending ? "正在取消..." : "确认取消"}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-xs text-muted-foreground">
+          确定要取消当前评测任务吗？取消后，正在执行或排队中的用例将安全终止。
+        </p>
+      </Modal>
 
       {/* 7. 模态框：重试失败用例二次确认弹窗 */}
       <Modal

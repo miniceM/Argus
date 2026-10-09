@@ -186,8 +186,8 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
             </div>
           </div>
 
-          {/* 右侧：操作区（严格单行水平按钮组，高度统一 32px） */}
-          <div className="flex items-center gap-2 shrink-0 self-start lg:self-center whitespace-nowrap">
+          {/* 右侧：操作区（高度统一 32px，允许移动端自适应折行） */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0 self-start lg:self-center">
             <Button
               variant="secondary"
               aria-label="刷新"

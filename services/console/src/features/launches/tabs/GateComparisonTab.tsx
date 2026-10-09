@@ -184,6 +184,14 @@ interface GateComparisonTabProps {
     expected_value?: unknown;
     required?: boolean;
     critical?: boolean;
+    result_type?: string;
+  }>;
+  manifestEvaluators?: Array<{
+    id?: string;
+    version?: string;
+    direction?: string;
+    result_type?: string;
+    required?: boolean;
   }>;
 }
 
@@ -196,6 +204,7 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
   onSetBaselineModal,
   onShowLatestSnapshot,
   qualityPolicyRules = [],
+  manifestEvaluators = [],
 }) => {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("ALL");
   const [selectedCase, setSelectedCase] = useState<string | null>(null);
@@ -248,16 +257,23 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
   ).sort();
 
   // Evaluator requirements map from quality policy
-  // Evaluator requirements map from quality policy
   const rulesMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const rule of qualityPolicyRules) {
       if (!rule.evaluator_id) continue;
+      const evalMeta = manifestEvaluators.find((e) => e.id === rule.evaluator_id);
+      const isNumeric =
+        rule.result_type === "numeric" ||
+        evalMeta?.result_type === "numeric" ||
+        rule.evaluator_id.toLowerCase().includes("cost") ||
+        rule.evaluator_id.toLowerCase().includes("duration") ||
+        rule.evaluator_id.toLowerCase().includes("latency") ||
+        (rule.threshold != null && rule.threshold > 1);
+
       let exp = "";
-      if (rule.operator === ">=" || rule.operator === "<=") {
-        const isCost = rule.evaluator_id.toLowerCase().includes("cost");
+      if (rule.operator === ">=" || rule.operator === "<=" || rule.operator === ">" || rule.operator === "<") {
         const formattedVal = rule.threshold != null
-          ? isCost
+          ? isNumeric
             ? String(rule.threshold)
             : (rule.threshold * 100).toFixed(1) + "%"
           : "—";
@@ -271,7 +287,7 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
       map.set(rule.evaluator_id, exp);
     }
     return map;
-  }, [qualityPolicyRules]);
+  }, [qualityPolicyRules, manifestEvaluators]);
 
   // Derived regression table metrics (Evaluator-level comparison)
   const regressionMetricsRows = useMemo(() => {
@@ -286,18 +302,18 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
         (r) => r.evaluator_id === "overall_pass_rate" || r.evaluator_id === "overall",
       );
       const reqText = overallRule?.threshold != null
-        ? `≥ ${(overallRule.threshold * 100).toFixed(1)}%`
-        : "≥ 90.0%";
-      const thresholdVal = overallRule?.threshold ?? 0.9;
-      const isMet = cPass != null && cPass >= thresholdVal;
+        ? `${overallRule.operator ?? "≥"} ${(overallRule.threshold * 100).toFixed(1)}%`
+        : "—";
+      const thresholdVal = overallRule?.threshold;
+      const isMet = thresholdVal != null && cPass != null ? cPass >= thresholdVal : null;
       rows.push({
         name: "综合质量通过率 (Overall Pass)",
         requirement: reqText,
         baseline: percent(bPass),
         candidate: percent(cPass),
         delta: deltaPp,
-        statusLabel: isMet ? "达标" : "未达标",
-        statusTone: isMet ? "pass" : "fail",
+        statusLabel: isMet === true ? "达标" : isMet === false ? "未达标" : "—",
+        statusTone: isMet === true ? "pass" : isMet === false ? "fail" : "neutral",
       });
     }
 
@@ -305,17 +321,80 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
     for (const evalId of evaluatorIds) {
       const bScore = cohort?.baseline.score_means?.[evalId];
       const cScore = cohort?.candidate.score_means?.[evalId];
-      const deltaText = percentagePointDelta(bScore, cScore);
+      const evalMeta = manifestEvaluators.find((e) => e.id === evalId);
+      const rule = qualityPolicyRules.find((r) => r.evaluator_id === evalId);
+      const isNumeric =
+        rule?.result_type === "numeric" ||
+        evalMeta?.result_type === "numeric" ||
+        evalId.toLowerCase().includes("cost") ||
+        evalId.toLowerCase().includes("duration") ||
+        evalId.toLowerCase().includes("latency") ||
+        ((bScore ?? 0) > 1 || (cScore ?? 0) > 1);
+
+      const isLowerBetter =
+        evalMeta?.direction === "lower_is_better" ||
+        rule?.operator === "<" ||
+        rule?.operator === "<=" ||
+        evalId.toLowerCase().includes("cost") ||
+        evalId.toLowerCase().includes("latency") ||
+        evalId.toLowerCase().includes("duration");
+
+      let baselineText = "—";
+      let candidateText = "—";
+      let deltaText = "—";
+
+      if (isNumeric) {
+        baselineText = bScore != null ? String(bScore) : "—";
+        candidateText = cScore != null ? String(cScore) : "—";
+        if (bScore != null && cScore != null) {
+          const diff = Number((cScore - bScore).toFixed(4));
+          deltaText = `${diff > 0 ? "+" : ""}${diff}`;
+        }
+      } else {
+        baselineText = percent(bScore);
+        candidateText = percent(cScore);
+        deltaText = percentagePointDelta(bScore, cScore);
+      }
+
       const req = rulesMap.get(evalId) || "—";
-      const isPositive = (cScore ?? 0) >= (bScore ?? 0);
+
+      let statusLabel = "—";
+      let statusTone: "pass" | "fail" | "neutral" = "neutral";
+
+      if (bScore != null && cScore != null) {
+        if (cScore === bScore) {
+          statusLabel = "持平";
+          statusTone = "pass";
+        } else if (isLowerBetter) {
+          if (cScore < bScore) {
+            statusLabel = "提升";
+            statusTone = "pass";
+          } else {
+            statusLabel = "退化";
+            statusTone = "fail";
+          }
+        } else {
+          if (cScore > bScore) {
+            statusLabel = "提升";
+            statusTone = "pass";
+          } else {
+            statusLabel = "下降";
+            statusTone = "fail";
+          }
+        }
+      } else if (cScore != null) {
+        statusLabel = "已测量";
+        statusTone = "neutral";
+      }
+
       rows.push({
         name: evalId,
         requirement: req,
-        baseline: percent(bScore),
-        candidate: percent(cScore),
+        baseline: baselineText,
+        candidate: candidateText,
         delta: deltaText,
-        statusLabel: (cScore ?? 0) > (bScore ?? 0) ? "提升" : isPositive ? "持平" : "下降",
-        statusTone: isPositive ? "pass" : "fail",
+        statusLabel,
+        statusTone,
       });
     }
 
@@ -325,9 +404,20 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
       const cLat = cohort.candidate.p95_latency_ms;
       const diff = bLat != null ? cLat - bLat : 0;
       const deltaText = bLat != null ? `${diff > 0 ? "+" : ""}${diff} ms` : "—";
+      const latencyRule = qualityPolicyRules.find(
+        (r) =>
+          r.evaluator_id === "latency" ||
+          r.evaluator_id === "p95_latency" ||
+          r.evaluator_id === "p95_latency_ms" ||
+          r.evaluator_id === "duration_ms",
+      );
+      let latReq = "—";
+      if (latencyRule && latencyRule.threshold != null) {
+        latReq = `${latencyRule.operator ?? "<="} ${latencyRule.threshold} ms`;
+      }
       rows.push({
         name: "P95 响应时延 (Latency)",
-        requirement: "< 500 ms",
+        requirement: latReq,
         baseline: bLat != null ? `${Math.round(bLat)} ms` : "—",
         candidate: `${Math.round(cLat)} ms`,
         delta: deltaText,
@@ -337,7 +427,7 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
     }
 
     return rows;
-  }, [cohort, evaluatorIds, rulesMap, qualityPolicyRules]);
+  }, [cohort, evaluatorIds, rulesMap, qualityPolicyRules, manifestEvaluators]);
 
   // Aggregate and Health rows
   const aggregateRows = cohort ? [
@@ -444,11 +534,27 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
             {evaluatorIds.length > 0 && (
               <div className="bg-surface-subtle border border-border rounded-lg p-3 space-y-1">
                 <span className="font-semibold text-foreground flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-pass" />
-                  评测规则门禁达标
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      !formal?.available
+                        ? "bg-timeout"
+                        : isRegression
+                        ? "bg-fail"
+                        : "bg-pass"
+                    }`}
+                  />
+                  {!formal?.available
+                    ? "评测门禁结论未就绪"
+                    : isRegression
+                    ? "评测门禁未达标 (存在退化)"
+                    : "评测规则门禁达标"}
                 </span>
                 <p className="text-muted-foreground leading-relaxed">
-                  共计 {evaluatorIds.length} 项评估指标已完成与基线对比，全部关键约束已纳入版本质量门禁监控。
+                  {!formal?.available
+                    ? "由于证据不足或基线未绑定，暂无法出具正式门禁准入结论。"
+                    : isRegression
+                    ? `共计 ${evaluatorIds.length} 项评估指标已比对，存在退化项需排查。`
+                    : `共计 ${evaluatorIds.length} 项评估指标已完成与基线对比，全部关键约束已纳入版本质量门禁监控。`}
                 </p>
               </div>
             )}
@@ -458,7 +564,10 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
                 运行健康与时延表现
               </span>
               <p className="text-muted-foreground leading-relaxed">
-                候选版本 P95 响应时延为 {Math.round(cohort.candidate.p95_latency_ms ?? 0)} ms
+                候选版本 P95 响应时延为{" "}
+                {cohort.candidate.p95_latency_ms != null
+                  ? `${Math.round(cohort.candidate.p95_latency_ms)} ms`
+                  : "—"}
                 {cohort.baseline.p95_latency_ms != null && (
                   <span>（基线为 {Math.round(cohort.baseline.p95_latency_ms)} ms）</span>
                 )}。
@@ -539,7 +648,19 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
                   <td className="py-3.5 px-5 font-mono text-muted-foreground">{row.requirement}</td>
                   <td className="py-3.5 px-5 font-mono text-muted-foreground">{row.baseline}</td>
                   <td className="py-3.5 px-5 font-mono font-semibold text-foreground">{row.candidate}</td>
-                  <td className="py-3.5 px-5 font-mono font-semibold text-pass">{row.delta}</td>
+                  <td
+                    className={`py-3.5 px-5 font-mono font-semibold ${
+                      row.statusTone === "pass"
+                        ? "text-pass"
+                        : row.statusTone === "fail"
+                        ? "text-fail"
+                        : row.statusTone === "timeout"
+                        ? "text-timeout"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {row.delta}
+                  </td>
                   <td className="py-3.5 px-5">
                     <span
                       className={`px-2 py-0.5 rounded text-xs font-medium ${

@@ -634,7 +634,7 @@ export const LaunchDetail: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* 1. 业务主体 Header */}
       <LaunchHeader
         launch={launch}
@@ -727,6 +727,7 @@ export const LaunchDetail: React.FC = () => {
         progress={launch.progress}
         cancelRequestedAt={launch.cancel_requested_at}
         statusReason={launch.status_reason}
+        isEvaluating={Array.isArray(rawItems) && rawItems.some((i) => (i.evaluation_status || "").toLowerCase() === "evaluating")}
       />
 
       {/* 3.5 结果快照版本控制面板 (Issue #85) */}

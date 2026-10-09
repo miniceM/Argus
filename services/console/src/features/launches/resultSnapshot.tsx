@@ -145,11 +145,11 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
     : "";
 
   return (
-    <section className="bg-surface border border-border rounded-lg px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs" data-testid="result-snapshot-panel">
+    <section className="bg-surface border border-border rounded-lg px-3.5 py-2 flex flex-wrap items-center justify-between gap-2 text-xs shadow-xs" data-testid="result-snapshot-panel">
       {active ? (
-        <div className="flex flex-col gap-1.5 w-full">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-col gap-1 w-full">
+          <div className="flex flex-wrap items-center justify-between gap-1.5">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-muted-foreground">当前查看版本</span>
               <span className="font-semibold text-foreground font-mono" data-testid="snapshot-revision">
                 Revision {active.revision}
@@ -177,7 +177,7 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
             </div>
 
             {revisions.length > 1 && (
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <span className="text-muted-foreground text-micro">版本历史:</span>
                 <div className="flex items-center gap-1" data-testid="snapshot-history">
                   {revisions.map((row) => (
@@ -187,7 +187,7 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
                       onClick={() => onSelect(row.snapshot_id)}
                       aria-current={row.snapshot_id === active?.snapshot_id ? "true" : undefined}
                       data-testid={`snapshot-revision-${row.revision}`}
-                      className={`text-micro px-2 py-0.5 rounded border transition-colors cursor-pointer ${
+                      className={`text-micro px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
                         row.snapshot_id === active?.snapshot_id
                           ? "border-primary bg-primary-subtle text-primary font-semibold"
                           : "border-border bg-surface text-muted-foreground hover:bg-surface-hover hover:text-foreground"
@@ -203,7 +203,7 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-muted-foreground pt-1 border-t border-border">
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-micro text-muted-foreground pt-1 border-t border-border">
             <span data-testid="snapshot-evidence-help">{evidenceHelp(active.evidence_state)}</span>
             <span data-testid="snapshot-quality-counts">
               PASS {active.quality_pass_count} · FAIL {active.quality_fail_count} · UNKNOWN {active.quality_unknown_count}

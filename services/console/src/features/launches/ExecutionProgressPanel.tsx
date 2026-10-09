@@ -99,6 +99,7 @@ interface ExecutionProgressPanelProps {
   progress?: ProgressCounts | null;
   cancelRequestedAt?: string | null;
   statusReason?: string | null;
+  isEvaluating?: boolean;
 }
 
 export const ExecutionProgressPanel: React.FC<ExecutionProgressPanelProps> = ({
@@ -106,10 +107,11 @@ export const ExecutionProgressPanel: React.FC<ExecutionProgressPanelProps> = ({
   progress,
   cancelRequestedAt,
   statusReason,
+  isEvaluating = false,
 }) => {
   const isExecuting = isLaunchExecutionActive(status);
-  const isEvaluating = Boolean((progress as any)?.evaluating && (progress as any).evaluating > 0);
-  const isActive = isExecuting || isEvaluating;
+  const isEvaluatingActive = isEvaluating || Boolean((progress as any)?.evaluating && (progress as any).evaluating > 0);
+  const isActive = isExecuting || isEvaluatingActive;
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
   const isExpanded = userOverride !== null ? userOverride : isActive;
 

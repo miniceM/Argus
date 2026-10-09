@@ -201,13 +201,22 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
       </div>
 
       {/* 核心指标微卡片 */}
-      <div data-testid="kpi-cards-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div data-testid="kpi-cards-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* KPI 1: 综合质量通过率 */}
           <div
             data-testid="quality-pass-rate"
-            className="bg-surface border border-border rounded-xl p-4 flex flex-col justify-between shadow-xs hover:border-border-strong transition cursor-pointer"
+            role="button"
+            tabIndex={0}
+            className="bg-surface border border-border rounded-xl p-3.5 flex flex-col justify-between shadow-xs hover:border-border-strong transition cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-focus"
             onClick={() => onNavigateTab?.("cases")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onNavigateTab?.("cases");
+              }
+            }}
             title="点击前往用例排查"
+            aria-label="综合质量通过率，点击前往用例排查"
           >
             <div>
               <div id="quality-pass-rate-label" aria-describedby="quality-pass-rate-help" className="text-xs font-medium text-muted-foreground mb-2 flex items-center justify-between">
@@ -261,9 +270,18 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
 
           {/* KPI 2: 正式回归用例数 */}
           <div
-            className="bg-surface border border-border rounded-xl p-4 flex flex-col justify-between shadow-xs hover:border-border-strong transition cursor-pointer"
+            role="button"
+            tabIndex={0}
+            className="bg-surface border border-border rounded-xl p-3.5 flex flex-col justify-between shadow-xs hover:border-border-strong transition cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-focus"
             onClick={() => onNavigateTab?.("compare")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onNavigateTab?.("compare");
+              }
+            }}
             title="点击前往门禁对比"
+            aria-label="正式回归用例数，点击前往门禁对比"
           >
             <div>
               <div className="text-xs font-medium text-muted-foreground mb-2">正式回归用例数</div>
@@ -299,7 +317,7 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
           </div>
 
           {/* KPI 3: P95 响应时延 */}
-          <div className="bg-surface border border-border rounded-xl p-4 flex flex-col justify-between shadow-xs hover:border-border-strong transition">
+          <div className="bg-surface border border-border rounded-xl p-3.5 flex flex-col justify-between shadow-xs hover:border-border-strong transition">
             <div>
               <div className="text-xs font-medium text-muted-foreground mb-2">P95 响应时延</div>
               <div className="flex items-baseline gap-1.5">
@@ -325,7 +343,7 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
           </div>
 
           {/* KPI 4: 单用例平均成本 */}
-          <div className="bg-surface border border-border rounded-xl p-4 flex flex-col justify-between shadow-xs hover:border-border-strong transition">
+          <div className="bg-surface border border-border rounded-xl p-3.5 flex flex-col justify-between shadow-xs hover:border-border-strong transition">
             <div>
               <div className="text-xs font-medium text-muted-foreground mb-2">单用例平均成本</div>
               <div className="flex items-baseline gap-1">

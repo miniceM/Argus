@@ -91,7 +91,7 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* 顶栏面包屑与快捷状态 */}
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <Link
@@ -111,7 +111,7 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
       </div>
 
       {/* 业务主体 Header */}
-      <header className="bg-surface border border-border rounded-xl p-5 shadow-xs">
+      <header className="bg-surface border border-border rounded-xl p-4 sm:p-5 shadow-xs">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           {/* 左侧：标题与元数据 */}
           <div className="space-y-2 min-w-0 flex-1">
@@ -195,8 +195,8 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
             </div>
           </div>
 
-          {/* 右侧：操作区（自适应文字高度，防止窄屏文字溢出） */}
-          <div className="flex flex-wrap items-center gap-2 shrink-0 self-start lg:self-center">
+          {/* 右侧：操作区（自适应文字高度与屏幕宽度，防止窄屏文字溢出或挤出视口） */}
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full lg:w-auto max-w-full self-start lg:self-center">
             <Button
               variant="secondary"
               aria-label="刷新"

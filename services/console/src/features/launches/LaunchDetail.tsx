@@ -26,6 +26,7 @@ import { ResultSnapshotPanel } from "./resultSnapshot";
 import { GateComparisonTab } from "./tabs/GateComparisonTab";
 import { CasesTraceTab } from "./tabs/CasesTraceTab";
 import { ManifestAuditTab } from "./tabs/ManifestAuditTab";
+import { projectFrozenCase, validateSnapshotDetail } from "./launchReportView";
 
 type LaunchResponse = import("../../api/schema").components["schemas"]["ExperimentLaunchResponse"];
 type ItemExecution = import("../../api/schema").components["schemas"]["ExperimentItemExecutionResponse"];
@@ -246,19 +247,25 @@ export const LaunchDetail: React.FC = () => {
   });
 
   // 3.1 Fetch Snapshot Detail for frozen items when viewing an immutable snapshot
+  const targetSnapshotId = selectedSnapshotId || activeSnapshot?.snapshot_id || null;
   const snapshotDetailQuery = useQuery({
-    queryKey: [...queryKeys.launches.all, "result-snapshot", launchId, activeSnapshot?.snapshot_id ?? "none"],
-    enabled: Boolean(launchId && activeSnapshot?.snapshot_id),
+    queryKey: [...queryKeys.launches.all, "result-snapshot", launchId, targetSnapshotId ?? "none"],
+    enabled: Boolean(launchId && targetSnapshotId),
     queryFn: async () => {
-      if (!launchId || !activeSnapshot?.snapshot_id) return null;
+      if (!launchId || !targetSnapshotId) return null;
       const res = await api.GET(
         "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}",
-        { params: { path: { launch_id: launchId, snapshot_id: activeSnapshot.snapshot_id } } },
+        { params: { path: { launch_id: launchId, snapshot_id: targetSnapshotId } } },
       );
       if (res.error) throw res.error;
       return res.data as any;
     },
   });
+
+  const snapshotValidation = useMemo(() => {
+    if (!snapshotDetailQuery.data || !launchId || !targetSnapshotId) return null;
+    return validateSnapshotDetail(snapshotDetailQuery.data, launchId, targetSnapshotId);
+  }, [snapshotDetailQuery.data, launchId, targetSnapshotId]);
 
   const rawItemsList: ItemExecution[] = Array.isArray(rawItems) ? rawItems : [];
   const liveItemsMap = useMemo(() => {
@@ -271,50 +278,25 @@ export const LaunchDetail: React.FC = () => {
     return map;
   }, [rawItemsList]);
 
-  // Data isolation (N01 & N02):
+  // Data isolation (M01 & M04):
   // 1. Explicit invalid snapshot: empty items, never bleed live items
-  // 2. Frozen snapshot: strictly consume snapshot items with adapter, never bleed live items or be blocked by rawItemsError 503
+  // 2. Frozen snapshot: strictly consume snapshot items with pure projector, never bleed live items or fake frozen
   // 3. Pure live run (no snapshot specified and no revisions exist): consume rawItemsList
   const items = useMemo(() => {
     if (isSnapshotNotFound) {
       return [];
     }
-    if (activeSnapshot) {
+    if (targetSnapshotId) {
+      if (snapshotValidation && !snapshotValidation.isValid) {
+        return [];
+      }
       const frozenList = snapshotDetailQuery.data?.items;
       if (Array.isArray(frozenList)) {
         return frozenList.map((row: any) => {
           const datasetItemId = String(row.dataset_item_id || "");
-          const matchedLive = liveItemsMap.get(datasetItemId);
-          return {
-            id: matchedLive?.id ?? null,
-            dataset_item_id: datasetItemId,
-            execution_status: row.execution_status ?? matchedLive?.execution_status ?? "succeeded",
-            eval_status: row.eval_status ?? row.evaluation_status ?? matchedLive?.eval_status ?? "succeeded",
-            quality_conclusion: row.quality_conclusion ?? matchedLive?.quality_conclusion ?? "unknown",
-            scores: row.scores ?? matchedLive?.scores ?? {},
-            quality_evaluation: row.quality_evaluation ?? matchedLive?.quality_evaluation ?? null,
-            evaluation_results: row.evaluation_results ?? matchedLive?.evaluation_results ?? null,
-            trace_url: row.trace_url || row.langfuse_trace_url || matchedLive?.langfuse_trace_url || null,
-            langfuse_trace_url: row.trace_url || row.langfuse_trace_url || matchedLive?.langfuse_trace_url || null,
-            latency_ms: row.latency_ms != null ? row.latency_ms : (matchedLive?.final_attempt_latency_ms ?? null),
-            final_attempt_latency_ms: row.latency_ms != null ? row.latency_ms : (matchedLive?.final_attempt_latency_ms ?? null),
-            final_attempt_http_status: row.final_attempt_http_status ?? matchedLive?.final_attempt_http_status ?? null,
-            attempt_count: row.cost_evidence?.attempt_count != null
-              ? row.cost_evidence.attempt_count
-              : (row.attempt_count != null ? row.attempt_count : (matchedLive?.attempt_count ?? null)),
-            final_attempt_id: row.final_attempt_id ?? matchedLive?.final_attempt_id ?? null,
-            is_frozen: true,
-          } as any;
+          const stableExecId = liveItemsMap.get(datasetItemId)?.id ?? null;
+          return projectFrozenCase(row, stableExecId);
         });
-      }
-      if (snapshotDetailQuery.isLoading) return [];
-      if (snapshotDetailQuery.data && !("items" in snapshotDetailQuery.data)) {
-        return rawItemsList.map((row) => ({
-          ...row,
-          trace_url: row.langfuse_trace_url ?? null,
-          latency_ms: row.final_attempt_latency_ms ?? null,
-          is_frozen: true,
-        })) as any[];
       }
       return [];
     }
@@ -327,11 +309,11 @@ export const LaunchDetail: React.FC = () => {
       })) as any[];
     }
     return [];
-  }, [isSnapshotNotFound, activeSnapshot, snapshotDetailQuery.data?.items, selectedSnapshotId, revisions.length, rawItemsList, liveItemsMap]);
+  }, [isSnapshotNotFound, targetSnapshotId, snapshotValidation, snapshotDetailQuery.data?.items, selectedSnapshotId, revisions.length, rawItemsList, liveItemsMap]);
 
   const isItemsLoading = isSnapshotNotFound
     ? false
-    : activeSnapshot
+    : targetSnapshotId
     ? snapshotDetailQuery.isLoading
     : (!selectedSnapshotId && revisions.length === 0)
     ? isRawItemsLoading
@@ -339,17 +321,22 @@ export const LaunchDetail: React.FC = () => {
 
   const itemsError = isSnapshotNotFound
     ? new Error(`评测快照 ${selectedSnapshotId} 不存在或无权访问`)
-    : activeSnapshot
-    ? snapshotDetailQuery.error
+    : targetSnapshotId
+    ? (snapshotValidation && !snapshotValidation.isValid
+        ? new Error(snapshotValidation.error)
+        : snapshotDetailQuery.error)
     : (!selectedSnapshotId && revisions.length === 0)
-    ? rawItemsError
-    : null;
+    ? (snapshotsQuery.isError ? snapshotsQuery.error : rawItemsError)
+    : snapshotsQuery.error;
 
-  // Retry routing (N03): retry frozen snapshot detail query on snapshot error, not live /items
+  // Retry routing (M01 & M04): retry frozen snapshot detail query on snapshot error, not live /items
   const handleRetryItems = () => {
-    if (activeSnapshot) {
+    if (targetSnapshotId) {
       snapshotDetailQuery.refetch();
       summaryQuery.refetch();
+      if (snapshotsQuery.isError) {
+        snapshotsQuery.refetch();
+      }
     } else if (!selectedSnapshotId && revisions.length === 0) {
       refetchItems();
     } else {

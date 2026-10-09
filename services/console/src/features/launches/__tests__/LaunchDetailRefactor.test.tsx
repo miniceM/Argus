@@ -259,6 +259,11 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
             ...mockSnapshotList.revisions[0],
             releasable: true,
             manifest: mockLaunch.manifest,
+            items: mockItems.map((item) => ({
+              ...item,
+              trace_url: item.langfuse_trace_url,
+              latency_ms: item.final_attempt_latency_ms,
+            })),
           },
         });
       }

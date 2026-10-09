@@ -1,6 +1,9 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, type BadgeTone } from "../../components/Badge";
+import { AlertCircle } from "lucide-react";
+import { Button } from "../../components/ui/Primitives";
+import { formatApiError } from "../../api/errors";
 import { api } from "../../api/client";
 import { queryKeys } from "../../api/query-keys";
 
@@ -100,6 +103,26 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
           <span className="font-semibold text-foreground">结果报告 (Result Snapshot)</span>
           <span className="text-muted-foreground">正在加载冻结结果版本...</span>
         </div>
+      </section>
+    );
+  }
+
+  if (history.isError) {
+    return (
+      <section className="bg-surface border border-fail-border rounded-lg px-4 py-2 flex items-center justify-between gap-3 text-xs" data-testid="result-snapshot-panel">
+        <div className="flex items-center gap-2 text-fail">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span className="font-semibold">加载快照版本失败</span>
+          <span>{formatApiError(history.error)}</span>
+        </div>
+        <Button
+          type="button"
+          variant="secondary"
+          className="h-6 text-2xs px-2"
+          onClick={() => history.refetch()}
+        >
+          重试
+        </Button>
       </section>
     );
   }

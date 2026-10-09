@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import {
+  AlertCircle,
   Bot,
   Check,
   CheckCircle2,
@@ -79,16 +80,24 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
     },
   });
 
-  // Copy JSON
+  const [copyError, setCopyError] = useState(false);
+
+  // Copy JSON (N07: await promise and provide failure feedback on rejection)
   const handleCopyJson = async () => {
     const payload = detailQuery.data;
-    if (!payload || !navigator.clipboard) return;
+    if (!payload || !navigator?.clipboard?.writeText) {
+      setCopyError(true);
+      setTimeout(() => setCopyError(false), 2000);
+      return;
+    }
     try {
       await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
       setCopied(true);
+      setCopyError(false);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // copy failed
+      setCopyError(true);
+      setTimeout(() => setCopyError(false), 2000);
     }
   };
 
@@ -141,9 +150,16 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
               className="h-7 text-xs px-2.5"
               onClick={handleCopyJson}
               disabled={isExportDisabled}
+              title={copyError ? "剪贴板写入失败，请检查浏览器权限" : undefined}
             >
-              {copied ? <Check className="w-3.5 h-3.5 text-pass" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? "已复制 JSON" : "复制 JSON"}</span>
+              {copied ? (
+                <Check className="w-3.5 h-3.5 text-pass" />
+              ) : copyError ? (
+                <AlertCircle className="w-3.5 h-3.5 text-fail" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
+              <span>{copied ? "已复制 JSON" : copyError ? "复制失败" : "复制 JSON"}</span>
             </Button>
             <Button
               variant="secondary"

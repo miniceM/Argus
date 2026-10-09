@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  AlertCircle,
   ArrowLeft,
   Check,
   Copy,
@@ -59,8 +60,6 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
   isRetryFailedPending,
   isRetryEvaluationPending,
 }) => {
-  const [copied, setCopied] = useState(false);
-
   const manifest = (launch.manifest || {}) as any;
   const agentId = manifest.agent?.id || launch.agent_id || "未知 Agent";
   const agentVersion = manifest.agent?.version || launch.agent_version || "latest";
@@ -85,11 +84,23 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
     ? `${launch.id.slice(0, 8)}…${launch.id.slice(-4)}`
     : launch.id;
 
-  const handleCopyId = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(launch.id);
+  const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
+
+  const handleCopyId = async () => {
+    if (!navigator?.clipboard?.writeText) {
+      setCopyError(true);
+      setTimeout(() => setCopyError(false), 2000);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(launch.id);
       setCopied(true);
+      setCopyError(false);
       setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopyError(true);
+      setTimeout(() => setCopyError(false), 2000);
     }
   };
 
@@ -180,13 +191,25 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
                   title={`点击复制完整 ID: ${launch.id}`}
                 >
                   <span>ID: {shortUuid}</span>
-                  {copied ? <Check className="w-3 h-3 text-pass" /> : <Copy className="w-3 h-3" />}
+                  {copied ? (
+                    <span className="inline-flex items-center gap-0.5 text-pass font-sans text-micro">
+                      <Check className="w-3 h-3 text-pass" />
+                      <span>已复制</span>
+                    </span>
+                  ) : copyError ? (
+                    <span className="inline-flex items-center gap-0.5 text-fail font-sans text-micro" role="alert">
+                      <AlertCircle className="w-3 h-3 text-fail" />
+                      <span>复制失败</span>
+                    </span>
+                  ) : (
+                    <Copy className="w-3 h-3" />
+                  )}
                 </button>
               </h2>
             </div>
           </div>
 
-          {/* 右侧：操作区（高度统一 32px，允许移动端自适应折行） */}
+          {/* 右侧：操作区（自适应文字高度，防止窄屏文字溢出） */}
           <div className="flex flex-wrap items-center gap-2 shrink-0 self-start lg:self-center">
             <Button
               variant="secondary"
@@ -194,7 +217,7 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
               onClick={onRefresh}
               disabled={isFetching}
               title="刷新"
-              className="h-8 px-2.5 text-xs"
+              className="min-h-8 h-auto py-1 px-2.5 text-xs whitespace-nowrap"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin text-primary" : ""}`} />
             </Button>
@@ -203,7 +226,7 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
               <Button
                 variant="primary"
                 onClick={onOpenBaselineModal}
-                className="h-8 text-xs font-semibold"
+                className="min-h-8 h-auto py-1 px-2.5 text-xs font-semibold whitespace-nowrap"
                 title="将当前固定版本设为该环境的 Baseline"
               >
                 <ShieldCheck className="h-3.5 w-3.5" />
@@ -212,27 +235,27 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
             )}
 
             {allowedActions.includes("run") && onRun && (
-              <Button onClick={onRun} disabled={isRunPending} className="h-8 text-xs">
+              <Button onClick={onRun} disabled={isRunPending} className="min-h-8 h-auto py-1 px-2.5 text-xs whitespace-normal sm:whitespace-nowrap">
                 <Play className="h-3.5 w-3.5 fill-current" />
-                <span>{isRunPending ? "正在运行..." : "立即执行评测 (Run)"}</span>
+                <span>{isRunPending ? "正在运行..." : "启动评测 (Run)"}</span>
               </Button>
             )}
 
             {allowedActions.includes("cancel") && onCancel && (
-              <Button variant="danger" onClick={onCancel} disabled={isCancelPending} className="h-8 text-xs">
+              <Button variant="danger" onClick={onCancel} disabled={isCancelPending} className="min-h-8 h-auto py-1 px-2.5 text-xs whitespace-normal sm:whitespace-nowrap">
                 <span>{isCancelPending ? "正在取消..." : "取消评测 (Cancel)"}</span>
               </Button>
             )}
 
             {allowedActions.includes("resume") && onResume && (
-              <Button onClick={onResume} disabled={isResumePending} className="h-8 text-xs">
+              <Button onClick={onResume} disabled={isResumePending} className="min-h-8 h-auto py-1 px-2.5 text-xs whitespace-normal sm:whitespace-nowrap">
                 <RefreshCw className="h-3.5 w-3.5" />
                 <span>{isResumePending ? "正在恢复..." : "断点恢复 (Resume)"}</span>
               </Button>
             )}
 
             {allowedActions.includes("retry_failed") && onRetryFailed && (
-              <Button variant="warning" onClick={onRetryFailed} disabled={isRetryFailedPending} className="h-8 text-xs">
+              <Button variant="warning" onClick={onRetryFailed} disabled={isRetryFailedPending} className="min-h-8 h-auto py-1 px-2.5 text-xs whitespace-normal sm:whitespace-nowrap">
                 <span>{isRetryFailedPending ? "重试中..." : "重试失败用例 (Retry Failed)"}</span>
               </Button>
             )}
@@ -242,11 +265,11 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
                 variant="secondary"
                 onClick={onRetryEvaluation}
                 disabled={isRetryEvaluationPending}
-                className="h-8 text-xs"
+                className="min-h-8 h-auto py-1 px-2.5 text-xs whitespace-normal sm:whitespace-nowrap"
                 data-testid="retry-evaluation-button"
                 title="仅重新评测失败的指标，复用原 Agent 输出，不会再次调用 Agent"
               >
-                <span>{isRetryEvaluationPending ? "重评中..." : "重试评测失败 (Retry Evaluation)"}</span>
+                <span>{isRetryEvaluationPending ? "重评中..." : "重试评测 (Retry Eval)"}</span>
               </Button>
             )}
 
@@ -256,9 +279,9 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="在 Langfuse 中查看"
-                className={buttonClassName("secondary", "h-8 text-xs")}
+                className={buttonClassName("secondary", "min-h-8 h-auto py-1 px-2.5 text-xs whitespace-nowrap")}
               >
-                <span>{langfuseLink.detailLabel || "在 Langfuse 打开 Trace"}</span>
+                <span>{langfuseLink.detailLabel || "Langfuse Trace"}</span>
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
             ) : (

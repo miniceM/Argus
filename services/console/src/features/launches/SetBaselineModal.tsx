@@ -32,6 +32,8 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
   const queryClient = useQueryClient();
   const [conflictError, setConflictError] = useState<string | null>(null);
   const [isRefreshingBaseline, setIsRefreshingBaseline] = useState(false);
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  const [refreshErrorMsg, setRefreshErrorMsg] = useState<string | null>(null);
 
   const isBaselineFetching = useIsFetching({
     queryKey: queryKeys.baselines.detail(agentId, environment),
@@ -43,8 +45,35 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
       prevBaselineRev.current = activeBaseline?.revision;
       setConflictError(null);
       setIsRefreshingBaseline(false);
+      setRefreshFailed(false);
+      setRefreshErrorMsg(null);
     }
   }, [activeBaseline?.revision]);
+
+  const handleRefreshBaseline = async () => {
+    setIsRefreshingBaseline(true);
+    setRefreshFailed(false);
+    setRefreshErrorMsg(null);
+    try {
+      const res = await api.GET("/api/v1/agents/{agent_id}/baselines", {
+        params: { path: { agent_id: agentId } },
+        query: { environment },
+      });
+      if (res.error) {
+        setIsRefreshingBaseline(false);
+        setRefreshFailed(true);
+        setRefreshErrorMsg(formatApiError(res.error));
+      } else {
+        queryClient.setQueryData(queryKeys.baselines.detail(agentId, environment), res.data);
+        setIsRefreshingBaseline(false);
+        setConflictError(null);
+      }
+    } catch (err: any) {
+      setIsRefreshingBaseline(false);
+      setRefreshFailed(true);
+      setRefreshErrorMsg(formatApiError(err));
+    }
+  };
 
   const setBaselineMutation = useMutation({
     mutationFn: async () => {
@@ -63,10 +92,10 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
 
       if (res.error) {
         if (res.response?.status === 409) {
-          setIsRefreshingBaseline(true);
-          void queryClient.invalidateQueries({
+          queryClient.invalidateQueries({
             queryKey: queryKeys.baselines.detail(agentId, environment),
           });
+          void handleRefreshBaseline();
           throw new Error("Baseline 绑定版本发生并发冲突 (HTTP 409)，请重新确认最新状态后再试。");
         }
         throw res.error;
@@ -96,7 +125,7 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
       onClose={onClose}
       title="固化设为新 Baseline (Set as Baseline)"
       tone="neutral"
-      dismissable={!setBaselineMutation.isPending && !isRefreshingBaseline}
+      dismissable={!setBaselineMutation.isPending}
       footer={
         <>
           <Button
@@ -104,7 +133,7 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
             variant="secondary"
             className="text-xs"
             onClick={onClose}
-            disabled={setBaselineMutation.isPending || isRefreshingBaseline || isBaselineFetching}
+            disabled={setBaselineMutation.isPending}
           >
             取消
           </Button>
@@ -112,7 +141,7 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
             type="button"
             variant="primary"
             className="text-xs font-semibold"
-            disabled={setBaselineMutation.isPending || isRefreshingBaseline || isBaselineFetching || Boolean(conflictError) || !activeSnapshot}
+            disabled={setBaselineMutation.isPending || isRefreshingBaseline || isBaselineFetching || Boolean(conflictError) || refreshFailed || !activeSnapshot}
             onClick={() => setBaselineMutation.mutate()}
           >
             {setBaselineMutation.isPending ? "正在固化绑定..." : "确认设为 Baseline"}
@@ -161,6 +190,24 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
           <div className="p-3 bg-fail-subtle border border-fail-border rounded-xl text-fail flex items-start gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <p>{conflictError}</p>
+          </div>
+        )}
+
+        {refreshFailed && (
+          <div className="p-3 bg-fail-subtle border border-fail-border rounded-xl text-fail flex flex-col gap-2" role="alert">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <p>获取最新 Baseline 绑定版本失败{refreshErrorMsg ? `: ${refreshErrorMsg}` : ""}，请重试或取消退出。</p>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-6 text-2xs px-2 self-start"
+              onClick={handleRefreshBaseline}
+              disabled={isRefreshingBaseline}
+            >
+              {isRefreshingBaseline ? "正在重试..." : "重试获取最新状态"}
+            </Button>
           </div>
         )}
       </div>

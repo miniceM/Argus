@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
@@ -158,6 +158,9 @@ export const LaunchDetail: React.FC = () => {
 
   const revisions: SnapshotRevision[] = snapshotsQuery.data?.revisions ?? [];
   const selectedSnapshot = revisions.find((row) => row.snapshot_id === selectedSnapshotId) ?? null;
+  const isSnapshotNotFound = Boolean(
+    selectedSnapshotId && snapshotsQuery.isSuccess && !selectedSnapshot
+  );
   // If a snapshot_id is explicitly specified, never silently fall back to latest revisions[0]
   const activeSnapshot = selectedSnapshotId
     ? selectedSnapshot
@@ -166,6 +169,8 @@ export const LaunchDetail: React.FC = () => {
 
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [comparisonFilter, setComparisonFilter] = useState("ALL");
+  const [comparisonSelectedCaseId, setComparisonSelectedCaseId] = useState<string | null>(null);
 
   useEffect(() => {
     setActionError(null);
@@ -175,6 +180,8 @@ export const LaunchDetail: React.FC = () => {
     setShowCancelModal(false);
     setCasesFilter("ALL");
     setExpandedCaseId(null);
+    setComparisonFilter("ALL");
+    setComparisonSelectedCaseId(null);
   }, [launchId, effectiveSnapshotId]);
 
   // Sync snapshot_id into URL if none was specified and one exists
@@ -254,14 +261,102 @@ export const LaunchDetail: React.FC = () => {
   });
 
   const rawItemsList: ItemExecution[] = Array.isArray(rawItems) ? rawItems : [];
-  const frozenItemsList: ItemExecution[] | null = Array.isArray(snapshotDetailQuery.data?.items)
-    ? (snapshotDetailQuery.data.items as ItemExecution[])
+  const liveItemsMap = useMemo(() => {
+    const map = new Map<string, ItemExecution>();
+    for (const item of rawItemsList) {
+      if (item.dataset_item_id) {
+        map.set(item.dataset_item_id, item);
+      }
+    }
+    return map;
+  }, [rawItemsList]);
+
+  // Data isolation (N01 & N02):
+  // 1. Explicit invalid snapshot: empty items, never bleed live items
+  // 2. Frozen snapshot: strictly consume snapshot items with adapter, never bleed live items or be blocked by rawItemsError 503
+  // 3. Pure live run (no snapshot specified and no revisions exist): consume rawItemsList
+  const items = useMemo(() => {
+    if (isSnapshotNotFound) {
+      return [];
+    }
+    if (activeSnapshot) {
+      const frozenList = snapshotDetailQuery.data?.items;
+      if (Array.isArray(frozenList)) {
+        return frozenList.map((row: any) => {
+          const datasetItemId = String(row.dataset_item_id || "");
+          const matchedLive = liveItemsMap.get(datasetItemId);
+          return {
+            id: matchedLive?.id ?? null,
+            dataset_item_id: datasetItemId,
+            execution_status: row.execution_status ?? matchedLive?.execution_status ?? "succeeded",
+            eval_status: row.eval_status ?? row.evaluation_status ?? matchedLive?.eval_status ?? "succeeded",
+            quality_conclusion: row.quality_conclusion ?? matchedLive?.quality_conclusion ?? "unknown",
+            scores: row.scores ?? matchedLive?.scores ?? {},
+            quality_evaluation: row.quality_evaluation ?? matchedLive?.quality_evaluation ?? null,
+            evaluation_results: row.evaluation_results ?? matchedLive?.evaluation_results ?? null,
+            trace_url: row.trace_url || row.langfuse_trace_url || matchedLive?.langfuse_trace_url || null,
+            langfuse_trace_url: row.trace_url || row.langfuse_trace_url || matchedLive?.langfuse_trace_url || null,
+            latency_ms: row.latency_ms != null ? row.latency_ms : (matchedLive?.final_attempt_latency_ms ?? null),
+            final_attempt_latency_ms: row.latency_ms != null ? row.latency_ms : (matchedLive?.final_attempt_latency_ms ?? null),
+            final_attempt_http_status: row.final_attempt_http_status ?? matchedLive?.final_attempt_http_status ?? null,
+            attempt_count: row.cost_evidence?.attempt_count != null
+              ? row.cost_evidence.attempt_count
+              : (row.attempt_count != null ? row.attempt_count : (matchedLive?.attempt_count ?? null)),
+            final_attempt_id: row.final_attempt_id ?? matchedLive?.final_attempt_id ?? null,
+            is_frozen: true,
+          } as any;
+        });
+      }
+      if (snapshotDetailQuery.isLoading) return [];
+      if (snapshotDetailQuery.data && !("items" in snapshotDetailQuery.data)) {
+        return rawItemsList.map((row) => ({
+          ...row,
+          trace_url: row.langfuse_trace_url ?? null,
+          latency_ms: row.final_attempt_latency_ms ?? null,
+          is_frozen: true,
+        })) as any[];
+      }
+      return [];
+    }
+    if (!selectedSnapshotId && revisions.length === 0) {
+      return rawItemsList.map((row) => ({
+        ...row,
+        trace_url: row.langfuse_trace_url ?? null,
+        latency_ms: row.final_attempt_latency_ms ?? null,
+        is_frozen: false,
+      })) as any[];
+    }
+    return [];
+  }, [isSnapshotNotFound, activeSnapshot, snapshotDetailQuery.data?.items, selectedSnapshotId, revisions.length, rawItemsList, liveItemsMap]);
+
+  const isItemsLoading = isSnapshotNotFound
+    ? false
+    : activeSnapshot
+    ? snapshotDetailQuery.isLoading
+    : (!selectedSnapshotId && revisions.length === 0)
+    ? isRawItemsLoading
+    : snapshotsQuery.isLoading;
+
+  const itemsError = isSnapshotNotFound
+    ? new Error(`评测快照 ${selectedSnapshotId} 不存在或无权访问`)
+    : activeSnapshot
+    ? snapshotDetailQuery.error
+    : (!selectedSnapshotId && revisions.length === 0)
+    ? rawItemsError
     : null;
-  const items: ItemExecution[] = frozenItemsList ?? rawItemsList;
-  const isItemsLoading = effectiveSnapshotId
-    ? (snapshotDetailQuery.isLoading || (snapshotDetailQuery.data?.items == null && isRawItemsLoading))
-    : isRawItemsLoading;
-  const itemsError = (Boolean(effectiveSnapshotId) && snapshotDetailQuery.error) || rawItemsError;
+
+  // Retry routing (N03): retry frozen snapshot detail query on snapshot error, not live /items
+  const handleRetryItems = () => {
+    if (activeSnapshot) {
+      snapshotDetailQuery.refetch();
+      summaryQuery.refetch();
+    } else if (!selectedSnapshotId && revisions.length === 0) {
+      refetchItems();
+    } else {
+      snapshotsQuery.refetch();
+      refetchItems();
+    }
+  };
 
   // Invalidate all queries
   const invalidateAll = () => {
@@ -443,8 +538,10 @@ export const LaunchDetail: React.FC = () => {
   const frozenSummary = summaryQuery.data?.summary as Record<string, any> | undefined;
   const activeSnap = activeSnapshot as Record<string, any> | undefined;
   const hasFrozenQualityCounts =
-    (frozenSummary?.quality_pass_count != null || frozenSummary?.quality_fail_count != null) ||
-    (activeSnap?.quality_pass_count != null || activeSnap?.quality_fail_count != null);
+    !isSnapshotNotFound && (
+      (frozenSummary?.quality_pass_count != null || frozenSummary?.quality_fail_count != null) ||
+      (activeSnap?.quality_pass_count != null || activeSnap?.quality_fail_count != null)
+    );
 
   const frozenPassCount = Number(frozenSummary?.quality_pass_count ?? activeSnap?.quality_pass_count ?? 0);
   const frozenFailCount = Number(frozenSummary?.quality_fail_count ?? activeSnap?.quality_fail_count ?? 0);
@@ -452,22 +549,35 @@ export const LaunchDetail: React.FC = () => {
   const frozenTotalCount = frozenPassCount + frozenFailCount + frozenUnknownCount;
 
   // Quality metrics calculations
-  const totalItems: number | null = hasFrozenQualityCounts
+  const totalItems: number | null = isSnapshotNotFound
+    ? null
+    : hasFrozenQualityCounts
     ? (frozenTotalCount > 0 ? frozenTotalCount : (itemsError ? null : items.length))
-    : (itemsError ? null : items.length);
+    : activeSnapshot
+    ? (itemsError ? null : items.length)
+    : (!selectedSnapshotId && revisions.length === 0)
+    ? (itemsError ? null : items.length)
+    : null;
 
-  const passedItems: number | null = hasFrozenQualityCounts
+  const passedItems: number | null = isSnapshotNotFound
+    ? null
+    : hasFrozenQualityCounts
     ? frozenPassCount
-    : (itemsError
-        ? null
-        : items.filter((i) => i.quality_conclusion?.toLowerCase() === "pass").length);
+    : activeSnapshot
+    ? (itemsError ? null : items.filter((i: any) => i.quality_conclusion?.toLowerCase() === "pass").length)
+    : (!selectedSnapshotId && revisions.length === 0)
+    ? (itemsError ? null : items.filter((i: any) => i.quality_conclusion?.toLowerCase() === "pass").length)
+    : null;
 
-  const decisionCounts: { pass: number; fail: number; unknown: number } | null = hasFrozenQualityCounts
+  const decisionCounts: { pass: number; fail: number; unknown: number } | null = isSnapshotNotFound
+    ? null
+    : hasFrozenQualityCounts
     ? { pass: frozenPassCount, fail: frozenFailCount, unknown: frozenUnknownCount }
-    : (itemsError
+    : activeSnapshot
+    ? (itemsError
         ? null
         : items.reduce(
-            (acc, item) => {
+            (acc: any, item: any) => {
               const conclusion = (item.quality_conclusion || "unknown").toLowerCase();
               if (conclusion === "pass") acc.pass += 1;
               else if (conclusion === "fail") acc.fail += 1;
@@ -475,7 +585,21 @@ export const LaunchDetail: React.FC = () => {
               return acc;
             },
             { pass: 0, fail: 0, unknown: 0 },
-          ));
+          ))
+    : (!selectedSnapshotId && revisions.length === 0)
+    ? (itemsError
+        ? null
+        : items.reduce(
+            (acc: any, item: any) => {
+              const conclusion = (item.quality_conclusion || "unknown").toLowerCase();
+              if (conclusion === "pass") acc.pass += 1;
+              else if (conclusion === "fail") acc.fail += 1;
+              else acc.unknown += 1;
+              return acc;
+            },
+            { pass: 0, fail: 0, unknown: 0 },
+          ))
+    : null;
 
   const decidedCount = decisionCounts ? decisionCounts.pass + decisionCounts.fail : 0;
   const passRateNum = frozenSummary?.pass_rate != null ? Number(frozenSummary.pass_rate) : null;
@@ -488,7 +612,9 @@ export const LaunchDetail: React.FC = () => {
 
   // Derive frozen quality conclusion for LaunchHeader (fail-closed, UNKNOWN-safe)
   let frozenQualityConclusion: string | null = null;
-  if (hasFrozenQualityCounts) {
+  if (isSnapshotNotFound) {
+    frozenQualityConclusion = "unknown";
+  } else if (hasFrozenQualityCounts) {
     if (frozenFailCount > 0) {
       frozenQualityConclusion = "fail";
     } else if (frozenUnknownCount > 0) {
@@ -502,7 +628,7 @@ export const LaunchDetail: React.FC = () => {
     } else {
       frozenQualityConclusion = "unknown";
     }
-  } else if (!effectiveSnapshotId) {
+  } else if (!effectiveSnapshotId && revisions.length === 0) {
     if (decisionCounts) {
       if (decisionCounts.fail > 0) {
         frozenQualityConclusion = "fail";
@@ -520,17 +646,13 @@ export const LaunchDetail: React.FC = () => {
     frozenQualityConclusion = "unknown";
   }
 
-  const isSnapshotNotFound = Boolean(
-    selectedSnapshotId && snapshotsQuery.isSuccess && !selectedSnapshot
-  );
-
   return (
     <div className="space-y-6">
       {/* 1. 业务主体 Header */}
       <LaunchHeader
         launch={launch}
         activeSnapshot={activeSnapshot}
-        allowedActions={allowedActions}
+        allowedActions={isSnapshotNotFound ? [] : allowedActions}
         langfuseLink={langfuseLink}
         isFetching={isLaunchFetching}
         qualityConclusion={frozenQualityConclusion}
@@ -548,7 +670,7 @@ export const LaunchDetail: React.FC = () => {
           setShowRetryModal(true);
         }}
         onRetryEvaluation={() => retryEvaluationMutation.mutate()}
-        onOpenBaselineModal={() => setShowBaselineModal(true)}
+        onOpenBaselineModal={isSnapshotNotFound ? undefined : () => setShowBaselineModal(true)}
         isRunPending={runMutation.isPending}
         isCancelPending={cancelMutation.isPending}
         isResumePending={resumeMutation.isPending}
@@ -556,30 +678,21 @@ export const LaunchDetail: React.FC = () => {
         isRetryEvaluationPending={retryEvaluationMutation.isPending}
       />
 
-      {/* 快照请求异常与未找到警示 (Alert) */}
-      {summaryQuery.error && currentTab !== "compare" && (
+      {/* 快照请求异常与未找到警示 (Alert) - 仅在非 compare Tab 渲染，避免与 GateComparisonTab 内部 Alert 重复 */}
+      {currentTab !== "compare" && (summaryQuery.error || isSnapshotNotFound) && (
         <div
           role="alert"
           className="p-3 text-xs bg-fail-subtle border border-fail-border rounded-lg text-fail font-medium"
         >
-          {formatApiError(summaryQuery.error)}
-        </div>
-      )}
-
-      {!summaryQuery.error && isSnapshotNotFound && (
-        <div
-          role="alert"
-          className="p-3 text-xs bg-fail-subtle border border-fail-border rounded-lg text-fail font-medium"
-        >
-          Snapshot {selectedSnapshotId} not found
+          {summaryQuery.error ? formatApiError(summaryQuery.error) : `Snapshot ${selectedSnapshotId} not found`}
         </div>
       )}
 
       {/* 用例明细数据加载异常或归属不一致警示 */}
-      {itemsError && (
+      {itemsError && !isSnapshotNotFound && currentTab !== "cases" && (
         <ErrorState
           message={formatApiError(itemsError)}
-          onRetry={() => refetchItems()}
+          onRetry={handleRetryItems}
         />
       )}
 
@@ -614,7 +727,10 @@ export const LaunchDetail: React.FC = () => {
         formal={comparisonInitialQuery.data?.formal}
         onNavigateTab={(tabId) => {
           if (tabId === "cases") setTab("cases");
-          else if (tabId === "compare") setTab("compare");
+          else if (tabId === "compare") {
+            setTab("compare");
+            setComparisonFilter("REGRESSION");
+          }
         }}
       />
 
@@ -723,6 +839,10 @@ export const LaunchDetail: React.FC = () => {
             }}
             qualityPolicyRules={manifest.quality_policy?.rules ?? []}
             manifestEvaluators={manifest.evaluators || []}
+            currentFilter={comparisonFilter}
+            onFilterChange={setComparisonFilter}
+            selectedCaseId={comparisonSelectedCaseId}
+            onSelectedCaseChange={setComparisonSelectedCaseId}
           />
         </div>
       )}
@@ -734,8 +854,8 @@ export const LaunchDetail: React.FC = () => {
           aria-labelledby="btn-tab-cases"
         >
           {isItemsLoading && <LoadingState message="正在加载用例明细与得分..." />}
-          {itemsError && <ErrorState message={formatApiError(itemsError)} onRetry={() => refetchItems()} />}
-          {!isItemsLoading && !itemsError && (
+          {itemsError && !isSnapshotNotFound && <ErrorState message={formatApiError(itemsError)} onRetry={handleRetryItems} />}
+          {!isItemsLoading && (!itemsError || isSnapshotNotFound) && (
             <CasesTraceTab
               key={`${launchId}-${effectiveSnapshotId}`}
               launchId={launch.id}

@@ -307,13 +307,16 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
 
                 {/* 右侧指标与操作链接 */}
                 <div className="flex items-center gap-3 shrink-0">
-                  {item.final_attempt_latency_ms != null && (
-                    <span className="text-muted-foreground font-mono flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-muted-foreground" />
-                      <span>{item.final_attempt_latency_ms}ms</span>
-                    </span>
-                  )}
-                  {item.final_attempt_http_status && (
+                  {(() => {
+                    const latency = (item as any).latency_ms != null ? (item as any).latency_ms : item.final_attempt_latency_ms;
+                    return latency != null ? (
+                      <span className="text-muted-foreground font-mono flex items-center gap-1" data-testid="case-latency">
+                        <Clock className="w-3 h-3 text-muted-foreground" />
+                        <span>{latency}ms</span>
+                      </span>
+                    ) : null;
+                  })()}
+                  {item.final_attempt_http_status != null && (
                     <span
                       className={`font-mono font-semibold px-1.5 py-0.5 rounded text-micro ${
                         item.final_attempt_http_status >= 200 && item.final_attempt_http_status < 300
@@ -325,41 +328,54 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
                     </span>
                   )}
 
-                  {/* Trace 链接 */}
-                  {item.langfuse_trace_url ? (
-                    <a
-                      href={item.langfuse_trace_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline inline-flex items-center gap-1 font-medium"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <span>Trace</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  ) : (
-                    <span className="text-muted-foreground text-micro">无 Trace</span>
-                  )}
+                  {/* Trace 链接 (N02: 优先读取冻结 trace_url) */}
+                  {(() => {
+                    const trace = (item as any).trace_url || item.langfuse_trace_url;
+                    return trace ? (
+                      <a
+                        href={trace}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline inline-flex items-center gap-1 font-medium"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span>Trace</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground text-micro">无 Trace</span>
+                    );
+                  })()}
 
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedAttemptItem({
-                        id: item.id,
-                        caseId: item.dataset_item_id,
-                        evaluationResults: (item.evaluation_results as EvaluationResult[] | undefined) ?? null,
-                        traceUrl: item.langfuse_trace_url ?? null,
-                        qualityEvaluation: (item.quality_evaluation as QualityEvaluation | undefined) ?? null,
-                      });
-                    }}
-                    className="min-h-7 px-2.5 py-1 text-xs font-mono"
-                    title="查看 Attempt 调用历史"
-                  >
-                    <span>{item.attempt_count ?? 1} 次尝试</span>
-                    <Eye aria-hidden="true" className="h-3.5 w-3.5 ml-1" />
-                  </Button>
+                  {(() => {
+                    const attempts = (item as any).cost_evidence?.attempt_count != null
+                      ? (item as any).cost_evidence.attempt_count
+                      : item.attempt_count;
+                    const canOpenAttempts = Boolean(item.id);
+                    return (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={!canOpenAttempts}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!item.id) return;
+                          setSelectedAttemptItem({
+                            id: item.id,
+                            caseId: item.dataset_item_id,
+                            evaluationResults: (item.evaluation_results as EvaluationResult[] | undefined) ?? null,
+                            traceUrl: (item as any).trace_url || item.langfuse_trace_url || null,
+                            qualityEvaluation: (item.quality_evaluation as QualityEvaluation | undefined) ?? null,
+                          });
+                        }}
+                        className="min-h-7 px-2.5 py-1 text-xs font-mono disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={canOpenAttempts ? "查看 Attempt 调用历史" : "历史快照无实时 Attempt 执行记录"}
+                      >
+                        <span>{attempts != null ? `${attempts} 次尝试` : "—"}</span>
+                        <Eye aria-hidden="true" className="h-3.5 w-3.5 ml-1" />
+                      </Button>
+                    );
+                  })()}
 
                   <Button
                     type="button"
@@ -516,6 +532,9 @@ const CaseDetailPanel: React.FC<{
 
           {baselineOutput && (
             <div className="space-y-2">
+              {baselineOutput.reason && baselineOutputStatus !== "FETCH_FAILED" && (
+                <p className="text-micro text-muted-foreground">{baselineOutput.reason}</p>
+              )}
               {baselineOutputStatus === "AVAILABLE" && baselineOutput.output != null ? (
                 <div className="text-foreground">
                   {typeof baselineOutput.output === "string" ? (
@@ -534,6 +553,21 @@ const CaseDetailPanel: React.FC<{
                 <p className="text-micro text-muted-foreground italic">
                   基准版本远程 Observation 已过期或不存在。
                 </p>
+              ) : baselineOutputStatus === "FETCH_FAILED" ? (
+                <div className="space-y-1.5" data-testid="baseline-fetch-failed">
+                  <p className="text-fail text-micro">
+                    获取基准输出失败{baselineOutput.reason ? `: ${baselineOutput.reason}` : ""}
+                  </p>
+                  {(baselineOutput.retryable ?? true) && (
+                    <Button
+                      variant="secondary"
+                      className="h-6 text-2xs px-2"
+                      onClick={() => caseOutputQuery.refetch()}
+                    >
+                      重试读取基准输出
+                    </Button>
+                  )}
+                </div>
               ) : (
                 <p className="text-micro text-muted-foreground italic">基准输出暂不可用。</p>
               )}

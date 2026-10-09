@@ -717,4 +717,171 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     expect(grid).not.toHaveClass("hidden");
   });
 
+  it("N01: explicit invalid snapshot renders alert and zero items; live 503 does not block valid S1", async () => {
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}/summary": { error: { detail: "Snapshot WRONG not found" }, response: { status: 404 } },
+      "/api/v1/experiment-launches/{launch_id}/comparison": { error: { detail: "Snapshot WRONG not found" }, response: { status: 404 } },
+    });
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=WRONG&tab=cases`);
+    await screen.findByRole("alert");
+    expect(screen.queryByTestId("case-row-expand-item-001")).not.toBeInTheDocument();
+
+    seedHistoricalFailures();
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}/items": { error: { detail: "live items 503 unavailable" }, response: { status: 503 } },
+    });
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=S1&tab=cases`);
+    expect(await screen.findByRole("button", { name: "未通过 (2)" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "未通过 (2)" }));
+    expect(await screen.findByTestId("case-row-expand-item-001")).toBeInTheDocument();
+  });
+
+  it("N02: frozen items map trace_url, latency_ms and disable attempt drawer", async () => {
+    const old = {
+      ...mockSnapshotList.revisions[0],
+      snapshot_id: "S1",
+      revision: 1,
+      is_latest: false,
+    };
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}/result-snapshots": {
+        data: { latest_snapshot_id: "S1", latest_revision: 1, revisions: [old] },
+      },
+      "/api/v1/experiment-launches/{launch_id}/summary": {
+        data: { ...mockSummary, snapshot_id: "S1" },
+      },
+      "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}": {
+        data: {
+          launch_id: mockLaunch.id,
+          ...old,
+          items: [
+            {
+              dataset_item_id: "frozen-item-001",
+              quality_conclusion: "pass",
+              scores: { pii_safe: 1 },
+              quality_evaluation: { conclusion: "pass", rules: [] },
+              trace_url: "https://cloud.langfuse.com/trace/frozen-trace-1",
+              latency_ms: 0,
+              cost_evidence: { attempt_count: 2 },
+            },
+          ],
+        },
+      },
+    });
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=S1&tab=cases`);
+    expect(await screen.findByText("0ms")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /2 次尝试/ })).toBeInTheDocument();
+    const traceLink = screen.getByRole("link", { name: /Trace/ });
+    expect(traceLink).toHaveAttribute("href", "https://cloud.langfuse.com/trace/frozen-trace-1");
+    const attemptBtn = screen.getByRole("button", { name: /2 次尝试/ });
+    expect(attemptBtn).toBeDisabled();
+    expect(attemptBtn).toHaveAttribute("title", "历史快照无实时 Attempt 执行记录");
+  });
+
+  it("N04: CAS 409 refresh failure allows manual retry and does not lock cancel button", async () => {
+    (api.POST as any).mockResolvedValue({ error: { detail: "conflict" }, response: { status: 409 } });
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path === "/api/v1/agents/{agent_id}/baselines") {
+        return Promise.resolve({ error: { detail: "network error on baseline refresh" }, response: { status: 500 } });
+      }
+      return Promise.resolve({ data: {} });
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SetBaselineModal
+          open
+          onClose={() => {}}
+          agentId="banking-agent"
+          environment="production"
+          activeSnapshot={mockSnapshotList.revisions[0] as any}
+          activeBaseline={{ revision: 1, result_snapshot_id: "base-snap-001" } as any}
+        />
+      </QueryClientProvider>
+    );
+    fireEvent.click(screen.getByRole("button", { name: "确认设为 Baseline" }));
+    await screen.findByText(/获取最新 Baseline 绑定版本失败/);
+    expect(screen.getByRole("button", { name: "重试获取最新状态" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "取消" })).not.toBeDisabled();
+  });
+
+  it("N05: explicit higher_is_better direction on latency metric is positive improvement", async () => {
+    const launch = structuredClone(mockLaunch) as any;
+    launch.manifest.evaluators = [{ id: "throughput_latency", version: "1", direction: "higher_is_better" }];
+    const c = structuredClone(mockComparison) as any;
+    c.summary.comparable_cohort.baseline.score_means = { throughput_latency: 100 };
+    c.summary.comparable_cohort.candidate.score_means = { throughput_latency: 150 };
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}": { data: launch },
+      "/api/v1/experiment-launches/{launch_id}/comparison": { data: c },
+    });
+    renderComponent();
+    const cell = await screen.findByText("throughput_latency", { selector: "td" });
+    const row = cell.closest("tr")!;
+    expect(within(row).getByText("提升")).toBeInTheDocument();
+  });
+
+  it("N07: copy UUID writes full UUID on resolve", async () => {
+    let clipboardText = "";
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn(async (text: string) => {
+          clipboardText = text;
+        }),
+      },
+    });
+    renderComponent();
+    const copyBtn = await screen.findByTitle(`点击复制完整 ID: ${mockLaunch.id}`);
+    await act(async () => {
+      fireEvent.click(copyBtn);
+    });
+    expect(clipboardText).toBe(mockLaunch.id);
+    expect(await screen.findByText("已复制")).toBeInTheDocument();
+  });
+
+  it("N07: copy UUID displays failure feedback on reject", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn(async () => {
+          throw new Error("Clipboard permission denied");
+        }),
+      },
+    });
+    renderComponent();
+    const copyBtn = await screen.findByTitle(`点击复制完整 ID: ${mockLaunch.id}`);
+    await act(async () => {
+      fireEvent.click(copyBtn);
+    });
+    expect(await screen.findByText("复制失败")).toBeInTheDocument();
+  });
+
+  it("N08: baseline case output FETCH_FAILED renders reason and allows retry", async () => {
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}/comparison/case": {
+        data: {
+          launch_id: mockLaunch.id,
+          candidate_snapshot_id: "snap-v2-001",
+          dataset_item_id: "item-001",
+          classification: "UNCHANGED",
+          baseline: {
+            output_status: "FETCH_FAILED",
+            output: null,
+            reason: "Baseline trace storage expired",
+            retryable: true,
+          },
+          candidate: {
+            output_status: "AVAILABLE",
+            output: "v2 output",
+            scores: {},
+          },
+        },
+      },
+    });
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=snap-v2-001&tab=cases`);
+    fireEvent.click(await screen.findByTestId("case-row-expand-item-001"));
+    await screen.findByText(/Baseline trace storage expired/);
+    expect(screen.getByRole("button", { name: "重试读取基准输出" })).toBeInTheDocument();
+  });
+
 });

@@ -262,6 +262,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
             ...mockSnapshotList.revisions[0],
             releasable: true,
             manifest: mockLaunch.manifest,
+            items: mockItems,
           },
         });
       }

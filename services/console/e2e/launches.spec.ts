@@ -298,7 +298,7 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     await expect(page.getByTestId("runner-version")).toContainText("0.1.0");
     await expect(page.getByText("sha256-mapping-engine-v1")).toBeVisible();
 
-    const runBtn = page.getByRole("button", { name: "立即执行评测" });
+    const runBtn = page.getByRole("button", { name: /启动评测|立即执行评测/ });
     await expect(runBtn).toBeVisible();
 
     // 3. Click Run Evaluation

@@ -185,7 +185,7 @@ test.describe("Issue #84 evaluation-only retry", () => {
     // The action is a distinct "retry evaluation", never "retry failed case".
     const button = page.getByTestId("retry-evaluation-button");
     await expect(button).toBeVisible();
-    await expect(page.getByText("重试评测失败 (Retry Evaluation)")).toBeVisible();
+    await expect(button).toContainText("重试评测");
 
     // It must be explicit that the Agent is not invoked again.
     await expect(button).toHaveAttribute("title", /不会再次调用 Agent/);

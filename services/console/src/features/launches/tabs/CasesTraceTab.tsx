@@ -217,7 +217,7 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
 
           return (
             <div
-              key={item.id}
+              key={item.dataset_item_id || item.id}
               className="p-4 hover:bg-surface-subtle transition-colors"
             >
               {/* 卡片头部行 */}

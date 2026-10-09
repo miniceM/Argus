@@ -247,7 +247,9 @@ export const LaunchDetail: React.FC = () => {
   });
 
   // 3.1 Fetch Snapshot Detail for frozen items when viewing an immutable snapshot
-  const targetSnapshotId = selectedSnapshotId || activeSnapshot?.snapshot_id || null;
+  const targetSnapshotId = selectedSnapshotId
+    ? (selectedSnapshot?.snapshot_id ?? null)
+    : (activeSnapshot?.snapshot_id ?? null);
   const snapshotDetailQuery = useQuery({
     queryKey: [...queryKeys.launches.all, "result-snapshot", launchId, targetSnapshotId ?? "none"],
     enabled: Boolean(launchId && targetSnapshotId),
@@ -322,12 +324,14 @@ export const LaunchDetail: React.FC = () => {
   const itemsError = isSnapshotNotFound
     ? new Error(`评测快照 ${selectedSnapshotId} 不存在或无权访问`)
     : targetSnapshotId
-    ? (snapshotValidation && !snapshotValidation.isValid
+    ? (snapshotValidation && !snapshotValidation.isValid && snapshotValidation.error?.includes("Launch 不一致")
         ? new Error(snapshotValidation.error)
         : snapshotDetailQuery.error)
     : (!selectedSnapshotId && revisions.length === 0)
-    ? (snapshotsQuery.isError ? snapshotsQuery.error : rawItemsError)
-    : snapshotsQuery.error;
+    ? (snapshotsQuery.isError ? new Error(`快照服务异常: ${formatApiError(snapshotsQuery.error)}`) : rawItemsError)
+    : snapshotsQuery.error
+    ? new Error(`快照服务异常: ${formatApiError(snapshotsQuery.error)}`)
+    : null;
 
   // Retry routing (M01 & M04): retry frozen snapshot detail query on snapshot error, not live /items
   const handleRetryItems = () => {

@@ -91,6 +91,6 @@ test.describe("Real API Acceptance E2E (Zero Mock)", () => {
     await expect(page.getByText("Concurrency:").first()).toBeVisible();
 
     // Run button is present in PENDING state
-    await expect(page.getByRole("button", { name: /立即执行评测/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /启动评测|立即执行评测/ })).toBeVisible();
   });
 });

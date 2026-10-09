@@ -36,7 +36,7 @@ const PROGRESS_STATES: ProgressStateSpec[] = [
     cardClass: "bg-queued-subtle border-queued-border",
     labelClass: "text-queued",
     valueClass: "text-queued-strong",
-    count: (p) => p.queued + p.pending,
+    count: (p) => (p.queued ?? 0) + (p.pending ?? 0),
   },
   {
     state: "running",
@@ -45,7 +45,7 @@ const PROGRESS_STATES: ProgressStateSpec[] = [
     cardClass: "bg-running-subtle border-running-border",
     labelClass: "text-running",
     valueClass: "text-running-strong",
-    count: (p) => p.running,
+    count: (p) => p.running ?? 0,
   },
   {
     state: "pass",
@@ -54,7 +54,7 @@ const PROGRESS_STATES: ProgressStateSpec[] = [
     cardClass: "bg-pass-subtle border-pass-border",
     labelClass: "text-pass",
     valueClass: "text-pass-strong",
-    count: (p) => p.succeeded,
+    count: (p) => p.succeeded ?? 0,
   },
   {
     state: "fail",
@@ -63,7 +63,7 @@ const PROGRESS_STATES: ProgressStateSpec[] = [
     cardClass: "bg-fail-subtle border-fail-border",
     labelClass: "text-fail",
     valueClass: "text-fail-strong",
-    count: (p) => p.failed,
+    count: (p) => p.failed ?? 0,
   },
   {
     state: "timeout",
@@ -72,7 +72,7 @@ const PROGRESS_STATES: ProgressStateSpec[] = [
     cardClass: "bg-timeout-subtle border-timeout-border",
     labelClass: "text-timeout",
     valueClass: "text-timeout-strong",
-    count: (p) => p.timed_out,
+    count: (p) => p.timed_out ?? 0,
   },
   {
     state: "retry",
@@ -81,7 +81,7 @@ const PROGRESS_STATES: ProgressStateSpec[] = [
     cardClass: "bg-retry-subtle border-retry-border",
     labelClass: "text-retry",
     valueClass: "text-retry-strong",
-    count: (p) => p.retry_wait,
+    count: (p) => p.retry_wait ?? 0,
   },
   {
     state: "cancelled",
@@ -90,7 +90,7 @@ const PROGRESS_STATES: ProgressStateSpec[] = [
     cardClass: "bg-cancelled-subtle border-cancelled-border",
     labelClass: "text-cancelled",
     valueClass: "text-cancelled-strong",
-    count: (p) => p.cancelled,
+    count: (p) => p.cancelled ?? 0,
   },
 ];
 
@@ -108,7 +108,8 @@ export const ExecutionProgressPanel: React.FC<ExecutionProgressPanelProps> = ({
   statusReason,
 }) => {
   const isExecuting = isLaunchExecutionActive(status);
-  const [isExpanded, setIsExpanded] = useState<boolean>(isExecuting);
+  const [userOverride, setUserOverride] = useState<boolean | null>(null);
+  const isExpanded = userOverride !== null ? userOverride : isExecuting;
 
   if (!progress || progress.total === 0) return null;
 
@@ -164,7 +165,7 @@ export const ExecutionProgressPanel: React.FC<ExecutionProgressPanelProps> = ({
             <span>重试: {progress.retries ?? 0} 次</span>
             <button
               type="button"
-              onClick={() => setIsExpanded(!isExpanded)}
+              onClick={() => setUserOverride(!isExpanded)}
               className="inline-flex items-center gap-1 text-primary hover:text-foreground cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-focus rounded-sm px-1"
             >
               <span>{isExpanded ? "收起诊断" : "展开诊断"}</span>

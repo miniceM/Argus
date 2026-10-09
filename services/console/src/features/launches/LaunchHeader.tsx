@@ -24,6 +24,7 @@ interface LaunchHeaderProps {
   allowedActions: string[];
   langfuseLink: LangfuseLinkView;
   isFetching: boolean;
+  qualityConclusion?: string | null;
   onRefresh: () => void;
   onRun?: () => void;
   onCancel?: () => void;
@@ -44,6 +45,7 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
   allowedActions,
   langfuseLink,
   isFetching,
+  qualityConclusion,
   onRefresh,
   onRun,
   onCancel,
@@ -73,9 +75,10 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
     durationText = `${((end - start) / 1000).toFixed(2)}s`;
   }
 
-  const qualityConclusion = (launch.quality_conclusion || "").toLowerCase();
-  const isPass = qualityConclusion === "pass";
-  const isFail = qualityConclusion === "fail";
+  const effectiveQuality = qualityConclusion !== undefined ? qualityConclusion : launch.quality_conclusion;
+  const qualityConclusionStr = (effectiveQuality || "").toLowerCase();
+  const isPass = qualityConclusionStr === "pass";
+  const isFail = qualityConclusionStr === "fail";
   const isComplete = activeSnapshot?.evidence_state === "COMPLETE";
 
   const shortUuid = launch.id.length > 12
@@ -126,7 +129,7 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
               {/* 执行状态与门禁徽章 */}
               <StatusBadge status={launch.status} />
               <div className="flex items-center gap-1.5">
-                <QualityBadge quality={launch.quality_conclusion} />
+                <QualityBadge quality={effectiveQuality || "unknown"} />
                 <span className="text-xs font-semibold text-muted-foreground">
                   {isPass ? "门禁准入通过 (PASS)" : isFail ? "门禁未通过 (FAIL)" : "门禁状态未知 (UNKNOWN)"}
                 </span>

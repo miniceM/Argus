@@ -34,6 +34,14 @@ interface CasesTraceTabProps {
   items: ItemExecution[];
   initialFilter?: string;
   manifestDataset?: any;
+  snapshotCounts?: {
+    pass?: number | null;
+    fail?: number | null;
+    unknown?: number | null;
+    total?: number | null;
+  } | null;
+  currentFilter?: string;
+  onFilterChange?: (filter: string) => void;
 }
 
 const ruleSummary = (evaluation: QualityEvaluation): string => {
@@ -56,8 +64,16 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
   items,
   initialFilter = "ALL",
   manifestDataset,
+  snapshotCounts,
+  currentFilter,
+  onFilterChange,
 }) => {
-  const [filterQuality, setFilterQuality] = useState<string>(initialFilter);
+  const [internalFilter, setInternalFilter] = useState<string>(initialFilter);
+  const filterQuality = currentFilter ?? internalFilter;
+  const setFilterQuality = (filter: string) => {
+    setInternalFilter(filter);
+    onFilterChange?.(filter);
+  };
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
   const [selectedAttemptItem, setSelectedAttemptItem] = useState<{
     id: string;
@@ -80,9 +96,18 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
     return true;
   });
 
-  const passCount = items.filter((i) => i.quality_conclusion?.toLowerCase() === "pass").length;
-  const failCount = items.filter((i) => i.quality_conclusion?.toLowerCase() === "fail").length;
-  const unknownCount = items.filter((i) => (i.quality_conclusion || "unknown").toLowerCase() === "unknown").length;
+  const passCount = snapshotCounts?.pass != null
+    ? snapshotCounts.pass
+    : items.filter((i) => i.quality_conclusion?.toLowerCase() === "pass").length;
+  const failCount = snapshotCounts?.fail != null
+    ? snapshotCounts.fail
+    : items.filter((i) => i.quality_conclusion?.toLowerCase() === "fail").length;
+  const unknownCount = snapshotCounts?.unknown != null
+    ? snapshotCounts.unknown
+    : items.filter((i) => (i.quality_conclusion || "unknown").toLowerCase() === "unknown").length;
+  const totalCount = snapshotCounts?.total != null
+    ? snapshotCounts.total
+    : items.length;
   const failedCount = items.filter((i) => ["failed", "timed_out"].includes((i.execution_status || "").toLowerCase())).length;
   const retryWaitCount = items.filter((i) => (i.execution_status || "").toLowerCase() === "retry_wait").length;
   const cancelledCount = items.filter((i) => (i.execution_status || "").toLowerCase() === "cancelled").length;
@@ -105,7 +130,7 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
             onClick={() => setFilterQuality("ALL")}
             className="min-h-7 px-3 py-1 text-xs"
           >
-            全部用例 ({items.length})
+            全部用例 ({totalCount})
           </Button>
           <Button
             type="button"

@@ -81,7 +81,7 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
 
   // Copy JSON
   const handleCopyJson = () => {
-    const payload = detailQuery.data || manifest;
+    const payload = detailQuery.data || (activeRev ? { ...activeRev, manifest } : manifest);
     if (navigator.clipboard) {
       navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
       setCopied(true);
@@ -91,7 +91,7 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
 
   // Download JSON
   const handleDownloadJson = () => {
-    const payload = detailQuery.data || manifest;
+    const payload = detailQuery.data || (activeRev ? { ...activeRev, manifest } : manifest);
     const jsonStr = JSON.stringify(payload, null, 2);
     const blob = new Blob([jsonStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);

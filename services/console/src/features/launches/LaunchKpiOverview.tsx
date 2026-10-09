@@ -283,7 +283,7 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
                 )}
               </div>
               <div className="text-micro text-muted-foreground font-mono">
-                已判定通过率：<span data-testid="decided-pass-rate">{decidedPassRate ? `${decidedPassRate}%` : "—"}</span>
+                已判定通过率：<span data-testid="decided-pass-rate">{decidedPassRate ? `${decidedPassRate}% (已判定)` : "—"}</span>
                 {" · "}
                 判定覆盖率：<span data-testid="decision-coverage">{decisionCoverage != null ? `${decisionCoverage.toFixed(1)}%` : "—"}</span>
               </div>

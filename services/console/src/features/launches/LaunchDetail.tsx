@@ -40,18 +40,25 @@ export const LaunchDetail: React.FC = () => {
   const { launchId } = useParams<{ launchId: string }>();
   const queryClient = useQueryClient();
 
+  const VALID_TABS = ["compare", "cases", "audit"] as const;
+  type TabKey = (typeof VALID_TABS)[number];
+
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedSnapshotId = searchParams.get("snapshot_id");
-  const currentTab = searchParams.get("tab") || "compare";
+  const rawTab = searchParams.get("tab");
+  const currentTab: TabKey = rawTab && VALID_TABS.includes(rawTab as TabKey)
+    ? (rawTab as TabKey)
+    : "compare";
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [showRetryModal, setShowRetryModal] = useState(false);
   const [forceRetry, setForceRetry] = useState(false);
   const [evalRetryNotice, setEvalRetryNotice] = useState<string | null>(null);
   const [showBaselineModal, setShowBaselineModal] = useState(false);
+  const [casesFilter, setCasesFilter] = useState<string>("ALL");
 
   // Switch tab without losing other params
-  const setTab = (tab: "compare" | "cases" | "audit") => {
+  const setTab = (tab: TabKey) => {
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -60,6 +67,28 @@ export const LaunchDetail: React.FC = () => {
       },
       { replace: false },
     );
+  };
+
+  // Keyboard navigation for WAI-ARIA tabs
+  const handleTabKeyDown = (e: React.KeyboardEvent, index: number) => {
+    let targetIndex = -1;
+    if (e.key === "ArrowRight") {
+      targetIndex = (index + 1) % VALID_TABS.length;
+    } else if (e.key === "ArrowLeft") {
+      targetIndex = (index - 1 + VALID_TABS.length) % VALID_TABS.length;
+    } else if (e.key === "Home") {
+      targetIndex = 0;
+    } else if (e.key === "End") {
+      targetIndex = VALID_TABS.length - 1;
+    }
+
+    if (targetIndex !== -1) {
+      e.preventDefault();
+      const nextTab = VALID_TABS[targetIndex];
+      setTab(nextTab);
+      const nextBtn = document.getElementById(`btn-tab-${nextTab}`);
+      nextBtn?.focus();
+    }
   };
 
   // Select snapshot and sync URL
@@ -73,13 +102,6 @@ export const LaunchDetail: React.FC = () => {
       { replace: false },
     );
   };
-
-  useEffect(() => {
-    setActionError(null);
-    setShowRetryModal(false);
-    setForceRetry(false);
-    setShowBaselineModal(false);
-  }, [launchId]);
 
   // 1. Fetch Launch Details with S2 Polling
   const launchPollingInterval = useLaunchPolling<LaunchResponse>(1500);
@@ -136,8 +158,19 @@ export const LaunchDetail: React.FC = () => {
 
   const revisions: SnapshotRevision[] = snapshotsQuery.data?.revisions ?? [];
   const selectedSnapshot = revisions.find((row) => row.snapshot_id === selectedSnapshotId) ?? null;
-  const activeSnapshot = selectedSnapshot ?? revisions[0] ?? null;
+  // If a snapshot_id is explicitly specified, never silently fall back to latest revisions[0]
+  const activeSnapshot = selectedSnapshotId
+    ? selectedSnapshot
+    : (revisions[0] ?? null);
   const effectiveSnapshotId = selectedSnapshotId || activeSnapshot?.snapshot_id || null;
+
+  useEffect(() => {
+    setActionError(null);
+    setShowRetryModal(false);
+    setForceRetry(false);
+    setShowBaselineModal(false);
+    setCasesFilter("ALL");
+  }, [launchId, effectiveSnapshotId]);
 
   // Sync snapshot_id into URL if none was specified and one exists
   useEffect(() => {
@@ -377,28 +410,68 @@ export const LaunchDetail: React.FC = () => {
   const allowedActions = launch.allowed_actions || (launch.status === "PENDING" ? ["run"] : []);
   const langfuseLink = getLangfuseLinkView(launch);
 
+  // Frozen summary and snapshot metrics calculations
+  const frozenSummary = summaryQuery.data?.summary as Record<string, any> | undefined;
+  const activeSnap = activeSnapshot as Record<string, any> | undefined;
+  const hasFrozenQualityCounts =
+    (frozenSummary?.quality_pass_count != null || frozenSummary?.quality_fail_count != null) ||
+    (activeSnap?.quality_pass_count != null || activeSnap?.quality_fail_count != null);
+
+  const frozenPassCount = Number(frozenSummary?.quality_pass_count ?? activeSnap?.quality_pass_count ?? 0);
+  const frozenFailCount = Number(frozenSummary?.quality_fail_count ?? activeSnap?.quality_fail_count ?? 0);
+  const frozenUnknownCount = Number(frozenSummary?.quality_unknown_count ?? activeSnap?.quality_unknown_count ?? 0);
+  const frozenTotalCount = frozenPassCount + frozenFailCount + frozenUnknownCount;
+
   // Quality metrics calculations
-  const totalItems = itemsError ? null : items.length;
-  const passedItems = itemsError
-    ? null
-    : items.filter((i) => i.quality_conclusion?.toLowerCase() === "pass").length;
-  const decisionCounts = itemsError
-    ? null
-    : items.reduce(
-        (acc, item) => {
-          const conclusion = (item.quality_conclusion || "unknown").toLowerCase();
-          if (conclusion === "pass") acc.pass += 1;
-          else if (conclusion === "fail") acc.fail += 1;
-          else acc.unknown += 1;
-          return acc;
-        },
-        { pass: 0, fail: 0, unknown: 0 },
-      );
+  const totalItems: number | null = hasFrozenQualityCounts
+    ? (frozenTotalCount > 0 ? frozenTotalCount : (itemsError ? null : items.length))
+    : (itemsError ? null : items.length);
+
+  const passedItems: number | null = hasFrozenQualityCounts
+    ? frozenPassCount
+    : (itemsError
+        ? null
+        : items.filter((i) => i.quality_conclusion?.toLowerCase() === "pass").length);
+
+  const decisionCounts: { pass: number; fail: number; unknown: number } | null = hasFrozenQualityCounts
+    ? { pass: frozenPassCount, fail: frozenFailCount, unknown: frozenUnknownCount }
+    : (itemsError
+        ? null
+        : items.reduce(
+            (acc, item) => {
+              const conclusion = (item.quality_conclusion || "unknown").toLowerCase();
+              if (conclusion === "pass") acc.pass += 1;
+              else if (conclusion === "fail") acc.fail += 1;
+              else acc.unknown += 1;
+              return acc;
+            },
+            { pass: 0, fail: 0, unknown: 0 },
+          ));
+
   const decidedCount = decisionCounts ? decisionCounts.pass + decisionCounts.fail : 0;
-  const decidedPassRate = decidedCount > 0 && decisionCounts
+  const passRateNum = frozenSummary?.pass_rate != null ? Number(frozenSummary.pass_rate) : null;
+  const decidedPassRate = passRateNum != null
+    ? (passRateNum * 100).toFixed(1)
+    : decidedCount > 0 && decisionCounts
     ? ((decisionCounts.pass / decidedCount) * 100).toFixed(1)
     : null;
   const decisionCoverage = decisionCounts && totalItems ? (decidedCount / totalItems) * 100 : null;
+
+  // Derive frozen quality conclusion for LaunchHeader
+  let frozenQualityConclusion = launch.quality_conclusion;
+  if (hasFrozenQualityCounts) {
+    if (frozenFailCount > 0) {
+      frozenQualityConclusion = "fail";
+    } else if (frozenPassCount > 0) {
+      frozenQualityConclusion = "pass";
+    } else {
+      frozenQualityConclusion = "unknown";
+    }
+  }
+
+  const isSnapshotNotFound = Boolean(
+    selectedSnapshotId && snapshotsQuery.isSuccess && !selectedSnapshot
+  );
 
   return (
     <div className="space-y-6">
@@ -409,6 +482,7 @@ export const LaunchDetail: React.FC = () => {
         allowedActions={allowedActions}
         langfuseLink={langfuseLink}
         isFetching={isLaunchFetching}
+        qualityConclusion={frozenQualityConclusion}
         onRefresh={() => {
           refetchLaunch();
           refetchItems();
@@ -438,6 +512,25 @@ export const LaunchDetail: React.FC = () => {
           selectedSnapshotId={selectedSnapshotId}
           onSelect={selectSnapshot}
         />
+      )}
+
+      {/* 快照请求异常与未找到警示 (Alert) */}
+      {summaryQuery.error && currentTab !== "compare" && (
+        <div
+          role="alert"
+          className="p-3 text-xs bg-fail-subtle border border-fail-border rounded-lg text-fail font-medium"
+        >
+          {formatApiError(summaryQuery.error)}
+        </div>
+      )}
+
+      {!summaryQuery.error && isSnapshotNotFound && (
+        <div
+          role="alert"
+          className="p-3 text-xs bg-fail-subtle border border-fail-border rounded-lg text-fail font-medium"
+        >
+          Snapshot {selectedSnapshotId} not found
+        </div>
       )}
 
       {/* 用例明细数据加载异常或归属不一致警示 */}
@@ -491,7 +584,7 @@ export const LaunchDetail: React.FC = () => {
         statusReason={launch.status_reason}
       />
 
-      {/* 4. Tab 导航条 */}
+      {/* 4. Tab 导航条 (WAI-ARIA Compliant) */}
       <div
         role="tablist"
         aria-label="评测详情功能分区"
@@ -503,6 +596,8 @@ export const LaunchDetail: React.FC = () => {
           id="btn-tab-compare"
           aria-controls="tab-compare"
           aria-selected={currentTab === "compare"}
+          tabIndex={currentTab === "compare" ? 0 : -1}
+          onKeyDown={(e) => handleTabKeyDown(e, 0)}
           onClick={() => setTab("compare")}
           className={clsx(
             "pb-3 flex items-center gap-1.5 transition cursor-pointer font-semibold",
@@ -521,6 +616,8 @@ export const LaunchDetail: React.FC = () => {
           id="btn-tab-cases"
           aria-controls="tab-cases"
           aria-selected={currentTab === "cases"}
+          tabIndex={currentTab === "cases" ? 0 : -1}
+          onKeyDown={(e) => handleTabKeyDown(e, 1)}
           onClick={() => setTab("cases")}
           className={clsx(
             "pb-3 flex items-center gap-1.5 transition cursor-pointer font-semibold",
@@ -530,7 +627,7 @@ export const LaunchDetail: React.FC = () => {
           )}
         >
           <Layers className="w-4 h-4" />
-          <span>用例排查与 Trace ({items.length})</span>
+          <span>用例排查与 Trace ({totalItems ?? items.length})</span>
         </button>
 
         <button
@@ -539,6 +636,8 @@ export const LaunchDetail: React.FC = () => {
           id="btn-tab-audit"
           aria-controls="tab-audit"
           aria-selected={currentTab === "audit"}
+          tabIndex={currentTab === "audit" ? 0 : -1}
+          onKeyDown={(e) => handleTabKeyDown(e, 2)}
           onClick={() => setTab("audit")}
           className={clsx(
             "pb-3 flex items-center gap-1.5 transition cursor-pointer font-semibold",
@@ -586,10 +685,23 @@ export const LaunchDetail: React.FC = () => {
           {itemsError && <ErrorState message={formatApiError(itemsError)} onRetry={() => refetchItems()} />}
           {!isItemsLoading && !itemsError && (
             <CasesTraceTab
+              key={`${launchId}-${effectiveSnapshotId}`}
               launchId={launch.id}
               snapshotId={effectiveSnapshotId}
               items={items}
               manifestDataset={manifest.dataset}
+              currentFilter={casesFilter}
+              onFilterChange={setCasesFilter}
+              snapshotCounts={
+                hasFrozenQualityCounts
+                  ? {
+                      pass: frozenPassCount,
+                      fail: frozenFailCount,
+                      unknown: frozenUnknownCount,
+                      total: totalItems,
+                    }
+                  : undefined
+              }
             />
           )}
         </div>

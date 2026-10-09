@@ -103,7 +103,7 @@ test.describe("Issue #29: Launch detail navigation and identity", () => {
 
     await page.getByRole("link", { name: `查看 Launch ${historicalLaunchId} 详情` }).click();
     await expect(page.getByRole("heading", { name: historicalLaunchId })).toBeVisible();
-    await expect(page.getByText("v1", { exact: true })).toBeVisible();
+    await expect(page.getByText("v1 (Candidate)")).toBeVisible();
 
     await page.reload();
     await expect(page.getByRole("heading", { name: historicalLaunchId })).toBeVisible();

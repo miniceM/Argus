@@ -49,6 +49,9 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
 
       if (res.error) {
         if (res.response?.status === 409) {
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.baselines.detail(agentId, environment),
+          });
           throw new Error("Baseline 绑定版本发生并发冲突 (HTTP 409)，请重新确认最新状态后再试。");
         }
         throw res.error;

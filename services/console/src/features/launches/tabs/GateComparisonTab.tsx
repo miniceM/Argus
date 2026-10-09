@@ -3,6 +3,7 @@ import { ExternalLink, ShieldCheck, Sparkles } from "lucide-react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { api } from "../../../api/client";
 import { queryKeys } from "../../../api/query-keys";
+import { formatApiError } from "../../../api/errors";
 import { Button } from "../../../components/ui/Primitives";
 import { ComparisonCaseDrawer } from "../ComparisonCaseDrawer";
 import { LangfuseSyncPanel } from "../langfuseSyncStatus";
@@ -247,13 +248,20 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
   ).sort();
 
   // Evaluator requirements map from quality policy
+  // Evaluator requirements map from quality policy
   const rulesMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const rule of qualityPolicyRules) {
       if (!rule.evaluator_id) continue;
       let exp = "";
       if (rule.operator === ">=" || rule.operator === "<=") {
-        exp = `${rule.operator} ${rule.threshold != null ? (rule.threshold * 100).toFixed(1) + "%" : "—"}`;
+        const isCost = rule.evaluator_id.toLowerCase().includes("cost");
+        const formattedVal = rule.threshold != null
+          ? isCost
+            ? String(rule.threshold)
+            : (rule.threshold * 100).toFixed(1) + "%"
+          : "—";
+        exp = `${rule.operator} ${formattedVal}`;
       } else if (rule.operator === "==") {
         exp = `== ${rule.expected_value != null ? String(rule.expected_value) : "—"}`;
       } else {
@@ -274,10 +282,17 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
       const bPass = cohort.baseline.pass_rate;
       const cPass = cohort.candidate.pass_rate;
       const deltaPp = percentagePointDelta(bPass, cPass);
-      const isMet = cPass != null && (cPass >= 0.9 || (bPass != null && cPass >= bPass));
+      const overallRule = qualityPolicyRules.find(
+        (r) => r.evaluator_id === "overall_pass_rate" || r.evaluator_id === "overall",
+      );
+      const reqText = overallRule?.threshold != null
+        ? `≥ ${(overallRule.threshold * 100).toFixed(1)}%`
+        : "≥ 90.0%";
+      const thresholdVal = overallRule?.threshold ?? 0.9;
+      const isMet = cPass != null && cPass >= thresholdVal;
       rows.push({
         name: "综合质量通过率 (Overall Pass)",
-        requirement: "≥ 90.0%",
+        requirement: reqText,
         baseline: percent(bPass),
         candidate: percent(cPass),
         delta: deltaPp,
@@ -322,7 +337,7 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
     }
 
     return rows;
-  }, [cohort, evaluatorIds, rulesMap]);
+  }, [cohort, evaluatorIds, rulesMap, qualityPolicyRules]);
 
   // Aggregate and Health rows
   const aggregateRows = cohort ? [
@@ -365,8 +380,31 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
     { label: "共同可比 Case", reason: comparisonSummary?.cost_comparison?.reason },
   ].filter((entry): entry is { label: string; reason: CostReason } => entry.reason != null);
 
+  const isRegression =
+    formal?.verdict === "REGRESSION" ||
+    (cohort?.baseline.pass_rate != null &&
+      cohort.candidate.pass_rate != null &&
+      cohort.candidate.pass_rate < cohort.baseline.pass_rate);
+
   return (
     <div className="space-y-6">
+      {/* 错误提示横幅 (Alert) */}
+      {comparisonQuery.isError && (
+        <div
+          role="alert"
+          className="p-3 text-xs bg-fail-subtle border border-fail-border rounded-lg text-fail font-medium flex items-center justify-between"
+        >
+          <span>{formatApiError(comparisonQuery.error)}</span>
+          <Button
+            variant="secondary"
+            className="h-6 text-2xs px-2"
+            onClick={() => comparisonQuery.refetch()}
+          >
+            重试
+          </Button>
+        </div>
+      )}
+
       {/* 1. 核心能力跃升/变化摘要卡片（严格基于真实数据与指标） */}
       {cohort && (
         <div
@@ -380,11 +418,27 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
             <div className="bg-surface-subtle border border-border rounded-lg p-3 space-y-1">
               <span className="font-semibold text-foreground flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-pass" />
-                综合质量通过率提升
+                <span className={`w-2 h-2 rounded-full ${isRegression ? "bg-fail" : "bg-pass"}`} />
+                {isRegression
+                  ? "综合质量通过率下降"
+                  : (cohort.candidate.pass_rate ?? 0) > (cohort.baseline.pass_rate ?? 0)
+                  ? "综合质量通过率提升"
+                  : "综合质量通过率持平"}
               </span>
               <p className="text-muted-foreground leading-relaxed">
-                共同可比用例通过率从 {percent(cohort.baseline.pass_rate)} 提升至 {percent(cohort.candidate.pass_rate)}（{percentagePointDelta(cohort.baseline.pass_rate, cohort.candidate.pass_rate)}）。
+                {isRegression ? (
+                  <>
+                    共同可比用例通过率从 {percent(cohort.baseline.pass_rate)} 下降至 {percent(cohort.candidate.pass_rate)}（{percentagePointDelta(cohort.baseline.pass_rate, cohort.candidate.pass_rate)}）。
+                  </>
+                ) : (cohort.candidate.pass_rate ?? 0) > (cohort.baseline.pass_rate ?? 0) ? (
+                  <>
+                    共同可比用例通过率从 {percent(cohort.baseline.pass_rate)} 提升至 {percent(cohort.candidate.pass_rate)}（{percentagePointDelta(cohort.baseline.pass_rate, cohort.candidate.pass_rate)}）。
+                  </>
+                ) : (
+                  <>
+                    共同可比用例通过率与基线持平（{percent(cohort.candidate.pass_rate)}）。
+                  </>
+                )}
               </p>
             </div>
             {evaluatorIds.length > 0 && (

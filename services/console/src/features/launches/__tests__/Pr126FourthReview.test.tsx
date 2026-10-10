@@ -745,6 +745,49 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     expect(screen.queryByText("门禁准入通过 (PASS)")).not.toBeInTheDocument();
   });
 
+  it("R126: legacy revision zero defaults cannot override frozen detail item verdicts", async () => {
+    const legacyRevision = {
+      ...mockSnapshotList.revisions[0],
+      snapshot_id: "S1",
+      revision: 1,
+      quality_pass_count: 0,
+      quality_fail_count: 0,
+      quality_unknown_count: 0,
+      is_latest: false,
+    };
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}/result-snapshots": {
+        data: { latest_snapshot_id: "S1", latest_revision: 1, revisions: [legacyRevision] },
+      },
+      "/api/v1/experiment-launches/{launch_id}/summary": {
+        data: {
+          ...mockSummary,
+          snapshot_id: "S1",
+          summary: { ...mockSummary.summary, pass_rate: 0 },
+        },
+      },
+      "/api/v1/experiment-launches/{launch_id}/comparison": {
+        data: { ...mockComparison, candidate_snapshot_id: "S1" },
+      },
+      "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}": {
+        data: {
+          ...legacyRevision,
+          launch_id: mockLaunch.id,
+          evidence_state: "DIAGNOSTIC",
+          releasable: false,
+          versions: mockSummary.versions,
+          summary: { total_cases: 2 },
+          items: mockItems.map((item) => ({ ...item, quality_conclusion: "fail" })),
+        },
+      },
+    });
+
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=S1&tab=cases`);
+
+    expect(await screen.findByText("门禁未通过 (FAIL)")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "未通过 (2)" })).toBeInTheDocument();
+  });
+
   it("R126: no overall policy must show no fabricated 90 percent requirement", async () => {
     renderComponent();
     await screen.findByText("综合质量通过率 (Overall Pass)");

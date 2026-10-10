@@ -573,25 +573,40 @@ export const LaunchDetail: React.FC = () => {
     : undefined;
   const activeSnap = snapshotForActions as Record<string, any> | undefined;
   const hasFrozenItems = Boolean(targetSnapshotId && snapshotDetailQuery.isSuccess);
+  const frozenItemQualityCounts = hasFrozenItems
+    ? items.reduce(
+        (counts, item: any) => {
+          const conclusion = String(item.quality_conclusion ?? "unknown").toLowerCase();
+          if (conclusion === "pass") counts.pass += 1;
+          else if (conclusion === "fail") counts.fail += 1;
+          else counts.unknown += 1;
+          return counts;
+        },
+        { pass: 0, fail: 0, unknown: 0 },
+      )
+    : null;
+  const readFrozenCount = (value: unknown): number | null => {
+    if (value == null || value === "") return null;
+    const count = Number(value);
+    return Number.isInteger(count) && count >= 0 ? count : null;
+  };
+  const summaryPassCount = readFrozenCount(frozenSummary?.quality_pass_count);
+  const summaryFailCount = readFrozenCount(frozenSummary?.quality_fail_count);
+  const summaryUnknownCount = readFrozenCount(frozenSummary?.quality_unknown_count);
   const hasLiveItems = Boolean(
     isLiveFallbackAllowed && !isRawItemsLoading && !rawItemsError,
   );
   const hasReportItems = !isSnapshotNotFound && (hasFrozenItems || hasLiveItems);
   const hasFrozenQualityCounts =
     !isSnapshotNotFound && Boolean(effectiveSnapshotId) && (
-      frozenSummary?.quality_pass_count != null ||
-      frozenSummary?.quality_fail_count != null ||
-      frozenSummary?.quality_unknown_count != null ||
-      (activeSnap?.snapshot_id === effectiveSnapshotId && (
-        activeSnap?.quality_pass_count != null ||
-        activeSnap?.quality_fail_count != null ||
-        activeSnap?.quality_unknown_count != null
-      ))
+      (summaryPassCount != null || frozenItemQualityCounts != null) &&
+      (summaryFailCount != null || frozenItemQualityCounts != null) &&
+      (summaryUnknownCount != null || frozenItemQualityCounts != null)
     );
 
-  const frozenPassCount = Number(frozenSummary?.quality_pass_count ?? activeSnap?.quality_pass_count ?? 0);
-  const frozenFailCount = Number(frozenSummary?.quality_fail_count ?? activeSnap?.quality_fail_count ?? 0);
-  const frozenUnknownCount = Number(frozenSummary?.quality_unknown_count ?? activeSnap?.quality_unknown_count ?? 0);
+  const frozenPassCount = summaryPassCount ?? frozenItemQualityCounts?.pass ?? 0;
+  const frozenFailCount = summaryFailCount ?? frozenItemQualityCounts?.fail ?? 0;
+  const frozenUnknownCount = summaryUnknownCount ?? frozenItemQualityCounts?.unknown ?? 0;
   const frozenTotalCount = frozenPassCount + frozenFailCount + frozenUnknownCount;
   // A complete set of PASS decisions is not sufficient to announce release readiness by
   // itself. The exact immutable detail must confirm releasable=true; any explicit negative

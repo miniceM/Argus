@@ -41,6 +41,56 @@ export interface MetricStatusResult {
   statusTone: "pass" | "fail" | "neutral";
 }
 
+export interface FrozenMetricRule {
+  operator?: string | null;
+  threshold?: number | null;
+  expected_value?: unknown;
+}
+
+/**
+ * Resolve whether a candidate measurement satisfies the frozen policy rule.
+ * Returns null when there is no executable rule or the value/rule is not comparable;
+ * callers may then show a neutral trend diagnostic without inventing a gate result.
+ */
+export function evaluateMetricRule(
+  candidateScore: number | null | undefined,
+  rule?: FrozenMetricRule | null,
+): MetricStatusResult | null {
+  if (candidateScore == null || !Number.isFinite(candidateScore) || !rule?.operator) {
+    return null;
+  }
+
+  let met: boolean | null = null;
+  switch (rule.operator) {
+    case ">=":
+      if (typeof rule.threshold === "number" && Number.isFinite(rule.threshold)) met = candidateScore >= rule.threshold;
+      break;
+    case "<=":
+      if (typeof rule.threshold === "number" && Number.isFinite(rule.threshold)) met = candidateScore <= rule.threshold;
+      break;
+    case ">":
+      if (typeof rule.threshold === "number" && Number.isFinite(rule.threshold)) met = candidateScore > rule.threshold;
+      break;
+    case "<":
+      if (typeof rule.threshold === "number" && Number.isFinite(rule.threshold)) met = candidateScore < rule.threshold;
+      break;
+    case "==":
+      // Strict equality matches the backend rule evaluator; do not coerce booleans or strings.
+      if (typeof rule.expected_value === "number" && Number.isFinite(rule.expected_value)) {
+        met = candidateScore === rule.expected_value;
+      }
+      break;
+    default:
+      break;
+  }
+
+  if (met == null) return null;
+  return {
+    statusLabel: met ? "达标" : "未达标",
+    statusTone: met ? "pass" : "fail",
+  };
+}
+
 export function evaluateMetricChange(
   baselineScore: number | null | undefined,
   candidateScore: number | null | undefined,

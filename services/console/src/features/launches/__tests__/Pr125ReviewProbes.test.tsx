@@ -587,7 +587,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
       "/api/v1/experiment-launches/{launch_id}/comparison": { data: c },
     });
     renderComponent();
-    const rule = await screen.findByText("<= 0.2 (关键)");
+    const rule = await screen.findByText("<= 0.2 (必要)");
     expect(rule).toHaveTextContent("<= 0.2");
   });
 

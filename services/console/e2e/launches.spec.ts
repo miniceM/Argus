@@ -161,7 +161,71 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
       }
     });
 
-    // Execution attempts endpoint (lazy-loaded when drawer opens)
+    // Freeze the terminal result revision. A successful execution must make its immutable
+    // result available, while pre-run state correctly reports an empty revision directory.
+    await page.route(`**/api/v1/experiment-launches/${launchId}/result-snapshots`, async (route) => {
+      if (currentLaunchStatus !== "SUCCEEDED") {
+        await route.fulfill({
+          json: { launch_id: launchId, latest_snapshot_id: null, latest_revision: 0, revisions: [] },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          launch_id: launchId,
+          latest_snapshot_id: "snap-launches-e2e",
+          latest_revision: 1,
+          revisions: [
+            {
+              snapshot_id: "snap-launches-e2e",
+              revision: 1,
+              created_at: new Date().toISOString(),
+              source_result_digest: "sha256:launches-result",
+              manifest_digest: "sha256:launches-manifest",
+              evidence_state: "COMPLETE",
+              evidence_reasons: [],
+              releasable: false,
+              total_cases: 1,
+              quality_pass_count: 0,
+              quality_fail_count: 1,
+              quality_unknown_count: 0,
+              is_latest: true,
+            },
+          ],
+        },
+      });
+    });
+    await page.route(`**/api/v1/experiment-launches/${launchId}/result-snapshots/snap-launches-e2e`, (route) =>
+      route.fulfill({
+        json: {
+          launch_id: launchId,
+          snapshot_id: "snap-launches-e2e",
+          revision: 1,
+          created_at: new Date().toISOString(),
+          source_result_digest: "sha256:launches-result",
+          manifest_digest: "sha256:launches-manifest",
+          evidence_state: "COMPLETE",
+          evidence_reasons: [],
+          releasable: false,
+          versions: {},
+          summary: {},
+          items: [
+            {
+              dataset_item_id: "case-transfer-01",
+              execution_status: "succeeded",
+              eval_status: "completed",
+              quality_conclusion: "fail",
+              scores: { exact_match: 0 },
+              cost_evidence: { attempt_count: 2 },
+              latency_ms: 185,
+              final_attempt_id: "attempt-launches-e2e-final",
+            },
+          ],
+        },
+      }),
+    );
+
+    // Execution attempts endpoint must remain lazy, and frozen rows must not open a live timeline.
     let attemptsFetched = false;
     await page.route("**/api/v1/execution-attempts**", async (route) => {
       attemptsFetched = true;
@@ -314,26 +378,15 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
     await expect(langfuseLink).toBeVisible();
     await expect(langfuseLink).toHaveAttribute("href", langfuseUrl);
 
-    // 6. Verify Cases Table and Aggregated Attempts
+    // 6. Frozen Case rows retain attempt counts but must not hydrate a mutable Attempt timeline.
     await page.getByRole("tab", { name: /用例排查与 Trace/ }).click();
     await expect(page.getByText("case-transfer-01")).toBeVisible();
-    await expect(page.getByText("2 次尝试")).toBeVisible();
-    expect(attemptsFetched).toBe(false); // Proves lazy loading! Attempts not fetched until requested!
+    const frozenAttempts = page.getByRole("button", { name: "2 次尝试" });
+    await expect(frozenAttempts).toBeDisabled();
+    await expect(frozenAttempts).toHaveAttribute("title", "历史快照无实时 Attempt 执行记录");
+    expect(attemptsFetched).toBe(false);
 
-    // 7. Click Attempt button to trigger lazy loading drawer
-    await page.getByRole("button", { name: "2 次尝试" }).click();
-
-    // Verify AttemptDrawer opens and shows attempts
-    await expect(page.getByText("用例执行调用历史")).toBeVisible();
-    expect(attemptsFetched).toBe(true); // Attempt query triggered!
-
-    // Verify attempts content
-    await expect(page.getByText("第 1 次调用尝试")).toBeVisible();
-    await expect(page.getByText("HTTP 504")).toBeVisible();
-    await expect(page.getByText("Upstream agent gateway timed out")).toBeVisible();
-
-    await expect(page.getByText("第 2 次调用尝试")).toBeVisible();
-    await expect(page.getByRole("dialog").getByText("HTTP 200")).toBeVisible();
-    await expect(page.getByText("已成功传播 traceparent").first()).toBeVisible();
+    // R13 separately proves that a live Launch can open the lazy Attempt Drawer with keyboard focus.
+    // This terminal snapshot deliberately has no mutable execution ID to prevent S1/S2 leakage.
   });
 });

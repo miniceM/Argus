@@ -159,12 +159,32 @@ async function mockLaunchApi(
     }
     await route.fulfill({ json: [buildLaunch(allowed)] });
   });
+  await page.route(`**/api/v1/experiment-launches/${LAUNCH_ID}/result-snapshots`, (route) =>
+    route.fulfill({
+      json: {
+        launch_id: LAUNCH_ID,
+        latest_snapshot_id: null,
+        latest_revision: 0,
+        revisions: [],
+      },
+    }),
+  );
   // Auxiliary panels must not receive a Launch payload.
   for (const suffix of ["summary", "comparison", "baselines"]) {
     await page.route(`**/api/v1/experiment-launches/${LAUNCH_ID}/${suffix}**`, async (route) => {
       await route.fulfill({ json: null });
     });
   }
+}
+
+async function showSnapshotlessLegacyItems(page: Page) {
+  await page.clock.install();
+  await page.reload();
+  await expect(page.getByText(/正在自动检测本次运行刚冻结的结果版本/)).toBeVisible();
+  const startedAt = await page.evaluate(() => Date.now());
+  await page.clock.fastForward(30_001);
+  const finishedAt = await page.evaluate(() => Date.now());
+  expect(finishedAt - startedAt).toBeGreaterThanOrEqual(30_000);
 }
 
 test.describe("Issue #84 evaluation-only retry", () => {
@@ -176,8 +196,10 @@ test.describe("Issue #84 evaluation-only retry", () => {
     page,
   }) => {
     await mockLaunchApi(page);
-    await page.reload();
+    await showSnapshotlessLegacyItems(page);
 
+    // A legacy completed Launch with a successfully resolved empty snapshot directory is
+    // eligible for the bounded live fallback only after the 30-second discovery window.
     // The failed evaluation is visible as its own failure reason.
     const recoveryCell = page.getByTestId("evaluation-recovery-case-a");
     await expect(recoveryCell).toContainText("EVALUATOR_TIMEOUT");
@@ -249,7 +271,7 @@ test.describe("Issue #84 evaluation-only retry", () => {
         },
       ],
     });
-    await page.reload();
+    await showSnapshotlessLegacyItems(page);
     await expect(page.getByText("已恢复")).toBeVisible();
     // A settled, recovered case shows no error and no pending action.
     await expect(page.getByTestId("evaluation-recovery-case-a")).toHaveCount(0);

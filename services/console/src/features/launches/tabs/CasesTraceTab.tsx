@@ -479,6 +479,8 @@ const CaseDetailPanel: React.FC<{
   const datasetItems = manifestDataset?.items || [];
   const datasetItem = datasetItems.find((d: any) => d.id === item.dataset_item_id);
   const frozenInput = datasetItem?.input;
+  const hasFrozenInput =
+    datasetItem != null && frozenInput !== undefined && frozenInput !== null;
 
   const baselineOutput = caseOutputQuery.data?.baseline;
   const candidateOutput = caseOutputQuery.data?.candidate;
@@ -492,13 +494,17 @@ const CaseDetailPanel: React.FC<{
         <div className="flex items-center justify-between">
           <span className="font-semibold text-foreground">用户提问 / 冻结输入 (Input)</span>
           <span className="text-micro text-muted-foreground font-mono">
-            {frozenInput ? "已冻结" : "未在快照中嵌入输入"}
+            {hasFrozenInput ? "已冻结" : "未在快照中嵌入输入"}
           </span>
         </div>
-        {frozenInput ? (
-          <div className="text-foreground">
+        {hasFrozenInput ? (
+          <div className="text-foreground" data-testid="frozen-input-value">
             {typeof frozenInput === "string" ? (
-              <p className="leading-relaxed">{frozenInput}</p>
+              frozenInput.length > 0 ? (
+                <p className="leading-relaxed">{frozenInput}</p>
+              ) : (
+                <code>""</code>
+              )
             ) : (
               <JsonViewer data={frozenInput} title="Input JSON" />
             )}
@@ -687,19 +693,27 @@ const CaseDetailPanel: React.FC<{
 
       {/* 底部操作与 Attempt 入口 */}
       <div className="flex items-center justify-between pt-2 border-t border-border">
-        <span className="text-micro font-mono">
-          Item Execution ID: {item.id}
-        </span>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={onOpenAttemptDrawer}
-          className="h-7 text-xs font-mono"
-        >
-          <Layers className="w-3.5 h-3.5 text-primary" />
-          <span>查看调用历史 ({item.attempt_count} 次尝试)</span>
-          <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-        </Button>
+        {item.id ? (
+          <>
+            <span className="text-micro font-mono">
+              Item Execution ID: {item.id}
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={onOpenAttemptDrawer}
+              className="h-7 text-xs font-mono"
+            >
+              <Layers className="w-3.5 h-3.5 text-primary" />
+              <span>查看调用历史 ({item.attempt_count ?? "—"} 次尝试)</span>
+              <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+            </Button>
+          </>
+        ) : (
+          <span className="text-micro text-muted-foreground" data-testid="historical-attempts-unavailable">
+            历史快照不包含实时 Attempt 时间线，避免关联后续重试记录。
+          </span>
+        )}
       </div>
     </div>
   );

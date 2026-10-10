@@ -3,6 +3,7 @@ import {
   itemEvaluatorFixture,
   type EvaluatorFixture,
 } from "./fixtures/evaluators";
+import { installSingleSnapshotFixture } from "./fixtures/resultSnapshots";
 
 /**
  * Issue #83 acceptance — the loop a reviewer must be able to complete:
@@ -328,6 +329,11 @@ async function mockDetail(page: Page, items: unknown[]) {
         },
       },
     });
+  });
+  await installSingleSnapshotFixture(page, {
+    launchId: "launch-83",
+    snapshotId: "snapshot-issue-83",
+    items,
   });
 }
 

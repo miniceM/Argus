@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";
 import { LaunchDetail } from "../../features/launches/LaunchDetail";
+import { SNAPSHOT_DISCOVERY_WINDOW_MS } from "../../features/launches/useSnapshotRevisionDiscovery";
 import { api } from "../../api/client";
 
 vi.mock("../../api/client", () => ({
@@ -386,6 +387,7 @@ describe("LaunchDetail Frozen Manifest Structured Audit View", () => {
       return Promise.resolve({ data: null });
     });
 
+    vi.useFakeTimers();
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[`/launches/${requestedId}`]}>
@@ -395,6 +397,11 @@ describe("LaunchDetail Frozen Manifest Structured Audit View", () => {
         </MemoryRouter>
       </QueryClientProvider>
     );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SNAPSHOT_DISCOVERY_WINDOW_MS + 2_000);
+    });
+    vi.useRealTimers();
 
     expect(await screen.findByText("Items service unavailable")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重新加载" })).toBeInTheDocument();
@@ -442,6 +449,7 @@ describe("LaunchDetail Frozen Manifest Structured Audit View", () => {
       return Promise.resolve({ data: null });
     });
 
+    vi.useFakeTimers();
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[`/launches/${requestedId}`]}>
@@ -451,6 +459,11 @@ describe("LaunchDetail Frozen Manifest Structured Audit View", () => {
         </MemoryRouter>
       </QueryClientProvider>
     );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SNAPSHOT_DISCOVERY_WINDOW_MS + 2_000);
+    });
+    vi.useRealTimers();
 
     expect(await screen.findByText("用例明细归属的 Launch 与当前页面不一致，请重新加载")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重新加载" })).toBeInTheDocument();
@@ -576,6 +589,16 @@ describe("Issue #45 quality pass rate wording", () => {
       if (path.includes("/summary") || path.includes("/comparison") || path.includes("/baselines")) {
         return Promise.resolve({ data: null });
       }
+      if (path === "/api/v1/experiment-launches/{launch_id}/result-snapshots") {
+        return Promise.resolve({
+          data: {
+            launch_id: launch.id,
+            latest_snapshot_id: null,
+            latest_revision: 0,
+            revisions: [],
+          },
+        });
+      }
       if (path.includes("/api/v1/experiment-launches")) return Promise.resolve({ data: launch });
       return Promise.resolve({ data: null });
     });
@@ -589,6 +612,19 @@ describe("Issue #45 quality pass rate wording", () => {
         </MemoryRouter>
       </QueryClientProvider>
     );
+  };
+
+  const renderLiveDetailAfterSnapshotDiscovery = async (
+    launch: Record<string, unknown>,
+    items: Array<Record<string, unknown>>,
+  ) => {
+    vi.useFakeTimers();
+    const rendered = renderDetail(launch, items);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SNAPSHOT_DISCOVERY_WINDOW_MS + 2_000);
+    });
+    vi.useRealTimers();
+    return rendered;
   };
 
   afterEach(() => {
@@ -606,7 +642,7 @@ describe("Issue #45 quality pass rate wording", () => {
       { quality_conclusion: "fail" },
     ]);
 
-    renderDetail(launch, items);
+    await renderLiveDetailAfterSnapshotDiscovery(launch, items);
 
     const metric = await screen.findByTestId("quality-pass-rate");
     // Issue #83: the top cell reports the three-way decision split, not a
@@ -679,7 +715,7 @@ describe("Issue #45 quality pass rate wording", () => {
       { execution_status: "SUCCEEDED", eval_status: "FAILED", quality_conclusion: "unknown" },
     ]);
 
-    renderDetail(launch, items);
+    await renderLiveDetailAfterSnapshotDiscovery(launch, items);
 
     // 1 PASS + 1 FAIL are decided; the two UNKNOWN items have no verdict, so
     // they leave the decided denominator but stay visible as UNKNOWN 2. The
@@ -724,7 +760,7 @@ describe("Issue #45 quality pass rate wording", () => {
       { execution_status: "CANCELLED", eval_status: "SKIPPED", quality_conclusion: "unknown" },
     ]);
 
-    renderDetail(launch, items);
+    await renderLiveDetailAfterSnapshotDiscovery(launch, items);
 
     // Nothing was decided, so the decided pass rate has no denominator at all
     // and renders as "—" instead of a fabricated 0%.
@@ -767,7 +803,7 @@ describe("Issue #45 quality pass rate wording", () => {
       { quality_conclusion: "Fail" },
     ]);
 
-    renderDetail(launch, items);
+    await renderLiveDetailAfterSnapshotDiscovery(launch, items);
 
     // Three of the four items are PASS once case-folded: 3 PASS + 1 FAIL, so
     // the decided rate is 3/4 = 75.0% and coverage is 100%.
@@ -810,7 +846,7 @@ describe("Issue #45 quality pass rate wording", () => {
       { execution_status: "TIMED_OUT", eval_status: "SKIPPED", quality_conclusion: "unknown" },
     ]);
 
-    renderDetail(launch, items);
+    await renderLiveDetailAfterSnapshotDiscovery(launch, items);
 
     // Each terminal execution state that never reached a comparable quality
     // verdict is reported as UNKNOWN, and still consumes all-cases denominator.
@@ -845,7 +881,7 @@ describe("Issue #45 quality pass rate wording", () => {
       },
     });
 
-    renderDetail(launch, []);
+    await renderLiveDetailAfterSnapshotDiscovery(launch, []);
 
     const metric = await screen.findByTestId("quality-pass-rate");
     expect(metric).not.toHaveTextContent("NaN");

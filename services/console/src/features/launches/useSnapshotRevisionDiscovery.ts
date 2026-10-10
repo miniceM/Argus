@@ -146,7 +146,21 @@ export function useSnapshotRevisionDiscovery(
     }
   }, [activeWindow, historySettled, isActive, launchId, latestSnapshotId, refresh]);
 
-  return { isDiscovering: Boolean(activeWindow && !settled && !expired) };
+  // Report the initial discovery synchronously on the first settled empty-directory render.
+  // Otherwise the parent could briefly render mutable /items before this effect opens its
+  // bounded window on the next commit.
+  const initialDiscoveryPending = Boolean(
+    launchId &&
+      historySettled &&
+      !isActive &&
+      latestSnapshotId == null &&
+      initialCycleRef.current !== launchId &&
+      !activeWindow,
+  );
+
+  return {
+    isDiscovering: Boolean((activeWindow && !settled && !expired) || initialDiscoveryPending),
+  };
 }
 
 /**

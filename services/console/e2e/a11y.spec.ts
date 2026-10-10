@@ -300,6 +300,10 @@ test.describe("WCAG 2.2 AA: overlay surfaces", () => {
   });
 
   test("attempt drawer", async ({ page }) => {
+    // Attempt timelines are a live read-model capability, not part of historical snapshots.
+    await page.route(`**/api/v1/experiment-launches/${LAUNCH_ID}`, (route) =>
+      route.fulfill({ json: { ...launch, status: "RUNNING" } }),
+    );
     await auditOpen(page, `/launches/${LAUNCH_ID}?tab=cases`, () =>
       page.getByRole("button", { name: /次尝试/ }).first().click(),
     );

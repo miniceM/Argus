@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { installSingleSnapshotFixture } from "./fixtures/resultSnapshots";
 
 /**
  * Issue #82 acceptance: one case must let the reviewer read a real numeric 0,
@@ -171,6 +172,11 @@ async function mockDetail(page: Page, items: unknown[] = [baseItem]) {
         },
       },
     });
+  });
+  await installSingleSnapshotFixture(page, {
+    launchId: "launch-issue-82",
+    snapshotId: "snapshot-issue-82",
+    items,
   });
 }
 

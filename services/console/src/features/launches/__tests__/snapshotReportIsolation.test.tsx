@@ -125,7 +125,16 @@ const detailRoute = (payload: any) => (path: string) => {
     return { data: directory };
   }
   if (path.includes("/result-snapshots/")) return { data: payload };
-  if (path === "/api/v1/experiment-launches/{launch_id}/summary") return { data: null };
+  if (path === "/api/v1/experiment-launches/{launch_id}/summary") {
+    return {
+      data: {
+        launch_id: LAUNCH_ID,
+        snapshot_id: SNAPSHOT_ID,
+        summary: {},
+        evidence_state: "COMPLETE",
+      },
+    };
+  }
   if (path === "/api/v1/experiment-launches/{launch_id}/comparison") return { data: null };
   return { data: null };
 };
@@ -191,6 +200,16 @@ describe("snapshot report identity isolation (F01)", () => {
       }
       if (path.includes("/result-snapshots/")) {
         return Promise.resolve({ data: validDetail({ items: [] }) });
+      }
+      if (path === "/api/v1/experiment-launches/{launch_id}/summary") {
+        return Promise.resolve({
+          data: {
+            launch_id: LAUNCH_ID,
+            snapshot_id: SNAPSHOT_ID,
+            summary: {},
+            evidence_state: "COMPLETE",
+          },
+        });
       }
       return Promise.resolve({ data: null });
     });

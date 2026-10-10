@@ -432,7 +432,9 @@ test.describe("PR #126 R05/R13 acceptance evidence", () => {
     let mutationRequests = 0;
     await installLaunchRoutes(page, {
       launchId: R13_DRAWER_LAUNCH_ID,
-      getPhase: () => "terminal",
+      // Attempt timelines belong to the live read model. Keep this fixture in a running
+      // state so it does not try to attach mutable attempts to a frozen snapshot row.
+      getPhase: () => "running",
       getAllowedActions: () => [],
       getEvaluationStatus: () => "completed",
       onMutationRequest: () => {

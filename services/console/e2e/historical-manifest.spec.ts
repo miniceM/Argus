@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { installSingleSnapshotFixture } from "./fixtures/resultSnapshots";
 
 test.describe("E2E-02: Frozen Manifest Absolute Immutability Verification", () => {
   test("historical launch displays frozen manifest even after agent updates in registry", async ({ page }) => {
@@ -91,6 +92,21 @@ test.describe("E2E-02: Frozen Manifest Absolute Immutability Verification", () =
           },
         ],
       });
+    });
+    await installSingleSnapshotFixture(page, {
+      launchId: historicalLaunchId,
+      snapshotId: "snapshot-historical-launch",
+      items: [
+        {
+          dataset_item_id: "case-001",
+          execution_status: "succeeded",
+          eval_status: "completed",
+          quality_conclusion: "pass",
+          scores: { exact_match: 1.0 },
+          latency_ms: 120,
+          final_attempt_id: "attempt-historical-1",
+        },
+      ],
     });
 
     // Notice: The current Agent Registry route has updated version 2.0.0!

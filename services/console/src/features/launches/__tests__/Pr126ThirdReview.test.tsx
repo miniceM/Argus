@@ -587,7 +587,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
       "/api/v1/experiment-launches/{launch_id}/comparison": { data: c },
     });
     renderComponent();
-    const rule = await screen.findByText("<= 0.2 (关键)");
+    const rule = await screen.findByText("<= 0.2 (必要)");
     expect(rule).toHaveTextContent("<= 0.2");
   });
 
@@ -750,7 +750,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   });
 
   it("R126: active evaluation recovery must not be hidden as an idle terminal run", () => {
-    render(<ExecutionProgressPanel status="COMPLETED" progress={{total:2,percentage:100,succeeded:2,evaluating:1} as any} />);
+    render(<ExecutionProgressPanel status="COMPLETED" progress={{total:2,percentage:100,pending:0,queued:0,running:0,retry_wait:0,succeeded:2,failed:0,timed_out:0,cancelled:0}} isEvaluating />);
     const grid=document.querySelector('[data-card="running"]')?.parentElement;
     expect(grid).not.toHaveClass("hidden");
   });
@@ -810,7 +810,9 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
 
   it("RECHECK: higher_is_better direction must outrank a latency name heuristic",async()=>{
     const launch=structuredClone(mockLaunch) as any;
-    launch.manifest.quality_policy.rules=[{evaluator_id:"latency_score",operator:">=",threshold:0.5,result_type:"numeric",required:true}];
+    // This test covers evaluator direction for the baseline trend only. Frozen gate
+    // evaluation is covered separately and must take precedence when a rule exists.
+    launch.manifest.quality_policy.rules=[];
     launch.manifest.evaluators=[{id:"latency_score",version:"1",result_type:"numeric",direction:"higher_is_better"}];
     const c=structuredClone(mockComparison) as any;
     c.summary.comparable_cohort.baseline.score_means={latency_score:0.5};

@@ -589,7 +589,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
       "/api/v1/experiment-launches/{launch_id}/comparison": { data: c },
     });
     renderComponent();
-    const rule = await screen.findByText("<= 0.2 (关键)");
+    const rule = await screen.findByText("<= 0.2 (必要)");
     expect(rule).toHaveTextContent("<= 0.2");
   });
 
@@ -649,6 +649,26 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     expect(screen.queryByText("≥ 90.0%")).not.toBeInTheDocument();
   });
 
+  it("R126: frozen all-PASS counts stay UNKNOWN unless exact detail confirms releasable", async () => {
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}": {
+        data: {
+          ...mockSnapshotList.revisions[0],
+          launch_id: mockLaunch.id,
+          snapshot_id: "snap-v2-001",
+          evidence_state: "COMPLETE",
+          releasable: false,
+          items: mockItems,
+        },
+      },
+    });
+
+    renderComponent();
+
+    expect(await screen.findByText("门禁状态未知 (UNKNOWN)")).toBeInTheDocument();
+    expect(screen.queryByText("门禁准入通过 (PASS)")).not.toBeInTheDocument();
+  });
+
   it("R126: no latency policy must show no fabricated 500ms requirement", async () => {
     renderComponent();
     await screen.findByText("综合质量通过率 (Overall Pass)");
@@ -685,6 +705,165 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     expect(within(cell.closest("tr")!).queryByText("下降")).not.toBeInTheDocument();
   });
 
+  it("REVIEW: formal regression does not invert an increasing comparable pass rate", async () => {
+    const c = structuredClone(mockComparison) as any;
+    c.summary.comparable_cohort.baseline.pass_rate = 0.5;
+    c.summary.comparable_cohort.candidate.pass_rate = 0.75;
+    c.formal.verdict = "REGRESSION";
+    c.classification_counts.REGRESSION = 1;
+    overrideGet({ "/api/v1/experiment-launches/{launch_id}/comparison": { data: c } });
+
+    renderComponent();
+
+    const summary = await screen.findByTestId("capabilities-delta-summary");
+    expect(summary).toHaveTextContent("综合质量通过率提升");
+    expect(summary).toHaveTextContent("共同可比用例通过率从 50.0% 提升至 75.0%");
+    expect(summary).toHaveTextContent("评测门禁未达标 (存在退化)");
+  });
+
+  it("REVIEW: candidate policy status follows the frozen operator and threshold", async () => {
+    const launch = structuredClone(mockLaunch) as any;
+    launch.manifest.quality_policy.rules = [
+      { evaluator_id: "call_cost", result_type: "numeric", operator: "<=", threshold: 0.2, required: true },
+      { evaluator_id: "overall_pass_rate", result_type: "numeric", operator: "<=", threshold: 0.8, required: true },
+    ];
+    launch.manifest.evaluators = [{ id: "call_cost", version: "1", result_type: "numeric", direction: "lower_is_better" }];
+    const comparison = structuredClone(mockComparison) as any;
+    comparison.summary.comparable_cohort.baseline.score_means = { call_cost: 0.3 };
+    comparison.summary.comparable_cohort.candidate.score_means = { call_cost: 0.25 };
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}": { data: launch },
+      "/api/v1/experiment-launches/{launch_id}/comparison": { data: comparison },
+    });
+
+    renderComponent();
+
+    const metric = await screen.findByText("call_cost", { selector: "td" });
+    const row = metric.closest("tr")!;
+    expect(row).toHaveTextContent("<= 0.2");
+    expect(within(row).getByText("未达标")).toBeInTheDocument();
+    expect(within(row).queryByText("提升")).not.toBeInTheDocument();
+    const overallMetric = screen.getByText("综合质量通过率 (Overall Pass)", { selector: "td" });
+    expect(within(overallMetric.closest("tr")!).getByText("未达标")).toBeInTheDocument();
+  });
+
+  it("REVIEW: configured overall and evaluator rules report missing evidence, not no gate or trend PASS", async () => {
+    const launch = structuredClone(mockLaunch) as any;
+    launch.manifest.quality_policy.rules = [
+      { evaluator_id: "overall_pass_rate", operator: ">=", threshold: 0.9, required: true },
+      { evaluator_id: "call_cost", operator: "<=", threshold: 0.2, required: true },
+    ];
+    launch.manifest.evaluators = [
+      { id: "call_cost", version: "1", result_type: "numeric", direction: "lower_is_better" },
+    ];
+    const comparison = structuredClone(mockComparison) as any;
+    comparison.summary.comparable_cohort.baseline.pass_rate = 0.8;
+    comparison.summary.comparable_cohort.candidate.pass_rate = null;
+    comparison.summary.comparable_cohort.baseline.score_means = { call_cost: 0.3 };
+    comparison.summary.comparable_cohort.candidate.score_means = {};
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}": { data: launch },
+      "/api/v1/experiment-launches/{launch_id}/comparison": { data: comparison },
+    });
+
+    renderComponent();
+
+    const overall = await screen.findByText("综合质量通过率 (Overall Pass)", { selector: "td" });
+    const overallRow = overall.closest("tr")!;
+    expect(overallRow).toHaveTextContent(">= 90.0%");
+    expect(within(overallRow).getByText("证据不足")).toBeInTheDocument();
+    expect(within(overallRow).queryByText("无冻结门槛")).not.toBeInTheDocument();
+
+    const cost = await screen.findByText("call_cost", { selector: "td" });
+    const costRow = cost.closest("tr")!;
+    expect(costRow).toHaveTextContent("<= 0.2");
+    expect(within(costRow).getByText("证据不足")).toBeInTheDocument();
+    expect(within(costRow).queryByText("较基线下降")).not.toBeInTheDocument();
+  });
+
+  it("REVIEW: required and critical policy flags remain independent", async () => {
+    const launch = structuredClone(mockLaunch) as any;
+    launch.manifest.quality_policy.rules = [
+      { evaluator_id: "tool_match", result_type: "numeric", operator: ">=", threshold: 0.9, required: true, critical: false },
+      { evaluator_id: "pii_safe", result_type: "numeric", operator: ">=", threshold: 0.8, required: false, critical: true },
+    ];
+    const comparison = structuredClone(mockComparison) as any;
+    comparison.summary.comparable_cohort.baseline.score_means.tool_match = 0.5;
+    comparison.summary.comparable_cohort.candidate.score_means.tool_match = 0.9;
+    overrideGet({ "/api/v1/experiment-launches/{launch_id}": { data: launch } });
+    overrideGet({ "/api/v1/experiment-launches/{launch_id}/comparison": { data: comparison } });
+
+    renderComponent();
+
+    const requiredMetric = await screen.findByText("tool_match", { selector: "td" });
+    const criticalMetric = await screen.findByText("pii_safe", { selector: "td" });
+    expect(requiredMetric.closest("tr")).toHaveTextContent("必要");
+    expect(requiredMetric.closest("tr")).not.toHaveTextContent("关键");
+    expect(criticalMetric.closest("tr")).toHaveTextContent("关键");
+    expect(criticalMetric.closest("tr")).not.toHaveTextContent("必要");
+  });
+
+  it("REVIEW: terminal Launch waits for unresolved snapshot history before showing live Cases", async () => {
+    let resolveHistory!: (value: any) => void;
+    const pendingHistory = new Promise((resolve) => {
+      resolveHistory = resolve;
+    });
+    overrideGet({ "/api/v1/experiment-launches/{launch_id}/result-snapshots": pendingHistory });
+
+    renderComponent(`/launches/${mockLaunch.id}?tab=cases`);
+
+    await waitFor(() => expect(api.GET).toHaveBeenCalledWith(
+      "/api/v1/experiment-launches/{launch_id}/result-snapshots",
+      expect.anything(),
+    ));
+    await screen.findByText("正在加载用例明细与得分...");
+    expect(screen.queryByTestId("case-row-expand-item-001")).not.toBeInTheDocument();
+    expect(screen.getByTestId("quality-pass-rate")).toHaveTextContent("—");
+    expect(screen.getByRole("tab", { name: /用例排查与 Trace/ })).toHaveTextContent("(—)");
+    expect(screen.getByText("门禁状态未知 (UNKNOWN)")).toBeInTheDocument();
+
+    await act(async () => resolveHistory({ data: mockSnapshotList }));
+    expect(await screen.findByTestId("case-row-expand-item-001")).toBeInTheDocument();
+  });
+
+  it("REVIEW: historical snapshot Attempts never use a matching live execution ID", async () => {
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=snap-v2-001&tab=cases`);
+
+    const attempts = await screen.findAllByRole("button", { name: /次尝试/ });
+    expect(attempts.length).toBeGreaterThan(0);
+    for (const attempt of attempts) {
+      expect(attempt).toBeDisabled();
+      expect(attempt).toHaveAttribute("title", "历史快照无实时 Attempt 执行记录");
+    }
+  });
+
+  it("REVIEW: expanded historical Cases never open a live Attempt timeline", async () => {
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=snap-v2-001&tab=cases`);
+    fireEvent.click(await screen.findByTestId("case-row-expand-item-001"));
+
+    expect(await screen.findByText(/历史快照不包含实时 Attempt 时间线/)).toBeInTheDocument();
+    expect(screen.queryByText(/Item Execution ID:/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /查看调用历史/ })).not.toBeInTheDocument();
+    expect((api.GET as any).mock.calls.filter((call: any[]) => call[0].includes("/attempts"))).toHaveLength(0);
+  });
+
+  it.each([
+    ["empty string", ""],
+    ["false", false],
+    ["zero", 0],
+  ])("REVIEW: frozen input preserves the %s value", async (_label, input) => {
+    const launch = structuredClone(mockLaunch) as any;
+    launch.manifest.dataset.items = [{ id: "item-001", input }];
+    overrideGet({ "/api/v1/experiment-launches/{launch_id}": { data: launch } });
+
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=snap-v2-001&tab=cases`);
+    fireEvent.click(await screen.findByTestId("case-row-expand-item-001"));
+
+    const frozenInput = await screen.findByTestId("frozen-input-value");
+    expect(frozenInput).toHaveTextContent(input === "" ? '""' : String(input));
+    expect(screen.queryByText(/未在快照中嵌入输入/)).not.toBeInTheDocument();
+  });
+
   it("R126: snapshot detail error must disable result download", async () => {
     overrideGet({"/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}":{
       error:{detail:"snapshot store unavailable"},response:{status:503}}});
@@ -693,6 +872,17 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     await waitFor(()=>expect(api.GET).toHaveBeenCalledWith(
       "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}",expect.anything()));
     expect(btn).toBeDisabled();
+    expect(await screen.findByRole("alert")).toHaveTextContent("snapshot store unavailable");
+  });
+
+  it("R126: raw snapshot view exposes detail errors and never falls back to the Launch manifest", async () => {
+    overrideGet({"/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}":{
+      error:{detail:"snapshot store unavailable"},response:{status:503}}});
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=snap-v2-001&tab=audit`);
+    fireEvent.click(await screen.findByRole("button", { name: "查看完整 Manifest JSON" }));
+
+    expect(await screen.findByTestId("snapshot-detail-error")).toHaveTextContent("snapshot store unavailable");
+    expect(screen.queryByText("Immutable Manifest JSON")).not.toBeInTheDocument();
   });
 
   it("R126: invalid audit snapshot must not read latest snapshot detail", async () => {
@@ -752,7 +942,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   });
 
   it("R126: active evaluation recovery must not be hidden as an idle terminal run", () => {
-    render(<ExecutionProgressPanel status="COMPLETED" progress={{total:2,percentage:100,succeeded:2,evaluating:1} as any} />);
+    render(<ExecutionProgressPanel status="COMPLETED" progress={{total:2,percentage:100,pending:0,queued:0,running:0,retry_wait:0,succeeded:2,failed:0,timed_out:0,cancelled:0}} isEvaluating />);
     const grid=document.querySelector('[data-card="running"]')?.parentElement;
     expect(grid).not.toHaveClass("hidden");
   });
@@ -812,7 +1002,8 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
 
   it("RECHECK: higher_is_better direction must outrank a latency name heuristic",async()=>{
     const launch=structuredClone(mockLaunch) as any;
-    launch.manifest.quality_policy.rules=[{evaluator_id:"latency_score",operator:">=",threshold:0.5,result_type:"numeric",required:true}];
+    // With no frozen policy rule this assertion isolates direction-based trend semantics.
+    launch.manifest.quality_policy.rules=[];
     launch.manifest.evaluators=[{id:"latency_score",version:"1",result_type:"numeric",direction:"higher_is_better"}];
     const c=structuredClone(mockComparison) as any;
     c.summary.comparable_cohort.baseline.score_means={latency_score:0.5};

@@ -262,15 +262,31 @@ export const LaunchDetail: React.FC = () => {
   );
 
   const rawItemsList: ItemExecution[] = Array.isArray(rawItems) ? rawItems : [];
-  const liveItemsMap = useMemo(() => {
-    const map = new Map<string, ItemExecution>();
-    for (const item of rawItemsList) {
-      if (item.dataset_item_id) {
-        map.set(item.dataset_item_id, item);
-      }
-    }
-    return map;
-  }, [rawItemsList]);
+
+  // 3.2 Bounded discovery of a just-frozen revision.
+  // A terminal Launch may have written its immutable snapshot just after the first history
+  // read. Keep live Cases hidden until the directory is resolved and this short discovery
+  // window finishes; active execution/evaluation remains on the live read model.
+  const refreshSnapshots = useSnapshotDirectoryRefresh(snapshotsQuery);
+  const evaluationActive = rawItemsList.some(
+    (item) => (item.evaluation_status || "").toLowerCase() === "evaluating",
+  );
+  const executionActive = Boolean(launch && isLaunchExecutionActive(launch.status));
+  const { isDiscovering } = useSnapshotRevisionDiscovery({
+    launchId,
+    executionActive,
+    evaluationActive,
+    historySettled: historyResolved && Boolean(launch),
+    latestSnapshotId: snapshotsQuery.data?.latest_snapshot_id ?? null,
+    refresh: refreshSnapshots,
+  });
+
+  const isLiveFallbackAllowed = Boolean(
+    !selectedSnapshotId &&
+      revisions.length === 0 &&
+      (executionActive || evaluationActive ||
+        (snapshotsQuery.isSuccess && !snapshotsQuery.isFetching && !isDiscovering)),
+  );
 
   // Data isolation (M01 & M04):
   // 1. Explicit invalid snapshot: empty items, never bleed live items
@@ -284,15 +300,11 @@ export const LaunchDetail: React.FC = () => {
       // The shared query throws on any invalid payload, so data here is already verified.
       const frozenList = snapshotDetailQuery.data?.items;
       if (Array.isArray(frozenList)) {
-        return frozenList.map((row: any) => {
-          const datasetItemId = String(row.dataset_item_id || "");
-          const stableExecId = liveItemsMap.get(datasetItemId)?.id ?? null;
-          return projectFrozenCase(row, stableExecId);
-        });
+        return frozenList.map((row: any) => projectFrozenCase(row));
       }
       return [];
     }
-    if (!selectedSnapshotId && revisions.length === 0) {
+    if (isLiveFallbackAllowed) {
       return rawItemsList.map((row) => ({
         ...row,
         trace_url: row.langfuse_trace_url ?? null,
@@ -301,15 +313,17 @@ export const LaunchDetail: React.FC = () => {
       })) as any[];
     }
     return [];
-  }, [isSnapshotNotFound, targetSnapshotId, snapshotDetailQuery.data?.items, selectedSnapshotId, revisions.length, rawItemsList, liveItemsMap]);
+  }, [isSnapshotNotFound, targetSnapshotId, snapshotDetailQuery.data?.items, isLiveFallbackAllowed, rawItemsList]);
 
   const isItemsLoading = isSnapshotNotFound
     ? false
     : targetSnapshotId
     ? snapshotDetailQuery.isLoading
-    : (!selectedSnapshotId && revisions.length === 0)
+    : isLiveFallbackAllowed
     ? isRawItemsLoading
-    : snapshotsQuery.isLoading;
+    : snapshotsQuery.isError
+    ? false
+    : snapshotsQuery.isLoading || snapshotsQuery.isFetching || isDiscovering;
 
   // A rejected detail payload surfaces as a query error, so the error branch is the single
   // place where "silent empty report" is impossible. An HTTP 404 remains the only credible
@@ -318,9 +332,9 @@ export const LaunchDetail: React.FC = () => {
     ? new Error(`评测快照 ${selectedSnapshotId} 不存在或无权访问`)
     : targetSnapshotId
     ? snapshotDetailQuery.error
-    : (!selectedSnapshotId && revisions.length === 0)
-    ? (snapshotsQuery.isError ? new Error(`快照服务异常: ${formatApiError(snapshotsQuery.error)}`) : rawItemsError)
-    : snapshotsQuery.error
+    : isLiveFallbackAllowed
+    ? rawItemsError
+    : snapshotsQuery.isError
     ? new Error(`快照服务异常: ${formatApiError(snapshotsQuery.error)}`)
     : null;
 
@@ -332,11 +346,10 @@ export const LaunchDetail: React.FC = () => {
       if (snapshotsQuery.isError) {
         snapshotsQuery.refetch();
       }
-    } else if (!selectedSnapshotId && revisions.length === 0) {
+    } else if (isLiveFallbackAllowed) {
       refetchItems();
     } else {
       snapshotsQuery.refetch();
-      refetchItems();
     }
   };
 
@@ -350,25 +363,6 @@ export const LaunchDetail: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: [...snapshotDetailKey(launchId, null)] });
     }
   };
-
-  // 3.2 Bounded discovery of a just-frozen revision.
-  //
-  // The launch query stops polling as soon as the run reaches a terminal state, but the
-  // frozen revision is written around that same moment. Without one bounded re-read the
-  // report would stay "not frozen yet" until the user manually refreshes or refocuses the
-  // window, even though the snapshot exists server-side.
-  const refreshSnapshots = useSnapshotDirectoryRefresh(snapshotsQuery);
-  const evaluationActive = Array.isArray(rawItems) && rawItems.some(
-    (item) => (item.evaluation_status || "").toLowerCase() === "evaluating",
-  );
-  const { isDiscovering } = useSnapshotRevisionDiscovery({
-    launchId,
-    executionActive: Boolean(launch && isLaunchExecutionActive(launch.status)),
-    evaluationActive,
-    historySettled: historyResolved,
-    latestSnapshotId: snapshotsQuery.data?.latest_snapshot_id ?? null,
-    refresh: refreshSnapshots,
-  });
 
   // 4. Mutations
   const runMutation = useMutation({
@@ -473,14 +467,24 @@ export const LaunchDetail: React.FC = () => {
   const summaryQuery = useQuery({
     queryKey: queryKeys.launches.summary(launchId || "", effectiveSnapshotId, 0),
     queryFn: async () => {
-      if (!launchId) return null;
+      if (!launchId || !effectiveSnapshotId) return null;
       const response = await api.GET("/api/v1/experiment-launches/{launch_id}/summary", {
-        params: { path: { launch_id: launchId }, query: { snapshot_id: effectiveSnapshotId ?? undefined } },
+        params: { path: { launch_id: launchId }, query: { snapshot_id: effectiveSnapshotId } },
       });
       if (response.error) throw response.error;
+      if (
+        !response.data ||
+        response.data.launch_id !== launchId ||
+        response.data.snapshot_id !== effectiveSnapshotId
+      ) {
+        throw new Error("Summary 响应与请求的 Launch / Snapshot 不一致，拒绝展示混合版本数据");
+      }
       return response.data as unknown as RunSummary;
     },
-    enabled: Boolean(canReadResults && launchId),
+    // The endpoint resolves an omitted snapshot_id to the latest revision. Never issue that
+    // ambiguous read while the revision directory is pending or when no frozen revision is
+    // selected; a null URL identity must not silently acquire a moving snapshot summary.
+    enabled: Boolean(canReadResults && launchId && effectiveSnapshotId),
   });
 
   const activeBaselineQuery = useQuery({
@@ -536,48 +540,70 @@ export const LaunchDetail: React.FC = () => {
   const langfuseLink = getLangfuseLinkView(launch);
 
   // Frozen summary and snapshot metrics calculations
-  const frozenSummary = summaryQuery.data?.summary as Record<string, any> | undefined;
+  const frozenSummary = (
+    summaryQuery.data?.launch_id === launchId &&
+    summaryQuery.data?.snapshot_id === effectiveSnapshotId
+  )
+    ? summaryQuery.data.summary as Record<string, any> | undefined
+    : undefined;
   const activeSnap = activeSnapshot as Record<string, any> | undefined;
+  const hasFrozenItems = Boolean(targetSnapshotId && snapshotDetailQuery.isSuccess);
+  const hasLiveItems = Boolean(
+    isLiveFallbackAllowed && !isRawItemsLoading && !rawItemsError,
+  );
+  const hasReportItems = !isSnapshotNotFound && (hasFrozenItems || hasLiveItems);
   const hasFrozenQualityCounts =
-    !isSnapshotNotFound && (
-      (frozenSummary?.quality_pass_count != null || frozenSummary?.quality_fail_count != null) ||
-      (activeSnap?.quality_pass_count != null || activeSnap?.quality_fail_count != null)
+    !isSnapshotNotFound && Boolean(effectiveSnapshotId) && (
+      frozenSummary?.quality_pass_count != null ||
+      frozenSummary?.quality_fail_count != null ||
+      frozenSummary?.quality_unknown_count != null ||
+      (activeSnap?.snapshot_id === effectiveSnapshotId && (
+        activeSnap?.quality_pass_count != null ||
+        activeSnap?.quality_fail_count != null ||
+        activeSnap?.quality_unknown_count != null
+      ))
     );
 
   const frozenPassCount = Number(frozenSummary?.quality_pass_count ?? activeSnap?.quality_pass_count ?? 0);
   const frozenFailCount = Number(frozenSummary?.quality_fail_count ?? activeSnap?.quality_fail_count ?? 0);
   const frozenUnknownCount = Number(frozenSummary?.quality_unknown_count ?? activeSnap?.quality_unknown_count ?? 0);
   const frozenTotalCount = frozenPassCount + frozenFailCount + frozenUnknownCount;
+  // A complete set of PASS decisions is not sufficient to announce release readiness by
+  // itself. The exact immutable detail must confirm releasable=true; any explicit negative
+  // signal from another same-identity source remains authoritative and fail-closed.
+  const frozenPassIsConfirmed = Boolean(
+    snapshotDetailQuery.isSuccess &&
+      snapshotDetailQuery.data?.launch_id === launchId &&
+      snapshotDetailQuery.data?.snapshot_id === effectiveSnapshotId &&
+      snapshotDetailQuery.data?.evidence_state === "COMPLETE" &&
+      snapshotDetailQuery.data?.releasable === true &&
+      activeSnap?.releasable !== false &&
+      frozenSummary?.releasable !== false,
+  );
 
   // Quality metrics calculations
   const totalItems: number | null = isSnapshotNotFound
     ? null
     : hasFrozenQualityCounts
     ? (frozenTotalCount > 0 ? frozenTotalCount : (itemsError ? null : items.length))
-    : activeSnapshot
-    ? (itemsError ? null : items.length)
-    : (!selectedSnapshotId && revisions.length === 0)
-    ? (itemsError ? null : items.length)
+    : hasReportItems
+    ? items.length
     : null;
 
   const passedItems: number | null = isSnapshotNotFound
     ? null
     : hasFrozenQualityCounts
     ? frozenPassCount
-    : activeSnapshot
-    ? (itemsError ? null : items.filter((i: any) => i.quality_conclusion?.toLowerCase() === "pass").length)
-    : (!selectedSnapshotId && revisions.length === 0)
-    ? (itemsError ? null : items.filter((i: any) => i.quality_conclusion?.toLowerCase() === "pass").length)
+    : hasReportItems
+    ? items.filter((i: any) => i.quality_conclusion?.toLowerCase() === "pass").length
     : null;
 
   const decisionCounts: { pass: number; fail: number; unknown: number } | null = isSnapshotNotFound
     ? null
     : hasFrozenQualityCounts
     ? { pass: frozenPassCount, fail: frozenFailCount, unknown: frozenUnknownCount }
-    : activeSnapshot
-    ? (itemsError
-        ? null
-        : items.reduce(
+    : hasReportItems
+    ? items.reduce(
             (acc: any, item: any) => {
               const conclusion = (item.quality_conclusion || "unknown").toLowerCase();
               if (conclusion === "pass") acc.pass += 1;
@@ -586,20 +612,7 @@ export const LaunchDetail: React.FC = () => {
               return acc;
             },
             { pass: 0, fail: 0, unknown: 0 },
-          ))
-    : (!selectedSnapshotId && revisions.length === 0)
-    ? (itemsError
-        ? null
-        : items.reduce(
-            (acc: any, item: any) => {
-              const conclusion = (item.quality_conclusion || "unknown").toLowerCase();
-              if (conclusion === "pass") acc.pass += 1;
-              else if (conclusion === "fail") acc.fail += 1;
-              else acc.unknown += 1;
-              return acc;
-            },
-            { pass: 0, fail: 0, unknown: 0 },
-          ))
+          )
     : null;
 
   const decidedCount = decisionCounts ? decisionCounts.pass + decisionCounts.fail : 0;
@@ -612,7 +625,7 @@ export const LaunchDetail: React.FC = () => {
   const decisionCoverage = decisionCounts && totalItems ? (decidedCount / totalItems) * 100 : null;
 
   // Derive frozen quality conclusion for LaunchHeader (fail-closed, UNKNOWN-safe)
-  let frozenQualityConclusion: string | null = null;
+  let frozenQualityConclusion: string | null = "unknown";
   if (isSnapshotNotFound) {
     frozenQualityConclusion = "unknown";
   } else if (hasFrozenQualityCounts) {
@@ -621,15 +634,23 @@ export const LaunchDetail: React.FC = () => {
     } else if (frozenUnknownCount > 0) {
       frozenQualityConclusion = "unknown";
     } else if (
-      frozenPassCount > 0 &&
-      (activeSnap?.evidence_state === "COMPLETE" || summaryQuery.data?.evidence_state === "COMPLETE") &&
-      activeSnap?.releasable !== false
+      frozenPassCount > 0 && frozenPassIsConfirmed
     ) {
       frozenQualityConclusion = "pass";
     } else {
       frozenQualityConclusion = "unknown";
     }
-  } else if (!effectiveSnapshotId && revisions.length === 0) {
+  } else if (effectiveSnapshotId && hasReportItems && decisionCounts) {
+    if (decisionCounts.fail > 0) {
+      frozenQualityConclusion = "fail";
+    } else if (decisionCounts.unknown > 0) {
+      frozenQualityConclusion = "unknown";
+    } else if (
+      decisionCounts.pass > 0 && frozenPassIsConfirmed
+    ) {
+      frozenQualityConclusion = "pass";
+    }
+  } else if (!effectiveSnapshotId && hasLiveItems) {
     if (decisionCounts) {
       if (decisionCounts.fail > 0) {
         frozenQualityConclusion = "fail";
@@ -788,7 +809,7 @@ export const LaunchDetail: React.FC = () => {
           )}
         >
           <Layers className="w-4 h-4" />
-          <span>用例排查与 Trace ({totalItems ?? items.length})</span>
+          <span>用例排查与 Trace ({totalItems ?? "—"})</span>
         </button>
 
         <button
@@ -823,7 +844,12 @@ export const LaunchDetail: React.FC = () => {
             launchId={launch.id}
             snapshotId={effectiveSnapshotId}
             environment={environment}
-            summary={summaryQuery.data}
+            summary={
+              summaryQuery.data?.launch_id === launchId &&
+              summaryQuery.data?.snapshot_id === effectiveSnapshotId
+                ? summaryQuery.data
+                : undefined
+            }
             activeBaseline={activeBaselineQuery.data ?? null}
             onSetBaselineModal={() => setShowBaselineModal(true)}
             onShowLatestSnapshot={() => {

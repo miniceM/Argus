@@ -13,6 +13,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { formatApiError } from "../../../api/errors";
 import {
   snapshotDetailQueryOptions,
   snapshotListQueryOptions,
@@ -324,7 +325,33 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
             <span className="text-xs font-semibold text-foreground block mb-2">
               完整冻结快照数据 (launch.manifest & result_snapshot)
             </span>
-            <JsonViewer data={detailQuery.data || manifest} title="Immutable Manifest JSON" />
+            {detailQuery.isLoading ? (
+              <p className="text-xs text-muted-foreground" role="status">
+                正在加载完整冻结快照...
+              </p>
+            ) : detailQuery.error ? (
+              <div
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-fail-border bg-fail-subtle p-3 text-xs text-fail"
+                role="alert"
+                data-testid="snapshot-detail-error"
+              >
+                <span>{formatApiError(detailQuery.error)}</span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-6 px-2 text-2xs"
+                  onClick={() => void detailQuery.refetch()}
+                >
+                  重试加载快照
+                </Button>
+              </div>
+            ) : detailQuery.data ? (
+              <JsonViewer data={detailQuery.data} title="Immutable Manifest JSON" />
+            ) : (
+              <p className="text-xs text-muted-foreground" role="status">
+                当前没有可查看的冻结快照。
+              </p>
+            )}
           </div>
         )}
       </div>

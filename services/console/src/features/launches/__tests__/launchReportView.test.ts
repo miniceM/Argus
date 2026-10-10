@@ -14,9 +14,9 @@ describe("launchReportView pure functions", () => {
       final_attempt_id: null,
     };
 
-    const projected = projectFrozenCase(frozenRecord, "stable-exec-1");
+    const projected = projectFrozenCase(frozenRecord);
 
-    expect(projected.id).toBe("stable-exec-1");
+    expect(projected.id).toBeNull();
     expect(projected.dataset_item_id).toBe("item-001");
     expect(projected.trace_url).toBeNull();
     expect(projected.latency_ms).toBeNull();
@@ -33,7 +33,7 @@ describe("launchReportView pure functions", () => {
       cost_evidence: { attempt_count: 0 },
     };
 
-    const projected = projectFrozenCase(frozenRecord, null);
+    const projected = projectFrozenCase(frozenRecord);
 
     expect(projected.latency_ms).toBe(0);
     expect(projected.final_attempt_latency_ms).toBe(0);
@@ -138,7 +138,7 @@ describe("launchReportView pure functions", () => {
       "s1",
     );
     expect(diagnosticRows.isValid).toBe(true);
-    const projected = projectFrozenCase(diagnosticRows.items![0], null);
+    const projected = projectFrozenCase(diagnosticRows.items![0]);
     expect(projected.quality_conclusion).toBe("unknown");
     expect(projected.trace_url).toBeNull();
   });

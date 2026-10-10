@@ -587,7 +587,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
       "/api/v1/experiment-launches/{launch_id}/comparison": { data: c },
     });
     renderComponent();
-    const rule = await screen.findByText("<= 0.2 (关键)");
+    const rule = await screen.findByText("<= 0.2 (必要)");
     expect(rule).toHaveTextContent("<= 0.2");
   });
 
@@ -749,7 +749,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   });
 
   it("R126: active evaluation recovery must not be hidden as an idle terminal run", () => {
-    render(<ExecutionProgressPanel status="COMPLETED" progress={{total:2,percentage:100,succeeded:2,evaluating:1} as any} />);
+    render(<ExecutionProgressPanel status="COMPLETED" progress={{total:2,percentage:100,pending:0,queued:0,running:0,retry_wait:0,succeeded:2,failed:0,timed_out:0,cancelled:0}} isEvaluating />);
     const grid=document.querySelector('[data-card="running"]')?.parentElement;
     expect(grid).not.toHaveClass("hidden");
   });

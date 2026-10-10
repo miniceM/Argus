@@ -129,12 +129,10 @@ export function validateSnapshotDetail(
 
 /**
  * Pure projector for a frozen case item.
- * ONLY accepts frozen record and stable execution ID. Never receives a live item object.
+ * Historical rows must not be given a live execution ID: doing so would attach a newer
+ * mutable Attempt timeline to an older immutable snapshot.
  */
-export function projectFrozenCase(
-  row: Record<string, any>,
-  stableExecutionId: string | null,
-): ReportCaseItem {
+export function projectFrozenCase(row: Record<string, any>): ReportCaseItem {
   const datasetItemId = String(row.dataset_item_id ?? "");
 
   const conclusionRaw = (row.quality_conclusion ?? "unknown").toLowerCase();
@@ -157,7 +155,7 @@ export function projectFrozenCase(
   }
 
   return {
-    id: stableExecutionId ?? null,
+    id: null,
     dataset_item_id: datasetItemId,
     execution_status: row.execution_status ?? "succeeded",
     eval_status: row.eval_status ?? row.evaluation_status ?? "succeeded",

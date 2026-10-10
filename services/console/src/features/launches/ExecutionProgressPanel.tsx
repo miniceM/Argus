@@ -110,8 +110,7 @@ export const ExecutionProgressPanel: React.FC<ExecutionProgressPanelProps> = ({
   isEvaluating = false,
 }) => {
   const isExecuting = isLaunchExecutionActive(status);
-  const isEvaluatingActive = isEvaluating || Boolean((progress as any)?.evaluating && (progress as any).evaluating > 0);
-  const isActive = isExecuting || isEvaluatingActive;
+  const isActive = isExecuting || isEvaluating;
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
   const isExpanded = userOverride !== null ? userOverride : isActive;
 

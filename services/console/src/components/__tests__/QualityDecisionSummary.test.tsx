@@ -6,10 +6,11 @@
  * frozen rule is shown with its own reason.
  */
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
-import { cleanup, render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { LaunchDetail } from "../../features/launches/LaunchDetail";
+import { SNAPSHOT_DISCOVERY_WINDOW_MS } from "../../features/launches/useSnapshotRevisionDiscovery";
 import { api } from "../../api/client";
 
 vi.mock("../../api/client", () => ({
@@ -91,6 +92,16 @@ const renderDetail = (
     if (path.includes("/summary") || path.includes("/comparison") || path.includes("/baselines")) {
       return Promise.resolve({ data: null });
     }
+    if (path === "/api/v1/experiment-launches/{launch_id}/result-snapshots") {
+      return Promise.resolve({
+        data: {
+          launch_id: launchPayload.id,
+          latest_snapshot_id: null,
+          latest_revision: 0,
+          revisions: [],
+        },
+      });
+    }
     if (path.includes("/api/v1/experiment-launches")) return Promise.resolve({ data: launchPayload });
     return Promise.resolve({ data: null });
   });
@@ -103,6 +114,20 @@ const renderDetail = (
       </MemoryRouter>
     </QueryClientProvider>,
   );
+};
+
+const renderLiveDetailAfterSnapshotDiscovery = async (
+  launchPayload: Record<string, unknown>,
+  items: Array<Record<string, unknown>>,
+  initialPath?: string,
+) => {
+  vi.useFakeTimers();
+  const rendered = renderDetail(launchPayload, items, initialPath);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(SNAPSHOT_DISCOVERY_WINDOW_MS + 2_000);
+  });
+  vi.useRealTimers();
+  return rendered;
 };
 
 const unknownEvaluation = {
@@ -175,7 +200,7 @@ describe("Issue #83 quality decision summary", () => {
   // The core of #83: a decided rate of 100% must still show the UNKNOWN count,
   // so "everything we could judge passed" can never read as "everything passed".
   it("shows PASS / FAIL / UNKNOWN side by side with the decided rate", async () => {
-    renderDetail(launch(), [
+    await renderLiveDetailAfterSnapshotDiscovery(launch(), [
       item(0, { quality_conclusion: "pass" }),
       item(1, { quality_conclusion: "pass" }),
       item(2, { quality_conclusion: "fail" }),
@@ -191,7 +216,7 @@ describe("Issue #83 quality decision summary", () => {
   });
 
   it("never shows a decided rate when nothing could be decided", async () => {
-    renderDetail(launch({ quality_conclusion: "unknown" }), [
+    await renderLiveDetailAfterSnapshotDiscovery(launch({ quality_conclusion: "unknown" }), [
       item(0, { quality_conclusion: "unknown", quality_evaluation: unknownEvaluation }),
       item(1, { quality_conclusion: "unknown", quality_evaluation: unknownEvaluation }),
     ]);
@@ -237,7 +262,7 @@ describe("Issue #83 per-rule explanations in the item drawer", () => {
   afterEach(() => cleanup());
 
   it("explains an UNKNOWN case as insufficient evidence, not as a rule violation", async () => {
-    renderDetail(
+    await renderLiveDetailAfterSnapshotDiscovery(
       launch(),
       [item(0, { quality_conclusion: "unknown", quality_evaluation: unknownEvaluation })],
       `/launches/launch-83?tab=cases`,
@@ -258,7 +283,7 @@ describe("Issue #83 per-rule explanations in the item drawer", () => {
   });
 
   it("names the violated rule for a FAIL case", async () => {
-    renderDetail(
+    await renderLiveDetailAfterSnapshotDiscovery(
       launch(),
       [item(0, { quality_conclusion: "fail", quality_evaluation: failEvaluation })],
       `/launches/launch-83?tab=cases`,
@@ -275,7 +300,7 @@ describe("Issue #83 per-rule explanations in the item drawer", () => {
   });
 
   it("summarises the cause in the item row so 证据不足 is visible without the drawer", async () => {
-    renderDetail(
+    await renderLiveDetailAfterSnapshotDiscovery(
       launch(),
       [item(0, { quality_conclusion: "unknown", quality_evaluation: unknownEvaluation })],
       `/launches/launch-83?tab=cases`,
@@ -287,7 +312,7 @@ describe("Issue #83 per-rule explanations in the item drawer", () => {
   });
 
   it("offers 证据不足 as its own filter bucket", async () => {
-    renderDetail(
+    await renderLiveDetailAfterSnapshotDiscovery(
       launch(),
       [
         item(0, { quality_conclusion: "pass" }),

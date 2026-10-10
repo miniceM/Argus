@@ -7,7 +7,7 @@ import { formatApiError } from "../../../api/errors";
 import { Button } from "../../../components/ui/Primitives";
 import { ComparisonCaseDrawer } from "../ComparisonCaseDrawer";
 import { LangfuseSyncPanel } from "../langfuseSyncStatus";
-import { resolveMetricDirection, evaluateMetricChange } from "../metricComparison";
+import { resolveMetricDirection, evaluateMetricChange, evaluateMetricRule } from "../metricComparison";
 
 type GeneratedRunSummary = import("../../../api/schema").components["schemas"]["RunSummaryResponse"];
 type GeneratedComparison = import("../../../api/schema").components["schemas"]["ComparisonResponse"];
@@ -303,7 +303,11 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
       } else {
         exp = "记录证据";
       }
-      if (rule.required) exp += " (关键)";
+      const ruleFlags = [
+        rule.required ? "必要" : null,
+        rule.critical ? "关键" : null,
+      ].filter((flag): flag is string => flag !== null);
+      if (ruleFlags.length > 0) exp += ` (${ruleFlags.join(" · ")})`;
       map.set(rule.evaluator_id, exp);
     }
     return map;
@@ -321,19 +325,30 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
       const overallRule = qualityPolicyRules.find(
         (r) => r.evaluator_id === "overall_pass_rate" || r.evaluator_id === "overall",
       );
-      const reqText = overallRule?.threshold != null
-        ? `${overallRule.operator ?? "≥"} ${(overallRule.threshold * 100).toFixed(1)}%`
-        : "—";
-      const thresholdVal = overallRule?.threshold;
-      const isMet = thresholdVal != null && cPass != null ? cPass >= thresholdVal : null;
+      const hasThresholdOperator = [">=", "<=", ">", "<"].includes(overallRule?.operator ?? "");
+      const reqText = !overallRule
+        ? "无冻结门槛"
+        : overallRule.operator === "=="
+        ? `== ${overallRule.expected_value != null ? `${(Number(overallRule.expected_value) * 100).toFixed(1)}%` : "—"}`
+        : hasThresholdOperator && overallRule?.threshold != null
+        ? `${overallRule.operator} ${(overallRule.threshold * 100).toFixed(1)}%`
+        : overallRule.operator
+        ? `${overallRule.operator} （规则不可判定）`
+        : "记录证据";
+      const policyStatus = evaluateMetricRule(cPass, overallRule);
+      const statusLabel = !overallRule
+        ? "无冻结门槛"
+        : !overallRule.operator
+        ? "仅记录证据"
+        : policyStatus?.statusLabel ?? "证据不足";
       rows.push({
         name: "综合质量通过率 (Overall Pass)",
         requirement: reqText,
         baseline: percent(bPass),
         candidate: percent(cPass),
         delta: deltaPp,
-        statusLabel: isMet === true ? "达标" : isMet === false ? "未达标" : "—",
-        statusTone: isMet === true ? "pass" : isMet === false ? "fail" : "neutral",
+        statusLabel,
+        statusTone: policyStatus?.statusTone ?? "neutral",
       });
     }
 
@@ -365,11 +380,17 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
 
       const req = rulesMap.get(evalId) || "—";
 
-      const metricEval = evaluateMetricChange(bScore, cScore, metricDir);
+      const policyStatus = evaluateMetricRule(cScore, rule);
+      const metricEval = rule
+        ? policyStatus ?? {
+            statusLabel: rule.operator ? "证据不足" : "仅记录证据",
+            statusTone: "neutral" as const,
+          }
+        : evaluateMetricChange(bScore, cScore, metricDir);
       let statusLabel = metricEval.statusLabel;
       let statusTone: "pass" | "fail" | "neutral" = metricEval.statusTone;
 
-      if (bScore == null && cScore != null) {
+      if (!rule && bScore == null && cScore != null) {
         statusLabel = "已测量";
         statusTone = "neutral";
       }
@@ -400,16 +421,25 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
       );
       let latReq = "—";
       if (latencyRule && latencyRule.threshold != null) {
-        latReq = `${latencyRule.operator ?? "<="} ${latencyRule.threshold} ms`;
+        latReq = `${latencyRule.operator ?? "—"} ${latencyRule.threshold} ms`;
       }
+      const policyStatus = evaluateMetricRule(cLat, latencyRule);
+      const trendStatus = bLat == null
+        ? { statusLabel: "已测量", statusTone: "neutral" as const }
+        : diff < 0
+        ? { statusLabel: "较基线下降", statusTone: "neutral" as const }
+        : diff > 0
+        ? { statusLabel: "较基线上升", statusTone: "neutral" as const }
+        : { statusLabel: "持平", statusTone: "neutral" as const };
+      const status = policyStatus ?? trendStatus;
       rows.push({
         name: "P95 响应时延 (Latency)",
         requirement: latReq,
         baseline: bLat != null ? `${Math.round(bLat)} ms` : "—",
         candidate: `${Math.round(cLat)} ms`,
         delta: deltaText,
-        statusLabel: diff <= 0 ? "优于基线" : "增加",
-        statusTone: diff <= 0 ? "pass" : "timeout",
+        statusLabel: status.statusLabel,
+        statusTone: status.statusTone,
       });
     }
 
@@ -457,11 +487,14 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
     { label: "共同可比 Case", reason: comparisonSummary?.cost_comparison?.reason },
   ].filter((entry): entry is { label: string; reason: CostReason } => entry.reason != null);
 
-  const isRegression =
-    formal?.verdict === "REGRESSION" ||
-    (cohort?.baseline.pass_rate != null &&
-      cohort.candidate.pass_rate != null &&
-      cohort.candidate.pass_rate < cohort.baseline.pass_rate);
+  const formalHasRegression = formal?.verdict === "REGRESSION";
+  const passRateTrend = cohort?.baseline.pass_rate == null || cohort.candidate.pass_rate == null
+    ? "unknown"
+    : cohort.candidate.pass_rate > cohort.baseline.pass_rate
+    ? "improved"
+    : cohort.candidate.pass_rate < cohort.baseline.pass_rate
+    ? "declined"
+    : "unchanged";
 
   return (
     <div className="space-y-6">
@@ -495,26 +528,36 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
             <div className="bg-surface-subtle border border-border rounded-lg p-3 space-y-1">
               <span className="font-semibold text-foreground flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${isRegression ? "bg-fail" : "bg-pass"}`} />
-                {isRegression
+                <span className={`w-2 h-2 rounded-full ${
+                  passRateTrend === "declined"
+                    ? "bg-fail"
+                    : passRateTrend === "improved"
+                    ? "bg-pass"
+                    : "bg-surface-muted"
+                }`} />
+                {passRateTrend === "declined"
                   ? "综合质量通过率下降"
-                  : (cohort.candidate.pass_rate ?? 0) > (cohort.baseline.pass_rate ?? 0)
+                  : passRateTrend === "improved"
                   ? "综合质量通过率提升"
-                  : "综合质量通过率持平"}
+                  : passRateTrend === "unchanged"
+                  ? "综合质量通过率持平"
+                  : "综合质量通过率变化不可用"}
               </span>
               <p className="text-muted-foreground leading-relaxed">
-                {isRegression ? (
+                {passRateTrend === "declined" ? (
                   <>
                     共同可比用例通过率从 {percent(cohort.baseline.pass_rate)} 下降至 {percent(cohort.candidate.pass_rate)}（{percentagePointDelta(cohort.baseline.pass_rate, cohort.candidate.pass_rate)}）。
                   </>
-                ) : (cohort.candidate.pass_rate ?? 0) > (cohort.baseline.pass_rate ?? 0) ? (
+                ) : passRateTrend === "improved" ? (
                   <>
                     共同可比用例通过率从 {percent(cohort.baseline.pass_rate)} 提升至 {percent(cohort.candidate.pass_rate)}（{percentagePointDelta(cohort.baseline.pass_rate, cohort.candidate.pass_rate)}）。
                   </>
-                ) : (
+                ) : passRateTrend === "unchanged" ? (
                   <>
                     共同可比用例通过率与基线持平（{percent(cohort.candidate.pass_rate)}）。
                   </>
+                ) : (
+                  <>缺少有效的可比通过率数据，无法说明通过率变化。</>
                 )}
               </p>
             </div>
@@ -525,22 +568,22 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
                     className={`w-2 h-2 rounded-full ${
                       !formal?.available
                         ? "bg-timeout"
-                        : isRegression
+                        : formalHasRegression
                         ? "bg-fail"
                         : "bg-pass"
                     }`}
                   />
                   {!formal?.available
                     ? "评测门禁结论未就绪"
-                    : isRegression
+                    : formalHasRegression
                     ? "评测门禁未达标 (存在退化)"
                     : "评测规则门禁达标"}
                 </span>
                 <p className="text-muted-foreground leading-relaxed">
                   {!formal?.available
                     ? "由于证据不足或基线未绑定，暂无法出具正式门禁准入结论。"
-                    : isRegression
-                    ? `共计 ${evaluatorIds.length} 项评估指标已比对，存在退化项需排查。`
+                    : formalHasRegression
+                    ? `正式比较结论为 REGRESSION；存在 ${comparison?.classification_counts?.REGRESSION ?? 0} 个回归 Case，请结合逐例分类排查。`
                     : `共计 ${evaluatorIds.length} 项评估指标已完成与基线对比，全部关键约束已纳入版本质量门禁监控。`}
                 </p>
               </div>
@@ -641,8 +684,6 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
                         ? "text-pass"
                         : row.statusTone === "fail"
                         ? "text-fail"
-                        : row.statusTone === "timeout"
-                        ? "text-timeout"
                         : "text-muted-foreground"
                     }`}
                   >

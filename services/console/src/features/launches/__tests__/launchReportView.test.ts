@@ -74,4 +74,72 @@ describe("launchReportView pure functions", () => {
     expect(validEmpty.isValid).toBe(true);
     expect(validEmpty.items).toEqual([]);
   });
+  it("treats a missing identity as a contract failure rather than an optional check", () => {
+    // A payload without identity cannot be attributed to the revision the user asked for, so
+    // it must be rejected exactly like a mismatched one.
+    const noLaunch = validateSnapshotDetail({ snapshot_id: "s1", items: [] }, "l1", "s1");
+    expect(noLaunch.isValid).toBe(false);
+    expect(noLaunch.error).toContain("快照归属 Launch 不一致");
+
+    const noSnapshot = validateSnapshotDetail({ launch_id: "l1", items: [] }, "l1", "s1");
+    expect(noSnapshot.isValid).toBe(false);
+    expect(noSnapshot.error).toContain("快照 ID 不一致");
+
+    const noIdentity = validateSnapshotDetail({ items: [] }, "l1", "s1");
+    expect(noIdentity.isValid).toBe(false);
+  });
+
+  it("rejects non-object payloads and rows that cannot be attributed to a case", () => {
+    for (const payload of [null, undefined, [], "detail", 7]) {
+      expect(validateSnapshotDetail(payload, "l1", "s1").isValid).toBe(false);
+    }
+
+    const rowWithoutCaseId = validateSnapshotDetail(
+      { launch_id: "l1", snapshot_id: "s1", items: [{ latency_ms: 5 }] },
+      "l1",
+      "s1",
+    );
+    expect(rowWithoutCaseId.isValid).toBe(false);
+    expect(rowWithoutCaseId.error).toContain("dataset_item_id");
+
+    const nullRow = validateSnapshotDetail(
+      { launch_id: "l1", snapshot_id: "s1", items: [null] },
+      "l1",
+      "s1",
+    );
+    expect(nullRow.isValid).toBe(false);
+  });
+
+  it("still accepts a legitimately empty revision and unknown-safe optional evidence", () => {
+    const emptyRevision = validateSnapshotDetail(
+      { launch_id: "l1", snapshot_id: "s1", items: [] },
+      "l1",
+      "s1",
+    );
+    expect(emptyRevision.isValid).toBe(true);
+
+    const diagnosticRows = validateSnapshotDetail(
+      {
+        launch_id: "l1",
+        snapshot_id: "s1",
+        evidence_state: "DIAGNOSTIC",
+        releasable: false,
+        items: [
+          {
+            dataset_item_id: "item-001",
+            trace_url: null,
+            latency_ms: null,
+            quality_conclusion: null,
+            scores: {},
+          },
+        ],
+      },
+      "l1",
+      "s1",
+    );
+    expect(diagnosticRows.isValid).toBe(true);
+    const projected = projectFrozenCase(diagnosticRows.items![0], null);
+    expect(projected.quality_conclusion).toBe("unknown");
+    expect(projected.trace_url).toBeNull();
+  });
 });

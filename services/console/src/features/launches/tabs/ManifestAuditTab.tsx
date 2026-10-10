@@ -13,8 +13,10 @@ import {
   Zap,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../../../api/client";
-import { queryKeys } from "../../../api/query-keys";
+import {
+  snapshotDetailQueryOptions,
+  snapshotListQueryOptions,
+} from "../launchSnapshotQueries";
 import { Button } from "../../../components/ui/Primitives";
 import { Badge } from "../../../components/Badge";
 import { JsonViewer } from "../../../components/JsonViewer";
@@ -25,6 +27,7 @@ import { useCopyFeedback } from "../useCopyFeedback";
 type LaunchResponse = import("../../../api/schema").components["schemas"]["ExperimentLaunchResponse"];
 type SnapshotRevision = import("../../../api/schema").components["schemas"]["ResultSnapshotRevisionResponse"];
 type SnapshotList = import("../../../api/schema").components["schemas"]["ResultSnapshotListResponse"];
+type SnapshotDetail = import("../../../api/schema").components["schemas"]["ResultSnapshotDetailResponse"];
 
 interface ManifestAuditTabProps {
   launch: LaunchResponse;
@@ -45,18 +48,8 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
   const manifestPolicyData = manifest.quality_policy || {};
   const frozenPolicyRules = manifestPolicyData?.rules ?? [];
 
-  // Fetch revisions list
-  const historyQuery = useQuery({
-    queryKey: [...queryKeys.launches.all, "result-snapshots", launch.id],
-    enabled: Boolean(launch.id),
-    queryFn: async () => {
-      const res = await api.GET("/api/v1/experiment-launches/{launch_id}/result-snapshots", {
-        params: { path: { launch_id: launch.id } },
-      });
-      if (res.error) throw res.error;
-      return (res.data ?? null) as SnapshotList | null;
-    },
-  });
+  // Fetch revisions list — shared entry so this tab can never observe an unverified payload
+  const historyQuery = useQuery<SnapshotList>(snapshotListQueryOptions(launch.id));
 
   const revisions: SnapshotRevision[] = historyQuery.data?.revisions ?? [];
   const [showRawJson, setShowRawJson] = useState(false);
@@ -64,18 +57,13 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
   const copyJson = useCopyFeedback(2000);
 
   // Fetch complete snapshot detail for JSON export
-  const detailQuery = useQuery({
-    queryKey: [...queryKeys.launches.all, "result-snapshot", launch.id, activeSnapshot?.snapshot_id ?? "none"],
-    enabled: Boolean(launch.id && activeSnapshot?.snapshot_id),
-    queryFn: async () => {
-      const res = await api.GET(
-        "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}",
-        { params: { path: { launch_id: launch.id, snapshot_id: activeSnapshot!.snapshot_id } } },
-      );
-      if (res.error) throw res.error;
-      return res.data as any;
-    },
-  });
+  const detailQuery = useQuery<SnapshotDetail>(
+    snapshotDetailQueryOptions(
+      launch.id && activeSnapshot?.snapshot_id
+        ? { launchId: launch.id, snapshotId: activeSnapshot.snapshot_id }
+        : null,
+    ),
+  );
 
   const handleCopyJson = () => {
     const payload = detailQuery.data;

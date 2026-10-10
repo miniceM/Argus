@@ -26,11 +26,16 @@ import { ResultSnapshotPanel } from "./resultSnapshot";
 import { GateComparisonTab } from "./tabs/GateComparisonTab";
 import { CasesTraceTab } from "./tabs/CasesTraceTab";
 import { ManifestAuditTab } from "./tabs/ManifestAuditTab";
-import { projectFrozenCase, validateSnapshotDetail } from "./launchReportView";
+import { projectFrozenCase } from "./launchReportView";
+import {
+  snapshotDetailKey,
+  snapshotDetailQueryOptions,
+  snapshotListKey,
+  snapshotListQueryOptions,
+} from "./launchSnapshotQueries";
 
 type LaunchResponse = import("../../api/schema").components["schemas"]["ExperimentLaunchResponse"];
 type ItemExecution = import("../../api/schema").components["schemas"]["ExperimentItemExecutionResponse"];
-type SnapshotList = import("../../api/schema").components["schemas"]["ResultSnapshotListResponse"];
 type SnapshotRevision = import("../../api/schema").components["schemas"]["ResultSnapshotRevisionResponse"];
 type Baseline = import("../../api/schema").components["schemas"]["BaselineResponse"];
 type RunSummary = import("../../api/schema").components["schemas"]["RunSummaryResponse"];
@@ -143,19 +148,8 @@ export const LaunchDetail: React.FC = () => {
     refetchInterval: (query) => launchPollingInterval(query.state.data as LaunchResponse | undefined),
   });
 
-  // 2. Fetch Result Snapshots List (Issue #85)
-  const snapshotsQuery = useQuery({
-    queryKey: [...queryKeys.launches.all, "result-snapshots", launchId],
-    enabled: Boolean(launchId),
-    queryFn: async () => {
-      if (!launchId) return null;
-      const res = await api.GET("/api/v1/experiment-launches/{launch_id}/result-snapshots", {
-        params: { path: { launch_id: launchId } },
-      });
-      if (res.error) throw res.error;
-      return (res.data ?? null) as SnapshotList | null;
-    },
-  });
+  // 2. Fetch Result Snapshots List (Issue #85) — shared entry, see launchSnapshotQueries
+  const snapshotsQuery = useQuery(snapshotListQueryOptions(launchId));
 
   const revisions: SnapshotRevision[] = snapshotsQuery.data?.revisions ?? [];
   const selectedSnapshot = revisions.find((row) => row.snapshot_id === selectedSnapshotId) ?? null;
@@ -246,28 +240,21 @@ export const LaunchDetail: React.FC = () => {
     },
   });
 
-  // 3.1 Fetch Snapshot Detail for frozen items when viewing an immutable snapshot
+  // 3.1 Fetch Snapshot Detail for frozen items when viewing an immutable snapshot.
+  //
+  // An explicitly requested revision keeps its own identity even when the revision directory
+  // cannot answer: an empty or failed directory must never be mistaken for "this revision
+  // does not exist", so a failed directory falls back to reading that revision directly.
+  // A revision the directory answered *without* listing is definitively missing, and no
+  // detail request is issued for it (and never falls back to the latest revision).
   const targetSnapshotId = selectedSnapshotId
-    ? (selectedSnapshot?.snapshot_id ?? null)
+    ? (selectedSnapshot || snapshotsQuery.isError ? selectedSnapshotId : null)
     : (activeSnapshot?.snapshot_id ?? null);
-  const snapshotDetailQuery = useQuery({
-    queryKey: [...queryKeys.launches.all, "result-snapshot", launchId, targetSnapshotId ?? "none"],
-    enabled: Boolean(launchId && targetSnapshotId),
-    queryFn: async () => {
-      if (!launchId || !targetSnapshotId) return null;
-      const res = await api.GET(
-        "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}",
-        { params: { path: { launch_id: launchId, snapshot_id: targetSnapshotId } } },
-      );
-      if (res.error) throw res.error;
-      return res.data as any;
-    },
-  });
-
-  const snapshotValidation = useMemo(() => {
-    if (!snapshotDetailQuery.data || !launchId || !targetSnapshotId) return null;
-    return validateSnapshotDetail(snapshotDetailQuery.data, launchId, targetSnapshotId);
-  }, [snapshotDetailQuery.data, launchId, targetSnapshotId]);
+  const snapshotDetailQuery = useQuery(
+    snapshotDetailQueryOptions(
+      launchId && targetSnapshotId ? { launchId, snapshotId: targetSnapshotId } : null,
+    ),
+  );
 
   const rawItemsList: ItemExecution[] = Array.isArray(rawItems) ? rawItems : [];
   const liveItemsMap = useMemo(() => {
@@ -289,9 +276,7 @@ export const LaunchDetail: React.FC = () => {
       return [];
     }
     if (targetSnapshotId) {
-      if (snapshotValidation && !snapshotValidation.isValid) {
-        return [];
-      }
+      // The shared query throws on any invalid payload, so data here is already verified.
       const frozenList = snapshotDetailQuery.data?.items;
       if (Array.isArray(frozenList)) {
         return frozenList.map((row: any) => {
@@ -311,7 +296,7 @@ export const LaunchDetail: React.FC = () => {
       })) as any[];
     }
     return [];
-  }, [isSnapshotNotFound, targetSnapshotId, snapshotValidation, snapshotDetailQuery.data?.items, selectedSnapshotId, revisions.length, rawItemsList, liveItemsMap]);
+  }, [isSnapshotNotFound, targetSnapshotId, snapshotDetailQuery.data?.items, selectedSnapshotId, revisions.length, rawItemsList, liveItemsMap]);
 
   const isItemsLoading = isSnapshotNotFound
     ? false
@@ -321,12 +306,13 @@ export const LaunchDetail: React.FC = () => {
     ? isRawItemsLoading
     : snapshotsQuery.isLoading;
 
+  // A rejected detail payload surfaces as a query error, so the error branch is the single
+  // place where "silent empty report" is impossible. An HTTP 404 remains the only credible
+  // proof that a requested revision does not exist.
   const itemsError = isSnapshotNotFound
     ? new Error(`评测快照 ${selectedSnapshotId} 不存在或无权访问`)
     : targetSnapshotId
-    ? (snapshotValidation && !snapshotValidation.isValid && snapshotValidation.error?.includes("Launch 不一致")
-        ? new Error(snapshotValidation.error)
-        : snapshotDetailQuery.error)
+    ? snapshotDetailQuery.error
     : (!selectedSnapshotId && revisions.length === 0)
     ? (snapshotsQuery.isError ? new Error(`快照服务异常: ${formatApiError(snapshotsQuery.error)}`) : rawItemsError)
     : snapshotsQuery.error
@@ -355,8 +341,8 @@ export const LaunchDetail: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.launches.detail(launchId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.launches.items(launchId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.launches.list() });
-      queryClient.invalidateQueries({ queryKey: [...queryKeys.launches.all, "result-snapshots", launchId] });
-      queryClient.invalidateQueries({ queryKey: [...queryKeys.launches.all, "result-snapshot", launchId] });
+      queryClient.invalidateQueries({ queryKey: [...snapshotListKey(launchId)] });
+      queryClient.invalidateQueries({ queryKey: [...snapshotDetailKey(launchId, null)] });
     }
   };
 

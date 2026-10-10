@@ -4,8 +4,10 @@ import { Badge, type BadgeTone } from "../../components/Badge";
 import { AlertCircle } from "lucide-react";
 import { Button } from "../../components/ui/Primitives";
 import { formatApiError } from "../../api/errors";
-import { api } from "../../api/client";
-import { queryKeys } from "../../api/query-keys";
+import {
+  snapshotDetailQueryOptions,
+  snapshotListQueryOptions,
+} from "./launchSnapshotQueries";
 
 /**
  * Issue #85 — the fixed result report.
@@ -65,17 +67,7 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
   selectedSnapshotId,
   onSelect,
 }) => {
-  const history = useQuery({
-    queryKey: [...queryKeys.launches.all, "result-snapshots", launchId],
-    enabled: Boolean(launchId),
-    queryFn: async () => {
-      const res = await api.GET("/api/v1/experiment-launches/{launch_id}/result-snapshots", {
-        params: { path: { launch_id: launchId } },
-      });
-      if (res.error) throw res.error;
-      return (res.data ?? null) as SnapshotList | null;
-    },
-  });
+  const history = useQuery<SnapshotList>(snapshotListQueryOptions(launchId));
 
   const revisions: SnapshotRevision[] = history.data?.revisions ?? [];
   const selected = revisions.find((row) => row.snapshot_id === selectedSnapshotId) ?? null;
@@ -83,18 +75,11 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
   const isHistorical = Boolean(selected) && Boolean(history.data?.latest_snapshot_id) &&
     selected?.snapshot_id !== history.data?.latest_snapshot_id;
 
-  const detail = useQuery({
-    queryKey: [...queryKeys.launches.all, "result-snapshot", launchId, active?.snapshot_id ?? "none"],
-    enabled: Boolean(launchId && active?.snapshot_id),
-    queryFn: async () => {
-      const res = await api.GET(
-        "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}",
-        { params: { path: { launch_id: launchId, snapshot_id: active!.snapshot_id } } },
-      );
-      if (res.error) throw res.error;
-      return (res.data ?? null) as SnapshotDetail | null;
-    },
-  });
+  const detail = useQuery<SnapshotDetail | null>(
+    snapshotDetailQueryOptions(
+      launchId && active?.snapshot_id ? { launchId, snapshotId: active.snapshot_id } : null,
+    ),
+  );
 
   if (history.isLoading) {
     return (

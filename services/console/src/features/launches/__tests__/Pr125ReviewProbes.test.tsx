@@ -257,9 +257,14 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
         return Promise.resolve({ data: mockSnapshotList });
       }
       if (path.includes("/result-snapshots/")) {
+        // Echo the requested identity the way the real endpoint does, so a historical
+        // revision is a payload for *that* revision instead of a foreign one.
+        const requested = options?.params?.path?.snapshot_id ?? "snap-v2-001";
         return Promise.resolve({
           data: {
             ...mockSnapshotList.revisions[0],
+            launch_id: mockLaunch.id,
+            snapshot_id: requested,
             releasable: true,
             manifest: mockLaunch.manifest,
             items: mockItems,

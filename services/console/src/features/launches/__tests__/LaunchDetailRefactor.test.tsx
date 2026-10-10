@@ -257,6 +257,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
         return Promise.resolve({
           data: {
             ...mockSnapshotList.revisions[0],
+            launch_id: mockLaunch.id,
             releasable: true,
             manifest: mockLaunch.manifest,
             items: mockItems.map((item) => ({

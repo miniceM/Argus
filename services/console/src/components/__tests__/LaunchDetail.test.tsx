@@ -378,6 +378,11 @@ describe("LaunchDetail Frozen Manifest Structured Audit View", () => {
           response: { status: 503 },
         });
       }
+      if (path === "/api/v1/experiment-launches/{launch_id}/result-snapshots") {
+        return Promise.resolve({
+          data: { launch_id: launch.id, revisions: [], latest_snapshot_id: null, latest_revision: 0 },
+        });
+      }
       return Promise.resolve({ data: null });
     });
 
@@ -428,6 +433,11 @@ describe("LaunchDetail Frozen Manifest Structured Audit View", () => {
       }
       if (path === "/api/v1/experiment-launches/{launch_id}/items") {
         return Promise.resolve({ data: [{ id: "item-from-other-launch", launch_id: "another-launch" }] });
+      }
+      if (path === "/api/v1/experiment-launches/{launch_id}/result-snapshots") {
+        return Promise.resolve({
+          data: { launch_id: launch.id, revisions: [], latest_snapshot_id: null, latest_revision: 0 },
+        });
       }
       return Promise.resolve({ data: null });
     });

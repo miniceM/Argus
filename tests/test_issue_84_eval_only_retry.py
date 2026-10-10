@@ -38,6 +38,7 @@ from app.db_models import (  # noqa: E402
     EvaluationResultRecord,
     ExecutionAttemptRecord,
     ExecutionCheckpointRecord,
+    RunResultSnapshotRecord,
 )
 from app.db_models import (  # noqa: E402
     ExperimentItemExecutionRecord as Item,
@@ -247,6 +248,104 @@ def test_retry_evaluation_does_not_call_the_agent(setup_runtime):
         )
     assert outcome["finalized"] is True
     mock_invoke.assert_not_awaited()
+
+
+def test_retry_evaluation_materializes_a_new_snapshot_after_recovery(setup_runtime):
+    binding = _frozen_binding("intent_match")
+    manifest = _manifest(
+        binding,
+        dataset_items=[
+            {"id": "case-1", "input": {}, "expected_output": {"expected_intent": "refund"}},
+            {"id": "case-2", "input": {}, "expected_output": {"expected_intent": "refund"}},
+        ],
+    )
+    db_mgr, queue, _limiter, orchestrator, worker, reconciler = setup_runtime
+    group = "issue84-snapshot-revision"
+    launch = orchestrator.create_launch("test-agent", "v1", "ds", "v1", group, manifest)
+    orchestrator.start_launch(launch.id)
+    messages = queue.read_group(group, count=2)
+    assert len(messages) == 2
+
+    async def _run_items():
+        with patch("app.worker.get_langfuse_client_safe", return_value=None):
+            with patch(
+                "app.worker.RemoteAgentExecutor.invoke_once", new_callable=AsyncMock
+            ) as mock_invoke:
+                mock_invoke.return_value = _ok_invocation({"intent": "refund"})
+                outcomes = []
+                for message in messages:
+                    outcomes.append(await worker.execute_item_message(*message))
+                assert mock_invoke.await_count == 2
+                return outcomes
+
+    assert all(asyncio.run(_run_items()))
+    item_ids = [message[1] for message in messages]
+
+    # Freeze S1 with both recoverable evaluation failures before recovery starts.
+    with db_mgr.get_session() as session:
+        for item_id in item_ids:
+            item = session.get(Item, item_id)
+            item.eval_status = "failed"
+            item.quality_conclusion = QUALITY_CONCLUSION_UNKNOWN
+            item.quality_evaluation = None
+            item.evaluation_status = EVALUATION_IDLE
+            session.query(EvaluationResultRecord).filter(
+                EvaluationResultRecord.item_execution_id == item_id
+            ).delete()
+        session.commit()
+
+    reconciler.reconcile_launch_states()
+    with db_mgr.get_session() as session:
+        first = session.query(RunResultSnapshotRecord).filter(
+            RunResultSnapshotRecord.launch_id == launch.id
+        ).one()
+        assert first.revision == 1
+        first_id = first.id
+        first_digest = first.source_result_digest
+        first_items = list(first.items)
+
+    orchestrator.retry_failed_evaluations(launch.id)
+    generations = {
+        item_id: _item(db_mgr, item_id).evaluation_generation
+        for item_id in item_ids
+    }
+    first_outcome = recover_evaluation(
+        db_mgr,
+        item_id=item_ids[0],
+        evaluation_generation=generations[item_ids[0]],
+        worker_id="w-eval-1",
+    )
+    assert first_outcome["finalized"] is True
+    with db_mgr.get_session() as session:
+        snapshots = session.query(RunResultSnapshotRecord).filter(
+            RunResultSnapshotRecord.launch_id == launch.id
+        ).all()
+        # S2 must not freeze while the sibling Case is still being re-evaluated.
+        assert [snapshot.revision for snapshot in snapshots] == [1]
+
+    second_outcome = recover_evaluation(
+        db_mgr,
+        item_id=item_ids[1],
+        evaluation_generation=generations[item_ids[1]],
+        worker_id="w-eval-2",
+    )
+    assert second_outcome["finalized"] is True
+    assert second_outcome["quality_conclusion"] == QUALITY_CONCLUSION_PASS
+
+    with db_mgr.get_session() as session:
+        snapshots = session.query(RunResultSnapshotRecord).filter(
+            RunResultSnapshotRecord.launch_id == launch.id
+        ).order_by(RunResultSnapshotRecord.revision).all()
+        assert [snapshot.revision for snapshot in snapshots] == [1, 2]
+        assert snapshots[0].id == first_id
+        assert snapshots[0].source_result_digest == first_digest
+        assert snapshots[0].items == first_items
+        assert snapshots[1].id != first_id
+        assert snapshots[1].source_result_digest != first_digest
+        assert all(
+            item["quality_conclusion"] == QUALITY_CONCLUSION_PASS
+            for item in snapshots[1].items
+        )
 
 
 # ---------------------------------------------------------------------------

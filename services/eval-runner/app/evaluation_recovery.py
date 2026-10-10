@@ -492,8 +492,20 @@ def finalize_evaluation(
     now = _now()
 
     with db_mgr.get_session() as session:
-        # Follow the global Launch -> Item lock ordering: read cancellation
-        # state before taking the item lock.
+        # Follow the global Launch -> Item lock ordering. Serializing recovery
+        # finalization per Launch also lets the last completed recovery freeze
+        # one coherent immutable revision after all sibling evaluations settle.
+        launch_record = None
+        if launch_id:
+            launch_stmt = select(ExperimentLaunchRecord).where(
+                ExperimentLaunchRecord.id == launch_id
+            )
+            if is_pg:
+                launch_stmt = launch_stmt.with_for_update()
+            launch_record = session.scalars(
+                launch_stmt.execution_options(populate_existing=True)
+            ).first()
+
         if _launch_cancelled(session, launch_id):
             _close_attempt(
                 session,
@@ -580,5 +592,13 @@ def finalize_evaluation(
             error_message=summary.eval_error,
             now=now,
         )
+        session.flush()
+        if launch_record is not None:
+            # This is a no-op while any sibling is still evaluating. When this
+            # is the last recovery, create_result_snapshot persists the new
+            # digest/revision in the same transaction as the finalized verdict.
+            from .result_snapshots import create_result_snapshot
+
+            create_result_snapshot(session, launch_record)
         session.commit()
         return True

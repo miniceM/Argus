@@ -9,6 +9,7 @@ import { ExecutionProgressPanel } from "../ExecutionProgressPanel";
 import { SetBaselineModal } from "../SetBaselineModal";
 import { queryKeys } from "../../../api/query-keys";
 import { api } from "../../../api/client";
+import { snapshotListKey } from "../launchSnapshotQueries";
 
 vi.mock("../../../api/client", () => ({
   api: {
@@ -476,6 +477,84 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Snapshot WRONG not found");
   });
 
+  it("REVIEW: a cached directory that confirms absence stays authoritative if refresh fails", async () => {
+    queryClient.setQueryData(snapshotListKey(mockLaunch.id), {
+      launch_id: mockLaunch.id,
+      latest_snapshot_id: "snap-v2-001",
+      latest_revision: 1,
+      revisions: mockSnapshotList.revisions,
+    });
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}/result-snapshots": {
+        error: { detail: "snapshot history unavailable" },
+        response: { status: 503 },
+      },
+      "/api/v1/experiment-launches/{launch_id}/summary": {
+        error: { detail: "Snapshot WRONG not found" },
+        response: { status: 404 },
+      },
+      "/api/v1/experiment-launches/{launch_id}/comparison": {
+        error: { detail: "Snapshot WRONG not found" },
+        response: { status: 404 },
+      },
+    });
+
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=WRONG`);
+
+    await waitFor(() => {
+      expect(api.GET).toHaveBeenCalledWith(
+        "/api/v1/experiment-launches/{launch_id}/result-snapshots",
+        expect.anything(),
+      );
+    });
+    expect(screen.queryByRole("button", { name: "设为新 Baseline" })).not.toBeInTheDocument();
+    expect(
+      (api.GET as any).mock.calls.some(([path, options]: [string, any]) =>
+        path.includes("/result-snapshots/") && options?.params?.path?.snapshot_id === "WRONG",
+      ),
+    ).toBe(false);
+  });
+
+  it("REVIEW: a verified explicit snapshot can be set as Baseline when history is unavailable", async () => {
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}/result-snapshots": {
+        error: { detail: "snapshot history unavailable" },
+        response: { status: 503 },
+      },
+    });
+
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=snap-v2-001`);
+
+    expect(await screen.findByText("证据完整")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "设为新 Baseline" }));
+
+    expect(await screen.findByRole("button", { name: "确认设为 Baseline" })).toBeEnabled();
+    expect(screen.getByText(/Revision 1 \(snap-v2-001/)).toBeInTheDocument();
+  });
+
+  it("REVIEW: a mismatched direct snapshot detail cannot authorize a Baseline", async () => {
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}/result-snapshots": {
+        error: { detail: "snapshot history unavailable" },
+        response: { status: 503 },
+      },
+      "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}": {
+        data: {
+          ...mockSnapshotList.revisions[0],
+          launch_id: mockLaunch.id,
+          snapshot_id: "different-snapshot",
+          releasable: true,
+          items: mockItems,
+        },
+      },
+    });
+
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=snap-v2-001`);
+
+    expect(await screen.findByText("诊断快照")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "设为新 Baseline" })).not.toBeInTheDocument();
+  });
+
   it("REVIEW: comparable regression must not be labelled a pass-rate improvement", async () => {
     const c = structuredClone(mockComparison);
     c.summary.comparable_cohort.baseline.pass_rate = 1;
@@ -589,8 +668,31 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
       "/api/v1/experiment-launches/{launch_id}/comparison": { data: c },
     });
     renderComponent();
-    const rule = await screen.findByText("<= 0.2 (必要)");
+    const rule = await screen.findByText("<= 0.2 (类型未声明 · 必要)");
     expect(rule).toHaveTextContent("<= 0.2");
+  });
+
+  it("REVIEW: legacy numeric thresholds without a declared type retain their raw value", async () => {
+    const launch = structuredClone(mockLaunch) as any;
+    launch.manifest.quality_policy.rules = [
+      { evaluator_id: "correctness", operator: ">=", threshold: 0.8, required: true },
+    ];
+    launch.manifest.evaluators = [];
+    const comparison = structuredClone(mockComparison) as any;
+    comparison.summary.comparable_cohort.baseline.score_means = { correctness: 0.7 };
+    comparison.summary.comparable_cohort.candidate.score_means = { correctness: 0.9 };
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}": { data: launch },
+      "/api/v1/experiment-launches/{launch_id}/comparison": { data: comparison },
+    });
+
+    renderComponent();
+
+    const metric = await screen.findByText("correctness", { selector: "td" });
+    const row = metric.closest("tr")!;
+    expect(row).toHaveTextContent(">= 0.8");
+    expect(row).toHaveTextContent("类型未声明");
+    expect(row).not.toHaveTextContent("80.0%");
   });
 
   it("REVIEW: snapshot read failure must not download Manifest as selected result JSON", async () => {

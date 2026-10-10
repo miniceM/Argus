@@ -157,8 +157,9 @@ export const LaunchDetail: React.FC = () => {
 
   const revisions: SnapshotRevision[] = snapshotsQuery.data?.revisions ?? [];
   const selectedSnapshot = revisions.find((row) => row.snapshot_id === selectedSnapshotId) ?? null;
+  const hasSnapshotDirectoryData = snapshotsQuery.data != null;
   const isSnapshotNotFound = Boolean(
-    selectedSnapshotId && snapshotsQuery.isSuccess && !selectedSnapshot
+    selectedSnapshotId && hasSnapshotDirectoryData && !selectedSnapshot
   );
   // If a snapshot_id is explicitly specified, never silently fall back to latest revisions[0]
   const activeSnapshot = selectedSnapshotId
@@ -246,19 +247,43 @@ export const LaunchDetail: React.FC = () => {
 
   // 3.1 Fetch Snapshot Detail for frozen items when viewing an immutable snapshot.
   //
-  // An explicitly requested revision keeps its own identity even when the revision directory
-  // cannot answer: an empty or failed directory must never be mistaken for "this revision
-  // does not exist", so a failed directory falls back to reading that revision directly.
-  // A revision the directory answered *without* listing is definitively missing, and no
-  // detail request is issued for it (and never falls back to the latest revision).
+  // An explicitly requested revision keeps its own identity when the directory has no
+  // usable cached response and the request fails, so it can be verified directly. Any
+  // validated directory response (including cached data during a failed refresh) is
+  // authoritative: an omitted ID is missing and must never fall back to another revision.
   const historyResolved = snapshotsQuery.isSuccess || snapshotsQuery.isError;
   const targetSnapshotId = selectedSnapshotId
-    ? (selectedSnapshot || snapshotsQuery.isError ? selectedSnapshotId : null)
+    ? (selectedSnapshot
+      ? selectedSnapshot.snapshot_id
+      : snapshotsQuery.isError && !hasSnapshotDirectoryData
+      ? selectedSnapshotId
+      : null)
     : (activeSnapshot?.snapshot_id ?? null);
   const snapshotDetailQuery = useQuery(
     snapshotDetailQueryOptions(
       launchId && targetSnapshotId ? { launchId, snapshotId: targetSnapshotId } : null,
     ),
+  );
+
+  // When a pinned URL snapshot is directly verified but the revision directory is
+  // unavailable, its immutable detail is the only safe source for Baseline metadata.
+  // A successful directory response that omits the requested ID remains authoritative:
+  // never turn that missing revision into a valid one using an unrelated fallback.
+  const detailSnapshot = snapshotDetailQuery.data;
+  const detailSnapshotMatchesRequest = Boolean(
+    snapshotsQuery.isError &&
+      !hasSnapshotDirectoryData &&
+      selectedSnapshotId &&
+      snapshotDetailQuery.isSuccess &&
+      detailSnapshot?.launch_id === launchId &&
+      detailSnapshot?.snapshot_id === selectedSnapshotId &&
+      Number.isInteger(detailSnapshot?.revision) &&
+      typeof detailSnapshot?.evidence_state === "string",
+  );
+  const snapshotForActions = activeSnapshot ?? (
+    detailSnapshotMatchesRequest
+      ? (detailSnapshot as unknown as SnapshotRevision)
+      : null
   );
 
   const rawItemsList: ItemExecution[] = Array.isArray(rawItems) ? rawItems : [];
@@ -546,7 +571,7 @@ export const LaunchDetail: React.FC = () => {
   )
     ? summaryQuery.data.summary as Record<string, any> | undefined
     : undefined;
-  const activeSnap = activeSnapshot as Record<string, any> | undefined;
+  const activeSnap = snapshotForActions as Record<string, any> | undefined;
   const hasFrozenItems = Boolean(targetSnapshotId && snapshotDetailQuery.isSuccess);
   const hasLiveItems = Boolean(
     isLiveFallbackAllowed && !isRawItemsLoading && !rawItemsError,
@@ -673,7 +698,7 @@ export const LaunchDetail: React.FC = () => {
       {/* 1. 业务主体 Header */}
       <LaunchHeader
         launch={launch}
-        activeSnapshot={activeSnapshot}
+        activeSnapshot={snapshotForActions}
         allowedActions={isSnapshotNotFound ? [] : allowedActions}
         langfuseLink={langfuseLink}
         isFetching={isLaunchFetching}
@@ -932,7 +957,7 @@ export const LaunchDetail: React.FC = () => {
         onClose={() => setShowBaselineModal(false)}
         agentId={agentId}
         environment={environment}
-        activeSnapshot={activeSnapshot}
+        activeSnapshot={snapshotForActions}
         activeBaseline={activeBaselineQuery.data ?? null}
         onSuccess={() => {
           activeBaselineQuery.refetch();

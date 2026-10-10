@@ -94,8 +94,13 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
   let passRateDeltaText: string | null = null;
   let isPassRateImproved: boolean | null = null;
 
-  if (cohort?.baseline.pass_rate != null && cohort?.candidate.pass_rate != null) {
-    const diff = (cohort.candidate.pass_rate - cohort.baseline.pass_rate) * 100;
+  const baselinePassRate = cohort?.baseline.pass_rate;
+  const candidatePassRate = cohort?.candidate.pass_rate;
+  if (
+    typeof baselinePassRate === "number" && Number.isFinite(baselinePassRate) &&
+    typeof candidatePassRate === "number" && Number.isFinite(candidatePassRate)
+  ) {
+    const diff = (candidatePassRate - baselinePassRate) * 100;
     const diffText = `${diff > 0 ? "+" : ""}${diff.toFixed(1)} pp`;
     if (diff > 0) {
       passRateDeltaText = `较基线提升 ${diffText}`;
@@ -172,12 +177,16 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
   const costCurrency = cohort?.candidate.cost_currency ?? comparisonSummary?.candidate?.cost_currency ?? "USD";
   const costReason = comparisonSummary?.candidate?.cost_unavailable_reason ?? comparisonSummary?.cost_comparison?.reason;
   let costText = "—";
-  let costSubText = "Token 消耗与基线相当";
+  let costSubText = "暂无可比较的成本对比";
 
   if (candidateCost != null) {
     costText = formatMoney(candidateCost, costCurrency);
-    if (comparisonSummary?.cost_comparison?.status === "COMPARABLE" && comparisonSummary.cost_comparison.delta != null) {
-      const delta = comparisonSummary.cost_comparison.delta;
+    const costDelta = comparisonSummary?.cost_comparison?.delta;
+    if (
+      comparisonSummary?.cost_comparison?.status === "COMPARABLE" &&
+      typeof costDelta === "number" && Number.isFinite(costDelta)
+    ) {
+      const delta = costDelta;
       if (delta > 0) {
         costSubText = `较基线增加 ${formatMoney(delta, costCurrency)}`;
       } else if (delta < 0) {
@@ -186,7 +195,7 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
         costSubText = "单例成本与基线持平";
       }
     } else if (costReason) {
-      costSubText = "部分覆盖，仅供参考";
+      costSubText = "成本证据不足，无法比较";
     }
   } else if (costReason) {
     costText = "未记录";
@@ -256,7 +265,7 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
                 ) : (
                   <span className="text-muted-foreground flex items-center gap-1">
                     <Minus className="w-3.5 h-3.5" />
-                    <span>{passRateDeltaText || "与基线持平"}</span>
+                    <span>{passRateDeltaText || "暂无基线对比"}</span>
                   </span>
                 )}
               </div>

@@ -282,20 +282,12 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
     for (const rule of qualityPolicyRules) {
       if (!rule.evaluator_id) continue;
       const evalMeta = manifestEvaluators.find((e) => e.id === rule.evaluator_id);
-      const isNumeric =
-        rule.result_type === "numeric" ||
-        evalMeta?.result_type === "numeric" ||
-        rule.evaluator_id.toLowerCase().includes("cost") ||
-        rule.evaluator_id.toLowerCase().includes("duration") ||
-        rule.evaluator_id.toLowerCase().includes("latency") ||
-        (rule.threshold != null && rule.threshold > 1);
+      const hasDeclaredResultType = Boolean(rule.result_type ?? evalMeta?.result_type);
 
       let exp = "";
       if (rule.operator === ">=" || rule.operator === "<=" || rule.operator === ">" || rule.operator === "<") {
         const formattedVal = rule.threshold != null
-          ? isNumeric
-            ? String(rule.threshold)
-            : (rule.threshold * 100).toFixed(1) + "%"
+          ? String(rule.threshold)
           : "—";
         exp = `${rule.operator} ${formattedVal}`;
       } else if (rule.operator === "==") {
@@ -304,6 +296,7 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
         exp = "记录证据";
       }
       const ruleFlags = [
+        !hasDeclaredResultType && rule.threshold != null ? "类型未声明" : null,
         rule.required ? "必要" : null,
         rule.critical ? "关键" : null,
       ].filter((flag): flag is string => flag !== null);

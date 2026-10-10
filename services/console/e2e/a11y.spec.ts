@@ -304,6 +304,40 @@ test.describe("WCAG 2.2 AA: overlay surfaces", () => {
       page.getByRole("button", { name: /次尝试/ }).first().click(),
     );
   });
+
+  test("mobile navigation drawer", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await auditOpen(page, "/agents", () =>
+      page.getByRole("button", { name: "打开导航" }).click(),
+    );
+  });
+
+  test("mobile navigation traps keyboard focus and restores it on Escape", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/agents");
+    await page.waitForLoadState("networkidle");
+
+    const opener = page.getByRole("button", { name: "打开导航" });
+    await opener.focus();
+    await page.keyboard.press("Space");
+    const dialog = page.getByRole("dialog", { name: "主导航" });
+    await expect(dialog).toBeVisible();
+    const agents = dialog.getByRole("link", { name: "Agents" });
+    const launches = dialog.getByRole("link", { name: "Launches" });
+    const close = dialog.getByRole("button", { name: "关闭" });
+    await expect(agents).toBeFocused();
+
+    await page.keyboard.press("Tab");
+    await expect(launches).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(launches).toBeFocused();
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(opener).toBeFocused();
+  });
 });
 
 /**
@@ -332,7 +366,7 @@ test.describe("prefers-reduced-motion", () => {
     // The FieldHelp triggers live inside the create-version dialog, not on the
     // agent detail page itself.
     await page.getByRole("button", { name: "创建新版本" }).click();
-    await page.locator("button[aria-expanded]").first().click();
+    await page.locator('button[title="查看字段说明"]').first().click();
 
     const popover = page.getByRole("dialog").last();
     await expect(popover).toBeVisible();

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { api } from "../api/client";
@@ -27,6 +27,7 @@ function renderAppShell(result: Promise<unknown>) {
         <Routes>
           <Route path="/" element={<AppShell />}>
             <Route path="agents" element={<div>Agents page</div>} />
+            <Route path="launches" element={<div>Launches page</div>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -50,6 +51,42 @@ describe("AppShell Langfuse Dashboard link", () => {
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(screen.getByText("Agents page")).toBeInTheDocument();
+  });
+
+  it("traps focus in the mobile navigation and restores it to the opener on Escape", async () => {
+    renderAppShell(success(systemInfo("https://observability.example.com/langfuse/")));
+    const opener = screen.getByRole("button", { name: "打开导航" });
+
+    fireEvent.click(opener);
+    const dialog = screen.getByRole("dialog", { name: "主导航" });
+    const agentsLink = within(dialog).getByRole("link", { name: "Agents" });
+    const dashboardLink = await within(dialog).findByRole("link", { name: /Langfuse Dashboard/ });
+    expect(document.activeElement).toBe(agentsLink);
+
+    const closeButton = within(dialog).getByRole("button", { name: "关闭" });
+    closeButton.focus();
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(dashboardLink);
+    fireEvent.keyDown(dialog, { key: "Tab" });
+    expect(document.activeElement).toBe(closeButton);
+    expect(screen.getByText("Agents page").closest("main")?.parentElement).toHaveAttribute("inert");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "主导航" })).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(opener);
+    expect(screen.getByText("Agents page").closest("main")?.parentElement).not.toHaveAttribute("inert");
+  });
+
+  it("closes the mobile navigation after selecting a route and restores focus", async () => {
+    renderAppShell(success(systemInfo()));
+    const opener = screen.getByRole("button", { name: "打开导航" });
+
+    fireEvent.click(opener);
+    fireEvent.click(within(screen.getByRole("dialog", { name: "主导航" })).getByRole("link", { name: "Launches" }));
+
+    await screen.findByText("Launches page");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "主导航" })).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(opener);
   });
 
   it.each([null, undefined])("does not render a link when the URL is %s", async (url) => {

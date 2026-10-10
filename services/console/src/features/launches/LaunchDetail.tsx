@@ -735,15 +735,6 @@ export const LaunchDetail: React.FC = () => {
         }}
       />
 
-      {/* 3. 运行态与诊断进度面板 (Progress Board) */}
-      <ExecutionProgressPanel
-        status={launch.status}
-        progress={launch.progress}
-        cancelRequestedAt={launch.cancel_requested_at}
-        statusReason={launch.status_reason}
-        isEvaluating={Array.isArray(rawItems) && rawItems.some((i) => (i.evaluation_status || "").toLowerCase() === "evaluating")}
-      />
-
       {/* 3.5 结果快照版本控制面板 (Issue #85) */}
       {launchId && (
         <ResultSnapshotPanel
@@ -897,6 +888,16 @@ export const LaunchDetail: React.FC = () => {
           />
         </div>
       )}
+
+      {/* 5. 运行态与诊断进度面板 (Progress Board) */}
+      {/* 置于 Tab 之后：首屏只保留 Header / KPI / 版本摘要 / Tab，诊断信息不挤占决策入口。 */}
+      <ExecutionProgressPanel
+        status={launch.status}
+        progress={launch.progress}
+        cancelRequestedAt={launch.cancel_requested_at}
+        statusReason={launch.status_reason}
+        isEvaluating={Array.isArray(rawItems) && rawItems.some((i) => (i.evaluation_status || "").toLowerCase() === "evaluating")}
+      />
 
       {/* 6. 模态框：设为 Baseline 二次确认弹窗 */}
       <SetBaselineModal

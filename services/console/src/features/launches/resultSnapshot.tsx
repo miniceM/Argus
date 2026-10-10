@@ -84,9 +84,30 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
     ),
   );
 
+  const historyRefreshError = history.isError && history.data ? (
+    <div
+      role="alert"
+      className="flex w-full flex-wrap items-center justify-between gap-2 rounded-md border border-fail-border bg-fail-subtle px-2 py-1.5 text-micro text-fail"
+      data-testid="snapshot-history-refresh-error"
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <AlertCircle aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+        <span>修订目录刷新失败，仍显示已缓存版本：{formatApiError(history.error)}</span>
+      </div>
+      <Button
+        type="button"
+        variant="secondary"
+        className="h-6 text-2xs px-2"
+        onClick={() => history.refetch()}
+      >
+        重试
+      </Button>
+    </div>
+  ) : null;
+
   if (history.isLoading) {
     return (
-      <section className="bg-surface border border-border rounded-lg px-4 py-2.5 flex items-center justify-between gap-3 text-xs" data-testid="result-snapshot-panel">
+      <section className="bg-surface border border-border rounded-lg px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs" data-testid="result-snapshot-panel">
         <div className="flex items-center gap-2">
           <span className="font-semibold text-foreground">结果报告 (Result Snapshot)</span>
           <span className="text-muted-foreground">正在加载冻结结果版本...</span>
@@ -95,7 +116,7 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
     );
   }
 
-  if (history.isError) {
+  if (history.isError && !history.data) {
     return (
       <section className="bg-surface border border-fail-border rounded-lg px-4 py-2 flex items-center justify-between gap-3 text-xs" data-testid="result-snapshot-panel">
         <div className="flex items-center gap-2 text-fail">
@@ -129,6 +150,7 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
             )}
           </span>
         </div>
+        {historyRefreshError}
       </section>
     );
   }
@@ -242,6 +264,7 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
           )}
         </div>
       )}
+      {historyRefreshError}
     </section>
   );
 };

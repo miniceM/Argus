@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ResultSnapshotPanel, evidenceTone } from "../resultSnapshot";
 import { api } from "../../../api/client";
+import { snapshotListKey } from "../launchSnapshotQueries";
 
 vi.mock("../../../api/client", () => ({ api: { GET: vi.fn(), POST: vi.fn() } }));
 
@@ -46,8 +47,10 @@ const detail = (rev: Rev) => ({
   items: [],
 });
 
-function renderPanel(props: Partial<React.ComponentProps<typeof ResultSnapshotPanel>> = {}) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderPanel(
+  props: Partial<React.ComponentProps<typeof ResultSnapshotPanel>> = {},
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   return render(
     <QueryClientProvider client={client}>
       <ResultSnapshotPanel
@@ -101,6 +104,50 @@ describe("Issue #85 ResultSnapshotPanel", () => {
     expect(link).toHaveTextContent("snapshot_id=snap-1");
     expect(link).not.toHaveTextContent("latest");
     expect(screen.getByTestId("snapshot-evidence-badge")).toHaveTextContent("证据完整");
+  });
+
+  it("keeps cached revisions visible after a background history refresh fails", async () => {
+    const revisions = [
+      revision({ snapshot_id: "snap-2", revision: 2, is_latest: true }),
+      revision({ snapshot_id: "snap-1", revision: 1, is_latest: false }),
+    ];
+    const cachedList = list(revisions);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 0 } } });
+    client.setQueryData(snapshotListKey("launch-85"), cachedList);
+    let failRefresh = true;
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path.endsWith("/result-snapshots")) {
+        return failRefresh
+          ? Promise.resolve({ error: { detail: "history temporarily unavailable" }, response: { status: 503 } })
+          : Promise.resolve({ data: cachedList });
+      }
+      if (path.includes("/result-snapshots/")) {
+        return Promise.resolve({ data: detail(revisions[0]) });
+      }
+      return Promise.resolve({ data: null });
+    });
+
+    renderPanel({ selectedSnapshotId: "snap-1" }, client);
+
+    expect(await screen.findByTestId("snapshot-history-refresh-error")).toBeInTheDocument();
+    expect(screen.getByTestId("snapshot-revision")).toHaveTextContent("Revision 1");
+    expect(screen.getByTestId("snapshot-history")).toBeInTheDocument();
+    expect(screen.getByTestId("snapshot-newer-available")).toHaveTextContent("Revision 2");
+
+    failRefresh = false;
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    await waitFor(() => {
+      expect(screen.queryByTestId("snapshot-history-refresh-error")).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId("snapshot-revision")).toHaveTextContent("Revision 1");
+  });
+
+  it("shows the full error state when the first revision-directory request fails", async () => {
+    (api.GET as any).mockResolvedValue({ error: { detail: "history unavailable" }, response: { status: 503 } });
+    renderPanel();
+
+    expect(await screen.findByText("加载快照版本失败")).toBeInTheDocument();
+    expect(screen.queryByTestId("result-snapshot-empty")).not.toBeInTheDocument();
   });
 
   it("marks an incomplete revision as diagnostic and lists why", async () => {

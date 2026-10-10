@@ -18,6 +18,7 @@ export interface ReportCaseItem {
   final_attempt_latency_ms: number | null;
   final_attempt_http_status: number | null;
   attempt_count: number | null;
+  dispatch_generation: number | null;
   final_attempt_id: string | null;
   is_frozen: boolean;
   output_ref?: any;
@@ -169,6 +170,7 @@ export function projectFrozenCase(row: Record<string, any>): ReportCaseItem {
     final_attempt_latency_ms: latency,
     final_attempt_http_status: typeof row.final_attempt_http_status === "number" ? row.final_attempt_http_status : null,
     attempt_count: attemptCount,
+    dispatch_generation: typeof row.dispatch_generation === "number" ? row.dispatch_generation : null,
     final_attempt_id: row.final_attempt_id ? String(row.final_attempt_id) : null,
     is_frozen: true,
     output_ref: row.output_ref ?? null,

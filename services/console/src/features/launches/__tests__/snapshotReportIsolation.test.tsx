@@ -108,13 +108,13 @@ const renderDetail = (search = "") => {
 };
 
 /** Realistic router: the detail endpoint answers for the revision that was actually asked for. */
-const mockApi = (route: (path: string, options?: any) => any) => {
+const mockApi = (route: (path: string, options?: any) => any, liveItems: unknown[] = []) => {
   (api.GET as any).mockImplementation((path: string, options?: any) => {
     if (path === "/api/v1/experiment-launches/{launch_id}") {
       return Promise.resolve({ data: launch });
     }
     if (path === "/api/v1/experiment-launches/{launch_id}/items") {
-      return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: liveItems });
     }
     return Promise.resolve(route(path, options));
   });
@@ -239,6 +239,18 @@ describe("snapshot report identity isolation (F01)", () => {
     for (const label of screen.getAllByTestId("snapshot-revision")) {
       expect(label).toHaveTextContent("Revision 1");
     }
+  });
+
+  it("renders the frozen dispatch generation instead of a newer live generation", async () => {
+    mockApi(
+      detailRoute(validDetail({ items: [{ ...frozenItem, dispatch_generation: 4 }] })),
+      [{ ...frozenItem, id: "live-item-001", dispatch_generation: 9 }],
+    );
+    renderDetail(`?snapshot_id=${SNAPSHOT_ID}&tab=cases`);
+
+    await settleDetail("success");
+    expect(await screen.findByText("gen #4")).toBeInTheDocument();
+    expect(screen.queryByText("gen #9")).not.toBeInTheDocument();
   });
 
   it("still reads an explicitly requested revision when the revision directory fails", async () => {

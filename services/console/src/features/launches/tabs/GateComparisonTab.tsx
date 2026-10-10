@@ -192,6 +192,7 @@ interface GateComparisonTabProps {
     version?: string;
     direction?: string;
     result_type?: string;
+    scope?: string;
     required?: boolean;
   }>;
   currentFilter?: string;
@@ -409,13 +410,15 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
       const cLat = cohort.candidate.p95_latency_ms;
       const diff = bLat != null ? cLat - bLat : 0;
       const deltaText = bLat != null ? `${diff > 0 ? "+" : ""}${diff} ms` : "—";
-      const latencyRule = qualityPolicyRules.find(
-        (r) =>
-          r.evaluator_id === "latency" ||
-          r.evaluator_id === "p95_latency" ||
-          r.evaluator_id === "p95_latency_ms" ||
-          r.evaluator_id === "duration_ms",
-      );
+      const latencyRule = qualityPolicyRules.find((rule) => {
+        // P95 is a run-level measurement. An item evaluator such as duration_ms may describe
+        // each Case's evaluator output, but it must never be applied to this aggregate.
+        if (rule.evaluator_id !== "p95_latency" && rule.evaluator_id !== "p95_latency_ms") {
+          return false;
+        }
+        const evaluator = manifestEvaluators.find((item) => item.id === rule.evaluator_id);
+        return evaluator?.scope?.toLowerCase() === "run";
+      });
       let latReq = "—";
       if (latencyRule && latencyRule.threshold != null) {
         latReq = `${latencyRule.operator ?? "—"} ${latencyRule.threshold} ms`;

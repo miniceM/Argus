@@ -777,6 +777,55 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     expect(screen.queryByText("< 500 ms")).not.toBeInTheDocument();
   });
 
+  it("REVIEW: an item duration rule cannot verdict run-level P95 latency", async () => {
+    const launch = structuredClone(mockLaunch) as any;
+    launch.manifest.quality_policy.rules = [
+      { evaluator_id: "duration_ms", result_type: "numeric", operator: "<=", threshold: 500, required: true },
+    ];
+    launch.manifest.evaluators = [
+      { id: "duration_ms", version: "1", result_type: "numeric", scope: "item" },
+    ];
+    const c = structuredClone(mockComparison) as any;
+    c.summary.comparable_cohort.baseline.p95_latency_ms = 200;
+    c.summary.comparable_cohort.candidate.p95_latency_ms = 800;
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}": { data: launch },
+      "/api/v1/experiment-launches/{launch_id}/comparison": { data: c },
+    });
+
+    renderComponent();
+
+    const latency = await screen.findByText("P95 响应时延 (Latency)", { selector: "td" });
+    const row = latency.closest("tr")!;
+    expect(within(row).getByText("较基线上升")).toBeInTheDocument();
+    expect(row).not.toHaveTextContent("<= 500 ms");
+    expect(row).not.toHaveTextContent("未达标");
+  });
+
+  it("REVIEW: an explicitly declared run-scope P95 rule may verdict run-level latency", async () => {
+    const launch = structuredClone(mockLaunch) as any;
+    launch.manifest.quality_policy.rules = [
+      { evaluator_id: "p95_latency_ms", result_type: "numeric", operator: "<=", threshold: 500, required: true },
+    ];
+    launch.manifest.evaluators = [
+      { id: "p95_latency_ms", version: "1", result_type: "numeric", scope: "run" },
+    ];
+    const c = structuredClone(mockComparison) as any;
+    c.summary.comparable_cohort.baseline.p95_latency_ms = 600;
+    c.summary.comparable_cohort.candidate.p95_latency_ms = 400;
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}": { data: launch },
+      "/api/v1/experiment-launches/{launch_id}/comparison": { data: c },
+    });
+
+    renderComponent();
+
+    const latency = await screen.findByText("P95 响应时延 (Latency)", { selector: "td" });
+    const row = latency.closest("tr")!;
+    expect(row).toHaveTextContent("<= 500 ms");
+    expect(within(row).getByText("达标")).toBeInTheDocument();
+  });
+
   it("R126: non-cost numeric thresholds and score means retain their units", async () => {
     const launch = structuredClone(mockLaunch) as any;
     launch.manifest.quality_policy.rules=[{evaluator_id:"duration_ms",result_type:"numeric",operator:"<=",threshold:500,required:true}];

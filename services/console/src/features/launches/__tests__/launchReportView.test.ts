@@ -41,6 +41,15 @@ describe("launchReportView pure functions", () => {
     expect(projected.attempt_count).toBe(0);
   });
 
+  it("preserves dispatch_generation from the frozen case row", () => {
+    const projected = projectFrozenCase({
+      dataset_item_id: "item-003",
+      dispatch_generation: 4,
+    });
+
+    expect(projected.dispatch_generation).toBe(4);
+  });
+
   it("validates identity and marks missing items as contract error", () => {
     const invalidLaunch = validateSnapshotDetail(
       { launch_id: "other-launch", snapshot_id: "s1", items: [] },

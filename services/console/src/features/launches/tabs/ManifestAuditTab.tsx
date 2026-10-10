@@ -33,12 +33,15 @@ type SnapshotDetail = import("../../../api/schema").components["schemas"]["Resul
 interface ManifestAuditTabProps {
   launch: LaunchResponse;
   activeSnapshot: SnapshotRevision | null;
+  /** Effective URL/user-selected ID, independent of whether revision history is available. */
+  snapshotId?: string | null;
   onSelectSnapshot?: (snapshotId: string) => void;
 }
 
 export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
   launch,
   activeSnapshot,
+  snapshotId,
   onSelectSnapshot,
 }) => {
   const manifest = (launch.manifest || {}) as any;
@@ -53,16 +56,19 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
   const historyQuery = useQuery<SnapshotList>(snapshotListQueryOptions(launch.id));
 
   const revisions: SnapshotRevision[] = historyQuery.data?.revisions ?? [];
+  const effectiveSnapshotId = snapshotId !== undefined
+    ? snapshotId
+    : activeSnapshot?.snapshot_id ?? null;
   const [showRawJson, setShowRawJson] = useState(false);
   const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
   // The exported JSON belongs to exactly one (launch, snapshot) pair.
-  const copyJson = useCopyFeedback(2000, `${launch.id}:${activeSnapshot?.snapshot_id ?? "none"}`);
+  const copyJson = useCopyFeedback(2000, `${launch.id}:${effectiveSnapshotId ?? "none"}`);
 
-  // Fetch complete snapshot detail for JSON export
+  // The URL's fixed ID is authoritative even if the revision directory is unavailable.
   const detailQuery = useQuery<SnapshotDetail>(
     snapshotDetailQueryOptions(
-      launch.id && activeSnapshot?.snapshot_id
-        ? { launchId: launch.id, snapshotId: activeSnapshot.snapshot_id }
+      launch.id && effectiveSnapshotId
+        ? { launchId: launch.id, snapshotId: effectiveSnapshotId }
         : null,
     ),
   );
@@ -74,14 +80,14 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
   };
   // Download JSON
   const handleDownloadJson = () => {
-    if (!detailQuery.data || !activeSnapshot) return;
+    if (!detailQuery.data || !effectiveSnapshotId) return;
     const payload = detailQuery.data;
     const jsonStr = JSON.stringify(payload, null, 2);
     const blob = new Blob([jsonStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `snapshot-${launch.id}-${activeSnapshot.snapshot_id}.json`;
+    a.download = `snapshot-${launch.id}-${effectiveSnapshotId}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -91,10 +97,10 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
     setTimeout(() => setDownloadNotice(null), 3000);
   };
 
-  const isExportDisabled = Boolean(!activeSnapshot || detailQuery.isLoading || detailQuery.error || !detailQuery.data);
+  const isExportDisabled = Boolean(!effectiveSnapshotId || detailQuery.isLoading || detailQuery.error || !detailQuery.data);
 
-  const shareUrl = activeSnapshot
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/launches/${launch.id}?snapshot_id=${activeSnapshot.snapshot_id}`
+  const shareUrl = effectiveSnapshotId
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/launches/${launch.id}?snapshot_id=${effectiveSnapshotId}`
     : "";
 
   return (
@@ -393,7 +399,7 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
             )}
             <ul className="space-y-1.5">
               {frozenPolicyRules.map((rule: any) => {
-                const expression = rule.operator === ">=" || rule.operator === "<="
+                const expression = [">=", "<=", ">", "<"].includes(rule.operator)
                   ? `${rule.operator} ${rule.threshold ?? "—"}`
                   : rule.operator === "=="
                     ? `== ${rule.expected_value === null || rule.expected_value === undefined ? "—" : String(rule.expected_value)}`
@@ -430,25 +436,35 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
           {activeSnapshot && <SnapshotEvidenceBadge state={activeSnapshot.evidence_state} />}
         </div>
 
-        {activeSnapshot && (
+        {effectiveSnapshotId && (
           <div className="space-y-2 text-xs">
             <div className="flex items-baseline gap-2 flex-wrap">
               <span className="text-muted-foreground">当前查看版本:</span>
-              <strong className="text-foreground" data-testid="snapshot-revision">
-                Revision {activeSnapshot.revision}
-              </strong>
-              {activeSnapshot.is_latest && (
-                <span className="text-micro text-pass font-semibold" data-testid="snapshot-latest-tag">
-                  (最新)
+              {activeSnapshot ? (
+                <>
+                  <strong className="text-foreground" data-testid="snapshot-revision">
+                    Revision {activeSnapshot.revision}
+                  </strong>
+                  {activeSnapshot.is_latest && (
+                    <span className="text-micro text-pass font-semibold" data-testid="snapshot-latest-tag">
+                      (最新)
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="text-muted-foreground" data-testid="snapshot-revision-unavailable">
+                  修订目录暂不可用，按固定 Snapshot ID 加载
                 </span>
               )}
             </div>
             <p className="text-micro text-muted-foreground font-mono" data-testid="snapshot-id">
-              Snapshot ID: {activeSnapshot.snapshot_id}
+              Snapshot ID: {effectiveSnapshotId}
             </p>
-            <p className="text-micro text-muted-foreground" data-testid="snapshot-quality-counts">
-              PASS {activeSnapshot.quality_pass_count} · FAIL {activeSnapshot.quality_fail_count} · UNKNOWN {activeSnapshot.quality_unknown_count}
-            </p>
+            {activeSnapshot && (
+              <p className="text-micro text-muted-foreground" data-testid="snapshot-quality-counts">
+                PASS {activeSnapshot.quality_pass_count} · FAIL {activeSnapshot.quality_fail_count} · UNKNOWN {activeSnapshot.quality_unknown_count}
+              </p>
+            )}
             <p className="text-micro text-muted-foreground font-mono break-all" data-testid="snapshot-share-url">
               固定分享链接: {shareUrl}
             </p>

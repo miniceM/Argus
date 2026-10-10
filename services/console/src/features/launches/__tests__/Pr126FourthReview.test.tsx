@@ -741,8 +741,9 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     const metric = await screen.findByText("call_cost", { selector: "td" });
     const row = metric.closest("tr")!;
     expect(row).toHaveTextContent("<= 0.2");
-    expect(within(row).getByText("未达标")).toBeInTheDocument();
-    expect(within(row).queryByText("提升")).not.toBeInTheDocument();
+    expect(within(row).getByText("聚合均值仅作趋势")).toBeInTheDocument();
+    expect(within(row).queryByText("未达标")).not.toBeInTheDocument();
+    expect(within(row).queryByText("达标")).not.toBeInTheDocument();
     const overallMetric = screen.getByText("综合质量通过率 (Overall Pass)", { selector: "td" });
     expect(within(overallMetric.closest("tr")!).getByText("未达标")).toBeInTheDocument();
   });
@@ -779,6 +780,53 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     expect(costRow).toHaveTextContent("<= 0.2");
     expect(within(costRow).getByText("证据不足")).toBeInTheDocument();
     expect(within(costRow).queryByText("较基线下降")).not.toBeInTheDocument();
+  });
+
+  it("REVIEW: evaluator rules are not applied to aggregate score means", async () => {
+    const launch = structuredClone(mockLaunch) as any;
+    launch.manifest.quality_policy.rules = [
+      { evaluator_id: "correctness", result_type: "numeric", operator: ">=", threshold: 0.8, required: true },
+    ];
+    launch.manifest.evaluators = [
+      { id: "correctness", version: "1", result_type: "numeric", direction: "higher_is_better" },
+    ];
+    const comparison = structuredClone(mockComparison) as any;
+    comparison.summary.comparable_cohort.baseline.score_means = { correctness: 0.7 };
+    comparison.summary.comparable_cohort.candidate.score_means = { correctness: 0.85 };
+    comparison.items = [
+      { dataset_item_id: "case-pass", classification: "IMPROVEMENT", candidate_scores: { correctness: 1.0 } },
+      { dataset_item_id: "case-fail", classification: "REGRESSION", candidate_scores: { correctness: 0.7 } },
+    ];
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}": { data: launch },
+      "/api/v1/experiment-launches/{launch_id}/comparison": { data: comparison },
+    });
+
+    renderComponent();
+
+    const metric = await screen.findByText("correctness", { selector: "td" });
+    const row = metric.closest("tr")!;
+    expect(row).toHaveTextContent(">= 0.8");
+    expect(within(row).getByText("聚合均值仅作趋势")).toBeInTheDocument();
+    expect(within(row).queryByText("达标")).not.toBeInTheDocument();
+    expect(within(row).queryByText("未达标")).not.toBeInTheDocument();
+    expect(screen.getByText(/score_means 仅为可比 Case 的聚合趋势/)).toBeInTheDocument();
+  });
+
+  it("REVIEW: frozen policy renders all strict and inclusive numeric operators", () => {
+    const launch = structuredClone(mockLaunch) as any;
+    launch.manifest.quality_policy.rules = [
+      { evaluator_id: "latency_ms", result_type: "numeric", operator: "<", threshold: 100, required: true },
+      { evaluator_id: "score", result_type: "numeric", operator: ">", threshold: 0.8, required: true },
+    ];
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ManifestAuditTab launch={launch} activeSnapshot={null} />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText("latency_ms", { selector: "span" }).closest("li")).toHaveTextContent("< 100");
+    expect(screen.getByText("score", { selector: "span" }).closest("li")).toHaveTextContent("> 0.8");
   });
 
   it("REVIEW: required and critical policy flags remain independent", async () => {
@@ -890,7 +938,10 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
       error:{detail:"Snapshot WRONG not found"},response:{status:404}}});
     renderComponent(`/launches/${mockLaunch.id}?snapshot_id=WRONG&tab=audit`);
     await screen.findByRole("button",{name:"下载原始 JSON"});
-    expect((api.GET as any).mock.calls.filter((call:any[])=>call[0].includes("/result-snapshots/"))).toHaveLength(0);
+    const detailCalls = (api.GET as any).mock.calls.filter((call: any[]) =>
+      call[0] === "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}",
+    );
+    expect(detailCalls).toHaveLength(0);
   });
 
   it("R126: clipboard must not report success before its promise resolves", async () => {
@@ -1215,5 +1266,70 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     view.rerender(ui("S2"));await waitFor(()=>expect(queryClient.getQueryState([...queryKeys.launches.all,"result-snapshot",mockLaunch.id,"S2"])?.status).toBe("success"));
     await act(async()=>{finish();});
     expect(screen.queryByRole("button",{name:"已复制 JSON"})).not.toBeInTheDocument();
+  });
+
+
+  it("REVIEW: loads, copies, and downloads an explicit snapshot when history is unavailable", async () => {
+    const snapshotId = "pinned-without-history";
+    const detail = {
+      launch_id: mockLaunch.id,
+      snapshot_id: snapshotId,
+      manifest: mockLaunch.manifest,
+      summary: mockSummary.summary,
+      items: [realFrozenItem],
+    };
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}/result-snapshots": {
+        error: { detail: "snapshot history unavailable" },
+        response: { status: 503 },
+      },
+      "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}": { data: detail },
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    const createUrlDescriptor = Object.getOwnPropertyDescriptor(URL, "createObjectURL");
+    const revokeUrlDescriptor = Object.getOwnPropertyDescriptor(URL, "revokeObjectURL");
+    const createObjectURL = vi.fn(() => "blob:pinned-snapshot");
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: revokeObjectURL });
+    let downloadedName = "";
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      downloadedName = this.download;
+    });
+
+    try {
+      renderComponent(`/launches/${mockLaunch.id}?snapshot_id=${snapshotId}&tab=audit`);
+      fireEvent.click(await screen.findByRole("tab", { name: /不可变快照与审计/ }));
+      const auditPanel = await screen.findByRole("tabpanel", { name: /不可变快照与审计/ });
+      const copy = await within(auditPanel).findByRole("button", { name: "复制 JSON" });
+      await waitFor(() => expect(copy).toBeEnabled());
+      fireEvent.click(copy);
+      await screen.findByRole("button", { name: "已复制 JSON" });
+      expect(writeText).toHaveBeenCalledWith(JSON.stringify(detail, null, 2));
+
+      fireEvent.click(within(auditPanel).getByRole("button", { name: "下载原始 JSON" }));
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(anchorClick).toHaveBeenCalledTimes(1);
+      expect(downloadedName).toBe(`snapshot-${mockLaunch.id}-${snapshotId}.json`);
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:pinned-snapshot");
+
+      fireEvent.click(within(auditPanel).getByRole("button", { name: "查看完整 Manifest JSON" }));
+      expect(await within(auditPanel).findByText("Immutable Manifest JSON")).toBeInTheDocument();
+      expect(within(auditPanel).getByTestId("snapshot-id")).toHaveTextContent(snapshotId);
+      expect(within(auditPanel).queryByTestId("snapshot-detail-error")).not.toBeInTheDocument();
+    } finally {
+      anchorClick.mockRestore();
+      if (createUrlDescriptor) Object.defineProperty(URL, "createObjectURL", createUrlDescriptor);
+      else delete (URL as any).createObjectURL;
+      if (revokeUrlDescriptor) Object.defineProperty(URL, "revokeObjectURL", revokeUrlDescriptor);
+      else delete (URL as any).revokeObjectURL;
+      if (clipboardDescriptor) Object.defineProperty(navigator, "clipboard", clipboardDescriptor);
+      else delete (navigator as any).clipboard;
+    }
   });
 });

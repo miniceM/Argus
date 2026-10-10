@@ -38,6 +38,38 @@ function renderAppShell(result: Promise<unknown>) {
 
 const success = (data: unknown) => Promise.resolve({ data } as never);
 
+function installDesktopMediaQuery(initialMatches = false) {
+  let matches = initialMatches;
+  const listeners = new Set<(event: MediaQueryListEvent) => void>();
+  const mediaQuery = {
+    media: "(min-width: 64rem)",
+    get matches() { return matches; },
+    onchange: null,
+    addEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => listeners.add(listener),
+    removeEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => listeners.delete(listener),
+    addListener: (listener: (event: MediaQueryListEvent) => void) => listeners.add(listener),
+    removeListener: (listener: (event: MediaQueryListEvent) => void) => listeners.delete(listener),
+    dispatchEvent: () => true,
+  } as unknown as MediaQueryList;
+  const original = Object.getOwnPropertyDescriptor(window, "matchMedia");
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: vi.fn(() => mediaQuery),
+  });
+  return {
+    mediaQuery,
+    setMatches(next: boolean) {
+      matches = next;
+      const event = { matches, media: mediaQuery.media } as MediaQueryListEvent;
+      listeners.forEach((listener) => listener(event));
+    },
+    restore() {
+      if (original) Object.defineProperty(window, "matchMedia", original);
+      else delete (window as any).matchMedia;
+    },
+  };
+}
+
 describe("AppShell Langfuse Dashboard link", () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => cleanup());
@@ -75,6 +107,24 @@ describe("AppShell Langfuse Dashboard link", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "主导航" })).not.toBeInTheDocument());
     expect(document.activeElement).toBe(opener);
     expect(screen.getByText("Agents page").closest("main")?.parentElement).not.toHaveAttribute("inert");
+  });
+
+  it("closes the mobile drawer and releases page inertness when crossing into desktop", async () => {
+    const viewport = installDesktopMediaQuery(false);
+    try {
+      renderAppShell(success(systemInfo()));
+      const opener = screen.getByRole("button", { name: "打开导航" });
+      fireEvent.click(opener);
+      expect(screen.getByRole("dialog", { name: "主导航" })).toBeInTheDocument();
+      expect(screen.getByText("Agents page").closest("main")?.parentElement).toHaveAttribute("inert");
+
+      viewport.setMatches(true);
+
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "主导航" })).not.toBeInTheDocument());
+      expect(screen.getByText("Agents page").closest("main")?.parentElement).not.toHaveAttribute("inert");
+    } finally {
+      viewport.restore();
+    }
   });
 
   it("closes the mobile navigation after selecting a route and restores focus", async () => {

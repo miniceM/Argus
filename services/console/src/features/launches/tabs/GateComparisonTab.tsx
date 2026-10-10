@@ -380,10 +380,14 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
 
       const req = rulesMap.get(evalId) || "—";
 
-      const policyStatus = evaluateMetricRule(cScore, rule);
+      // Evaluator rules are applied to individual Cases. score_means is a run-level
+      // aggregate, so applying a per-Case threshold to it can hide failing Cases.
+      // Keep this row diagnostic-only; the formal verdict comes from per-Case evidence.
       const metricEval = rule
-        ? policyStatus ?? {
-            statusLabel: rule.operator ? "证据不足" : "仅记录证据",
+        ? {
+            statusLabel: cScore == null || !Number.isFinite(cScore)
+              ? "证据不足"
+              : rule.operator ? "聚合均值仅作趋势" : "仅记录证据",
             statusTone: "neutral" as const,
           }
         : evaluateMetricChange(bScore, cScore, metricDir);
@@ -659,6 +663,9 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
         </div>
 
         {/* 核心回归指标表 */}
+        <p className="text-micro text-muted-foreground" data-testid="aggregate-metric-policy-note">
+          Evaluator 质量门槛按逐用例结果判定；score_means 仅为可比 Case 的聚合趋势，不以均值宣告门槛达标。
+        </p>
         <div className="overflow-x-auto text-xs">
           <table className="w-full text-left border-collapse">
             <thead>

@@ -120,6 +120,17 @@ export const AppShell: React.FC = () => {
     closeNav();
   }, [location.pathname, closeNav]);
 
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const desktopViewport = window.matchMedia("(min-width: 64rem)");
+    const closeDrawerOnDesktop = (event: MediaQueryListEvent) => {
+      if (event.matches) closeNav();
+    };
+    if (desktopViewport.matches) closeNav();
+    desktopViewport.addEventListener("change", closeDrawerOnDesktop);
+    return () => desktopViewport.removeEventListener("change", closeDrawerOnDesktop);
+  }, [closeNav]);
+
   return (
     <div className="flex h-screen min-h-0 overflow-hidden bg-canvas text-foreground">
       {/* Wide viewports: the fixed sidebar keeps its current layout. */}

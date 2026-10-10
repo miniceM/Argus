@@ -910,6 +910,7 @@ export const LaunchDetail: React.FC = () => {
           <ManifestAuditTab
             launch={launch}
             activeSnapshot={activeSnapshot}
+            snapshotId={isSnapshotNotFound ? null : effectiveSnapshotId}
             onSelectSnapshot={selectSnapshot}
           />
         </div>

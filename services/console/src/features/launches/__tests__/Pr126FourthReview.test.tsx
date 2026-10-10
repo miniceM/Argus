@@ -391,8 +391,8 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
 
     // Metrics table checks
     expect(screen.getAllByText("pii_safe").length).toBeGreaterThanOrEqual(1);
-    // Delta should reflect percentage points change
-    expect(screen.getByText("+33.3 pp")).toBeInTheDocument();
+    // With no frozen result_type, display the metric and its delta in raw units.
+    expect(screen.getByText("+0.333")).toBeInTheDocument();
 
     // Summary cards exist based on real data
     expect(screen.getByTestId("capabilities-delta-summary")).toBeInTheDocument();
@@ -693,6 +693,9 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     expect(row).toHaveTextContent(">= 0.8");
     expect(row).toHaveTextContent("类型未声明");
     expect(row).not.toHaveTextContent("80.0%");
+    expect(row).not.toHaveTextContent("90.0%");
+    expect(within(row).getAllByRole("cell")[2]).toHaveTextContent("0.7");
+    expect(within(row).getAllByRole("cell")[3]).toHaveTextContent("0.9");
   });
 
   it("REVIEW: snapshot read failure must not download Manifest as selected result JSON", async () => {

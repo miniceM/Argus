@@ -388,8 +388,8 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
 
     // Metrics table checks
     expect(screen.getAllByText("pii_safe").length).toBeGreaterThanOrEqual(1);
-    // Delta should reflect percentage points change
-    expect(screen.getByText("+33.3 pp")).toBeInTheDocument();
+    // Undeclared result types keep the metric and delta in raw units.
+    expect(screen.getByText("+0.333")).toBeInTheDocument();
 
     // Summary cards exist based on real data
     expect(screen.getByTestId("capabilities-delta-summary")).toBeInTheDocument();

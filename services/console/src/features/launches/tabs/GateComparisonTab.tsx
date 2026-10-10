@@ -357,12 +357,15 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
       const rule = qualityPolicyRules.find((r) => r.evaluator_id === evalId);
       const metricDir = resolveMetricDirection(evalMeta, rule);
       const isNumeric = metricDir.isNumeric;
+      const hasDeclaredResultType = Boolean(rule?.result_type ?? evalMeta?.result_type);
 
       let baselineText = "—";
       let candidateText = "—";
       let deltaText = "—";
 
-      if (isNumeric) {
+      // A legacy score mean with no frozen result type has no declared unit.
+      // Keep its raw value instead of guessing that a 0.8 means 80 percent.
+      if (isNumeric || !hasDeclaredResultType) {
         baselineText = bScore != null ? String(bScore) : "—";
         candidateText = cScore != null ? String(cScore) : "—";
         if (bScore != null && cScore != null) {

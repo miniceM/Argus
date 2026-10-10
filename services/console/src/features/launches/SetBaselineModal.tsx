@@ -1,5 +1,5 @@
-import React, { useReducer, useEffect, useRef } from "react";
-import { useMutation, useQueryClient, useIsFetching } from "@tanstack/react-query";
+import React, { useReducer, useEffect, useRef, useCallback } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { api } from "../../api/client";
 import { queryKeys } from "../../api/query-keys";
@@ -14,6 +14,7 @@ import {
 
 type SnapshotRevision = import("../../api/schema").components["schemas"]["ResultSnapshotRevisionResponse"];
 type Baseline = import("../../api/schema").components["schemas"]["BaselineResponse"];
+type BaselineResponseData = import("../../api/schema").components["schemas"]["BaselineResponse"];
 
 interface SetBaselineModalProps {
   open: boolean;
@@ -25,6 +26,23 @@ interface SetBaselineModalProps {
   onSuccess?: () => void;
 }
 
+interface BaselineSession {
+  epoch: number;
+  agentId: string;
+  environment: string;
+  snapshotId: string;
+}
+
+const CONFLICT_MESSAGE =
+  "Baseline 绑定版本发生并发冲突 (HTTP 409)，请重新确认最新状态后再试。";
+
+/**
+ * One dialog session = one (open, agent, environment, target snapshot) combination.
+ *
+ * The epoch is bumped during render whenever that combination changes, so every request,
+ * callback and cache write started for a previous session becomes stale immediately —
+ * including the moment the dialog closes, before it is ever reopened.
+ */
 export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
   open,
   onClose,
@@ -37,19 +55,34 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
   const queryClient = useQueryClient();
   const [dialogState, dispatch] = useReducer(baselineDialogReducer, initialBaselineDialogState);
 
-  const isBaselineFetching = useIsFetching({
-    queryKey: queryKeys.baselines.detail(agentId, environment),
-  }) > 0;
+  const targetSnapshotId = activeSnapshot?.snapshot_id ?? "";
 
-  const prevBaselineRev = useRef(activeBaseline?.revision);
-  useEffect(() => {
-    if (activeBaseline?.revision !== prevBaselineRev.current) {
-      prevBaselineRev.current = activeBaseline?.revision;
-      if (dialogState.stage === "refreshing") {
-        dispatch({ type: "REFRESH_SUCCESS", newRevision: activeBaseline?.revision ?? 0 });
-      }
-    }
-  }, [activeBaseline?.revision, dialogState.stage]);
+  // Every fresh GET carries a sequence; a late response for an older request is dropped
+  // even inside the same session.
+  const seqRef = useRef(0);
+  const refreshInFlightRef = useRef(false);
+  const submitInFlightRef = useRef(false);
+
+  const sessionRef = useRef<BaselineSession>({
+    epoch: 0,
+    agentId,
+    environment,
+    snapshotId: targetSnapshotId,
+  });
+  const sessionKey = `${open}|${agentId}|${environment}|${targetSnapshotId}`;
+  const lastSessionKeyRef = useRef(sessionKey);
+  if (lastSessionKeyRef.current !== sessionKey) {
+    lastSessionKeyRef.current = sessionKey;
+    sessionRef.current = {
+      epoch: sessionRef.current.epoch + 1,
+      agentId,
+      environment,
+      snapshotId: targetSnapshotId,
+    };
+    // The new session owns refreshing from here on: the old in-flight request is stale
+    // bookkeeping, not a lock, and must not block this session's single fresh GET.
+    refreshInFlightRef.current = false;
+  }
 
   useEffect(() => {
     if (!open) {
@@ -57,52 +90,123 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
     }
   }, [open]);
 
-  const handleRefreshBaseline = async () => {
+  const staleSession = useCallback(
+    (session: BaselineSession, seq: number) =>
+      session.epoch !== sessionRef.current.epoch || seq !== seqRef.current,
+    [],
+  );
+
+  const invalidateBaselineKey = useCallback(
+    (session: BaselineSession) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.baselines.detail(session.agentId, session.environment),
+      });
+    },
+    [queryClient],
+  );
+
+  /**
+   * The single recovery path after a 409 (and the retry button): one fresh GET for the
+   * session's own agent/environment, verified before anything is cached or dispatched.
+   */
+  const handleRefreshBaseline = useCallback(async (): Promise<void> => {
+    refreshInFlightRef.current = true;
+    const session = sessionRef.current;
+    const seq = ++seqRef.current;
     try {
       const res = await api.GET("/api/v1/agents/{agent_id}/baselines", {
         params: {
-          path: { agent_id: agentId },
-          query: { environment },
+          path: { agent_id: session.agentId },
+          query: { environment: session.environment },
         },
       });
+      if (staleSession(session, seq)) return;
+
       if (res.error) {
-        dispatch({ type: "REFRESH_FAILURE", error: formatApiError(res.error) });
-      } else {
-        if (res.data && (!("environment" in (res.data as any)) || (res.data as any).environment === environment)) {
-          queryClient.setQueryData(queryKeys.baselines.detail(agentId, environment), res.data);
-          dispatch({ type: "REFRESH_SUCCESS", newRevision: (res.data as any).revision ?? 0 });
-        } else {
-          dispatch({ type: "REFRESH_FAILURE", error: "返回的 Baseline 环境与目标环境不一致" });
+        const status = res.response?.status;
+        if (status === 404) {
+          // The endpoint answers 404 only for a valid agent/environment without a
+          // binding, so this is "no binding" — never a refresh failure and never a 403.
+          queryClient.setQueryData(
+            queryKeys.baselines.detail(session.agentId, session.environment),
+            null,
+          );
+          dispatch({ type: "REFRESH_SUCCESS", newRevision: 0, snapshotId: null });
+          return;
         }
+        dispatch({
+          type: "REFRESH_FAILURE",
+          error:
+            status === 403
+              ? "无权访问该 Agent 的 Baseline（HTTP 403）"
+              : formatApiError(res.error),
+        });
+        invalidateBaselineKey(session);
+        return;
       }
-    } catch (err: any) {
+
+      const data = res.data as BaselineResponseData | undefined;
+      const identityMatches =
+        !!data &&
+        typeof data === "object" &&
+        typeof data.environment === "string" &&
+        data.environment === session.environment &&
+        (data.agent_id == null || data.agent_id === session.agentId) &&
+        Number.isInteger(data.revision) &&
+        data.revision >= 0 &&
+        (data.revision === 0 ||
+          (typeof data.result_snapshot_id === "string" && data.result_snapshot_id.length > 0));
+      if (!identityMatches) {
+        // A response for another agent/environment must never reach the shared cache.
+        dispatch({
+          type: "REFRESH_FAILURE",
+          error: "返回的 Baseline 与当前会话（Agent / 环境）不一致",
+        });
+        invalidateBaselineKey(session);
+        return;
+      }
+
+      queryClient.setQueryData(
+        queryKeys.baselines.detail(session.agentId, session.environment),
+        data,
+      );
+      dispatch({
+        type: "REFRESH_SUCCESS",
+        newRevision: data.revision,
+        snapshotId: data.result_snapshot_id ?? null,
+      });
+    } catch (err) {
+      if (staleSession(session, seq)) return;
       dispatch({ type: "REFRESH_FAILURE", error: formatApiError(err) });
+      invalidateBaselineKey(session);
+    } finally {
+      if (!staleSession(session, seq)) {
+        refreshInFlightRef.current = false;
+      }
     }
-  };
+  }, [queryClient, staleSession]);
 
   const setBaselineMutation = useMutation({
-    mutationFn: async () => {
-      if (!activeSnapshot || !agentId) {
+    mutationFn: async (variables: { expectedRevision: number; epoch: number }) => {
+      const session = sessionRef.current;
+      if (!activeSnapshot || !session.agentId) {
         throw new Error("快照或 Agent ID 不存在");
       }
-      dispatch({ type: "SUBMIT_START" });
+      // POST the binding the dialog currently displays, from the session that owns it.
       const res = await api.POST("/api/v1/agents/{agent_id}/baselines", {
-        params: { path: { agent_id: agentId } },
+        params: { path: { agent_id: session.agentId } },
         body: {
-          environment,
-          result_snapshot_id: activeSnapshot.snapshot_id,
-          expected_revision: activeBaseline?.revision ?? 0,
+          environment: session.environment,
+          result_snapshot_id: session.snapshotId,
+          expected_revision: variables.expectedRevision,
         },
       });
 
       if (res.error) {
         if (res.response?.status === 409) {
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.baselines.detail(agentId, environment),
-          });
-          dispatch({ type: "CONFLICT_409", currentRevision: activeBaseline?.revision });
+          dispatch({ type: "CONFLICT_409", currentRevision: variables.expectedRevision });
           void handleRefreshBaseline();
-          const cErr: any = new Error("Baseline 绑定版本发生并发冲突 (HTTP 409)，请重新确认最新状态后再试。");
+          const cErr: any = new Error(CONFLICT_MESSAGE);
           cErr.isConflict = true;
           throw cErr;
         }
@@ -110,31 +214,60 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
       }
       return res.data;
     },
-    onSuccess: () => {
+    onMutate: () => {
+      dispatch({ type: "SUBMIT_START" });
+    },
+    onSuccess: (_data, variables) => {
+      const session = sessionRef.current;
+      if (variables.epoch !== session.epoch) return; // superseded session
       queryClient.invalidateQueries({
-        queryKey: queryKeys.baselines.detail(agentId, environment),
+        queryKey: queryKeys.baselines.detail(session.agentId, session.environment),
       });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.launches.all,
-      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.launches.all });
       onSuccess?.();
       onClose();
     },
-    onError: (err: any) => {
-      if (err?.isConflict || err?.status === 409 || err?.response?.status === 409) {
-        // Already handled with CONFLICT_409 in mutationFn
-      } else {
-        dispatch({ type: "SUBMIT_FAILURE", error: formatApiError(err) });
+    onError: (err: any, variables) => {
+      if (variables?.epoch !== sessionRef.current.epoch) return; // superseded session
+      if (err?.isConflict) {
+        // Already handled with CONFLICT_409 inside mutationFn.
+        return;
       }
+      dispatch({ type: "SUBMIT_FAILURE", error: formatApiError(err) });
     },
   });
 
+  const handleConfirm = () => {
+    // Synchronous re-entry guard: two clicks inside one React batch must not POST twice.
+    if (submitInFlightRef.current || setBaselineMutation.isPending) return;
+    submitInFlightRef.current = true;
+    const expectedRevision = dialogState.displayedRevision ?? activeBaseline?.revision ?? 0;
+    setBaselineMutation.mutate(
+      { expectedRevision, epoch: sessionRef.current.epoch },
+      { onSettled: () => { submitInFlightRef.current = false; } },
+    );
+  };
+
+  const handleRetryRefresh = () => {
+    if (refreshInFlightRef.current) return;
+    dispatch({ type: "REFRESH_RETRY" });
+    void handleRefreshBaseline();
+  };
+
   if (!open) return null;
+
+  const displayedRevision =
+    dialogState.displayedRevision ?? activeBaseline?.revision ?? null;
+  const displayedSnapshotId =
+    dialogState.displayedRevision != null
+      ? dialogState.displayedSnapshotId
+      : (activeBaseline?.result_snapshot_id ?? null);
+  const hasDisplayedBinding = displayedSnapshotId != null;
 
   const confirmDisabled = isConfirmDisabled(
     dialogState.stage,
     Boolean(activeSnapshot),
-    isBaselineFetching || setBaselineMutation.isPending,
+    setBaselineMutation.isPending,
   );
 
   return (
@@ -160,7 +293,7 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
             variant="primary"
             className="text-xs font-semibold"
             disabled={confirmDisabled}
-            onClick={() => setBaselineMutation.mutate()}
+            onClick={handleConfirm}
           >
             {dialogState.stage === "submitting" || setBaselineMutation.isPending
               ? "正在固化绑定..."
@@ -189,8 +322,8 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">当前绑定的 Baseline:</span>
             <span className="font-mono text-muted-foreground">
-              {activeBaseline
-                ? `Revision ${activeBaseline.revision} (Snapshot: ${activeBaseline.result_snapshot_id?.slice(0, 8)}…)`
+              {hasDisplayedBinding && displayedRevision != null
+                ? `Revision ${displayedRevision} (Snapshot: ${displayedSnapshotId.slice(0, 8)}…)`
                 : "尚未绑定任何 Baseline"}
             </span>
           </div>
@@ -218,6 +351,11 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
                   正在刷新最新状态...
                 </p>
               )}
+              {dialogState.stage === "ready_for_reconfirmation" && displayedRevision != null && (
+                <p className="text-2xs text-muted-foreground mt-1">
+                  已刷新到 Revision {displayedRevision}，请二次确认后重新提交。
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -241,7 +379,7 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
               type="button"
               variant="secondary"
               className="h-6 text-2xs px-2 self-start"
-              onClick={handleRefreshBaseline}
+              onClick={handleRetryRefresh}
             >
               重试获取最新状态
             </Button>

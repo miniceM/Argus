@@ -524,8 +524,29 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   });
 
   it("REVIEW: baseline conflict refreshes binding before renewed confirmation", async () => {
+    // F03 migration: the 409 recovery is a single fresh GET whose verified result lands
+    // in the shared cache and in the dialog display. The old assertion observed the
+    // invalidate + manual GET double path, which is exactly the defect this unit removes.
     (api.POST as any).mockResolvedValue({ error: { detail: "conflict" }, response: { status: 409 } });
-    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    (api.GET as any).mockImplementation((path: string) =>
+      path === "/api/v1/agents/{agent_id}/baselines"
+        ? Promise.resolve({
+            data: {
+              agent_id: "banking-agent",
+              environment: "production",
+              revision: 5,
+              result_snapshot_id: "base-snap-005",
+              updated_by: "tester",
+              updated_at: "2026-10-08T16:08:13Z",
+              launch_id: "ff04d66b-3d00-4d67-8cf4-d36772fff708",
+              agent_version: "v2",
+              dataset_name: "banking-agent-regression",
+              dataset_version: "2026-10-08T16:08:13Z",
+              summary: {},
+            },
+          })
+        : Promise.resolve({ data: {} }),
+    );
     render(<QueryClientProvider client={queryClient}>
       <SetBaselineModal open onClose={() => {}} agentId="banking-agent" environment="production"
         activeSnapshot={mockSnapshotList.revisions[0] as any}
@@ -533,7 +554,17 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     </QueryClientProvider>);
     fireEvent.click(screen.getByRole("button", { name: "确认设为 Baseline" }));
     await screen.findByText(/HTTP 409/);
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.baselines.detail("banking-agent", "production") });
+    await waitFor(() =>
+      expect(screen.getByText(/Revision 5 \(Snapshot: base-sna/)).toBeInTheDocument(),
+    );
+    const baselineGets = (api.GET as any).mock.calls.filter(
+      (c: any[]) => c[0] === "/api/v1/agents/{agent_id}/baselines",
+    );
+    expect(baselineGets).toHaveLength(1);
+    expect(baselineGets[0][1].params.query).toEqual({ environment: "production" });
+    expect(
+      queryClient.getQueryData<any>(queryKeys.baselines.detail("banking-agent", "production"))?.revision,
+    ).toBe(5);
   });
 
   it("REVIEW: progress board collapses on RUNNING to COMPLETED without remount", () => {

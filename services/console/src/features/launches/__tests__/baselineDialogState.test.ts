@@ -22,9 +22,12 @@ describe("baselineDialogReducer state machine", () => {
     expect(isConfirmDisabled(state.stage, true, false)).toBe(true);
 
     // 3. Fresh GET succeeds with revision 5
-    state = baselineDialogReducer(state, { type: "REFRESH_SUCCESS", newRevision: 5 });
+    state = baselineDialogReducer(state, { type: "REFRESH_SUCCESS", newRevision: 5, snapshotId: "base-snap-005" });
     expect(state.stage).toBe("ready_for_reconfirmation");
     expect(state.conflictRevision).toBe(5);
+    // The dialog now shows (and will POST with) the refreshed binding.
+    expect(state.displayedRevision).toBe(5);
+    expect(state.displayedSnapshotId).toBe("base-snap-005");
     expect(isConfirmDisabled(state.stage, true, false)).toBe(false);
   });
 

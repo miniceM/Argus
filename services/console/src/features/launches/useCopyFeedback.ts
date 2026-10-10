@@ -11,9 +11,21 @@ export interface UseCopyFeedbackResult {
   reset: () => void;
 }
 
-export function useCopyFeedback(durationMs = 2000): UseCopyFeedbackResult {
+/**
+ * Clipboard feedback scoped to a report identity.
+ *
+ * `identity` is the (launch, snapshot) combination the copied content belongs to. When it
+ * changes, any in-flight attempt and its feedback timer are invalidated, so a late
+ * success/failure from the previous identity can never be displayed as the current one —
+ * and content produced for a superseded identity is never written to the clipboard at all.
+ */
+export function useCopyFeedback(
+  durationMs = 2000,
+  identity?: string | null,
+): UseCopyFeedbackResult {
   const [status, setStatus] = useState<CopyFeedbackStatus>("idle");
   const tokenRef = useRef(0);
+  const identityRef = useRef<string | null>(identity ?? null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearTimer = useCallback(() => {
@@ -23,16 +35,26 @@ export function useCopyFeedback(durationMs = 2000): UseCopyFeedbackResult {
     }
   }, []);
 
+  // Identity change invalidates the previous attempt: newest token, no timer, back to idle.
+  useEffect(() => {
+    identityRef.current = identity ?? null;
+    tokenRef.current += 1;
+    clearTimer();
+    setStatus("idle");
+  }, [identity, clearTimer]);
+
+  // Unmount only releases bookkeeping; it never touches state afterwards.
+  useEffect(() => {
+    return () => {
+      tokenRef.current += 1;
+      clearTimer();
+    };
+  }, [clearTimer]);
+
   const reset = useCallback(() => {
     tokenRef.current += 1;
     clearTimer();
     setStatus("idle");
-  }, [clearTimer]);
-
-  useEffect(() => {
-    return () => {
-      clearTimer();
-    };
   }, [clearTimer]);
 
   const copy = useCallback(
@@ -47,6 +69,11 @@ export function useCopyFeedback(durationMs = 2000): UseCopyFeedbackResult {
         }
 
         const text = typeof textProducer === "function" ? await textProducer() : textProducer;
+        // Re-check ownership after a possibly async producer: the attempt may have been
+        // superseded while producing, and writing that content would be wrong.
+        if (tokenRef.current !== currentToken) {
+          return false;
+        }
         await navigator.clipboard.writeText(text);
 
         if (tokenRef.current === currentToken) {

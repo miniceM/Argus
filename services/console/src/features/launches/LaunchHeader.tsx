@@ -85,7 +85,8 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
     ? `${launch.id.slice(0, 8)}…${launch.id.slice(-4)}`
     : launch.id;
 
-  const copyId = useCopyFeedback(2000);
+  // The copied content is this launch's id, so the feedback identity is the launch.
+  const copyId = useCopyFeedback(2000, launch?.id);
   const handleCopyId = () => {
     void copyId.copy(launch.id);
   };

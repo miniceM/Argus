@@ -54,7 +54,8 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
   const revisions: SnapshotRevision[] = historyQuery.data?.revisions ?? [];
   const [showRawJson, setShowRawJson] = useState(false);
   const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
-  const copyJson = useCopyFeedback(2000);
+  // The exported JSON belongs to exactly one (launch, snapshot) pair.
+  const copyJson = useCopyFeedback(2000, `${launch.id}:${activeSnapshot?.snapshot_id ?? "none"}`);
 
   // Fetch complete snapshot detail for JSON export
   const detailQuery = useQuery<SnapshotDetail>(

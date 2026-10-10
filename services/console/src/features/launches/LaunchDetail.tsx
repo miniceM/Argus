@@ -33,6 +33,10 @@ import {
   snapshotListKey,
   snapshotListQueryOptions,
 } from "./launchSnapshotQueries";
+import {
+  useSnapshotDirectoryRefresh,
+  useSnapshotRevisionDiscovery,
+} from "./useSnapshotRevisionDiscovery";
 
 type LaunchResponse = import("../../api/schema").components["schemas"]["ExperimentLaunchResponse"];
 type ItemExecution = import("../../api/schema").components["schemas"]["ExperimentItemExecutionResponse"];
@@ -247,6 +251,7 @@ export const LaunchDetail: React.FC = () => {
   // does not exist", so a failed directory falls back to reading that revision directly.
   // A revision the directory answered *without* listing is definitively missing, and no
   // detail request is issued for it (and never falls back to the latest revision).
+  const historyResolved = snapshotsQuery.isSuccess || snapshotsQuery.isError;
   const targetSnapshotId = selectedSnapshotId
     ? (selectedSnapshot || snapshotsQuery.isError ? selectedSnapshotId : null)
     : (activeSnapshot?.snapshot_id ?? null);
@@ -345,6 +350,25 @@ export const LaunchDetail: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: [...snapshotDetailKey(launchId, null)] });
     }
   };
+
+  // 3.2 Bounded discovery of a just-frozen revision.
+  //
+  // The launch query stops polling as soon as the run reaches a terminal state, but the
+  // frozen revision is written around that same moment. Without one bounded re-read the
+  // report would stay "not frozen yet" until the user manually refreshes or refocuses the
+  // window, even though the snapshot exists server-side.
+  const refreshSnapshots = useSnapshotDirectoryRefresh(snapshotsQuery);
+  const evaluationActive = Array.isArray(rawItems) && rawItems.some(
+    (item) => (item.evaluation_status || "").toLowerCase() === "evaluating",
+  );
+  const { isDiscovering } = useSnapshotRevisionDiscovery({
+    launchId,
+    executionActive: Boolean(launch && isLaunchExecutionActive(launch.status)),
+    evaluationActive,
+    historySettled: historyResolved,
+    latestSnapshotId: snapshotsQuery.data?.latest_snapshot_id ?? null,
+    refresh: refreshSnapshots,
+  });
 
   // 4. Mutations
   const runMutation = useMutation({
@@ -726,6 +750,7 @@ export const LaunchDetail: React.FC = () => {
           launchId={launchId}
           selectedSnapshotId={selectedSnapshotId}
           onSelect={selectSnapshot}
+          discovering={isDiscovering}
         />
       )}
 

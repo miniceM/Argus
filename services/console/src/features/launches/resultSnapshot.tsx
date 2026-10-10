@@ -60,12 +60,15 @@ type PanelProps = {
   launchId: string;
   selectedSnapshotId: string | null;
   onSelect: (snapshotId: string) => void;
+  /** True while the bounded re-read for a just-frozen revision is running. */
+  discovering?: boolean;
 };
 
 export const ResultSnapshotPanel: React.FC<PanelProps> = ({
   launchId,
   selectedSnapshotId,
   onSelect,
+  discovering = false,
 }) => {
   const history = useQuery<SnapshotList>(snapshotListQueryOptions(launchId));
 
@@ -119,6 +122,11 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
           <span className="font-semibold text-foreground">结果报告 (Result Snapshot)</span>
           <span className="text-muted-foreground" data-testid="result-snapshot-empty">
             尚未冻结任何结果版本。评测进入终态后会自动生成。
+            {discovering && (
+              <span className="ml-1 text-primary" data-testid="snapshot-discovering">
+                正在自动检测本次运行刚冻结的结果版本...
+              </span>
+            )}
           </span>
         </div>
       </section>

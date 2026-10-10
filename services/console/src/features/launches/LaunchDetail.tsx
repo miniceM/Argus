@@ -297,7 +297,7 @@ export const LaunchDetail: React.FC = () => {
     (item) => (item.evaluation_status || "").toLowerCase() === "evaluating",
   );
   const executionActive = Boolean(launch && isLaunchExecutionActive(launch.status));
-  const { isDiscovering } = useSnapshotRevisionDiscovery({
+  const { isDiscovering, startDiscovery: startSnapshotRevisionDiscovery } = useSnapshotRevisionDiscovery({
     launchId,
     executionActive,
     evaluationActive,
@@ -709,14 +709,28 @@ export const LaunchDetail: React.FC = () => {
           snapshotsQuery.refetch();
           summaryQuery.refetch();
         }}
-        onRun={() => runMutation.mutate()}
+        onRun={() => {
+          startSnapshotRevisionDiscovery(
+            snapshotsQuery.data?.latest_snapshot_id ?? effectiveSnapshotId,
+          );
+          runMutation.mutate();
+        }}
         onCancel={() => setShowCancelModal(true)}
-        onResume={() => resumeMutation.mutate()}
+        onResume={() => {
+          startSnapshotRevisionDiscovery(
+            snapshotsQuery.data?.latest_snapshot_id ?? effectiveSnapshotId,
+          );
+          resumeMutation.mutate();
+        }}
         onRetryFailed={() => {
           setForceRetry(false);
           setShowRetryModal(true);
         }}
-        onRetryEvaluation={() => retryEvaluationMutation.mutate()}
+        onRetryEvaluation={() => {
+          const discoveryBaseline = snapshotsQuery.data?.latest_snapshot_id ?? effectiveSnapshotId;
+          startSnapshotRevisionDiscovery(discoveryBaseline);
+          retryEvaluationMutation.mutate();
+        }}
         onOpenBaselineModal={isSnapshotNotFound ? undefined : () => setShowBaselineModal(true)}
         isRunPending={runMutation.isPending}
         isCancelPending={cancelMutation.isPending}
@@ -869,6 +883,7 @@ export const LaunchDetail: React.FC = () => {
             launchId={launch.id}
             snapshotId={effectiveSnapshotId}
             environment={environment}
+            candidateQualityConclusion={effectiveSnapshotId ? frozenQualityConclusion : null}
             summary={
               summaryQuery.data?.launch_id === launchId &&
               summaryQuery.data?.snapshot_id === effectiveSnapshotId
@@ -1024,7 +1039,12 @@ export const LaunchDetail: React.FC = () => {
               variant="warning-solid"
               className="text-xs"
               disabled={retryFailedMutation.isPending}
-              onClick={() => retryFailedMutation.mutate(forceRetry)}
+              onClick={() => {
+                startSnapshotRevisionDiscovery(
+                  snapshotsQuery.data?.latest_snapshot_id ?? effectiveSnapshotId,
+                );
+                retryFailedMutation.mutate(forceRetry);
+              }}
             >
               {retryFailedMutation.isPending ? "正在提交重试..." : "确认重新调度"}
             </Button>

@@ -487,6 +487,40 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     expect(screen.queryByText("质量通过率提升")).not.toBeInTheDocument();
   });
 
+  it("REVIEW: an UNCHANGED comparison does not turn a failing Candidate gate into PASS", async () => {
+    const c = structuredClone(mockComparison);
+    c.formal.verdict = "UNCHANGED";
+    c.classification_counts.UNCHANGED = 2;
+    c.classification_counts.IMPROVEMENT = 0;
+    c.summary.comparable_cohort.baseline.pass_rate = 0;
+    c.summary.comparable_cohort.candidate.pass_rate = 0;
+
+    const failedRevision = {
+      ...mockSnapshotList,
+      revisions: [{
+        ...mockSnapshotList.revisions[0],
+        quality_pass_count: 0,
+        quality_fail_count: 2,
+        quality_unknown_count: 0,
+      }],
+    };
+    const failedSummary = {
+      ...mockSummary,
+      summary: { ...mockSummary.summary, quality_pass_count: 0, quality_fail_count: 2, quality_unknown_count: 0 },
+    };
+    overrideGet({
+      "/api/v1/experiment-launches/{launch_id}/result-snapshots": { data: failedRevision },
+      "/api/v1/experiment-launches/{launch_id}/summary": { data: failedSummary },
+      "/api/v1/experiment-launches/{launch_id}/comparison": { data: c },
+    });
+
+    renderComponent();
+
+    expect(await screen.findByTestId("candidate-quality-gate-verdict")).toHaveTextContent("Candidate 冻结门禁：未通过");
+    expect(screen.getByTestId("formal-comparison-verdict")).toHaveTextContent("Baseline 相对变化：无变化");
+    expect(screen.queryByText("评测规则门禁达标")).not.toBeInTheDocument();
+  });
+
   it("REVIEW: no frozen 90 percent rule means no fabricated overall gate", async () => {
     const c = structuredClone(mockComparison);
     c.summary.comparable_cohort.baseline.pass_rate = 0.7;

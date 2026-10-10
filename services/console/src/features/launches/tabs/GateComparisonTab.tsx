@@ -175,6 +175,8 @@ interface GateComparisonTabProps {
   snapshotId: string | null;
   environment: string;
   summary: RunSummary | null | undefined;
+  /** Frozen PASS/FAIL/UNKNOWN conclusion for the currently selected Candidate snapshot. */
+  candidateQualityConclusion?: string | null;
   activeBaseline: Baseline | null;
   onSetBaselineModal?: () => void;
   onShowLatestSnapshot?: () => void;
@@ -206,6 +208,7 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
   snapshotId,
   environment,
   summary,
+  candidateQualityConclusion,
   activeBaseline,
   onSetBaselineModal,
   onShowLatestSnapshot,
@@ -487,7 +490,33 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
     { label: "共同可比 Case", reason: comparisonSummary?.cost_comparison?.reason },
   ].filter((entry): entry is { label: string; reason: CostReason } => entry.reason != null);
 
-  const formalHasRegression = formal?.verdict === "REGRESSION";
+  const candidateQualityState = candidateQualityConclusion?.toLowerCase();
+  const candidateQualityLabel = candidateQualityState === "pass"
+    ? "已通过 (PASS)"
+    : candidateQualityState === "fail"
+    ? "未通过 (FAIL)"
+    : "证据不足，无法判定 (UNKNOWN)";
+  const candidateQualityTone = candidateQualityState === "pass"
+    ? "text-pass"
+    : candidateQualityState === "fail"
+    ? "text-fail"
+    : "text-timeout";
+  const relativeVerdictLabel = !formal?.available
+    ? "暂不可判定"
+    : formal.verdict === "REGRESSION"
+    ? "存在回归"
+    : formal.verdict === "IMPROVEMENT"
+    ? "有所改善"
+    : formal.verdict === "UNCHANGED"
+    ? "无变化"
+    : "暂不可判定";
+  const relativeVerdictTone = !formal?.available || !formal.verdict
+    ? "text-timeout"
+    : formal.verdict === "REGRESSION"
+    ? "text-fail"
+    : formal.verdict === "IMPROVEMENT"
+    ? "text-pass"
+    : "text-muted-foreground";
   const passRateTrend = cohort?.baseline.pass_rate == null || cohort.candidate.pass_rate == null
     ? "unknown"
     : cohort.candidate.pass_rate > cohort.baseline.pass_rate
@@ -561,30 +590,49 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
                 )}
               </p>
             </div>
-            {evaluatorIds.length > 0 && (
+            {(evaluatorIds.length > 0 || candidateQualityConclusion != null) && (
               <div className="bg-surface-subtle border border-border rounded-lg p-3 space-y-1">
-                <span className="font-semibold text-foreground flex items-center gap-1.5">
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      !formal?.available
-                        ? "bg-timeout"
-                        : formalHasRegression
-                        ? "bg-fail"
-                        : "bg-pass"
-                    }`}
-                  />
-                  {!formal?.available
-                    ? "评测门禁结论未就绪"
-                    : formalHasRegression
-                    ? "评测门禁未达标 (存在退化)"
-                    : "评测规则门禁达标"}
+                <span
+                  className={`font-semibold flex items-center gap-1.5 ${candidateQualityTone}`}
+                  data-testid="candidate-quality-gate-verdict"
+                >
+                  <span className={`w-2 h-2 rounded-full ${
+                    candidateQualityState === "pass"
+                      ? "bg-pass"
+                      : candidateQualityState === "fail"
+                      ? "bg-fail"
+                      : "bg-timeout"
+                  }`} />
+                  Candidate 冻结门禁：{candidateQualityLabel}
+                </span>
+                <p className="text-muted-foreground leading-relaxed">
+                  该门禁状态仅依据当前选中 Revision 的冻结质量结论；Baseline 比较结果不会替代 Candidate 自身的准入判断。
+                </p>
+                <span
+                  className={`font-semibold flex items-center gap-1.5 ${relativeVerdictTone}`}
+                  data-testid="formal-comparison-verdict"
+                >
+                  <span className={`w-2 h-2 rounded-full ${
+                    !formal?.available || !formal.verdict
+                      ? "bg-timeout"
+                      : formal.verdict === "REGRESSION"
+                      ? "bg-fail"
+                      : formal.verdict === "IMPROVEMENT"
+                      ? "bg-pass"
+                      : "bg-surface-muted"
+                  }`} />
+                  Baseline 相对变化：{relativeVerdictLabel}
                 </span>
                 <p className="text-muted-foreground leading-relaxed">
                   {!formal?.available
-                    ? "由于证据不足或基线未绑定，暂无法出具正式门禁准入结论。"
-                    : formalHasRegression
-                    ? `正式比较结论为 REGRESSION；存在 ${comparison?.classification_counts?.REGRESSION ?? 0} 个回归 Case，请结合逐例分类排查。`
-                    : `共计 ${evaluatorIds.length} 项评估指标已完成与基线对比，全部关键约束已纳入版本质量门禁监控。`}
+                    ? "由于比较证据不足或 Baseline 未绑定，暂无法给出相对变化结论。"
+                    : formal.verdict === "REGRESSION"
+                    ? `正式比较发现 ${comparison?.classification_counts?.REGRESSION ?? 0} 个回归 Case；此结论只描述相对变化。`
+                    : formal.verdict === "IMPROVEMENT"
+                    ? "正式比较显示相对基线有所改善；Candidate 是否达到门禁仍以其冻结质量结论为准。"
+                    : formal.verdict === "UNCHANGED"
+                    ? "正式比较显示相对基线无变化；未进一步退化不等于 Candidate 达到发布门禁。"
+                    : "正式比较 verdict 缺失或未知，暂不能说明相对变化。"}
                 </p>
               </div>
             )}

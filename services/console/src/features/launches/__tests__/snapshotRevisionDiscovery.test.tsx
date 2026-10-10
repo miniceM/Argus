@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { LaunchDetail } from "../LaunchDetail";
@@ -150,6 +150,65 @@ describe("snapshot revision discovery after a run finishes (F02)", () => {
     );
     expect(await screen.findByTestId("snapshot-revision")).toHaveTextContent("Revision 1");
     expect(screen.queryByTestId("snapshot-discovering")).not.toBeInTheDocument();
+  });
+
+  it("starts bounded revision discovery from retry-evaluation submission when S1 already exists", async () => {
+    let showS2 = false;
+    let historyCalls = 0;
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path === "/api/v1/experiment-launches/{launch_id}") {
+        return Promise.resolve({ data: { ...baseLaunch, status: "COMPLETED", allowed_actions: ["retry_evaluation"] } });
+      }
+      if (path === "/api/v1/experiment-launches/{launch_id}/items") {
+        // Never expose an evaluating state: the retry can finish between normal /items polls.
+        return Promise.resolve({ data: [] });
+      }
+      if (path === "/api/v1/experiment-launches/{launch_id}/result-snapshots") {
+        historyCalls += 1;
+        const latest = showS2 && historyCalls >= 3;
+        return Promise.resolve({
+          data: latest
+            ? {
+                launch_id: LAUNCH_ID,
+                latest_snapshot_id: S2,
+                latest_revision: 2,
+                revisions: [revisionRow(S2, 2, true), revisionRow(S1, 1, false)],
+              }
+            : {
+                launch_id: LAUNCH_ID,
+                latest_snapshot_id: S1,
+                latest_revision: 1,
+                revisions: [revisionRow(S1, 1, true)],
+              },
+        });
+      }
+      if (path.includes("/result-snapshots/")) {
+        return Promise.resolve({ data: frozenDetail(S1) });
+      }
+      return Promise.resolve({ data: null });
+    });
+    (api.POST as any).mockResolvedValue({ data: { submitted: ["item-001"], blocked: [] } });
+
+    renderDetail(`?snapshot_id=${S1}&tab=cases`);
+    await screen.findByTestId("snapshot-revision");
+    const historyCallsBeforeRetry = historyCalls;
+    fireEvent.click(screen.getByTestId("retry-evaluation-button"));
+
+    await waitFor(() => expect(api.POST).toHaveBeenCalledWith(
+      "/api/v1/experiment-launches/{launch_id}/retry-evaluation",
+      expect.any(Object),
+    ));
+    // Let the mutation's one-off invalidation/refetch finish while S1 is still the latest.
+    await waitFor(() => expect(historyCalls).toBeGreaterThan(historyCallsBeforeRetry));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(screen.getByTestId("snapshot-revision")).toHaveTextContent("Revision 1");
+
+    showS2 = true;
+    await waitFor(() => {
+      expect(screen.getByTestId("snapshot-newer-available")).toHaveTextContent("Revision 2");
+    }, { timeout: 5000 });
+    expect(screen.getByTestId("snapshot-revision")).toHaveTextContent("Revision 1");
+    expect(historyCalls).toBeGreaterThanOrEqual(3);
   });
 
   it("keeps a pinned historical revision selected when a newer revision is discovered", async () => {

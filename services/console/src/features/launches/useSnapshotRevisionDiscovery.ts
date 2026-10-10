@@ -34,9 +34,17 @@ interface DiscoveryWindow {
   startedAt: number;
 }
 
+interface ExplicitDiscoveryBaseline {
+  launchId: string;
+  baselineLatest: string | null;
+  startedAt: number;
+}
+
 export interface SnapshotRevisionDiscoveryResult {
   /** True while the bounded discovery window is open. */
   isDiscovering: boolean;
+  /** Explicitly look for a revision newer than the snapshot visible before a result-changing action. */
+  startDiscovery: (baselineLatest: string | null) => void;
 }
 
 /**
@@ -63,14 +71,32 @@ export function useSnapshotRevisionDiscovery(
   const [activeWindow, setActiveWindow] = useState<DiscoveryWindow | null>(null);
 
   const observedActiveRef = useRef(false);
+  const observedActiveBaselineRef = useRef<string | null>(null);
+  const explicitDiscoveryBaselineRef = useRef<ExplicitDiscoveryBaseline | null>(null);
   // Launch identity for which the "no revision yet" window has already run once.
   const initialCycleRef = useRef<string | null>(null);
 
   // Activity is observed as it happens, so the transition out of it stays detectable even if
   // the launch query is between polls.
   useEffect(() => {
-    if (isActive) observedActiveRef.current = true;
-  }, [isActive]);
+    if (isActive && !observedActiveRef.current) {
+      observedActiveRef.current = true;
+      // If retry-evaluation already opened a discovery window, keep its submission-time
+      // baseline. A newer snapshot found by that window is sufficient; completion of the
+      // activity must not start a redundant second window against the new latest revision.
+      const explicit = explicitDiscoveryBaselineRef.current;
+      const explicitIsCurrent = Boolean(
+        explicit &&
+          explicit.launchId === launchId &&
+          Date.now() - explicit.startedAt < SNAPSHOT_DISCOVERY_WINDOW_MS,
+      );
+      observedActiveBaselineRef.current = explicitIsCurrent
+        ? explicit!.baselineLatest
+        : activeWindow
+        ? activeWindow.baselineLatest
+        : latestSnapshotId;
+    }
+  }, [activeWindow, isActive, launchId, latestSnapshotId]);
 
   // A revision became visible: the empty-directory cycle for this launch is satisfied.
   useEffect(() => {
@@ -80,13 +106,13 @@ export function useSnapshotRevisionDiscovery(
   // Launch identity change: forget everything that belonged to the previous launch.
   useEffect(() => {
     observedActiveRef.current = false;
+    observedActiveBaselineRef.current = null;
+    explicitDiscoveryBaselineRef.current = null;
     initialCycleRef.current = null;
     setActiveWindow(null);
   }, [launchId]);
 
-  const epochRef = useRef(0);
-  const openWindow = (baselineLatest: string | null) => {
-    epochRef.current += 1;
+  const openWindow = useCallback((baselineLatest: string | null) => {
     const next: DiscoveryWindow = {
       launchId: launchId ?? "",
       baselineLatest,
@@ -96,7 +122,22 @@ export function useSnapshotRevisionDiscovery(
     // The directory may already hold the frozen revision while the launch query still echoes
     // the previous status, so read it immediately instead of waiting a full interval.
     refresh();
-  };
+  }, [launchId, refresh]);
+
+  const startDiscovery = useCallback((baselineLatest: string | null) => {
+    if (!launchId) return;
+    // A result-changing action is an explicit signal: capture the known revision before the
+    // mutation and start bounded discovery even if /items never exposes an intermediate active state.
+    observedActiveRef.current = false;
+    observedActiveBaselineRef.current = null;
+    explicitDiscoveryBaselineRef.current = {
+      launchId,
+      baselineLatest,
+      startedAt: Date.now(),
+    };
+    initialCycleRef.current = launchId;
+    openWindow(baselineLatest);
+  }, [launchId, openWindow]);
 
   const settled = Boolean(
     activeWindow &&
@@ -126,17 +167,35 @@ export function useSnapshotRevisionDiscovery(
 
   useEffect(() => {
     if (!launchId || !historySettled || isActive) return;
-    if (activeWindow) return;
 
     const observedActive = observedActiveRef.current;
+    const activityBaseline = observedActiveBaselineRef.current;
+    const explicit = explicitDiscoveryBaselineRef.current;
+    const explicitIsCurrent = Boolean(
+      explicit &&
+        explicit.launchId === launchId &&
+        Date.now() - explicit.startedAt < SNAPSHOT_DISCOVERY_WINDOW_MS,
+    );
+    const discoveryBaseline = explicitIsCurrent
+      ? explicit!.baselineLatest
+      : activityBaseline;
     observedActiveRef.current = false;
+    observedActiveBaselineRef.current = null;
 
     if (observedActive) {
-      // Activity ended while we were watching: look for the revision it should have frozen.
-      openWindow(latestSnapshotId);
+      explicitDiscoveryBaselineRef.current = null;
+      const revisionAlreadyFound = discoveryBaseline == null
+        ? latestSnapshotId != null
+        : latestSnapshotId != null && latestSnapshotId !== discoveryBaseline;
+      if (revisionAlreadyFound || activeWindow) return;
+
+      // Activity ended before a newer revision appeared and no discovery window remains.
+      openWindow(discoveryBaseline);
       initialCycleRef.current = launchId;
       return;
     }
+
+    if (activeWindow) return;
 
     const nothingFrozenYet = latestSnapshotId == null;
     if (nothingFrozenYet && initialCycleRef.current !== launchId) {
@@ -144,7 +203,7 @@ export function useSnapshotRevisionDiscovery(
       initialCycleRef.current = launchId;
       openWindow(null);
     }
-  }, [activeWindow, historySettled, isActive, launchId, latestSnapshotId, refresh]);
+  }, [activeWindow, historySettled, isActive, launchId, latestSnapshotId, openWindow]);
 
   // Report the initial discovery synchronously on the first settled empty-directory render.
   // Otherwise the parent could briefly render mutable /items before this effect opens its
@@ -160,6 +219,7 @@ export function useSnapshotRevisionDiscovery(
 
   return {
     isDiscovering: Boolean((activeWindow && !settled && !expired) || initialDiscoveryPending),
+    startDiscovery,
   };
 }
 

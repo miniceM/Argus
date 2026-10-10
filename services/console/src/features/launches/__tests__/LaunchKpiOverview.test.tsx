@@ -64,6 +64,24 @@ describe("LaunchKpiOverview comparison evidence", () => {
     expect(screen.queryByText(/较基线持平/)).not.toBeInTheDocument();
   });
 
+  it("does not claim normal latency when no candidate P95 measurement is available", () => {
+    renderKpis(undefined);
+
+    expect(screen.getByText("暂无时延数据")).toBeInTheDocument();
+    expect(screen.queryByText("耗时正常")).not.toBeInTheDocument();
+  });
+
+  it("reports a P95 comparison only when valid candidate measurements exist", () => {
+    renderKpis({
+      comparable_cohort: {
+        baseline: { p95_latency_ms: 120 },
+        candidate: { p95_latency_ms: 120 },
+      },
+    });
+
+    expect(screen.getByText("与基线持平")).toBeInTheDocument();
+  });
+
   it("only reports a flat pass-rate delta when both rates are present and equal", () => {
     renderKpis({
       comparable_cohort: {

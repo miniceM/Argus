@@ -150,13 +150,15 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
   // 3. P95 Latency
   const candidateP95 = cohort?.candidate.p95_latency_ms ?? comparisonSummary?.candidate?.p95_latency_ms;
   const baselineP95 = cohort?.baseline.p95_latency_ms ?? comparisonSummary?.baseline?.p95_latency_ms;
+  const hasCandidateP95 = typeof candidateP95 === "number" && Number.isFinite(candidateP95);
+  const hasBaselineP95 = typeof baselineP95 === "number" && Number.isFinite(baselineP95);
   let p95Text = "—";
   let p95DeltaText: string | null = null;
   let isLatencyImproved: boolean | null = null;
 
-  if (candidateP95 != null) {
+  if (hasCandidateP95) {
     p95Text = String(Math.round(candidateP95));
-    if (baselineP95 != null) {
+    if (hasBaselineP95) {
       const diff = Math.round(candidateP95 - baselineP95);
       if (diff < 0) {
         p95DeltaText = `较基线缩短 ${Math.abs(diff)}ms`;
@@ -346,7 +348,7 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
                   <span>{p95DeltaText}</span>
                 </span>
               ) : (
-                <span>{p95DeltaText || "耗时正常"}</span>
+                <span>{p95DeltaText || "暂无时延数据"}</span>
               )}
             </div>
           </div>

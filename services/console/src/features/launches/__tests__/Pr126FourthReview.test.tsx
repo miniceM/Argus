@@ -869,7 +869,9 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     const summary = await screen.findByTestId("capabilities-delta-summary");
     expect(summary).toHaveTextContent("综合质量通过率提升");
     expect(summary).toHaveTextContent("共同可比用例通过率从 50.0% 提升至 75.0%");
-    expect(summary).toHaveTextContent("评测门禁未达标 (存在退化)");
+    expect(summary).toHaveTextContent("Candidate 冻结门禁：已通过 (PASS)");
+    expect(summary).toHaveTextContent("Baseline 相对变化：存在回归");
+    expect(summary).not.toHaveTextContent("评测规则门禁达标");
   });
 
   it("REVIEW: candidate policy status follows the frozen operator and threshold", async () => {

@@ -105,7 +105,7 @@ describe("Issue #85 ResultSnapshotPanel", () => {
     const link = screen.getByTestId("snapshot-share-url");
     expect(link).toHaveTextContent("snapshot_id=snap-1");
     expect(link).not.toHaveTextContent("latest");
-    expect(screen.getByTestId("snapshot-evidence-badge")).toHaveTextContent("证据完整");
+    expect(screen.getByTestId("snapshot-evidence-badge")).toHaveTextContent("冻结证据完整");
   });
 
   it("keeps cached revisions visible after a background history refresh fails", async () => {

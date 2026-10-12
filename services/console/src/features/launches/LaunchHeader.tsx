@@ -293,23 +293,33 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
               <div className="flex items-center gap-1.5">
                 <QualityBadge quality={effectiveQuality || "unknown"} />
                 <span className="text-xs font-semibold text-muted-foreground">
-                  {isPass ? "门禁准入通过 (PASS)" : isFail ? "门禁未通过 (FAIL)" : "门禁状态未知 (UNKNOWN)"}
+                  {isPass ? "冻结质量通过 (PASS)" : isFail ? "冻结质量未通过 (FAIL)" : "冻结质量未知 (UNKNOWN)"}
                 </span>
               </div>
 
-              {/* 证据完整状态徽章 */}
-              {isComplete ? (
+              {/* 证据状态徽章：无快照 / 证据完整 / 仅诊断 三态分离 */}
+              {!activeSnapshot ? (
                 <span
                   className="px-2 py-0.5 rounded text-xs text-muted-foreground bg-surface-muted border border-border flex items-center gap-1"
-                  title="数据签名完整，可作为基线"
+                  title="当前 Launch 尚未产出冻结结果，不可作为 Baseline"
+                  data-testid="snapshot-evidence-state"
+                >
+                  尚未生成冻结结果
+                </span>
+              ) : isComplete ? (
+                <span
+                  className="px-2 py-0.5 rounded text-xs text-muted-foreground bg-surface-muted border border-border flex items-center gap-1"
+                  title="当前选定 Revision 的冻结证据完整"
+                  data-testid="snapshot-evidence-state"
                 >
                   <ShieldCheck className="w-3.5 h-3.5 text-pass" />
-                  证据完整
+                  冻结证据完整
                 </span>
               ) : (
                 <span
                   className="px-2 py-0.5 rounded text-xs text-muted-foreground bg-surface-muted border border-border flex items-center gap-1"
                   title="证据不足，仅供诊断"
+                  data-testid="snapshot-evidence-state"
                 >
                   诊断快照
                 </span>

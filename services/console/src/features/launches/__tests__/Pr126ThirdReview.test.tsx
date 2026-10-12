@@ -338,8 +338,8 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     });
 
     // 2. Gate conclusion badge & evidence status badge
-    expect(screen.getByText("门禁准入通过 (PASS)")).toBeInTheDocument();
-    expect(screen.getAllByText("证据完整").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("冻结质量通过 (PASS)")).toBeInTheDocument();
+    expect(screen.getAllByText("冻结证据完整").length).toBeGreaterThanOrEqual(1);
 
     // 3. Compact UUID display with copy button
     expect(screen.getByText(/ID: ff04d66b…f708/)).toBeInTheDocument();
@@ -651,7 +651,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     });
     renderComponent();
     await screen.findByRole("tab",{name:/用例排查与 Trace/});
-    expect(screen.queryByText("门禁准入通过 (PASS)")).not.toBeInTheDocument();
+    expect(screen.queryByText("冻结质量通过 (PASS)")).not.toBeInTheDocument();
   });
 
   it("R126: no overall policy must show no fabricated 90 percent requirement", async () => {

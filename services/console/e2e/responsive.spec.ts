@@ -98,8 +98,9 @@ const launch = {
     execution_policy: { timeout_seconds: 30, max_retries: 2, max_concurrency: 2 },
     runner: { runner_version: "0.1.0", mapping_engine_version: "sha256-mapping-engine-v1" },
   },
-  langfuse_experiment_url: null,
+  langfuse_experiment_url: "https://langfuse.example/project/demo/experiments/exp-responsive",
   langfuse_sync_status: "SYNCED",
+  allowed_actions: ["retry_evaluation"],
   created_at: "2026-09-24T00:00:00Z",
   started_at: "2026-09-24T00:01:00Z",
   completed_at: "2026-09-24T00:09:00Z",
@@ -190,6 +191,48 @@ async function mockApi(page: Page): Promise<void> {
       ],
     }),
   );
+  // Frozen report data, so the launch detail header shows the real action set
+  // (including 设为新 Baseline) and the revision context.
+  const snapshotRevisions = [
+    {
+      snapshot_id: "snap-1",
+      revision: 1,
+      created_at: "2026-09-24T00:05:00Z",
+      source_result_digest: "sha256:aaaaaaaaaaaaaaaa",
+      manifest_digest: "sha256:bbbbbbbbbbbbbbbb",
+      evidence_state: "COMPLETE",
+      evidence_reasons: [],
+      total_cases: 2,
+      quality_pass_count: 2,
+      quality_fail_count: 0,
+      quality_unknown_count: 0,
+      is_latest: true,
+    },
+  ];
+  await page.route(`**/api/v1/experiment-launches/${LAUNCH_ID}/result-snapshots`, (route) =>
+    route.fulfill({
+      json: {
+        launch_id: LAUNCH_ID,
+        latest_snapshot_id: "snap-1",
+        latest_revision: 1,
+        revisions: snapshotRevisions,
+      },
+    }),
+  );
+  await page.route(`**/api/v1/experiment-launches/${LAUNCH_ID}/result-snapshots/**`, (route) =>
+    route.fulfill({
+      json: {
+        launch_id: LAUNCH_ID,
+        snapshot_id: "snap-1",
+        revision: 1,
+        created_at: "2026-09-24T00:05:00Z",
+        evidence_state: "COMPLETE",
+        evidence_reasons: [],
+        releasable: true,
+        items: [],
+      },
+    }),
+  );
 }
 
 /**
@@ -233,6 +276,62 @@ async function unreachableControls(page: Page): Promise<string[]> {
     return found;
   });
 }
+
+const readActionGeometry = (el: Element) => {
+  const rect = el.getBoundingClientRect();
+  const vw = document.documentElement.clientWidth;
+  const vh = document.documentElement.clientHeight;
+  const label = el.querySelector<HTMLElement>("span:not(.sr-only)");
+  const labelRect = label?.getBoundingClientRect() ?? rect;
+  const clippedByAncestors: string[] = [];
+
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    const style = window.getComputedStyle(node);
+    const ancestor = node.getBoundingClientRect();
+    const clipLeft = ancestor.left + node.clientLeft;
+    const clipTop = ancestor.top + node.clientTop;
+    const clipRight = clipLeft + node.clientWidth;
+    const clipBottom = clipTop + node.clientHeight;
+    const clipsX = ["hidden", "clip", "auto", "scroll"].includes(style.overflowX);
+    const clipsY = ["hidden", "clip", "auto", "scroll"].includes(style.overflowY);
+    const controlsClipped =
+      (clipsX && (rect.left < clipLeft - 1 || rect.right > clipRight + 1)) ||
+      (clipsY && (rect.top < clipTop - 1 || rect.bottom > clipBottom + 1));
+    const labelClipped =
+      (clipsX && (labelRect.left < clipLeft - 1 || labelRect.right > clipRight + 1)) ||
+      (clipsY && (labelRect.top < clipTop - 1 || labelRect.bottom > clipBottom + 1));
+    if (controlsClipped || labelClipped) {
+      clippedByAncestors.push(`${node.tagName.toLowerCase()}.${String(node.className).slice(0, 80)}`);
+    }
+  }
+
+  const hitTestPoints = [0.25, 0.5, 0.75].flatMap((xRatio) =>
+    [0.25, 0.5, 0.75].map((yRatio) => {
+      const x = rect.left + rect.width * xRatio;
+      const y = rect.top + rect.height * yRatio;
+      const hit = document.elementFromPoint(x, y);
+      return hit !== null && (el === hit || el.contains(hit));
+    }),
+  );
+
+  return {
+    left: rect.left,
+    right: rect.right,
+    top: rect.top,
+    bottom: rect.bottom,
+    labelLeft: labelRect.left,
+    labelRight: labelRect.right,
+    labelTop: labelRect.top,
+    labelBottom: labelRect.bottom,
+    labelScrollWidth: label?.scrollWidth ?? null,
+    labelClientWidth: label?.clientWidth ?? null,
+    labelText: label ? (label.textContent ?? "").trim() : null,
+    vw,
+    vh,
+    clippedByAncestors,
+    hitTestPoints,
+  };
+};
 
 async function expectPageReady(page: Page, routePath: string) {
   const heading = page.getByRole("heading", { level: 1 });
@@ -344,6 +443,264 @@ test.describe("narrow viewports", () => {
 });
 
 
+test.describe("Issue #120: launch detail narrow-viewport action geometry", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockApi(page);
+  });
+
+  for (const width of [360, 390, 768]) {
+    test(`launch actions and their labels stay fully visible at ${width}px`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto(`/launches/${LAUNCH_ID}`);
+      await expectPageReady(page, `/launches/${LAUNCH_ID}`);
+
+      const controlNames = ["刷新", "设为新 Baseline", "重试评测 (Retry Eval)", "在 Langfuse 中查看"];
+      const measuredControls = [];
+      for (const name of controlNames) {
+        const control = page
+          .getByRole("button", { name })
+          .or(page.getByRole("link", { name }))
+          .first();
+        await expect(control, `${name} must be present`).toBeVisible();
+
+        const geometry = await control.evaluate(readActionGeometry);
+
+        expect(geometry.labelLeft, `${name} label clipped on the left`).toBeGreaterThanOrEqual(-1);
+        expect(geometry.labelRight, `${name} label clipped on the right`).toBeLessThanOrEqual(
+          geometry.vw + 1,
+        );
+        if (geometry.labelScrollWidth !== null && geometry.labelClientWidth !== null) {
+          expect(geometry.labelScrollWidth, `${name} label text is clipped`).toBeLessThanOrEqual(
+            geometry.labelClientWidth + 1,
+          );
+        }
+        expect(geometry.left, `${name} clipped on the left`).toBeGreaterThanOrEqual(-1);
+        expect(geometry.right, `${name} clipped on the right`).toBeLessThanOrEqual(geometry.vw + 1);
+        expect(geometry.top, `${name} above the viewport`).toBeGreaterThanOrEqual(-1);
+        expect(geometry.bottom, `${name} below the fold at 800px`).toBeLessThanOrEqual(geometry.vh + 1);
+        expect(geometry.clippedByAncestors, `${name} is clipped by an ancestor`).toEqual([]);
+        expect(geometry.hitTestPoints, `${name} is obstructed or not fully pointer-reachable`).toEqual(
+          Array(9).fill(true),
+        );
+        measuredControls.push({ name, ...geometry });
+      }
+      await testInfo.attach("narrow-launch-action-geometry.json", {
+        body: JSON.stringify({ viewport: { width, height: 800 }, controls: measuredControls }, null, 2),
+        contentType: "application/json",
+      });
+    });
+  }
+
+  const executionActionScenarios = [
+    {
+      name: "pending run and cancel actions",
+      status: "PENDING",
+      allowedActions: ["run", "cancel"],
+      labels: ["启动评测 (Run)", "取消评测 (Cancel)"],
+      progress: {
+        total: 6, completed: 0, percentage: 0, pending: 6, queued: 0, running: 0,
+        retry_wait: 0, succeeded: 0, failed: 0, timed_out: 0, cancelled: 0,
+      },
+    },
+    {
+      name: "partial-failure recovery actions",
+      status: "PARTIAL_FAILED",
+      allowedActions: ["resume", "retry_failed", "retry_evaluation"],
+      labels: ["断点恢复 (Resume)", "重试失败用例 (Retry Failed)", "重试评测 (Retry Eval)"],
+      progress: {
+        total: 6, completed: 6, percentage: 100, pending: 0, queued: 0, running: 0,
+        retry_wait: 0, succeeded: 4, failed: 1, timed_out: 0, cancelled: 1,
+      },
+    },
+  ];
+
+  for (const width of [360, 390, 768]) {
+    for (const scenario of executionActionScenarios) {
+      test(`${scenario.name} stay fully reachable at ${width}px`, async ({ page }, testInfo) => {
+        await page.setViewportSize({ width, height: 800 });
+        await page.route(`**/api/v1/experiment-launches/${LAUNCH_ID}`, (route) =>
+          route.fulfill({
+            json: {
+              ...launch,
+              status: scenario.status,
+              allowed_actions: scenario.allowedActions,
+              progress: scenario.progress,
+            },
+          }),
+        );
+        await page.goto(`/launches/${LAUNCH_ID}`);
+        await expect(page.getByRole("heading", { level: 1, name: AGENT_ID })).toBeVisible();
+        await expect(page.getByTestId("status-badge").first()).toHaveText(scenario.status);
+
+        const measuredControls = [];
+        for (const name of scenario.labels) {
+          const control = page.getByRole("button", { name, exact: true });
+          await expect(control, `${name} must be present for ${scenario.name}`).toBeVisible();
+          await control.scrollIntoViewIfNeeded();
+          const geometry = await control.evaluate(readActionGeometry);
+          expect(geometry.left, `${name} clipped on the left`).toBeGreaterThanOrEqual(-1);
+          expect(geometry.right, `${name} clipped on the right`).toBeLessThanOrEqual(geometry.vw + 1);
+          expect(geometry.top, `${name} clipped above the viewport`).toBeGreaterThanOrEqual(-1);
+          expect(geometry.bottom, `${name} clipped below the viewport`).toBeLessThanOrEqual(geometry.vh + 1);
+          if (geometry.labelScrollWidth !== null && geometry.labelClientWidth !== null) {
+            expect(geometry.labelScrollWidth, `${name} label text is clipped`).toBeLessThanOrEqual(
+              geometry.labelClientWidth + 1,
+            );
+          }
+          if (geometry.labelText !== null) {
+            expect(geometry.labelText.trim().length, `${name} has visible button text`).toBeGreaterThan(0);
+          }
+          expect(geometry.labelLeft, `${name} label clipped on the left`).toBeGreaterThanOrEqual(-1);
+          expect(geometry.labelRight, `${name} label clipped on the right`).toBeLessThanOrEqual(
+            geometry.vw + 1,
+          );
+          expect(geometry.clippedByAncestors, `${name} is clipped by an ancestor`).toEqual([]);
+          expect(geometry.hitTestPoints, `${name} is obstructed or not fully pointer-reachable`).toEqual(
+            Array(9).fill(true),
+          );
+          measuredControls.push({ name, ...geometry });
+        }
+        await testInfo.attach("execution-action-geometry.json", {
+          body: JSON.stringify({
+            viewport: { width, height: 800 },
+            launchStatus: scenario.status,
+            allowedActions: scenario.allowedActions,
+            controls: measuredControls,
+          }, null, 2),
+          contentType: "application/json",
+        });
+      });
+    }
+  }
+
+  for (const width of [1024, 1280, 1440]) {
+    test(`desktop launch actions remain one-line 32px controls with long identity at ${width}px`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 });
+      const longAgentId = "financial-fraud-detection-assistant-enterprise-production-long-name";
+      const longLaunch = {
+        ...launch,
+        name: "nightly-regression-validation-with-a-long-descriptive-launch-name-for-release-review",
+        manifest: {
+          ...launch.manifest,
+          agent: { ...launch.manifest.agent, id: longAgentId },
+        },
+      };
+
+      // Register these after mockApi so the long-name and multi-revision fixtures win.
+      await page.route(`**/api/v1/experiment-launches/${LAUNCH_ID}`, (route) =>
+        route.fulfill({ json: longLaunch }),
+      );
+      await page.route(`**/api/v1/experiment-launches/${LAUNCH_ID}/result-snapshots`, (route) =>
+        route.fulfill({
+          json: {
+            launch_id: LAUNCH_ID,
+            latest_snapshot_id: "snap-3",
+            latest_revision: 3,
+            revisions: [1, 2, 3].map((revision) => ({
+              snapshot_id: `snap-${revision}`,
+              revision,
+              created_at: `2026-09-24T00:0${revision}:00Z`,
+              source_result_digest: `sha256:${String(revision).repeat(16)}`,
+              manifest_digest: `sha256:${String(revision + 3).repeat(16)}`,
+              evidence_state: "COMPLETE",
+              evidence_reasons: [],
+              total_cases: 2,
+              quality_pass_count: 2,
+              quality_fail_count: 0,
+              quality_unknown_count: 0,
+              is_latest: revision === 3,
+            })),
+          },
+        }),
+      );
+      await page.route(`**/api/v1/experiment-launches/${LAUNCH_ID}/result-snapshots/**`, (route) =>
+        route.fulfill({
+          json: {
+            launch_id: LAUNCH_ID,
+            snapshot_id: "snap-3",
+            revision: 3,
+            created_at: "2026-09-24T00:03:00Z",
+            evidence_state: "COMPLETE",
+            evidence_reasons: [],
+            releasable: true,
+            items: [],
+          },
+        }),
+      );
+
+      await page.goto(`/launches/${LAUNCH_ID}`);
+      await expectPageReady(page, `/launches/${LAUNCH_ID}`);
+      await expect(page.getByRole("heading", { name: longAgentId })).toBeVisible();
+      await expect(page.getByText(/revision 3/i)).toBeVisible();
+
+      const names = ["刷新", "设为新 Baseline", "重试评测 (Retry Eval)", "在 Langfuse 中查看"];
+      const boxes = [];
+      const measuredControls = [];
+      for (const name of names) {
+        const control = page.getByRole("button", { name, exact: name === "刷新" })
+          .or(page.getByRole("link", { name }))
+          .first();
+        await expect(control, `${name} is rendered`).toBeVisible();
+        const box = await control.boundingBox();
+        expect(box, `${name} has layout geometry`).not.toBeNull();
+        const geometry = await control.evaluate(readActionGeometry);
+        expect(geometry.clippedByAncestors, `${name} is clipped by an ancestor`).toEqual([]);
+        expect(geometry.hitTestPoints, `${name} is obstructed or not fully pointer-reachable`).toEqual(
+          Array(9).fill(true),
+        );
+        expect(geometry.labelLeft, `${name} label clipped on the left`).toBeGreaterThanOrEqual(-1);
+        expect(geometry.labelRight, `${name} label clipped on the right`).toBeLessThanOrEqual(
+          geometry.vw + 1,
+        );
+        expect(box!.height, `${name} is 32px ± 1`).toBeGreaterThanOrEqual(31);
+        expect(box!.height, `${name} is 32px ± 1`).toBeLessThanOrEqual(33);
+        const labelMetrics = await control.evaluate((el) => {
+          const label = el.querySelector<HTMLElement>("span:not(.sr-only)");
+          return label
+            ? {
+                hasVisibleLabel: true,
+                height: label.getBoundingClientRect().height,
+                scrollWidth: label.scrollWidth,
+                clientWidth: label.clientWidth,
+                text: (label.textContent ?? "").trim(),
+              }
+            : { hasVisibleLabel: false, height: 0, scrollWidth: 0, clientWidth: 0, text: "" };
+        });
+        if (labelMetrics.hasVisibleLabel) {
+          expect(labelMetrics.height, `${name} label stays on one line`).toBeLessThanOrEqual(18);
+          expect(labelMetrics.scrollWidth, `${name} label text is clipped`).toBeLessThanOrEqual(
+            labelMetrics.clientWidth + 1,
+          );
+          expect(labelMetrics.text.length, `${name} has visible button text`).toBeGreaterThan(0);
+        }
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
+        boxes.push(box!);
+        measuredControls.push({ name, ...box!, ...geometry, ...labelMetrics });
+      }
+
+      const actionRows = boxes.map((box) => box.y);
+      expect(Math.max(...actionRows) - Math.min(...actionRows), "actions share a single row").toBeLessThanOrEqual(1);
+      boxes.sort((left, right) => left.x - right.x);
+      for (let index = 1; index < boxes.length; index += 1) {
+        expect(boxes[index].x, "actions do not overlap").toBeGreaterThanOrEqual(
+          boxes[index - 1].x + boxes[index - 1].width - 1,
+        );
+      }
+      await testInfo.attach("desktop-launch-action-geometry.json", {
+        body: JSON.stringify({
+          viewport: { width, height: 900 },
+          launchName: longLaunch.name,
+          agentId: longAgentId,
+          revisions: 3,
+          controls: measuredControls,
+        }, null, 2),
+        contentType: "application/json",
+      });
+    });
+  }
+});
+
 test.describe("Issue #47: 核心页面布局与操作闭环", () => {
   test.beforeEach(async ({ page }) => { await mockApi(page); });
 
@@ -454,7 +811,7 @@ test.describe("Issue #47: 核心页面布局与操作闭环", () => {
       expect(await page.locator("main").evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
       await expect(submit).toBeEnabled();
       await submit.click();
-      await expect(page).toHaveURL(`/launches/${LAUNCH_ID}`);
+      await expect(page).toHaveURL(`/launches/${LAUNCH_ID}?snapshot_id=snap-1`);
       expect(submitted).toMatchObject({ name: `responsive-${width}`, agent_id: AGENT_ID,
         agent_version: "1.0.0", dataset_name: "responsive-regression", dataset_version: "2026-10-01T00:00:00Z",
         environment: "staging", max_concurrency: 2 });

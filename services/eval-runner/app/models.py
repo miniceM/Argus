@@ -615,9 +615,11 @@ class ResultSnapshotRevisionResponse(BaseModel):
     evidence_state: str
     evidence_reasons: list[str] = Field(default_factory=list)
     total_cases: int = 0
-    quality_pass_count: int = 0
-    quality_fail_count: int = 0
-    quality_unknown_count: int = 0
+    # Legacy summaries may not have persisted these counters. None preserves
+    # the distinction between an unknown historical value and an explicit zero.
+    quality_pass_count: int | None = None
+    quality_fail_count: int | None = None
+    quality_unknown_count: int | None = None
     is_latest: bool = False
 
 
@@ -640,6 +642,8 @@ class ResultSnapshotDetailResponse(BaseModel):
     evidence_state: str
     evidence_reasons: list[str] = Field(default_factory=list)
     releasable: bool = False
+    # Exact manifest frozen alongside this revision; never source it from the live Launch.
+    manifest: dict[str, Any]
     versions: dict[str, Any]
     summary: RunCostSummaryResponse
     items: list[dict[str, Any]] = Field(default_factory=list)

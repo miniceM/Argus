@@ -114,7 +114,7 @@ async function mockDetail(
 test.describe("Issue #81: frozen evaluation execution identity", () => {
   test("shows the frozen version, implementation and verification status", async ({ page }) => {
     await mockDetail(page, { schemaVersion: "1.2", evaluators: [frozenBinding] });
-    await page.goto("/launches/launch-issue-81");
+    await page.goto("/launches/launch-issue-81?tab=audit");
 
     await expect(page.getByTestId("manifest-schema-version")).toContainText("Schema v1.2");
     await expect(page.getByTestId("binding-verification-intent_match")).toHaveText("已冻结校验");
@@ -133,7 +133,7 @@ test.describe("Issue #81: frozen evaluation execution identity", () => {
       schemaVersion: "1.1",
       evaluators: [{ id: "pii_safe", version: "1.0.0", scope: "item", threshold: 1 }],
     });
-    await page.goto("/launches/launch-issue-81");
+    await page.goto("/launches/launch-issue-81?tab=audit");
 
     await expect(page.getByTestId("manifest-schema-version")).toContainText("Schema v1.1");
     await expect(page.getByTestId("binding-verification-pii_safe")).toHaveText("历史契约未记录");
@@ -162,7 +162,7 @@ test.describe("Issue #81: frozen evaluation execution identity", () => {
         },
       ],
     });
-    await page.goto("/launches/launch-issue-81");
+    await page.goto("/launches/launch-issue-81?tab=cases");
 
     // Stable error code plus the recovery path, instead of a silent re-run.
     await expect(page.getByText(/EVALUATOR_ARTIFACT_DIGEST_MISMATCH/)).toBeVisible();

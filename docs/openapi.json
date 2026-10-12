@@ -6344,6 +6344,11 @@
             "title": "Releasable",
             "default": false
           },
+          "manifest": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Manifest"
+          },
           "versions": {
             "additionalProperties": true,
             "type": "object",
@@ -6370,6 +6375,7 @@
           "source_result_digest",
           "manifest_digest",
           "evidence_state",
+          "manifest",
           "versions",
           "summary"
         ],
@@ -6458,19 +6464,37 @@
             "default": 0
           },
           "quality_pass_count": {
-            "type": "integer",
-            "title": "Quality Pass Count",
-            "default": 0
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Pass Count"
           },
           "quality_fail_count": {
-            "type": "integer",
-            "title": "Quality Fail Count",
-            "default": 0
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Fail Count"
           },
           "quality_unknown_count": {
-            "type": "integer",
-            "title": "Quality Unknown Count",
-            "default": 0
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Unknown Count"
           },
           "is_latest": {
             "type": "boolean",

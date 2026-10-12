@@ -302,7 +302,7 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
               <div>
                 <span>Runner: </span>
                 <span data-testid="runner-version" className="font-mono text-micro text-foreground font-semibold">
-                  {manifestRunner.runner_version || "1.0.0"}
+                  {manifestRunner.runner_version || "未记录"}
                 </span>
               </div>
               <div className="truncate" title={manifestRunner.mapping_engine_version || ""}>
@@ -399,6 +399,13 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
             )}
             <ul className="space-y-1.5">
               {frozenPolicyRules.map((rule: any) => {
+                const evaluatorResultType = manifestEvaluators.find(
+                  (evaluator: any) => evaluator.id === rule.evaluator_id,
+                )?.result_type;
+                const resultType = [rule.result_type, evaluatorResultType].find(
+                  (candidate): candidate is string =>
+                    typeof candidate === "string" && candidate.trim().length > 0,
+                );
                 const expression = [">=", "<=", ">", "<"].includes(rule.operator)
                   ? `${rule.operator} ${rule.threshold ?? "—"}`
                   : rule.operator === "=="
@@ -410,7 +417,7 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
                     className="flex flex-wrap items-center gap-2 text-xs"
                   >
                     <span className="font-mono font-semibold text-foreground">{rule.evaluator_id}</span>
-                    <span className="text-muted-foreground">结果类型 {rule.result_type ?? "numeric"}</span>
+                    <span className="text-muted-foreground">结果类型 {resultType ?? "类型未声明"}</span>
                     <span className="font-mono text-muted-foreground">{expression}</span>
                     <Badge tone={rule.required ? "pass" : "neutral"}>
                       {rule.required ? "必要" : "可选诊断"}

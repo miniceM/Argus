@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";
 import { LaunchDetail } from "../LaunchDetail";
+import { ManifestAuditTab } from "../tabs/ManifestAuditTab";
 import { api } from "../../../api/client";
 
 vi.mock("../../../api/client", () => ({
@@ -324,6 +325,23 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     );
   };
 
+  const renderAuditTab = (manifestOverrides: Record<string, unknown>) => {
+    const launch = {
+      ...mockLaunch,
+      manifest: { ...mockLaunch.manifest, ...manifestOverrides },
+    };
+
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <ManifestAuditTab
+          launch={launch as any}
+          activeSnapshot={mockSnapshotList.revisions[0] as any}
+          snapshotId="snap-v2-001"
+        />
+      </QueryClientProvider>,
+    );
+  };
+
   it("AC1 & #120: Renders business Header with human-readable name, exact version badge, compact UUID copy, and 4 KPI cards", async () => {
     renderComponent();
 
@@ -411,6 +429,35 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
       expect(traceLinks.length).toBeGreaterThanOrEqual(1);
       expect(traceLinks[0]).toHaveAttribute("href", "https://cloud.langfuse.com/trace/t1");
     });
+  });
+
+  it("AC7: shows an unrecorded Runner version instead of inventing a default", () => {
+    renderAuditTab({ runner: { mapping_engine_version: "engine-v1" } });
+
+    expect(screen.getByTestId("runner-version")).toHaveTextContent("未记录");
+    expect(screen.getByTestId("runner-version")).not.toHaveTextContent("1.0.0");
+  });
+
+  it("AC7: resolves result types from the matching frozen evaluator and labels missing types", () => {
+    renderAuditTab({
+      evaluators: [
+        { id: "typed_metric", version: "1.0.0", result_type: "categorical" },
+        { id: "untyped_metric", version: "1.0.0" },
+        { id: "rule_typed_metric", version: "1.0.0", result_type: "categorical" },
+      ],
+      quality_policy: {
+        rules: [
+          { evaluator_id: "typed_metric", operator: "==", expected_value: "good", required: true },
+          { evaluator_id: "untyped_metric", operator: ">=", threshold: 1, required: false },
+          { evaluator_id: "rule_typed_metric", result_type: "boolean", operator: "==", expected_value: true, required: true },
+        ],
+      },
+    });
+
+    expect(screen.getByText("结果类型 categorical")).toBeInTheDocument();
+    expect(screen.getByText("结果类型 类型未声明")).toBeInTheDocument();
+    expect(screen.getByText("结果类型 boolean")).toBeInTheDocument();
+    expect(screen.queryByText("结果类型 numeric")).not.toBeInTheDocument();
   });
 
   it("AC7 & AC9 & #124: Tab 3 offers 4D manifest, JSON copy/download, and baseline set modal", async () => {

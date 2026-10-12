@@ -58,3 +58,55 @@
 3. 在 #126 回复并 resolve 三条 P2 Review；确认没有新的未解决阻断意见。
 4. 给 PR #126 增加 `Closes #119`、`Closes #120`、`Closes #121`、`Closes #122`、`Closes #123`、`Closes #124`，合并后核实六个 Issue 均关闭。
 5. 最后在 PR #125 记录由 #126 取代及最终交付位置，再关闭 PR #125；不合并 #125，避免重复交付。
+
+---
+
+## 2026-10-12 补充：Issue #119 main 剩余差距修复（U1–U6，dated supplement）
+
+> 本补充不覆盖上方的 #126 主线快照；上方历史结果保持原样。本节的"本地 PASS"仅指本工作树实测。
+> 实施分支：`codex/fix-issue119-main-acceptance`，基于 `origin/main` == `4b043739c63357ecc10131e1ba54bc1bc53d862a`（与方案审查基准一致）；最终本地 HEAD：`6f5f6a2`。
+> 方案来源：`docs/plans/2026-10-12-issue119-main-gap-luna-guide.md`；验收门禁见方案 §8。
+
+### 修复单元与提交
+
+| 提交 | 内容 | RED 证据 | GREEN 证据 |
+|---|---|---|---|
+| `a211b18` | U1：统一 Comparison / Case 响应身份校验（`launchComparisonQueries.ts`，双元 / 三元身份、身份不符入错误分支不入成功缓存） | 前序会话已验证 RED（源码 stash） | 本 HEAD 全量 Vitest 复跑通过；`comparisonResponseIdentity.test.tsx` 17 项 |
+| `3eed3bc` | U2：缺失回归计数 unknown-safe（真实 0 与 missing/null/非法值分开） | 前序会话已验证 RED（源码 stash） | 本 HEAD 全量 Vitest 复跑通过；`LaunchKpiOverview.test.tsx` 新增 8 项 + `Pr126FourthReview` R119-U2 |
+| `0c39679` | U3：运行动作按页面会话隔离（点击时冻结目标 Launch，晚响应 / ABA / unmount / 跨 Revision 防重复 POST） | 前序会话已验证 RED | 本 HEAD 全量 Vitest 复跑通过；`launchActionIsolation.test.tsx` 13 项 |
+| `257d422` | U4：窄屏紧凑主动作 + 可键盘操作"更多操作"菜单（`LaunchActionMenu.tsx`，单一定义列表驱动两布局） | 本会话实测 RED：stub 菜单下 17/18 行为失败（另有一次 import 不存在 RED） | 本会话实测 GREEN：`launchActionMenu.test.tsx` 18 项 + responsive 窄屏 E2E 12 项 |
+| `6f5f6a2` | U5：质量 / 证据 / 资格 / Release Gate 语义分离（冻结质量命名、三态证据徽章、去掉签名与发布依据宣称） | 本会话实测 RED：旧文案下 6/8 失败 | 本会话实测 GREEN：`launchHeaderClaims.test.tsx` 8 项；旧文案断言仅改名，未删任何 fail-closed 断言 |
+
+边界：只修改 `services/console`（5 个 Console 源文件、5 个测试文件、`e2e/responsive.spec.ts`）；未动后端 API、数据库、评分算法、冻结快照语义、Baseline 存储与 Worker 状态机；未引入新 UI 库或平行数据访问体系；`docs/openapi.json` 与 `services/console/src/api/schema.d.ts` 无 drift（`make validate` 步骤 5/6 通过）。
+
+### LG01–LG10 验收矩阵
+
+| 项 | 状态 | 证据与边界 |
+|---|---|---|
+| LG01（U1 身份校验） | **PASS（本地）** | `comparisonResponseIdentity.test.tsx` 17 项：KPI、分页比较、Case 行内展开与 Drawer 共用 fetch/校验边界；身份缺失/错误响应进入错误分支、可解释可重试，不进入成功缓存。 |
+| LG02（U1 缓存形状） | **PASS（本地）** | 同文件：普通查询与分页查询保持不同数据形状；相同 Case 的两消费者同 key 共享；S1/S2 各自缓存；合法空数组保留；无 latest 回退。 |
+| LG03（U2 unknown-safe） | **PASS（本地）** | `LaunchKpiOverview.test.tsx` 8 项：missing/null/字符串/负值/小数/非有限 → unknown，仅非负整数为正式值；formal 与 comparable 同时成立才展示数值；真实 0 显示"正式比较未发现回归"；KPI 与回归摘要一致。 |
+| LG04（U3 目标隔离） | **PASS（本地）** | `launchActionIsolation.test.tsx` 13 项：run/cancel/resume/retry_failed/retry_evaluation 点击时冻结目标；late success/failure、ABA 返回、unmount 后旧反馈不写新页面；缓存刷新只失效原 Launch。 |
+| LG05（U3 请求锁） | **PASS（本地）** | 同文件：同一 Launch 同一动作 pending 中切换 Revision 不重复 POST；旧锁不误释放新请求；恢复轮询与 S2 bounded discovery 保留。 |
+| LG06（U4 窄屏菜单） | **PASS（本地）** | `launchActionMenu.test.tsx` 18 项 + responsive.spec 12 项 E2E（360/390/768）：More 键盘打开/导航/选择/Escape/Tab/焦点恢复；菜单权限、pending、确认入口与桌面一致；cancel/retry 确认前 0 POST、确认各 1 POST，目标为 `/api/v1/experiment-launches/{launch_id}/cancel` 与 `…/retry-failed`；不允许动作无可执行项。 |
+| LG07（U4 六视口几何） | **PASS（本地）** | 全量 Playwright 124 项：360/390/768 紧凑行 + 菜单浮层实际几何（控件/文本 box、9 点命中、祖先裁剪）通过；1024/1280/1440 两个主动作 32±1px、同行、不换行不退化；`launch-detail-navigation` 首屏矩阵（1280×800 / 1440×900）保持。 |
+| LG08（U5 语义） | **PASS（本地）** | `launchHeaderClaims.test.tsx` 8 项：COMPLETE+PASS / COMPLETE+FAIL / DIAGNOSTIC+UNKNOWN / 无快照+RUNNING 文案分离；无"签名已验证 / 门禁准入 / 发布通过 / 可作为 Baseline"宣称；缺质量、缺资格、链接失败不推导 PASS；诊断态"不可作为正式 Baseline"负向声明保留。 |
+| LG09（门禁） | **PASS（本地）；1 项 BLOCKED 已记录原因** | typecheck、Vitest（52 文件 / 847 项）、`lint:tokens`、`build`、全量 Playwright（124）、`make validate`（8/8）均通过；后端契约专项 48 项通过。BLOCKED：`make console-e2e` 默认端口 18080/18083 被本机 Docker 占用，改以等价的隔离端口 `ARGUS_E2E_API_PORT=30580 ARGUS_E2E_CONSOLE_PORT=30583 pnpm exec playwright test` 跑同一全量套件。Python 4 项 skip 为 `TEST_POSTGRES_URL` 未配置的真实 PostgreSQL 用例，非失败。 |
+| LG10（交付卫生） | **PASS（本地）** | 5 个单一目的 Conventional Commit；`git diff origin/main --check` 干净；diff 仅 Console；无新 Secret / SDK 侵入；OpenAPI 与 schema 无 drift；RED→GREEN、命令、计数与截图见上。 |
+
+### 本地验证记录（本 HEAD 实测）
+
+| 验证 | 命令 / 结果 | 边界 |
+|---|---|---|
+| Console 类型 / 单测 / Token / 构建 | `pnpm typecheck` 通过；`pnpm test` **52 文件 / 847 项通过**；`pnpm lint:tokens` 通过；`pnpm build` 成功。 | 均为 mock UI 级证据。 |
+| 全量 Playwright | `ARGUS_E2E_API_PORT=30580 ARGUS_E2E_CONSOLE_PORT=30583 pnpm --dir services/console exec playwright test`：**124 passed**。 | test-mode SQLite + `vite preview`；含路由 fixture UI 场景与零 Mock 真实本地 API 场景；**不是**生产 Worker→Agent→Langfuse 全链路证据。 |
+| 仓库主门禁 | `make validate`：**PASS（8/8）**；Python **759 passed / 4 skipped**（skip 全部为 `TEST_POSTGRES_URL` 未配置）；`docker compose config` OK。 | 使用本机 Python 3.12 venv；未连接生产数据；docker Desktop 占用 18080/18083，未影响 validate。 |
+| `make console-test` | `make console-test`：**847 passed（52 文件）**。 | 同上 Console 单测。 |
+| 后端契约专项 | `.venv/bin/python -m pytest -q tests/test_pr125_launch_detail_contract.py tests/test_issue_84_eval_only_retry.py tests/test_issue_85_snapshot_revision.py tests/test_api_results_s3.py`：**48 passed**。 | 本地 API/DB 契约；不含真实 PostgreSQL 与真实 Worker/Agent/Langfuse。 |
+| 截图证据 | `/tmp/menu-evidence-390-open.png`（390px 菜单展开：更多操作内含 Langfuse 链接、取消评测、重试失败用例、重试评测）；`tmp/menu-evidence-1280-inline.png`（1280px 主动作同行内联）。 | 本地 Chromium headless；截图未入库。 |
+
+### 残留风险
+
+- 断点判定使用 `matchMedia("(min-width: 64rem)")`，浏览器实时切换会同步布局；SSR / 无 matchMedia 环境默认桌面布局（与既有 AppShell 行为一致）。
+- 更多操作菜单在超窄视口（≤360px）对超长动作标签采用换行而非截断；如需进一步压缩可再评估，但当前 360/390/768 几何与键盘断言均通过。
+- 真实 Worker / Agent / Langfuse 链路未在验证范围内；远端 CI、Review 与 PR 合并不在本地声明之列。

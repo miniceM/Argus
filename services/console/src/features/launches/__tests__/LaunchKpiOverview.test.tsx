@@ -12,7 +12,7 @@ describe("LaunchKpiOverview keyboard navigation & accessibility (K1)", () => {
         decisionCounts={{ pass: 8, fail: 2, unknown: 0 }}
         decidedPassRate="80.0%"
         decisionCoverage={1.0}
-        classificationCounts={{ regression: 1 }}
+        classificationCounts={{ REGRESSION: 1 }}
         onNavigateTab={handleNavigate}
       />
     );
@@ -144,5 +144,96 @@ describe("LaunchKpiOverview comparison evidence", () => {
     });
 
     expect(screen.getByText("单例成本与基线持平")).toBeInTheDocument();
+  });
+});
+
+describe("LaunchKpiOverview regression count unknown-safe (issue 119 U2)", () => {
+  const FORMAL_COMPARABLE = {
+    comparability: { comparable: true, reason_codes: [] },
+    formal: { available: true, verdict: "UNCHANGED" },
+  };
+
+  const renderRegression = (props: {
+    classificationCounts?: Record<string, unknown> | null;
+    comparability?: any;
+    formal?: any;
+  }) =>
+    render(
+      <LaunchKpiOverview
+        totalItems={2}
+        passedItems={2}
+        decisionCounts={{ pass: 2, fail: 0, unknown: 0 }}
+        decidedPassRate="100.0%"
+        decisionCoverage={1}
+        {...props}
+      />,
+    );
+
+  const regressionValue = () => screen.getByTestId("regression-count-value");
+  const regressionNote = () => screen.getByTestId("regression-count-note");
+
+  it("shows a real zero as a formal no-regression result", () => {
+    renderRegression({
+      classificationCounts: { REGRESSION: 0 },
+      ...FORMAL_COMPARABLE,
+    });
+    expect(regressionValue()).toHaveTextContent("0");
+    expect(regressionNote()).toHaveTextContent("正式比较未发现回归");
+  });
+
+  it("does not turn a missing regression count into a green zero", () => {
+    renderRegression({ classificationCounts: {}, ...FORMAL_COMPARABLE });
+    expect(regressionValue()).not.toHaveTextContent("0");
+    expect(regressionValue()).toHaveTextContent("不可用");
+    expect(screen.queryByText(/未发现回归/)).not.toBeInTheDocument();
+  });
+
+  it("does not coerce a null regression count into zero", () => {
+    renderRegression({ classificationCounts: { REGRESSION: null }, ...FORMAL_COMPARABLE });
+    expect(regressionValue()).toHaveTextContent("不可用");
+    expect(screen.queryByText(/未发现回归/)).not.toBeInTheDocument();
+  });
+
+  it("does not coerce a string regression count into a number", () => {
+    renderRegression({ classificationCounts: { REGRESSION: "0" }, ...FORMAL_COMPARABLE });
+    expect(regressionValue()).toHaveTextContent("不可用");
+    expect(screen.queryByText(/未发现回归/)).not.toBeInTheDocument();
+  });
+
+  it("rejects negative, fractional and non-finite regression counts", () => {
+    for (const bad of [-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const { unmount } = renderRegression({
+        classificationCounts: { REGRESSION: bad } as any,
+        ...FORMAL_COMPARABLE,
+      });
+      expect(regressionValue()).toHaveTextContent("不可用");
+      unmount();
+    }
+  });
+
+  it("keeps a valid positive regression count with its排查 entry", () => {
+    renderRegression({ classificationCounts: { REGRESSION: 3 }, ...FORMAL_COMPARABLE });
+    expect(regressionValue()).toHaveTextContent("3");
+    expect(regressionNote()).toHaveTextContent("3 项性能退化");
+  });
+
+  it("does not display a formal count when comparability is false even if formal is available", () => {
+    renderRegression({
+      classificationCounts: { REGRESSION: 0 },
+      comparability: { comparable: false, reason_codes: [] },
+      formal: { available: true, verdict: "UNCHANGED" },
+    });
+    expect(regressionValue()).not.toHaveTextContent("0");
+    expect(screen.queryByText(/未发现回归/)).not.toBeInTheDocument();
+  });
+
+  it("does not display a formal count when the formal verdict is unavailable", () => {
+    renderRegression({
+      classificationCounts: { REGRESSION: 0 },
+      comparability: { comparable: true, reason_codes: [] },
+      formal: { available: false, withheld_reasons: ["EVIDENCE_INCOMPLETE"] },
+    });
+    expect(regressionValue()).not.toHaveTextContent("0");
+    expect(screen.queryByText(/未发现回归/)).not.toBeInTheDocument();
   });
 });

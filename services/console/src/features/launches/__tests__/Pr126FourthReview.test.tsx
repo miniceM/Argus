@@ -581,6 +581,24 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     expect(screen.queryByText("质量通过率提升")).not.toBeInTheDocument();
   });
 
+  it("R119-U2: a missing regression count must not be reported as zero regressions", async () => {
+    const c = structuredClone(mockComparison);
+    c.formal.verdict = "REGRESSION";
+    delete (c.classification_counts as Record<string, unknown>).REGRESSION;
+    overrideGet({ "/api/v1/experiment-launches/{launch_id}/comparison": { data: c } });
+    renderComponent();
+
+    await screen.findByTestId("formal-comparison-verdict");
+    // 摘要不能把缺失计数说成 0 个回归 Case
+    expect(screen.getByText(/正式比较判定存在回归/)).toBeInTheDocument();
+    expect(screen.queryByText(/发现 0 个回归/)).not.toBeInTheDocument();
+    // 筛选 chip 同样不默认 0
+    expect(screen.getByRole("button", { name: "REGRESSION (未返回)" })).toBeInTheDocument();
+    // KPI 卡片与摘要一致：计数不可用，不是绿色 0
+    expect(screen.getByTestId("regression-count-value")).toHaveTextContent("不可用");
+    expect(screen.getByText(/无法判定无回归/)).toBeInTheDocument();
+  });
+
   it("REVIEW: no frozen 90 percent rule means no fabricated overall gate", async () => {
     const c = structuredClone(mockComparison);
     c.summary.comparable_cohort.baseline.pass_rate = 0.7;

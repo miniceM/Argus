@@ -6,6 +6,7 @@ import { Button } from "../../../components/ui/Primitives";
 import { ComparisonCaseDrawer } from "../ComparisonCaseDrawer";
 import { LangfuseSyncPanel } from "../langfuseSyncStatus";
 import { comparisonPagesQueryOptions } from "../launchComparisonQueries";
+import { readRegressionCount } from "../LaunchKpiOverview";
 import { resolveMetricDirection, evaluateMetricChange, evaluateMetricRule } from "../metricComparison";
 
 type GeneratedRunSummary = import("../../../api/schema").components["schemas"]["RunSummaryResponse"];
@@ -169,6 +170,20 @@ const percentagePointDelta = (before: number | null | undefined, after: number |
   return `${delta > 0 ? "+" : ""}${delta.toFixed(1)} pp`;
 };
 
+/**
+ * Filter chip label (issue 119 U2): a classification count that the payload did
+ * not return is "未返回", never a default zero that reads as "no regression".
+ */
+const filterChipLabel = (
+  value: string,
+  counts: Record<string, unknown> | undefined,
+): string => {
+  if (value === "ALL") return "全部";
+  const raw = counts?.[value];
+  const count = typeof raw === "number" && Number.isInteger(raw) && raw >= 0 ? raw : null;
+  return count == null ? `${value} (未返回)` : `${value} (${count})`;
+};
+
 interface GateComparisonTabProps {
   launchId: string;
   snapshotId: string | null;
@@ -246,6 +261,9 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
   // local table view type (the old queryFn used the same explicit projection).
   const comparison = comparisonQuery.data?.pages[0] as unknown as Comparison | undefined;
   const comparisonSummary = comparison?.summary as ComparisonSummary | undefined;
+  // Same unknown-safe read as the KPI card (issue 119 U2): the summary must not
+  // invent a zero regression count when the payload did not return one.
+  const regressionCountState = readRegressionCount(comparison?.classification_counts);
   const cohort = comparisonSummary?.comparable_cohort;
   const versions = comparison?.versions;
   const metrics = summary?.summary;
@@ -615,7 +633,9 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
                   {!formal?.available
                     ? "由于比较证据不足或 Baseline 未绑定，暂无法给出相对变化结论。"
                     : formal.verdict === "REGRESSION"
-                    ? `正式比较发现 ${comparison?.classification_counts?.REGRESSION ?? 0} 个回归 Case；此结论只描述相对变化。`
+                    ? regressionCountState.kind === "value"
+                      ? `正式比较发现 ${regressionCountState.value} 个回归 Case；此结论只描述相对变化。`
+                      : "正式比较判定存在回归，但回归计数未返回或不可用；此结论只描述相对变化。"
                     : formal.verdict === "IMPROVEMENT"
                     ? "正式比较显示相对基线有所改善；Candidate 是否达到门禁仍以其冻结质量结论为准。"
                     : formal.verdict === "UNCHANGED"
@@ -966,7 +986,7 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
                     : "border-border text-muted-foreground hover:bg-surface-muted"
                 }`}
               >
-                {value === "ALL" ? "全部" : `${value} (${comparison.classification_counts[value] ?? 0})`}
+                {filterChipLabel(value, comparison.classification_counts)}
               </button>
             ))}
           </div>

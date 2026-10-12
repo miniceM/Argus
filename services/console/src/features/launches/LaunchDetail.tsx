@@ -28,7 +28,6 @@ import { CasesTraceTab } from "./tabs/CasesTraceTab";
 import { ManifestAuditTab } from "./tabs/ManifestAuditTab";
 import { projectFrozenCase } from "./launchReportView";
 import {
-  snapshotDetailKey,
   snapshotDetailQueryOptions,
   snapshotListKey,
   snapshotListQueryOptions,
@@ -385,7 +384,9 @@ export const LaunchDetail: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.launches.items(launchId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.launches.list() });
       queryClient.invalidateQueries({ queryKey: [...snapshotListKey(launchId)] });
-      queryClient.invalidateQueries({ queryKey: [...snapshotDetailKey(launchId, null)] });
+      // A result snapshot is immutable under its ID. Refresh its directory after a
+      // result-changing action, but keep the selected historical detail (for example S1)
+      // cached while S2 is discovered instead of refetching the same frozen payload.
     }
   };
 

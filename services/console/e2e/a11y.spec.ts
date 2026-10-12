@@ -326,11 +326,14 @@ test.describe("WCAG 2.2 AA: overlay surfaces", () => {
     await page.keyboard.press("Space");
     const dialog = page.getByRole("dialog", { name: "主导航" });
     await expect(dialog).toBeVisible();
+    const credentials = dialog.getByRole("link", { name: "Credentials" });
     const agents = dialog.getByRole("link", { name: "Agents" });
     const launches = dialog.getByRole("link", { name: "Launches" });
     const close = dialog.getByRole("button", { name: "关闭" });
-    await expect(agents).toBeFocused();
+    await expect(credentials).toBeFocused();
 
+    await page.keyboard.press("Tab");
+    await expect(agents).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(launches).toBeFocused();
     await page.keyboard.press("Tab");

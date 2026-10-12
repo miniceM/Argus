@@ -207,6 +207,7 @@ test.describe("E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Atte
           evidence_state: "COMPLETE",
           evidence_reasons: [],
           releasable: false,
+          manifest: launchObj.manifest,
           versions: {},
           summary: {},
           items: [

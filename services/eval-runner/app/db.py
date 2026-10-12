@@ -65,6 +65,11 @@ class MigrationRunner:
                 clean_content = re.sub(r"--[^\n]*", "", content)
                 statements = [s.strip() for s in clean_content.split(";") if s.strip()]
                 for statement in statements:
+                    # SQLite 测试建表使用 ORM 约束；此 PostgreSQL 列约束语法无法执行。
+                    if conn.dialect.name == "sqlite" and re.fullmatch(
+                        r"ALTER TABLE \w+ ALTER COLUMN \w+ SET NOT NULL", statement, re.IGNORECASE
+                    ):
+                        continue
                     try:
                         conn.execute(text(statement))
                     except Exception as exc:

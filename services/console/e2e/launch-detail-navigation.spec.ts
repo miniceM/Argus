@@ -536,6 +536,12 @@ test.describe("Issue #119: launch detail first-screen hierarchy", () => {
   });
 
   test("downloads parseable JSON for the URL-pinned Launch and Snapshot", async ({ page }, testInfo) => {
+    const selectedManifest = {
+      schema_version: "1.2",
+      dataset: { dataset_id: "frozen-dataset-v1", dataset_version: "v1" },
+      agent: { id: "historical-agent", version: "v2" },
+      evaluators: [{ id: "frozen-evaluator", version: "3.1.0" }],
+    };
     const selectedPayload = {
       launch_id: historicalLaunchId,
       snapshot_id: "snap-v1",
@@ -544,6 +550,9 @@ test.describe("Issue #119: launch detail first-screen hierarchy", () => {
       evidence_state: "COMPLETE",
       evidence_reasons: [],
       releasable: true,
+      manifest: selectedManifest,
+      versions: {},
+      summary: {},
       items: [{ dataset_item_id: "frozen-case-1", quality_conclusion: "fail", scores: { intent_match: 0 } }],
     };
     await page.route("**/api/v1/experiment-launches/*/result-snapshots/*", (route) =>
@@ -566,6 +575,7 @@ test.describe("Issue #119: launch detail first-screen hierarchy", () => {
     expect(downloadedJson.launch_id).toBe(historicalLaunchId);
     expect(downloadedJson.snapshot_id).toBe("snap-v1");
     expect(downloadedJson.revision).toBe(1);
+    expect(downloadedJson.manifest).toEqual(selectedManifest);
     expect(downloadedJson.items[0].dataset_item_id).toBe("frozen-case-1");
     await testInfo.attach("downloaded-snapshot.json", {
       body: JSON.stringify(downloadedJson, null, 2),

@@ -178,7 +178,9 @@ describe("CreateLaunch Evaluator selection", () => {
     await waitFor(() => expect(screen.getByText("已选 0 项")).toBeInTheDocument());
     expect(screen.getByText("已选 0 项")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /创建评测任务/ }));
+    const submit = screen.getByRole("button", { name: /创建评测任务/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
     await waitFor(() => expect(screen.getByText("请至少选择一个评测指标 (Evaluator)")).toBeInTheDocument());
     expect(api.POST).not.toHaveBeenCalled();
   });
@@ -187,6 +189,10 @@ describe("CreateLaunch Evaluator selection", () => {
     vi.mocked(api.POST).mockResolvedValue({ data: { id: "launch-created-1", status: "PENDING" } } as never);
     renderCreateLaunch();
     await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
+
+    const agentVersion = screen.getByLabelText(/选择版本规格/);
+    await waitFor(() => expect(agentVersion).toHaveValue("v1"));
+    fireEvent.change(agentVersion, { target: { value: "v1" } });
 
     const submit = screen.getByRole("button", { name: /创建评测任务/ });
     await waitFor(() => expect(submit).toBeEnabled());
@@ -223,7 +229,9 @@ describe("CreateLaunch Evaluator selection", () => {
     await waitFor(() => expect(screen.getByText("已选 4 项")).toBeInTheDocument());
 
     fireEvent.click(screen.getByTestId("evaluator-toggle-intent_match"));
-    fireEvent.click(screen.getByRole("button", { name: /创建评测任务/ }));
+    const submit = screen.getByRole("button", { name: /创建评测任务/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
 
     await waitFor(() => {
       expect(api.POST).toHaveBeenCalledWith("/api/v1/experiment-launches", {

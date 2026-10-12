@@ -47,6 +47,10 @@ interface ShellNavProps {
 const ShellNav: React.FC<ShellNavProps> = ({ dashboardUrl, dashboardStatus, onNavigate }) => (
   <>
     <nav aria-label="主导航" className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-3">
+      <NavLink to="/credentials" className={navLinkClass} onClick={onNavigate}>
+        <ShieldCheck aria-hidden="true" className="size-4 shrink-0 text-muted-foreground group-hover:text-current" />
+        <span>Credentials</span>
+      </NavLink>
       <NavLink to="/agents" className={navLinkClass} onClick={onNavigate}>
         <Bot aria-hidden="true" className="size-4 shrink-0 text-muted-foreground group-hover:text-current" />
         <span>Agents</span>

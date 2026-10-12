@@ -85,6 +85,7 @@ const snapshotDetail = {
   quality_fail_count: 4,
   quality_unknown_count: 0,
   releasable: true,
+  manifest: launch.manifest,
   items: items.map((it) => ({
     ...it,
     scores: it.scores,

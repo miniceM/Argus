@@ -3,6 +3,9 @@ from __future__ import annotations
 import os
 from urllib.parse import parse_qsl, urlsplit
 
+from .credentials import ResolvedCredential
+from .secret_providers import provider_for
+
 FORBIDDEN_QUERY_KEYS = {"token", "secret", "key", "password", "auth", "api_key", "apikey"}
 DEFAULT_ALLOWED_ENVS = {"DEMO_AUTH_TOKEN", "ARGUS_DEMO_TOKEN"}
 
@@ -31,31 +34,19 @@ def get_allowed_credential_envs() -> set[str]:
 def validate_credential_ref(ref: str | None) -> None:
     if not ref:
         return
-
-    if ref.startswith("env://"):
-        env_name = ref[len("env://") :].strip()
-        allowed = get_allowed_credential_envs()
-        if env_name not in allowed:
-            raise ValueError(
-                f"Environment variable '{env_name}' is not in allowed credential whitelist: {sorted(allowed)}"
-            )
-    elif ref.startswith("vault://") or ref.startswith("k8s-secret://"):
-        scheme = ref.split("://")[0]
-        raise ValueError(f"Credential provider '{scheme}://' is not supported for resolution in current version.")
-    else:
-        raise ValueError(f"Unsupported credential reference scheme: '{ref}'. Expected env://")
+    provider_for(ref, get_allowed_credential_envs()).validate(ref)
 
 
 def resolve_credential(ref: str | None) -> str | None:
     if not ref:
         return None
 
-    if ref.startswith("env://"):
-        env_name = ref[len("env://") :].strip()
-        allowed = get_allowed_credential_envs()
-        if env_name in allowed:
-            return os.getenv(env_name)
-    return None
+    return provider_for(ref, get_allowed_credential_envs()).resolve(ref)
+
+
+def resolve_execution_credential(ref: str) -> ResolvedCredential:
+    provider = provider_for(ref, get_allowed_credential_envs())
+    return ResolvedCredential(provider.resolve(ref), provider=ref.split(":", 1)[0])
 
 
 def sanitize_headers_for_trace(headers: dict[str, str]) -> dict[str, str]:

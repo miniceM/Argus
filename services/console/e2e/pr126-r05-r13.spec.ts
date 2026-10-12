@@ -200,6 +200,7 @@ async function installLaunchRoutes(
           evidence_state: "COMPLETE",
           evidence_reasons: [],
           releasable: true,
+          manifest: { schema_version: "1.2", dataset: {}, agent: {}, evaluators: [] },
           versions: {},
           summary: {},
           items: [frozenItem(`case-${launchId}`)],

@@ -127,6 +127,7 @@ async function mockApi(
         evidence_state: found.evidence_state,
         evidence_reasons: found.evidence_reasons,
         releasable: found.evidence_state === "COMPLETE",
+        manifest: launch.manifest,
         versions: {},
         summary: {},
         items: [],

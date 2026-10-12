@@ -26,6 +26,7 @@ function renderAppShell(result: Promise<unknown>) {
       <MemoryRouter initialEntries={["/agents"]}>
         <Routes>
           <Route path="/" element={<AppShell />}>
+            <Route path="credentials" element={<div>Credentials page</div>} />
             <Route path="agents" element={<div>Agents page</div>} />
             <Route path="launches" element={<div>Launches page</div>} />
           </Route>
@@ -91,9 +92,9 @@ describe("AppShell Langfuse Dashboard link", () => {
 
     fireEvent.click(opener);
     const dialog = screen.getByRole("dialog", { name: "主导航" });
-    const agentsLink = within(dialog).getByRole("link", { name: "Agents" });
+    const credentialsLink = within(dialog).getByRole("link", { name: "Credentials" });
     const dashboardLink = await within(dialog).findByRole("link", { name: /Langfuse Dashboard/ });
-    expect(document.activeElement).toBe(agentsLink);
+    expect(document.activeElement).toBe(credentialsLink);
 
     const closeButton = within(dialog).getByRole("button", { name: "关闭" });
     closeButton.focus();
@@ -137,6 +138,38 @@ describe("AppShell Langfuse Dashboard link", () => {
     await screen.findByText("Launches page");
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "主导航" })).not.toBeInTheDocument());
     expect(document.activeElement).toBe(opener);
+  });
+
+  it("keeps Credentials reachable in the desktop navigation", async () => {
+    const viewport = installDesktopMediaQuery(true);
+    try {
+      renderAppShell(success(systemInfo()));
+
+      const credentialsLink = await screen.findByRole("link", { name: "Credentials" });
+      expect(credentialsLink).toHaveAttribute("href", "/credentials");
+      fireEvent.click(credentialsLink);
+      expect(await screen.findByText("Credentials page")).toBeInTheDocument();
+    } finally {
+      viewport.restore();
+    }
+  });
+
+  it("keeps Credentials reachable from the mobile navigation drawer", async () => {
+    const viewport = installDesktopMediaQuery(false);
+    try {
+      renderAppShell(success(systemInfo()));
+      const opener = screen.getByRole("button", { name: "打开导航" });
+
+      fireEvent.click(opener);
+      const dialog = screen.getByRole("dialog", { name: "主导航" });
+      fireEvent.click(within(dialog).getByRole("link", { name: "Credentials" }));
+
+      expect(await screen.findByText("Credentials page")).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "主导航" })).not.toBeInTheDocument());
+      expect(document.activeElement).toBe(opener);
+    } finally {
+      viewport.restore();
+    }
   });
 
   it.each([null, undefined])("does not render a link when the URL is %s", async (url) => {

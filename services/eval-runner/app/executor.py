@@ -5,6 +5,8 @@ import email.utils
 import time
 from collections import deque
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -13,8 +15,37 @@ from typing import Any
 import httpx
 
 from .costs import extract_usage_cost
+from .credentials import CredentialService
 from .registry import AgentVersionSpec
-from .security import resolve_credential
+from .secret_providers import CredentialUnavailable
+from .security import resolve_execution_credential
+
+# 与单个 Launch 允许的最大并发一致，避免与 Langfuse/文件任务争抢默认线程池。
+_CREDENTIAL_EXECUTOR = ThreadPoolExecutor(max_workers=50, thread_name_prefix="argus-credentials")
+_CREDENTIAL_QUEUE_TIMEOUT = 5.0
+
+
+async def _resolve_execution_secret(callback, *args):
+    loop = asyncio.get_running_loop()
+    started = loop.create_future()
+    context = copy_context()
+
+    def announce(timestamp):
+        if not started.done():
+            started.set_result(timestamp)
+
+    def resolve():
+        loop.call_soon_threadsafe(announce, time.monotonic())
+        return context.run(callback, *args)
+
+    work = loop.run_in_executor(_CREDENTIAL_EXECUTOR, resolve)
+    try:
+        # 排队和解析分别有界，避免挂起的 Provider 占满线程后无限等待。
+        began = await asyncio.wait_for(started, timeout=_CREDENTIAL_QUEUE_TIMEOUT)
+        return await asyncio.wait_for(work, timeout=max(0, 5 - (time.monotonic() - began)))
+    finally:
+        if not work.done():
+            work.cancel()
 
 
 class AttemptAuthorizationError(RuntimeError):
@@ -93,8 +124,11 @@ class SlidingWindowRateLimiter:
 class RemoteAgentExecutor:
     """Remote Agent invocation executor with HTTP error classification, idempotency protection, and rate limiting."""
 
-    def __init__(self, spec: AgentVersionSpec, client: httpx.AsyncClient | None = None):
+    def __init__(self, spec: AgentVersionSpec, client: httpx.AsyncClient | None = None, *, credential_db_manager=None):
         self.spec = spec
+        self.credential_db_manager = credential_db_manager
+        self.resolved_credential = None
+        self._credential_prepared = False
         self._limiter = SlidingWindowRateLimiter(spec.rate_limit_per_minute)
         self._client = client or httpx.AsyncClient(
             timeout=httpx.Timeout(
@@ -104,6 +138,22 @@ class RemoteAgentExecutor:
                 write=spec.timeout_seconds,
             )
         )
+
+    async def prepare_credential(self, *, force_refresh: bool = False):
+        if self._credential_prepared and not force_refresh:
+            return
+        try:
+            if self.spec.credential_id:
+                manager = self.credential_db_manager
+                if manager is None:
+                    from .main import db_manager
+                    manager = db_manager
+                self.resolved_credential = await _resolve_execution_secret(CredentialService(manager).resolve, self.spec.credential_id)
+            elif self.spec.credential_ref:
+                self.resolved_credential = await _resolve_execution_secret(resolve_execution_credential, self.spec.credential_ref)
+            self._credential_prepared = True
+        except (ValueError, TimeoutError):
+            raise CredentialUnavailable() from None
 
     async def invoke_once(
         self,
@@ -117,10 +167,9 @@ class RemoteAgentExecutor:
             raise ValueError(f"Executor currently supports POST only, got: {self.spec.method}")
 
         call_headers = dict(headers)
-        if self.spec.credential_ref:
-            token = resolve_credential(self.spec.credential_ref)
-            if token:
-                call_headers["Authorization"] = f"Bearer {token}"
+        await self.prepare_credential()
+        if self.resolved_credential:
+            call_headers["Authorization"] = f"Bearer {self.resolved_credential.token}"
 
         active_client = client or self._client
         start_time = time.monotonic()
@@ -278,14 +327,6 @@ class RemoteAgentExecutor:
 
         total_started = time.monotonic()
         total_attempts = 0
-        call_headers = dict(headers)
-
-        # Inject resolved credential if present
-        if self.spec.credential_ref:
-            token = resolve_credential(self.spec.credential_ref)
-            if token:
-                call_headers["Authorization"] = f"Bearer {token}"
-
         timeout = httpx.Timeout(
             self.spec.timeout_seconds,
             connect=min(5.0, self.spec.timeout_seconds),
@@ -296,6 +337,13 @@ class RemoteAgentExecutor:
         async with httpx.AsyncClient(timeout=timeout, transport=client_transport) as client:
             for attempt in range(self.spec.max_retries + 1):
                 total_attempts = attempt + 1
+                # 同步 executor 可被多个 Item 共用；每个实际 HTTP Attempt 读取当前凭据。
+                await self._limiter.acquire()
+                await self.prepare_credential(force_refresh=True)
+                call_headers = dict(headers)
+                if self.resolved_credential:
+                    call_headers["Authorization"] = f"Bearer {self.resolved_credential.token}"
+                # 拷贝 Header 与同步授权回调之间不让出控制权，修订与发送的 Token 一致。
                 attempt_id: str | None = None
                 if on_attempt_start:
                     attempt_id = on_attempt_start(total_attempts)
@@ -304,7 +352,6 @@ class RemoteAgentExecutor:
                             f"Attempt {total_attempts} authorization denied. Invocation aborted to prevent unrecorded HTTP calls."
                         )
 
-                await self._limiter.acquire()
                 attempt_started = time.monotonic()
 
                 try:

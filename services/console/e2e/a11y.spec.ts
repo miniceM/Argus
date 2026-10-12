@@ -300,9 +300,50 @@ test.describe("WCAG 2.2 AA: overlay surfaces", () => {
   });
 
   test("attempt drawer", async ({ page }) => {
-    await auditOpen(page, `/launches/${LAUNCH_ID}`, () =>
+    // Attempt timelines are a live read-model capability, not part of historical snapshots.
+    await page.route(`**/api/v1/experiment-launches/${LAUNCH_ID}`, (route) =>
+      route.fulfill({ json: { ...launch, status: "RUNNING" } }),
+    );
+    await auditOpen(page, `/launches/${LAUNCH_ID}?tab=cases`, () =>
       page.getByRole("button", { name: /次尝试/ }).first().click(),
     );
+  });
+
+  test("mobile navigation drawer", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await auditOpen(page, "/agents", () =>
+      page.getByRole("button", { name: "打开导航" }).click(),
+    );
+  });
+
+  test("mobile navigation traps keyboard focus and restores it on Escape", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/agents");
+    await page.waitForLoadState("networkidle");
+
+    const opener = page.getByRole("button", { name: "打开导航" });
+    await opener.focus();
+    await page.keyboard.press("Space");
+    const dialog = page.getByRole("dialog", { name: "主导航" });
+    await expect(dialog).toBeVisible();
+    const credentials = dialog.getByRole("link", { name: "Credentials" });
+    const agents = dialog.getByRole("link", { name: "Agents" });
+    const launches = dialog.getByRole("link", { name: "Launches" });
+    const close = dialog.getByRole("button", { name: "关闭" });
+    await expect(credentials).toBeFocused();
+
+    await page.keyboard.press("Tab");
+    await expect(agents).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(launches).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(launches).toBeFocused();
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(opener).toBeFocused();
   });
 });
 
@@ -332,7 +373,7 @@ test.describe("prefers-reduced-motion", () => {
     // The FieldHelp triggers live inside the create-version dialog, not on the
     // agent detail page itself.
     await page.getByRole("button", { name: "创建新版本" }).click();
-    await page.locator("button[aria-expanded]").first().click();
+    await page.locator('button[title="查看字段说明"]').first().click();
 
     const popover = page.getByRole("dialog").last();
     await expect(popover).toBeVisible();

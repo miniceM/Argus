@@ -1,4 +1,6 @@
+import { readFile } from "node:fs/promises";
 import { test, expect } from "@playwright/test";
+import { installSingleSnapshotFixture } from "./fixtures/resultSnapshots";
 
 test.describe("E2E-02: Frozen Manifest Absolute Immutability Verification", () => {
   test("historical launch displays frozen manifest even after agent updates in registry", async ({ page }) => {
@@ -92,6 +94,22 @@ test.describe("E2E-02: Frozen Manifest Absolute Immutability Verification", () =
         ],
       });
     });
+    const snapshotFixture = await installSingleSnapshotFixture(page, {
+      launchId: historicalLaunchId,
+      snapshotId: "snapshot-historical-launch",
+      manifest: frozenManifest,
+      items: [
+        {
+          dataset_item_id: "case-001",
+          execution_status: "succeeded",
+          eval_status: "completed",
+          quality_conclusion: "pass",
+          scores: { exact_match: 1.0 },
+          latency_ms: 120,
+          final_attempt_id: "attempt-historical-1",
+        },
+      ],
+    });
 
     // Notice: The current Agent Registry route has updated version 2.0.0!
     await page.route("**/api/v1/agent-versions**", async (route) => {
@@ -119,6 +137,7 @@ test.describe("E2E-02: Frozen Manifest Absolute Immutability Verification", () =
     await expect(page.getByTestId("quality-badge").first()).toContainText("PASS");
 
     // CRITICAL: The page MUST display the frozen endpoint from manifest, NOT currentLatestEndpoint
+    await page.getByRole("tab", { name: /不可变快照与审计/ }).click();
     await expect(page.getByText(frozenEndpoint)).toBeVisible();
     await expect(page.getByText(currentLatestEndpoint)).not.toBeVisible();
 
@@ -126,8 +145,26 @@ test.describe("E2E-02: Frozen Manifest Absolute Immutability Verification", () =
     await expect(page.getByText("四维不可变冻结快照")).toBeVisible();
     await expect(page.getByText("exact_match", { exact: true })).toBeVisible();
 
-    // Verify Raw JSON Viewer toggle
-    await page.getByRole("button", { name: "查看完整 Manifest JSON" }).click();
-    await expect(page.getByText("Immutable Manifest JSON")).toBeVisible();
+    // The raw viewer and download are the selected Result Snapshot detail, including its
+    // frozen Manifest; the browser artifact must parse to the exact mocked API payload.
+    await page.getByRole("button", { name: "查看完整快照 JSON" }).click();
+    await expect(page.getByText("Frozen Result Snapshot JSON")).toBeVisible();
+    await expect(page.locator("pre")).toContainText(frozenEndpoint);
+
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByRole("button", { name: "下载原始 JSON" }).click(),
+    ]);
+    const downloadPath = await download.path();
+    expect(downloadPath).not.toBeNull();
+    const exported = JSON.parse(await readFile(downloadPath!, "utf8"));
+    expect(exported).toEqual(snapshotFixture.detail);
+    expect(exported).toMatchObject({
+      launch_id: historicalLaunchId,
+      snapshot_id: "snapshot-historical-launch",
+      manifest: frozenManifest,
+    });
+    expect(JSON.stringify(exported)).not.toContain("Authorization");
+    expect(JSON.stringify(exported)).not.toContain("Cookie");
   });
 });

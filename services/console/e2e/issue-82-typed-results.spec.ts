@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { installSingleSnapshotFixture } from "./fixtures/resultSnapshots";
 
 /**
  * Issue #82 acceptance: one case must let the reviewer read a real numeric 0,
@@ -172,12 +173,17 @@ async function mockDetail(page: Page, items: unknown[] = [baseItem]) {
       },
     });
   });
+  await installSingleSnapshotFixture(page, {
+    launchId: "launch-issue-82",
+    snapshotId: "snapshot-issue-82",
+    items,
+  });
 }
 
 test.describe("Issue #82: typed evaluation results", () => {
   test("reads 0, false, category, text and a failure in one case without collapsing to zero", async ({ page }) => {
     await mockDetail(page);
-    await page.goto("/launches/launch-issue-82");
+    await page.goto("/launches/launch-issue-82?tab=cases");
 
     // The item table shows each typed result with its own type.
     const numericCell = page.getByTestId("typed-result-intent_match").first();
@@ -221,7 +227,7 @@ test.describe("Issue #82: typed evaluation results", () => {
     await mockDetail(page, [
       { ...baseItem, id: "item-legacy", evaluation_results: [], scores: { intent_match: 1 } },
     ]);
-    await page.goto("/launches/launch-issue-82");
+    await page.goto("/launches/launch-issue-82?tab=cases");
 
     const legacy = page.getByTestId("typed-result-intent_match").first();
     await expect(legacy).toBeVisible();

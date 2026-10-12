@@ -64,7 +64,7 @@ function renderDetail(manifest: Record<string, unknown>, items: unknown[] = []) 
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/launches/launch-issue-81"]}>
+      <MemoryRouter initialEntries={["/launches/launch-issue-81?tab=audit"]}>
         <Routes>
           <Route path="/launches/:launchId" element={<LaunchDetail />} />
         </Routes>

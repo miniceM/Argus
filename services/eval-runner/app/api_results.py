@@ -169,9 +169,15 @@ def _revision_row(snapshot: RunResultSnapshotRecord, is_latest: bool) -> ResultS
         evidence_state=(snapshot.evidence_state or EVIDENCE_COMPLETE).upper(),
         evidence_reasons=list(snapshot.evidence_reasons or []),
         total_cases=int(summary.get("total_cases", 0) or 0),
-        quality_pass_count=int(summary.get("quality_pass_count", 0) or 0),
-        quality_fail_count=int(summary.get("quality_fail_count", 0) or 0),
-        quality_unknown_count=int(summary.get("quality_unknown_count", 0) or 0),
+        quality_pass_count=(
+            int(summary["quality_pass_count"]) if summary.get("quality_pass_count") is not None else None
+        ),
+        quality_fail_count=(
+            int(summary["quality_fail_count"]) if summary.get("quality_fail_count") is not None else None
+        ),
+        quality_unknown_count=(
+            int(summary["quality_unknown_count"]) if summary.get("quality_unknown_count") is not None else None
+        ),
         is_latest=is_latest,
     )
 
@@ -234,6 +240,7 @@ def get_launch_result_snapshot(launch_id: str, snapshot_id: str) -> ResultSnapsh
             evidence_state=evidence_state,
             evidence_reasons=list(snapshot.evidence_reasons or []),
             releasable=evidence_state == EVIDENCE_COMPLETE,
+            manifest=snapshot.manifest,
             versions=_versions(snapshot.manifest),
             summary=snapshot.summary,
             items=list(snapshot.items or []),

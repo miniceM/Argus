@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { api } from "../api/client";
@@ -26,7 +26,9 @@ function renderAppShell(result: Promise<unknown>) {
       <MemoryRouter initialEntries={["/agents"]}>
         <Routes>
           <Route path="/" element={<AppShell />}>
+            <Route path="credentials" element={<div>Credentials page</div>} />
             <Route path="agents" element={<div>Agents page</div>} />
+            <Route path="launches" element={<div>Launches page</div>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -36,6 +38,38 @@ function renderAppShell(result: Promise<unknown>) {
 }
 
 const success = (data: unknown) => Promise.resolve({ data } as never);
+
+function installDesktopMediaQuery(initialMatches = false) {
+  let matches = initialMatches;
+  const listeners = new Set<(event: MediaQueryListEvent) => void>();
+  const mediaQuery = {
+    media: "(min-width: 64rem)",
+    get matches() { return matches; },
+    onchange: null,
+    addEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => listeners.add(listener),
+    removeEventListener: (_type: string, listener: (event: MediaQueryListEvent) => void) => listeners.delete(listener),
+    addListener: (listener: (event: MediaQueryListEvent) => void) => listeners.add(listener),
+    removeListener: (listener: (event: MediaQueryListEvent) => void) => listeners.delete(listener),
+    dispatchEvent: () => true,
+  } as unknown as MediaQueryList;
+  const original = Object.getOwnPropertyDescriptor(window, "matchMedia");
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: vi.fn(() => mediaQuery),
+  });
+  return {
+    mediaQuery,
+    setMatches(next: boolean) {
+      matches = next;
+      const event = { matches, media: mediaQuery.media } as MediaQueryListEvent;
+      listeners.forEach((listener) => listener(event));
+    },
+    restore() {
+      if (original) Object.defineProperty(window, "matchMedia", original);
+      else delete (window as any).matchMedia;
+    },
+  };
+}
 
 describe("AppShell Langfuse Dashboard link", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -50,6 +84,92 @@ describe("AppShell Langfuse Dashboard link", () => {
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(screen.getByText("Agents page")).toBeInTheDocument();
+  });
+
+  it("traps focus in the mobile navigation and restores it to the opener on Escape", async () => {
+    renderAppShell(success(systemInfo("https://observability.example.com/langfuse/")));
+    const opener = screen.getByRole("button", { name: "打开导航" });
+
+    fireEvent.click(opener);
+    const dialog = screen.getByRole("dialog", { name: "主导航" });
+    const credentialsLink = within(dialog).getByRole("link", { name: "Credentials" });
+    const dashboardLink = await within(dialog).findByRole("link", { name: /Langfuse Dashboard/ });
+    expect(document.activeElement).toBe(credentialsLink);
+
+    const closeButton = within(dialog).getByRole("button", { name: "关闭" });
+    closeButton.focus();
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(dashboardLink);
+    fireEvent.keyDown(dialog, { key: "Tab" });
+    expect(document.activeElement).toBe(closeButton);
+    expect(screen.getByText("Agents page").closest("main")?.parentElement).toHaveAttribute("inert");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "主导航" })).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(opener);
+    expect(screen.getByText("Agents page").closest("main")?.parentElement).not.toHaveAttribute("inert");
+  });
+
+  it("closes the mobile drawer and releases page inertness when crossing into desktop", async () => {
+    const viewport = installDesktopMediaQuery(false);
+    try {
+      renderAppShell(success(systemInfo()));
+      const opener = screen.getByRole("button", { name: "打开导航" });
+      fireEvent.click(opener);
+      expect(screen.getByRole("dialog", { name: "主导航" })).toBeInTheDocument();
+      expect(screen.getByText("Agents page").closest("main")?.parentElement).toHaveAttribute("inert");
+
+      viewport.setMatches(true);
+
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "主导航" })).not.toBeInTheDocument());
+      expect(screen.getByText("Agents page").closest("main")?.parentElement).not.toHaveAttribute("inert");
+    } finally {
+      viewport.restore();
+    }
+  });
+
+  it("closes the mobile navigation after selecting a route and restores focus", async () => {
+    renderAppShell(success(systemInfo()));
+    const opener = screen.getByRole("button", { name: "打开导航" });
+
+    fireEvent.click(opener);
+    fireEvent.click(within(screen.getByRole("dialog", { name: "主导航" })).getByRole("link", { name: "Launches" }));
+
+    await screen.findByText("Launches page");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "主导航" })).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("keeps Credentials reachable in the desktop navigation", async () => {
+    const viewport = installDesktopMediaQuery(true);
+    try {
+      renderAppShell(success(systemInfo()));
+
+      const credentialsLink = await screen.findByRole("link", { name: "Credentials" });
+      expect(credentialsLink).toHaveAttribute("href", "/credentials");
+      fireEvent.click(credentialsLink);
+      expect(await screen.findByText("Credentials page")).toBeInTheDocument();
+    } finally {
+      viewport.restore();
+    }
+  });
+
+  it("keeps Credentials reachable from the mobile navigation drawer", async () => {
+    const viewport = installDesktopMediaQuery(false);
+    try {
+      renderAppShell(success(systemInfo()));
+      const opener = screen.getByRole("button", { name: "打开导航" });
+
+      fireEvent.click(opener);
+      const dialog = screen.getByRole("dialog", { name: "主导航" });
+      fireEvent.click(within(dialog).getByRole("link", { name: "Credentials" }));
+
+      expect(await screen.findByText("Credentials page")).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "主导航" })).not.toBeInTheDocument());
+      expect(document.activeElement).toBe(opener);
+    } finally {
+      viewport.restore();
+    }
   });
 
   it.each([null, undefined])("does not render a link when the URL is %s", async (url) => {

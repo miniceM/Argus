@@ -53,6 +53,14 @@ interface ShellProps extends OverlayProps {
    * that scrolls with the viewport.
    */
   variant: "modal" | "drawer";
+  /** Drawer docking side; modal geometry ignores this value. */
+  drawerSide?: "left" | "right";
+  /** `sidebar` uses the shared navigation width; `default` uses the standard drawer width. */
+  drawerSize?: "sidebar" | "default";
+  /** Optional responsive visibility classes for the full-screen overlay layer. */
+  overlayClassName?: string;
+  /** Explicit focus-return target when opening changes/inerts the trigger's parent. */
+  returnFocusRef?: React.RefObject<HTMLElement | null>;
 }
 
 const Overlay: React.FC<ShellProps> = ({
@@ -66,6 +74,10 @@ const Overlay: React.FC<ShellProps> = ({
   children,
   footer,
   variant,
+  drawerSide = "right",
+  drawerSize = "default",
+  overlayClassName,
+  returnFocusRef,
   className,
 }) => {
   const titleId = useId();
@@ -79,9 +91,9 @@ const Overlay: React.FC<ShellProps> = ({
   // users restart at the top of the page.
   useEffect(() => {
     if (!open) return;
-    returnFocusTo.current = document.activeElement as HTMLElement | null;
+    returnFocusTo.current = returnFocusRef?.current ?? (document.activeElement as HTMLElement | null);
     return () => returnFocusTo.current?.focus?.();
-  }, [open]);
+  }, [open, returnFocusRef]);
 
   useEffect(() => {
     if (!open) return;
@@ -152,7 +164,10 @@ const Overlay: React.FC<ShellProps> = ({
     <div
       className={clsx(
         "fixed inset-0 z-modal bg-overlay/50 backdrop-blur-xs",
-        isDrawer ? "flex justify-end" : "flex items-center justify-center overflow-y-auto p-4",
+        overlayClassName,
+        isDrawer
+          ? drawerSide === "left" ? "flex justify-start" : "flex justify-end"
+          : "flex items-center justify-center overflow-y-auto p-4",
       )}
       onMouseDown={(event) => {
         if (dismissable && event.target === event.currentTarget) onClose();
@@ -168,7 +183,11 @@ const Overlay: React.FC<ShellProps> = ({
         className={clsx(
           "relative flex flex-col border border-border bg-surface shadow-lg",
           isDrawer
-            ? "h-full w-full max-w-drawer border-y-0 border-r-0"
+            ? clsx(
+              "h-full border-y-0",
+              drawerSize === "sidebar" ? "w-sidebar max-w-sidebar" : "w-full max-w-drawer",
+              drawerSide === "left" ? "border-l-0" : "border-r-0",
+            )
             : "my-auto max-h-full w-full sm:max-w-modal",
           className,
         )}

@@ -207,6 +207,10 @@ class LaunchService:
         if not ver_rec.is_active:
             raise ValueError(f"AgentVersion '{agent_id}:{agent_version}' is archived/inactive")
 
+        version_environment = ver_rec.environment or ("production" if ver_rec.credential_id else None)
+        if version_environment is not None and normalize_environment(version_environment) != normalized_environment:
+            raise ValueError("Launch environment must match AgentVersion environment")
+
         agent_rec = self.registry.get_agent(agent_id)
         if not agent_rec or agent_rec.status != "active":
             raise ValueError(
@@ -257,6 +261,7 @@ class LaunchService:
                 "request_mapping": dict(ver_rec.request_mapping or {}),
                 "usage_cost_mapping": dict(ver_rec.usage_cost_mapping or {}) or None,
                 "credential_ref": ver_rec.credential_ref,
+                "credential_id": ver_rec.credential_id,
                 "spec_digest": ver_rec.spec_digest,
                 "artifact_ref": ver_rec.artifact_ref,
                 "is_idempotent": ver_rec.is_idempotent,

@@ -1,0 +1,62 @@
+# 复制到业务仓库 .github/workflows/；配置 Variables/Secrets 并替换 deploy 命令。
+name: Argus release gate
+on:
+  workflow_dispatch:
+    inputs:
+      agent_version:
+        description: 已注册的不可变 Agent 版本
+        required: true
+        type: string
+      dataset_version:
+        description: 平台已确认的 Dataset 版本
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ARGUS_API_URL: ${{ vars.ARGUS_API_URL }}
+      ARGUS_CLI_REF: ${{ vars.ARGUS_CLI_REF }}
+      AGENT_VERSION: ${{ inputs.agent_version }}
+      DATASET_VERSION: ${{ inputs.dataset_version }}
+      RELEASE_KEY: argus-gh-${{ github.repository_id }}-${{ github.run_id }}
+    steps:
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Install pinned Argus CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$ARGUS_CLI_REF" =~ ^[0-9a-f]{40}$ ]]
+          test -n "$ARGUS_API_URL"
+          python -m pip install "argus-release-cli @ git+https://github.com/miniceM/Argus.git@${ARGUS_CLI_REF}#subdirectory=services/argus-cli"
+      - name: Evaluate and gate
+        env:
+          ARGUS_API_TOKEN: ${{ secrets.ARGUS_API_TOKEN }}
+        run: |
+          argus eval run --agent banking-agent --agent-version "$AGENT_VERSION" \
+            --dataset banking-agent-regression --dataset-version "$DATASET_VERSION" \
+            --evaluator intent_match@1.0.0 --evaluator required_tool_match@1.0.0 \
+            --evaluator pii_safe@1.0.0 --evaluator escalation_match@1.0.0 \
+            --policy banking-production --policy-version 1.0.0 \
+            --idempotency-key "$RELEASE_KEY" --wait --timeout 300 --report artifacts/argus-gate.json
+      - name: Save gate evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: argus-release-gate
+          path: artifacts/argus-gate.json
+          if-no-files-found: warn
+          retention-days: 30
+  deploy:
+    needs: gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: echo '门禁已通过，在此接入业务已有发布命令'

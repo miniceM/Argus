@@ -127,6 +127,12 @@ async def _execute_single_item(
                 status="RUNNING",
                 started_at=datetime.utcnow(),
             )
+            # invoke() 已在授权 Attempt 前解析凭据；记录本次实际使用的修订。
+            credential = executor.resolved_credential
+            if credential is not None:
+                att_rec.credential_id = credential.credential_id
+                att_rec.credential_version = credential.version
+                att_rec.credential_provider = credential.provider
             session.add(att_rec)
             session.commit()
         return att_id
@@ -440,11 +446,12 @@ class LaunchExecutionService:
                 request_mapping=agent_spec_dict["request_mapping"],
                 max_concurrency=exec_policy["max_concurrency"],
                 credential_ref=agent_spec_dict.get("credential_ref"),
+                credential_id=agent_spec_dict.get("credential_id"),
                 id=agent_spec_dict.get("agent_version_id", ""),
                 is_idempotent=bool(agent_spec_dict.get("is_idempotent", False)),
             )
 
-            executor = RemoteAgentExecutor(spec)
+            executor = RemoteAgentExecutor(spec, credential_db_manager=self.db_manager)
             items = manifest.get("dataset", {}).get("items", [])
 
             # Ensure initial DB records exist for all dataset items

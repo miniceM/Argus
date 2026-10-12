@@ -226,6 +226,48 @@ class ExecutionWorker:
             session.commit()
             return next_attempt_no
 
+    def mark_attempt_dispatched(
+        self, item_id: str, launch_id: str, lease_token: str, generation: int,
+        attempt_id: str, credential: Any = None,
+    ) -> bool:
+        """凭据预取后按 Launch -> Item -> Attempt 加锁，再确认发送权和租约。"""
+        is_pg = self.db_mgr.engine.dialect.name == "postgresql"
+        with self.db_mgr.get_session() as session:
+            def locked(model, record_id):
+                statement = select(model).where(model.id == record_id)
+                if is_pg:
+                    statement = statement.with_for_update()
+                return session.scalars(statement).first()
+
+            launch = locked(ExperimentLaunchRecord, launch_id)
+            item = locked(ExperimentItemExecutionRecord, item_id)
+            attempt = locked(ExecutionAttemptRecord, attempt_id)
+            current_ts = session.scalar(select(func.clock_timestamp())) if is_pg else datetime.now(UTC)
+            if current_ts.tzinfo is None:
+                current_ts = current_ts.replace(tzinfo=UTC)
+            expires = item.lease_expires_at if item else None
+            if expires and expires.tzinfo is None:
+                expires = expires.replace(tzinfo=UTC)
+            if (
+                not launch or not item or not attempt
+                or launch.cancel_requested_at or launch.status in ("CANCELLING", "CANCELLED")
+                or item.launch_id != launch_id or item.execution_status != "running"
+                or item.lease_token != lease_token or item.dispatch_generation != generation
+                or not expires or expires <= current_ts or item.active_attempt_id != attempt_id
+                or attempt.item_execution_id != item_id or attempt.status != "RUNNING"
+                or attempt.lease_token != lease_token or attempt.dispatch_generation != generation
+                or attempt.request_phase != "PREPARED"
+            ):
+                session.rollback()
+                return False
+            if credential:
+                attempt.credential_id = credential.credential_id
+                attempt.credential_version = credential.version
+                attempt.credential_provider = credential.provider
+            attempt.request_phase = "MAY_HAVE_BEEN_SENT"
+            session.commit()
+            return True
+
     def finalize_execution_and_attempt(
         self,
         item_id: str,
@@ -519,6 +561,7 @@ class ExecutionWorker:
                 max_concurrency=policy_dict["max_concurrency"],
                 is_idempotent=bool(agent_dict.get("is_idempotent", False)),
                 credential_ref=agent_dict.get("credential_ref"),
+                credential_id=agent_dict.get("credential_id"),
                 id=agent_dict.get("agent_version_id", f"{agent_dict['agent_id']}-{agent_dict['version']}"),
             )
 
@@ -596,8 +639,23 @@ class ExecutionWorker:
                 ).first()
                 current_attempt_id = att_rec.id if att_rec else None
 
-            executor = RemoteAgentExecutor(spec)
+            executor = RemoteAgentExecutor(spec, credential_db_manager=self.db_mgr)
             mapped_payload = map_request(dataset_input, spec.request_mapping)
+            # 在可能发送标记、Agent Trace 和 HTTP 调用之前预取凭据。
+            try:
+                await executor.prepare_credential()
+            except ValueError:
+                finalized = self.finalize_execution_and_attempt(
+                    item_id=item_id, generation=generation, lease_token=token,
+                    target_item_status="FAILED", target_eval_status="skipped", target_quality_conclusion="unknown",
+                    current_attempt_id=current_attempt_id, execution_error="CREDENTIAL_UNAVAILABLE",
+                    attempt_updates={"status": "FAILED", "error_type": "CREDENTIAL_UNAVAILABLE",
+                                     "error_message": "CREDENTIAL_UNAVAILABLE", "request_phase": "PREPARED"},
+                )
+                self.limiter.release_concurrency_permit(spec.id, permit_id)
+                await executor._client.aclose()
+                self.queue.ack(message_id)
+                return finalized
             headers = {
                 "Content-Type": "application/json",
                 "X-Eval-Launch-Id": launch_id,
@@ -675,13 +733,14 @@ class ExecutionWorker:
                     trace_id = headers["traceparent"].split("-")[1]
                     return await executor.invoke_once(mapped_payload, headers)
 
-            # Mark attempt phase as MAY_HAVE_BEEN_SENT before network call
-            if current_attempt_id:
-                with self.db_mgr.get_session() as session:
-                    att = session.get(ExecutionAttemptRecord, current_attempt_id)
-                    if att:
-                        att.request_phase = "MAY_HAVE_BEEN_SENT"
-                        session.commit()
+            # 解析期间可能已失去租约或被取消，禁止旧 Worker 标记发送或调用 Agent。
+            if not current_attempt_id or not self.mark_attempt_dispatched(
+                item_id, launch_id, token, generation, current_attempt_id, executor.resolved_credential,
+            ):
+                self.limiter.release_concurrency_permit(spec.id, permit_id)
+                await executor._client.aclose()
+                self.queue.ack(message_id)
+                return False
 
             # Start background heartbeat to renew lease AND concurrency permit during invocation
             stop_hb = asyncio.Event()

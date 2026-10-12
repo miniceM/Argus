@@ -110,3 +110,7 @@
 - 断点判定使用 `matchMedia("(min-width: 64rem)")`，浏览器实时切换会同步布局；SSR / 无 matchMedia 环境默认桌面布局（与既有 AppShell 行为一致）。
 - 更多操作菜单在超窄视口（≤360px）对超长动作标签采用换行而非截断；如需进一步压缩可再评估，但当前 360/390/768 几何与键盘断言均通过。
 - 真实 Worker / Agent / Langfuse 链路未在验证范围内；远端 CI、Review 与 PR 合并不在本地声明之列。
+
+### 远端 CI 结果（PR #134，head `ec3548f`）
+
+推送分支 `codex/fix-issue119-main-acceptance` 后，PR #134 的 5 个 Job 全部通过：Code Quality（26s）、Console Quality & E2E（4m15s，含全量 Playwright）、Docker / Compose Validation（1m19s）、Full Python Tests（1m37s）、Langfuse Cloud E2E（2m40s）。此为推送后同 SHA CI 证据；Review 与合并状态不在本地声明之列。

@@ -141,6 +141,44 @@ describe("SetBaselineModal session isolation (F03)", () => {
     expect(queryClient.getQueryData(queryKeys.baselines.detail(AGENT_ID, ENVIRONMENT))).toBeUndefined();
   });
 
+  it("R14: a late 409 from a closed dialog cannot refresh or poison a reopened session", async () => {
+    let resolvePost: (value: any) => void = () => {};
+    (api.GET as any).mockResolvedValue({ data: boundBaseline(5, "new-session-base") });
+    (api.POST as any).mockImplementation(
+      () => new Promise((resolve) => { resolvePost = resolve; }),
+    );
+    const onClose = vi.fn();
+    const ui = (open: boolean) => (
+      <QueryClientProvider client={queryClient}>
+        <SetBaselineModal
+          open={open}
+          onClose={onClose}
+          agentId={AGENT_ID}
+          environment={ENVIRONMENT}
+          activeSnapshot={activeSnapshot}
+          activeBaseline={boundBaseline(4)}
+        />
+      </QueryClientProvider>
+    );
+    const view = render(ui(true));
+    fireEvent.click(screen.getByRole("button", { name: CONFIRM }));
+    await waitFor(() => expect(api.POST).toHaveBeenCalledTimes(1));
+
+    // The old POST remains in flight while a new dialog session opens.
+    view.rerender(ui(false));
+    view.rerender(ui(true));
+
+    await act(async () => {
+      resolvePost(httpError(409, "OLD-SESSION-revision conflict"));
+    });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: CONFIRM })).toBeEnabled());
+    expect(baselineGetCalls()).toHaveLength(0);
+    expect(screen.queryByText(/OLD-SESSION-revision conflict/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: CONFIRM })).toBeEnabled();
+    expect(queryClient.getQueryData(queryKeys.baselines.detail(AGENT_ID, ENVIRONMENT))).toBeUndefined();
+  });
+
   it("R06/P07: a refresh response for a different agent is rejected and never cached", async () => {
     mockNonBaselineGets();
     (api.GET as any).mockImplementation((path: string) => {

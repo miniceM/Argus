@@ -69,6 +69,10 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
     environment,
     snapshotId: targetSnapshotId,
   });
+  const isCurrentSession = useCallback(
+    (session: BaselineSession) => session.epoch === sessionRef.current.epoch,
+    [],
+  );
   const sessionKey = `${open}|${agentId}|${environment}|${targetSnapshotId}`;
   const lastSessionKeyRef = useRef(sessionKey);
   if (lastSessionKeyRef.current !== sessionKey) {
@@ -82,6 +86,7 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
     // The new session owns refreshing from here on: the old in-flight request is stale
     // bookkeeping, not a lock, and must not block this session's single fresh GET.
     refreshInFlightRef.current = false;
+    submitInFlightRef.current = false;
   }
 
   useEffect(() => {
@@ -92,8 +97,8 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
 
   const staleSession = useCallback(
     (session: BaselineSession, seq: number) =>
-      session.epoch !== sessionRef.current.epoch || seq !== seqRef.current,
-    [],
+      !isCurrentSession(session) || seq !== seqRef.current,
+    [isCurrentSession],
   );
 
   const invalidateBaselineKey = useCallback(
@@ -109,9 +114,13 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
    * The single recovery path after a 409 (and the retry button): one fresh GET for the
    * session's own agent/environment, verified before anything is cached or dispatched.
    */
-  const handleRefreshBaseline = useCallback(async (): Promise<void> => {
+  const handleRefreshBaseline = useCallback(async (
+    session: BaselineSession = sessionRef.current,
+  ): Promise<void> => {
+    // A late conflict must not even start a GET for the currently displayed
+    // session; only the session that issued the POST owns its recovery path.
+    if (!isCurrentSession(session)) return;
     refreshInFlightRef.current = true;
-    const session = sessionRef.current;
     const seq = ++seqRef.current;
     try {
       const res = await api.GET("/api/v1/agents/{agent_id}/baselines", {
@@ -184,12 +193,15 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
         refreshInFlightRef.current = false;
       }
     }
-  }, [queryClient, staleSession]);
+  }, [isCurrentSession, queryClient, staleSession]);
 
   const setBaselineMutation = useMutation({
-    mutationFn: async (variables: { expectedRevision: number; epoch: number }) => {
-      const session = sessionRef.current;
-      if (!activeSnapshot || !session.agentId) {
+    mutationFn: async (variables: { expectedRevision: number; session: BaselineSession }) => {
+      const { session } = variables;
+      if (!isCurrentSession(session)) {
+        throw new Error("Baseline dialog session was superseded");
+      }
+      if (!session.snapshotId || !session.agentId) {
         throw new Error("快照或 Agent ID 不存在");
       }
       // POST the binding the dialog currently displays, from the session that owns it.
@@ -204,8 +216,10 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
 
       if (res.error) {
         if (res.response?.status === 409) {
-          dispatch({ type: "CONFLICT_409", currentRevision: variables.expectedRevision });
-          void handleRefreshBaseline();
+          if (isCurrentSession(session)) {
+            dispatch({ type: "CONFLICT_409", currentRevision: variables.expectedRevision });
+            void handleRefreshBaseline(session);
+          }
           const cErr: any = new Error(CONFLICT_MESSAGE);
           cErr.isConflict = true;
           throw cErr;
@@ -214,12 +228,14 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
       }
       return res.data;
     },
-    onMutate: () => {
-      dispatch({ type: "SUBMIT_START" });
+    onMutate: (variables) => {
+      if (isCurrentSession(variables.session)) {
+        dispatch({ type: "SUBMIT_START" });
+      }
     },
     onSuccess: (_data, variables) => {
-      const session = sessionRef.current;
-      if (variables.epoch !== session.epoch) return; // superseded session
+      const { session } = variables;
+      if (!isCurrentSession(session)) return; // superseded session
       queryClient.invalidateQueries({
         queryKey: queryKeys.baselines.detail(session.agentId, session.environment),
       });
@@ -228,7 +244,7 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
       onClose();
     },
     onError: (err: any, variables) => {
-      if (variables?.epoch !== sessionRef.current.epoch) return; // superseded session
+      if (!variables || !isCurrentSession(variables.session)) return; // superseded session
       if (err?.isConflict) {
         // Already handled with CONFLICT_409 inside mutationFn.
         return;
@@ -242,9 +258,14 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
     if (submitInFlightRef.current || setBaselineMutation.isPending) return;
     submitInFlightRef.current = true;
     const expectedRevision = dialogState.displayedRevision ?? activeBaseline?.revision ?? 0;
+    const session = { ...sessionRef.current };
     setBaselineMutation.mutate(
-      { expectedRevision, epoch: sessionRef.current.epoch },
-      { onSettled: () => { submitInFlightRef.current = false; } },
+      { expectedRevision, session },
+      {
+        onSettled: () => {
+          if (isCurrentSession(session)) submitInFlightRef.current = false;
+        },
+      },
     );
   };
 

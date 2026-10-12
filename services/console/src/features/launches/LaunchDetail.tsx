@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
@@ -37,6 +37,10 @@ import {
   useSnapshotDirectoryRefresh,
   useSnapshotRevisionDiscovery,
 } from "./useSnapshotRevisionDiscovery";
+import {
+  useLaunchActionScope,
+  type LaunchActionContext,
+} from "./useLaunchActionScope";
 
 type LaunchResponse = import("../../api/schema").components["schemas"]["ExperimentLaunchResponse"];
 type ItemExecution = import("../../api/schema").components["schemas"]["ExperimentItemExecutionResponse"];
@@ -172,8 +176,20 @@ export const LaunchDetail: React.FC = () => {
   const [comparisonFilter, setComparisonFilter] = useState("ALL");
   const [comparisonSelectedCaseId, setComparisonSelectedCaseId] = useState<string | null>(null);
 
+  // Page session epoch (issue 119 U3): advanced synchronously while rendering the
+  // first frame of a new identity, so a callback belonging to an older identity can
+  // never be mistaken for one allowed to write to the current page.
+  const actionEpochRef = useRef(0);
+  const actionIdentityKey = `${launchId ?? ""}::${effectiveSnapshotId ?? ""}`;
+  const lastActionIdentityRef = useRef(actionIdentityKey);
+  if (lastActionIdentityRef.current !== actionIdentityKey) {
+    lastActionIdentityRef.current = actionIdentityKey;
+    actionEpochRef.current += 1;
+  }
+
   useEffect(() => {
     setActionError(null);
+    setEvalRetryNotice(null);
     setShowRetryModal(false);
     setForceRetry(false);
     setShowBaselineModal(false);
@@ -378,110 +394,148 @@ export const LaunchDetail: React.FC = () => {
     }
   };
 
-  // Invalidate all queries
-  const invalidateAll = () => {
-    if (launchId) {
-      queryClient.invalidateQueries({ queryKey: queryKeys.launches.detail(launchId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.launches.items(launchId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.launches.list() });
-      queryClient.invalidateQueries({ queryKey: [...snapshotListKey(launchId)] });
-      // A result snapshot is immutable under its ID. Refresh its directory after a
-      // result-changing action, but keep the selected historical detail (for example S1)
-      // cached while S2 is discovered instead of refetching the same frozen payload.
-    }
+  // Invalidate the caches of one explicit Launch (issue 119 U3). A late response
+  // must only refresh the entity its request belonged to, never whichever launch
+  // happens to be displayed when the response arrives.
+  const invalidateLaunchCaches = (targetLaunchId: string) => {
+    if (!targetLaunchId) return;
+    queryClient.invalidateQueries({ queryKey: queryKeys.launches.detail(targetLaunchId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.launches.items(targetLaunchId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.launches.list() });
+    queryClient.invalidateQueries({ queryKey: [...snapshotListKey(targetLaunchId)] });
+    // A result snapshot is immutable under its ID. Refresh its directory after a
+    // result-changing action, but keep the selected historical detail (for example S1)
+    // cached while S2 is discovered instead of refetching the same frozen payload.
   };
 
+  // Run-action scope: per-target in-flight locks plus page-session-gated feedback.
+  const actionScope = useLaunchActionScope({
+    launchId,
+    snapshotId: effectiveSnapshotId,
+    epoch: actionEpochRef.current,
+  });
+
   // 4. Mutations
+  // Every action carries its own request context: the target Launch is frozen at
+  // click time, feedback writes are gated on the page session that was visible
+  // then, and the in-flight lock is keyed by (target Launch, action) so switching
+  // Revision/Launch can neither duplicate nor silently drop a pending request.
   const runMutation = useMutation({
-    mutationFn: async () => {
-      if (!launchId) return;
-      setActionError(null);
+    mutationFn: async (context: LaunchActionContext) => {
       const res = await api.POST("/api/v1/experiment-launches/{launch_id}/run", {
-        params: { path: { launch_id: launchId } },
+        params: { path: { launch_id: context.targetLaunchId } },
       });
       if (res.error) throw res.error;
       return res.data;
     },
-    onSuccess: invalidateAll,
-    onError: (err) => setActionError(formatApiError(err)),
+    onSuccess: (_data, context) => {
+      invalidateLaunchCaches(context.targetLaunchId);
+    },
+    onError: (err, context) => {
+      if (actionScope.canWriteFeedback(context)) {
+        setActionError(formatApiError(err));
+      }
+    },
+    onSettled: (_data, _err, context) => actionScope.settle(context),
   });
 
   const cancelMutation = useMutation({
-    mutationFn: async () => {
-      if (!launchId) return;
-      setActionError(null);
+    mutationFn: async (context: LaunchActionContext) => {
       const res = await api.POST("/api/v1/experiment-launches/{launch_id}/cancel", {
-        params: { path: { launch_id: launchId } },
+        params: { path: { launch_id: context.targetLaunchId } },
       });
       if (res.error) throw res.error;
       return res.data;
     },
-    onSuccess: invalidateAll,
-    onError: (err) => setActionError(formatApiError(err)),
+    onSuccess: (_data, context) => {
+      invalidateLaunchCaches(context.targetLaunchId);
+    },
+    onError: (err, context) => {
+      if (actionScope.canWriteFeedback(context)) {
+        setActionError(formatApiError(err));
+      }
+    },
+    onSettled: (_data, _err, context) => actionScope.settle(context),
   });
 
   const resumeMutation = useMutation({
-    mutationFn: async () => {
-      if (!launchId) return;
-      setActionError(null);
+    mutationFn: async (context: LaunchActionContext) => {
       const res = await api.POST("/api/v1/experiment-launches/{launch_id}/resume", {
-        params: { path: { launch_id: launchId } },
+        params: { path: { launch_id: context.targetLaunchId } },
       });
       if (res.error) throw res.error;
       return res.data;
     },
-    onSuccess: invalidateAll,
-    onError: (err) => setActionError(formatApiError(err)),
+    onSuccess: (_data, context) => {
+      invalidateLaunchCaches(context.targetLaunchId);
+    },
+    onError: (err, context) => {
+      if (actionScope.canWriteFeedback(context)) {
+        setActionError(formatApiError(err));
+      }
+    },
+    onSettled: (_data, _err, context) => actionScope.settle(context),
   });
 
   const retryFailedMutation = useMutation({
-    mutationFn: async (force: boolean) => {
-      if (!launchId) return;
-      setActionError(null);
+    mutationFn: async ({
+      context,
+      force,
+    }: {
+      context: LaunchActionContext;
+      force: boolean;
+    }) => {
       const res = await api.POST("/api/v1/experiment-launches/{launch_id}/retry-failed", {
-        params: { path: { launch_id: launchId } },
+        params: { path: { launch_id: context.targetLaunchId } },
         body: { force },
       });
       if (res.error) throw res.error;
       return res.data;
     },
-    onSuccess: () => {
-      setShowRetryModal(false);
-      invalidateAll();
+    onSuccess: (_data, { context }) => {
+      if (actionScope.canWriteFeedback(context)) {
+        setShowRetryModal(false);
+      }
+      invalidateLaunchCaches(context.targetLaunchId);
     },
-    onError: (err) => {
+    onError: (err, { context }) => {
       const errMsg = formatApiError(err);
-      setActionError(errMsg);
-      if (errMsg.toLowerCase().includes("force") || errMsg.toLowerCase().includes("ambiguous")) {
-        setShowRetryModal(true);
+      if (actionScope.canWriteFeedback(context)) {
+        setActionError(errMsg);
+        if (errMsg.toLowerCase().includes("force") || errMsg.toLowerCase().includes("ambiguous")) {
+          setShowRetryModal(true);
+        }
       }
     },
+    onSettled: (_data, _err, { context }) => actionScope.settle(context),
   });
 
   const retryEvaluationMutation = useMutation({
-    mutationFn: async () => {
-      if (!launchId) return;
-      setActionError(null);
-      setEvalRetryNotice(null);
+    mutationFn: async (context: LaunchActionContext) => {
       const res = await api.POST("/api/v1/experiment-launches/{launch_id}/retry-evaluation", {
-        params: { path: { launch_id: launchId } },
+        params: { path: { launch_id: context.targetLaunchId } },
       });
       if (res.error) throw res.error;
       return res.data;
     },
-    onSuccess: (data) => {
-      const submitted = data?.submitted?.length ?? 0;
-      const blocked = data?.blocked ?? [];
-      let notice = `已提交 ${submitted} 个用例仅重试评测（复用原 Agent 输出，不会再次调用 Agent）。`;
-      if (blocked.length > 0) {
-        notice += ` ${blocked.length} 个用例因检查点不可用被阻止：${blocked[0].message}`;
+    onSuccess: (data, context) => {
+      if (actionScope.canWriteFeedback(context)) {
+        const submitted = data?.submitted?.length ?? 0;
+        const blocked = data?.blocked ?? [];
+        let notice = `已提交 ${submitted} 个用例仅重试评测（复用原 Agent 输出，不会再次调用 Agent）。`;
+        if (blocked.length > 0) {
+          notice += ` ${blocked.length} 个用例因检查点不可用被阻止：${blocked[0].message}`;
+        }
+        setEvalRetryNotice(notice);
       }
-      setEvalRetryNotice(notice);
-      invalidateAll();
+      invalidateLaunchCaches(context.targetLaunchId);
     },
-    onError: (err) => {
-      setActionError(formatApiError(err));
+    onError: (err, context) => {
+      if (actionScope.canWriteFeedback(context)) {
+        setActionError(formatApiError(err));
+      }
     },
+    onSettled: (_data, _err, context) => actionScope.settle(context),
   });
 
   // 5. Comparison & Summary data for KPI & Tab 1
@@ -725,14 +779,18 @@ export const LaunchDetail: React.FC = () => {
           startSnapshotRevisionDiscovery(
             snapshotsQuery.data?.latest_snapshot_id ?? effectiveSnapshotId,
           );
-          runMutation.mutate();
+          setActionError(null);
+          const context = actionScope.begin("run", launchId ?? "");
+          if (context) runMutation.mutate(context);
         }}
         onCancel={() => setShowCancelModal(true)}
         onResume={() => {
           startSnapshotRevisionDiscovery(
             snapshotsQuery.data?.latest_snapshot_id ?? effectiveSnapshotId,
           );
-          resumeMutation.mutate();
+          setActionError(null);
+          const context = actionScope.begin("resume", launchId ?? "");
+          if (context) resumeMutation.mutate(context);
         }}
         onRetryFailed={() => {
           setForceRetry(false);
@@ -741,14 +799,17 @@ export const LaunchDetail: React.FC = () => {
         onRetryEvaluation={() => {
           const discoveryBaseline = snapshotsQuery.data?.latest_snapshot_id ?? effectiveSnapshotId;
           startSnapshotRevisionDiscovery(discoveryBaseline);
-          retryEvaluationMutation.mutate();
+          setActionError(null);
+          setEvalRetryNotice(null);
+          const context = actionScope.begin("retry_evaluation", launchId ?? "");
+          if (context) retryEvaluationMutation.mutate(context);
         }}
         onOpenBaselineModal={isSnapshotNotFound ? undefined : () => setShowBaselineModal(true)}
-        isRunPending={runMutation.isPending}
-        isCancelPending={cancelMutation.isPending}
-        isResumePending={resumeMutation.isPending}
-        isRetryFailedPending={retryFailedMutation.isPending}
-        isRetryEvaluationPending={retryEvaluationMutation.isPending}
+        isRunPending={actionScope.isPending("run", launchId)}
+        isCancelPending={actionScope.isPending("cancel", launchId)}
+        isResumePending={actionScope.isPending("resume", launchId)}
+        isRetryFailedPending={actionScope.isPending("retry_failed", launchId)}
+        isRetryEvaluationPending={actionScope.isPending("retry_evaluation", launchId)}
       />
 
       {/* 快照请求异常与未找到警示 (Alert) - 仅在非 compare Tab 渲染，避免与 GateComparisonTab 内部 Alert 重复 */}
@@ -1008,7 +1069,7 @@ export const LaunchDetail: React.FC = () => {
         activeBaseline={activeBaselineQuery.data ?? null}
         onSuccess={() => {
           activeBaselineQuery.refetch();
-          invalidateAll();
+          invalidateLaunchCaches(launchId ?? "");
         }}
       />
 
@@ -1018,28 +1079,37 @@ export const LaunchDetail: React.FC = () => {
         onClose={() => setShowCancelModal(false)}
         title="确认取消评测任务"
         tone="danger"
-        dismissable={!cancelMutation.isPending}
+        dismissable={!actionScope.isPending("cancel", launchId)}
         footer={
           <>
             <Button
               type="button"
               variant="secondary"
               onClick={() => setShowCancelModal(false)}
-              disabled={cancelMutation.isPending}
+              disabled={actionScope.isPending("cancel", launchId)}
             >
               放弃
             </Button>
             <Button
               type="button"
               variant="danger"
-              disabled={cancelMutation.isPending}
+              disabled={actionScope.isPending("cancel", launchId)}
               onClick={() => {
-                cancelMutation.mutate(undefined, {
-                  onSettled: () => setShowCancelModal(false),
+                setActionError(null);
+                const context = actionScope.begin("cancel", launchId ?? "");
+                if (!context) return;
+                cancelMutation.mutate(context, {
+                  onSettled: (_data, _err, settledContext) => {
+                    // Only the still-current page may close this modal; a late
+                    // settle must not close a modal opened for a newer request.
+                    if (actionScope.canWriteFeedback(settledContext)) {
+                      setShowCancelModal(false);
+                    }
+                  },
                 });
               }}
             >
-              {cancelMutation.isPending ? "正在取消..." : "确认取消"}
+              {actionScope.isPending("cancel", launchId) ? "正在取消..." : "确认取消"}
             </Button>
           </>
         }
@@ -1055,7 +1125,7 @@ export const LaunchDetail: React.FC = () => {
         onClose={() => setShowRetryModal(false)}
         title="重试失败用例 (Retry Failed Items)"
         tone="danger"
-        dismissable={!retryFailedMutation.isPending}
+        dismissable={!actionScope.isPending("retry_failed", launchId)}
         footer={
           <>
             <Button
@@ -1070,15 +1140,18 @@ export const LaunchDetail: React.FC = () => {
               type="button"
               variant="warning-solid"
               className="text-xs"
-              disabled={retryFailedMutation.isPending}
+              disabled={actionScope.isPending("retry_failed", launchId)}
               onClick={() => {
                 startSnapshotRevisionDiscovery(
                   snapshotsQuery.data?.latest_snapshot_id ?? effectiveSnapshotId,
                 );
-                retryFailedMutation.mutate(forceRetry);
+                setActionError(null);
+                const context = actionScope.begin("retry_failed", launchId ?? "");
+                if (!context) return;
+                retryFailedMutation.mutate({ context, force: forceRetry });
               }}
             >
-              {retryFailedMutation.isPending ? "正在提交重试..." : "确认重新调度"}
+              {actionScope.isPending("retry_failed", launchId) ? "正在提交重试..." : "确认重新调度"}
             </Button>
           </>
         }

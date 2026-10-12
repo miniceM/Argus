@@ -82,6 +82,36 @@ describe("LaunchKpiOverview comparison evidence", () => {
     expect(screen.getByText("与基线持平")).toBeInTheDocument();
   });
 
+  it("does not fall back to full-run P95 when comparable candidate evidence is missing", () => {
+    renderKpis({
+      candidate: { p95_latency_ms: 230 },
+      baseline: { p95_latency_ms: 120 },
+      comparable_cohort: {
+        baseline: { p95_latency_ms: 100 },
+        candidate: { p95_latency_ms: null },
+      },
+    });
+
+    expect(screen.getByText("暂无时延数据")).toBeInTheDocument();
+    expect(screen.queryByText("230")).not.toBeInTheDocument();
+    expect(screen.queryByText("较基线增加 130ms")).not.toBeInTheDocument();
+  });
+
+  it("does not compare comparable candidate P95 with full-run baseline P95", () => {
+    renderKpis({
+      candidate: { p95_latency_ms: 230 },
+      baseline: { p95_latency_ms: 120 },
+      comparable_cohort: {
+        baseline: { p95_latency_ms: null },
+        candidate: { p95_latency_ms: 210 },
+      },
+    });
+
+    expect(screen.getByText("210")).toBeInTheDocument();
+    expect(screen.getByText("单版本测量")).toBeInTheDocument();
+    expect(screen.queryByText("较基线增加 90ms")).not.toBeInTheDocument();
+  });
+
   it("only reports a flat pass-rate delta when both rates are present and equal", () => {
     renderKpis({
       comparable_cohort: {

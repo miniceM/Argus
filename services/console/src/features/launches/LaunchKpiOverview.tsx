@@ -148,8 +148,15 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
   }
 
   // 3. P95 Latency
-  const candidateP95 = cohort?.candidate.p95_latency_ms ?? comparisonSummary?.candidate?.p95_latency_ms;
-  const baselineP95 = cohort?.baseline.p95_latency_ms ?? comparisonSummary?.baseline?.p95_latency_ms;
+  // When a comparable cohort is present, keep both sides on that exact sample
+  // set. Falling back one side at a time to full-run metrics creates a false
+  // comparison between different populations when cohort evidence is missing.
+  const candidateP95 = cohort
+    ? cohort.candidate.p95_latency_ms
+    : comparisonSummary?.candidate?.p95_latency_ms;
+  const baselineP95 = cohort
+    ? cohort.baseline.p95_latency_ms
+    : comparisonSummary?.baseline?.p95_latency_ms;
   const hasCandidateP95 = typeof candidateP95 === "number" && Number.isFinite(candidateP95);
   const hasBaselineP95 = typeof baselineP95 === "number" && Number.isFinite(baselineP95);
   let p95Text = "—";

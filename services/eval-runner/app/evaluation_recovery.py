@@ -238,6 +238,20 @@ def _record_attempt_started(
         session.commit()
 
 
+def _materialize_recovery_snapshot_if_settled(
+    session,
+    launch: ExperimentLaunchRecord | None,
+) -> None:
+    """Freeze a post-recovery revision only after all sibling evaluations settle."""
+    if launch is None:
+        return
+    # Keep this import local to avoid coupling result-snapshot initialization
+    # to the recovery module's import cycle.
+    from .result_snapshots import create_result_snapshot
+
+    create_result_snapshot(session, launch)
+
+
 def _fail_without_results(
     db_mgr: DatabaseManager,
     claim: dict[str, Any],
@@ -257,9 +271,30 @@ def _fail_without_results(
     item_id = claim["item_id"]
     generation = claim["evaluation_generation"]
     token = claim["lease_token"]
+    launch_id = claim.get("launch_id")
+    is_pg = db_mgr.engine.dialect.name == "postgresql"
 
     with db_mgr.get_session() as session:
-        item = session.get(ExperimentItemExecutionRecord, item_id)
+        # Serialize terminal failures with successful finalization. Locking the
+        # Launch before the Item keeps one consistent sibling-evaluation view
+        # when the last recovery materializes the immutable revision.
+        launch_record = None
+        if launch_id:
+            launch_stmt = select(ExperimentLaunchRecord).where(
+                ExperimentLaunchRecord.id == launch_id
+            )
+            if is_pg:
+                launch_stmt = launch_stmt.with_for_update()
+            launch_record = session.scalars(
+                launch_stmt.execution_options(populate_existing=True)
+            ).first()
+
+        item_stmt = select(ExperimentItemExecutionRecord).where(
+            ExperimentItemExecutionRecord.id == item_id
+        )
+        if is_pg:
+            item_stmt = item_stmt.with_for_update()
+        item = session.scalars(item_stmt).first()
         if not item:
             session.rollback()
             return RecoveryOutcome(claimed=True, finalized=False, reason="ITEM_MISSING")
@@ -296,6 +331,8 @@ def _fail_without_results(
             error_message=error_message,
             now=now,
         )
+        session.flush()
+        _materialize_recovery_snapshot_if_settled(session, launch_record)
         session.commit()
         return RecoveryOutcome(
             claimed=True,
@@ -593,12 +630,8 @@ def finalize_evaluation(
             now=now,
         )
         session.flush()
-        if launch_record is not None:
-            # This is a no-op while any sibling is still evaluating. When this
-            # is the last recovery, create_result_snapshot persists the new
-            # digest/revision in the same transaction as the finalized verdict.
-            from .result_snapshots import create_result_snapshot
-
-            create_result_snapshot(session, launch_record)
+        # This is a no-op while any sibling is still evaluating; the final
+        # success or failure path freezes the same coherent revision.
+        _materialize_recovery_snapshot_if_settled(session, launch_record)
         session.commit()
         return True

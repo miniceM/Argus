@@ -250,7 +250,10 @@ def test_retry_evaluation_does_not_call_the_agent(setup_runtime):
     mock_invoke.assert_not_awaited()
 
 
-def test_retry_evaluation_materializes_a_new_snapshot_after_recovery(setup_runtime):
+@pytest.mark.parametrize("last_recovery_fails", [False, True])
+def test_retry_evaluation_materializes_a_new_snapshot_after_recovery(
+    setup_runtime, last_recovery_fails: bool
+):
     binding = _frozen_binding("intent_match")
     manifest = _manifest(
         binding,
@@ -323,14 +326,30 @@ def test_retry_evaluation_materializes_a_new_snapshot_after_recovery(setup_runti
         # S2 must not freeze while the sibling Case is still being re-evaluated.
         assert [snapshot.revision for snapshot in snapshots] == [1]
 
-    second_outcome = recover_evaluation(
-        db_mgr,
-        item_id=item_ids[1],
-        evaluation_generation=generations[item_ids[1]],
-        worker_id="w-eval-2",
-    )
+    if last_recovery_fails:
+        # The last sibling can terminate before evaluation when its checkpoint
+        # expires while queued. This must still close the recovery generation
+        # by materializing a revision that includes earlier successful work.
+        with patch(
+            "app.evaluation_recovery.load_recoverable_checkpoint",
+            side_effect=CheckpointUnavailableError("CHECKPOINT_EXPIRED"),
+        ):
+            second_outcome = recover_evaluation(
+                db_mgr,
+                item_id=item_ids[1],
+                evaluation_generation=generations[item_ids[1]],
+                worker_id="w-eval-2",
+            )
+    else:
+        second_outcome = recover_evaluation(
+            db_mgr,
+            item_id=item_ids[1],
+            evaluation_generation=generations[item_ids[1]],
+            worker_id="w-eval-2",
+        )
     assert second_outcome["finalized"] is True
-    assert second_outcome["quality_conclusion"] == QUALITY_CONCLUSION_PASS
+    if not last_recovery_fails:
+        assert second_outcome["quality_conclusion"] == QUALITY_CONCLUSION_PASS
 
     with db_mgr.get_session() as session:
         snapshots = session.query(RunResultSnapshotRecord).filter(
@@ -342,10 +361,12 @@ def test_retry_evaluation_materializes_a_new_snapshot_after_recovery(setup_runti
         assert snapshots[0].items == first_items
         assert snapshots[1].id != first_id
         assert snapshots[1].source_result_digest != first_digest
-        assert all(
-            item["quality_conclusion"] == QUALITY_CONCLUSION_PASS
-            for item in snapshots[1].items
+        expected_conclusions = (
+            [QUALITY_CONCLUSION_PASS, QUALITY_CONCLUSION_UNKNOWN]
+            if last_recovery_fails
+            else [QUALITY_CONCLUSION_PASS, QUALITY_CONCLUSION_PASS]
         )
+        assert [item["quality_conclusion"] for item in snapshots[1].items] == expected_conclusions
 
 
 # ---------------------------------------------------------------------------

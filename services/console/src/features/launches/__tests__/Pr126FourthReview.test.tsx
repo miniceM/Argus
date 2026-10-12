@@ -170,6 +170,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   };
 
   const mockComparison = {
+    launch_id: mockLaunch.id,
     candidate_snapshot_id: "snap-v2-001",
     baseline_snapshot_id: "base-snap-001",
     classification_counts: {

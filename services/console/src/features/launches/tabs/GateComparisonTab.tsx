@@ -1,12 +1,11 @@
 import React, { useMemo, useState } from "react";
 import { ExternalLink, ShieldCheck, Sparkles } from "lucide-react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { api } from "../../../api/client";
-import { queryKeys } from "../../../api/query-keys";
 import { formatApiError } from "../../../api/errors";
 import { Button } from "../../../components/ui/Primitives";
 import { ComparisonCaseDrawer } from "../ComparisonCaseDrawer";
 import { LangfuseSyncPanel } from "../langfuseSyncStatus";
+import { comparisonPagesQueryOptions } from "../launchComparisonQueries";
 import { resolveMetricDirection, evaluateMetricChange, evaluateMetricRule } from "../metricComparison";
 
 type GeneratedRunSummary = import("../../../api/schema").components["schemas"]["RunSummaryResponse"];
@@ -233,40 +232,26 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
     onSelectedCaseChange?.(next);
   };
 
-  const comparisonQuery = useInfiniteQuery({
-    queryKey: queryKeys.launches.comparison(launchId, snapshotId ?? "unresolved", filter),
-    initialPageParam: 0,
-    queryFn: async ({ pageParam }) => {
-      const response = await api.GET("/api/v1/experiment-launches/{launch_id}/comparison", {
-        params: {
-          path: { launch_id: launchId },
-          query: {
-            snapshot_id: snapshotId ?? undefined,
-            classification: filter === "ALL" ? undefined : filter,
-            limit: 50,
-            cursor: pageParam,
-          },
-        },
-      });
-      if (response.error) throw response.error;
-      if (!response.data) throw new Error("Comparison response is empty");
-      if (response.data.candidate_snapshot_id !== snapshotId) {
-        throw new Error("Comparison page belongs to a different result snapshot; refusing to mix revisions");
-      }
-      return response.data as unknown as Comparison;
-    },
-    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
-    enabled: Boolean(launchId && snapshotId),
-  });
+  // Shared validated comparison entry (issue 119 gap U1): every page must prove
+  // the exact (launch_id, candidate_snapshot_id) identity before it can join the
+  // table, so a foreign page is never appended to the verified first page.
+  const comparisonQuery = useInfiniteQuery(
+    comparisonPagesQueryOptions(
+      launchId && snapshotId ? { launchId, snapshotId } : null,
+      filter,
+    ),
+  );
 
-  const comparison = comparisonQuery.data?.pages[0];
+  // The shared entry validated the identity; project the generated DTO onto the
+  // local table view type (the old queryFn used the same explicit projection).
+  const comparison = comparisonQuery.data?.pages[0] as unknown as Comparison | undefined;
   const comparisonSummary = comparison?.summary as ComparisonSummary | undefined;
   const cohort = comparisonSummary?.comparable_cohort;
   const versions = comparison?.versions;
   const metrics = summary?.summary;
 
   const displayRows = useMemo(
-    () => comparisonQuery.data?.pages.flatMap((page) => page.items ?? []) ?? [],
+    () => comparisonQuery.data?.pages.flatMap((page) => (page.items ?? []) as unknown as ComparisonItem[]) ?? [],
     [comparisonQuery.data],
   );
 

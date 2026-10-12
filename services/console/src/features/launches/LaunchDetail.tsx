@@ -32,6 +32,7 @@ import {
   snapshotListKey,
   snapshotListQueryOptions,
 } from "./launchSnapshotQueries";
+import { comparisonKpiQueryOptions } from "./launchComparisonQueries";
 import {
   useSnapshotDirectoryRefresh,
   useSnapshotRevisionDiscovery,
@@ -529,21 +530,16 @@ export const LaunchDetail: React.FC = () => {
     enabled: Boolean(agentId),
   });
 
-  const comparisonInitialQuery = useQuery({
-    queryKey: [...queryKeys.launches.comparison(launchId || "", effectiveSnapshotId ?? "unresolved", "ALL"), "kpi-initial"],
-    queryFn: async () => {
-      if (!launchId || !effectiveSnapshotId) return null;
-      const res = await api.GET("/api/v1/experiment-launches/{launch_id}/comparison", {
-        params: {
-          path: { launch_id: launchId },
-          query: { snapshot_id: effectiveSnapshotId, limit: 50 },
-        },
-      });
-      if (res.error) throw res.error;
-      return res.data as any;
-    },
-    enabled: Boolean(canReadResults && launchId && effectiveSnapshotId),
-  });
+  // Shared validated comparison entry (issue 119 gap U1): the KPI read must prove
+  // the exact (launch_id, snapshot_id) identity before its numbers may render. It
+  // keeps its own cache key and DTO shape, separate from the paginated table.
+  const comparisonInitialQuery = useQuery(
+    comparisonKpiQueryOptions(
+      canReadResults && launchId && effectiveSnapshotId
+        ? { launchId, snapshotId: effectiveSnapshotId }
+        : null,
+    ),
+  );
 
   if (isLaunchLoading) return <LoadingState message="正在加载评测任务与不可变快照..." />;
   if (launchError) {
@@ -787,6 +783,26 @@ export const LaunchDetail: React.FC = () => {
       {actionError && (
         <div className="p-3 text-xs bg-fail-subtle border border-fail-border rounded-lg text-fail font-medium">
           {actionError}
+        </div>
+      )}
+
+      {/* 比较响应契约错误 (issue 119 U1)：身份不符的比较数据必须显式失败并可重试，
+          不能被展示成“无回归/时延正常”的成功 KPI。compare Tab 下由门禁对比表
+          自带同一身份的失败横幅，避免同一错误重复出现两次。 */}
+      {comparisonInitialQuery.error && !isSnapshotNotFound && currentTab !== "compare" && (
+        <div
+          role="alert"
+          className="p-3 text-xs bg-fail-subtle border border-fail-border rounded-lg text-fail font-medium flex items-center justify-between gap-2"
+        >
+          <span>比较数据校验失败：{formatApiError(comparisonInitialQuery.error)}</span>
+          <Button
+            variant="secondary"
+            className="h-6 text-2xs px-2"
+            onClick={() => comparisonInitialQuery.refetch()}
+            disabled={comparisonInitialQuery.isFetching}
+          >
+            重试
+          </Button>
         </div>
       )}
 

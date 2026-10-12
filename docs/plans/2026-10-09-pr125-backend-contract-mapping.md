@@ -1,19 +1,32 @@
 # PR #125 后端读模型字段映射与契约缺口结论（BE-01 / BE-05 交付）
 
-> **后续状态说明（2026-10-12）**：本文保留 2026-10-09 当时的范围和验证证据，不代表当前 PR/Issue 状态。PR #126 是本轮承接候选；其实现新增冻结 `manifest` 投影，并将早期修订的质量计数改为可空以区分未记录与真实零。因此，本文中“无需新增字段/无产品改动”等结论仅对原始审查基线有效；当前合并验收以 `docs/plans/2026-10-12-issue119-final-acceptance.md` 为准。
+> **维护说明（2026-10-12）**：本文保留 2026-10-09 的 #125 后端映射与验证记录；#125 的有效契约测试已整合进 #126。下文原结论及“无需新增字段/无产品改动”只描述当时基线。#126 的现行契约增量见 §1.1，最终验收状态以 `docs/plans/2026-10-12-issue119-final-acceptance.md` 为准。
 
 
 日期：2026-10-09（Asia/Shanghai）
 基线：PR head `2acad659ebf8526145f1072cbf94b2dc4198b1ba`（OPEN / MERGEABLE，执行前已实时核对）；本地测试合并提交 `2d212eb4a1079a975278aa7974e8e3b84962b052`。
 范围：仅 Runner API/领域契约与后端测试；前端 F1–F12 修复不在本文范围。
 
-## 1. 结论摘要
+## 1. #125 原始基线结论（2026-10-09）
 
 1. **Console 拼装 PR #125 所需的全部冻结字段已可从现有端点取到，接口差异清单为空**：无需新增端点、响应字段、数据库表或迁移。
 2. **正式质量/发布语义必须来自 `GET .../comparison` 的 `formal` 与 `comparability` 对象**；前端不得用 cohort 诊断或硬编码 90%/500ms 自造门禁。
 3. **不存在 run 级冻结 `quality_conclusion` 字符串**：Snapshot detail/summary 只提供冻结计数（`quality_pass_count` / `quality_fail_count` / `quality_unknown_count`）、`evidence_state`、`releasable` 与逐用例结论。`GET /experiment-launches/{id}` 顶层的 `quality_conclusion` 是 live 可变字段。按交接约定：前端用冻结统计展示，不拿 live conclusion 补洞，也不因此新增 Gate 规则。
 4. **三个易错形状**（前端消费时必须注意，详见 §3）：`versions` 扁平 vs comparison 分侧嵌套、`threshold` vs `expected`、`quality_evaluation` 是带 `rules` 的 dict。
 5. **生产代码零改动；契约已验证，PR #125 已确认缺陷（F1–F12）的修复落在前端（FE-01–FE-07）**。交付 = 本映射 + 新增 5 个契约验证测试 + 既有回归引用；没有为了 F3 的 UI 硬编码新增 90% 或 500ms 规则。
+
+## 1.1 #126 整合后的契约增量（2026-10-12）
+
+以下是当前 #126 分支相对 #125 原始基线需要保留的后端契约事实；字段在 API、OpenAPI 与 Console 生成类型中保持同步：
+
+| 内容 | 当前契约与消费规则 | 回归证据 |
+|---|---|---|
+| 冻结 Manifest | `GET /api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}` 的 detail 响应含该 Revision 存储的 `manifest`，并按同一 Snapshot 返回 `versions`、`summary`、`items`。审计导出必须以校验过身份的 detail 为准，不用实时 Launch manifest 拼成冻结快照。 | `tests/test_pr125_launch_detail_contract.py::test_console_report_contract_reaches_every_required_frozen_field`；`::test_snapshot_bytes_are_independent_of_live_manifest_and_item_mutation` |
+| 修订目录历史计数 | `/result-snapshots` 的 `quality_pass_count` / `quality_fail_count` / `quality_unknown_count` 为可空整数。实际冻结的 `0` 保留为 `0`；早期 summary 未存这些键时，目录返回 `null`，不可把兼容默认值当成事实。 | `tests/test_issue_85_snapshot_revision.py::test_revision_directory_preserves_missing_quality_counts_as_unknown` |
+| UI 修订计数恢复 | ResultSnapshotPanel 对计数按身份匹配的冻结 detail summary → 同一冻结 detail items（未识别/缺失结论按 UNKNOWN）→ 修订目录可信计数的顺序解析；详情 ID 不匹配时不能拿来补另一修订。 | `services/console/src/features/launches/__tests__/resultSnapshot.test.tsx`；`tests/test_issue_85_snapshot_revision.py::test_revision_directory_preserves_missing_quality_counts_as_unknown` |
+| 快照导出边界 | “复制/下载 Snapshot”仅在 `(launch_id, snapshot_id)` 对应 detail 通过校验后导出；detail 未加载、失败或身份不匹配时不得退回 Manifest 或目录元数据伪装为完整快照。 | `services/console/src/features/launches/__tests__/Pr126FourthReview.test.tsx` |
+
+本次是对既有读取端点的最小投影/历史可空语义修正，不新增存储表或迁移；`docs/openapi.json` 与 `services/console/src/api/schema.d.ts` 必须保持同步。具体 API 字段以生成快照及以上回归测试为准。
 
 ## 2. 字段映射表（Header / KPI / Cases / Comparison / Export）
 
@@ -45,9 +58,9 @@
 2. **阈值字段名不同**：冻结 Policy（`manifest.quality_policy.rules[]`）用 `threshold`；逐用例规则评估（`quality_evaluation.rules[]`）用 `expected`。两者都是原始数值（`0.8`），`operator` 都是 `">="`；**不得 ×100 或加 `%`**。
 3. **`quality_evaluation` 是 dict 不是 list**：顶层有 `conclusion`、`policy_id/policy_version/policy_digest`、`releasable`、`unknown_reasons`、`rules[]`；逐规则信息在 `rules[]` 内。另外 `RunSummaryResponse` 没有 `releasable`，只有 detail 才有；summary 只有 `evidence_state`。
 
-## 4. 接口差异清单
+## 4. #125 原始基线接口差异清单（历史记录）
 
-**必需字段差异：空。** 无新端点、无响应模型改动、无 OpenAPI/Console schema 同步需求、无数据库迁移。
+**在 2026-10-09 的 #125 基线中，必需字段差异为空。** 当时没有新端点、响应模型改动或 OpenAPI/Console schema 同步需求；此结论不覆盖 §1.1 记录的 #126 后续契约增量。
 
 按交接要求对 4 个候选缺口逐条核对：
 
@@ -85,8 +98,8 @@
 | BE-04 冻结 Output/单侧用例 | **PASS** | 既有 `test_result_outputs.py`（冻结 ref、双侧独立失败、伪造 ref 被拒）+ `test_api_results_s3::test_comparison_case_details_...`；新增 `FETCH_FAILED + retryable=true` 断言 |
 | BE-05 真实形状夹具 | **PASS** | `_manifest`/`_quality_evaluation`/`_seed` 经 FastAPI `response_model` 校验；§5 场景表逐条给出生成位置与预期 UI 断言；接口差异清单为空 |
 | 条件性产品改动 | **未触发（NOT NEEDED）** | §4 四个候选缺口逐一被现有字段否定；生产代码 diff = 0 |
-| 新产物远端 CI | **NOT RUN** | 无 push 授权，本地提交未推送 |
-| 前端联合真实 API E2E / 真实全链路 | **NOT RUN** | 前端修复未开始；不以 mock 或本地套件冒充 |
+| 新产物远端 CI | **NOT RUN（#125 历史基线）** | 仅代表 2026-10-09 原始交接时状态；当前 #126 状态见最终验收记录 |
+| 前端联合真实 API E2E / 真实全链路 | **NOT RUN（#125 历史基线）** | 仅代表当时的任务边界；不以 mock 或本地套件冒充 |
 
 ## 7. 验证结果（实际执行）
 

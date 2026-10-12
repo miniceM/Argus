@@ -423,6 +423,212 @@ test.describe("Issue #119: launch detail first-screen hierarchy", () => {
     });
   }
 
+  const firstScreenStates = [
+    {
+      name: "successful result",
+      status: "COMPLETED",
+      allowedActions: ["retry_evaluation"],
+      hasSnapshot: true,
+      evidenceState: "COMPLETE",
+      releasable: true,
+      quality: { pass: 6, fail: 0, unknown: 0 },
+    },
+    {
+      name: "failed execution with its prior frozen report",
+      status: "FAILED",
+      allowedActions: ["resume", "retry_failed"],
+      hasSnapshot: true,
+      evidenceState: "COMPLETE",
+      releasable: true,
+      quality: { pass: 6, fail: 0, unknown: 0 },
+    },
+    {
+      name: "cancelled execution with its prior frozen report",
+      status: "CANCELLED",
+      allowedActions: ["run"],
+      hasSnapshot: true,
+      evidenceState: "COMPLETE",
+      releasable: true,
+      quality: { pass: 6, fail: 0, unknown: 0 },
+    },
+    {
+      name: "insufficient diagnostic evidence",
+      status: "PARTIAL_FAILED",
+      allowedActions: ["resume", "retry_failed", "retry_evaluation"],
+      hasSnapshot: true,
+      evidenceState: "DIAGNOSTIC",
+      releasable: false,
+      quality: { pass: 2, fail: 1, unknown: 3 },
+    },
+    {
+      name: "running without a frozen result yet",
+      status: "RUNNING",
+      allowedActions: ["cancel"],
+      hasSnapshot: false,
+      evidenceState: "DIAGNOSTIC",
+      releasable: false,
+      quality: { pass: 0, fail: 0, unknown: 6 },
+    },
+  ] as const;
+
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 1440, height: 900 },
+  ]) {
+    for (const scenario of firstScreenStates) {
+      test(`${scenario.name} retains a usable decision entry above the fold at ${viewport.width}x${viewport.height}`, async ({
+        page,
+      }, testInfo) => {
+        await page.setViewportSize(viewport);
+
+        const scenarioLaunch = {
+          ...launches.find((launch) => launch.id === historicalLaunchId)!,
+          status: scenario.status,
+          allowed_actions: [...scenario.allowedActions],
+        };
+        await page.route(`**/api/v1/experiment-launches/${historicalLaunchId}`, (route) =>
+          route.fulfill({ json: scenarioLaunch }),
+        );
+
+        const snapshotId = "snap-v2";
+        const frozenItems = Array.from({ length: 6 }, (_, index) => ({
+          dataset_item_id: `matrix-case-${index + 1}`,
+          execution_status: "SUCCEEDED",
+          quality_conclusion:
+            index < scenario.quality.pass
+              ? "pass"
+              : index < scenario.quality.pass + scenario.quality.fail
+                ? "fail"
+                : "unknown",
+          scores: { intent_match: index < scenario.quality.pass ? 1 : 0 },
+        }));
+
+        const revisions = scenario.hasSnapshot
+          ? [
+              {
+                snapshot_id: snapshotId,
+                revision: 2,
+                created_at: "2026-09-23T08:00:05Z",
+                source_result_digest: "sha256:matrix-result",
+                manifest_digest: "sha256:matrix-manifest",
+                evidence_state: scenario.evidenceState,
+                evidence_reasons: scenario.releasable ? [] : ["REQUIRED_EVIDENCE_MISSING"],
+                releasable: scenario.releasable,
+                total_cases: 6,
+                quality_pass_count: scenario.quality.pass,
+                quality_fail_count: scenario.quality.fail,
+                quality_unknown_count: scenario.quality.unknown,
+                is_latest: true,
+              },
+            ]
+          : [];
+
+        await page.route(`**/api/v1/experiment-launches/${historicalLaunchId}/result-snapshots`, (route) =>
+          route.fulfill({
+            json: {
+              launch_id: historicalLaunchId,
+              latest_snapshot_id: scenario.hasSnapshot ? snapshotId : null,
+              latest_revision: scenario.hasSnapshot ? 2 : null,
+              revisions,
+            },
+          }),
+        );
+        if (scenario.hasSnapshot) {
+          await page.route(`**/api/v1/experiment-launches/${historicalLaunchId}/summary`, (route) =>
+            route.fulfill({
+              json: {
+                launch_id: historicalLaunchId,
+                snapshot_id: snapshotId,
+                versions: {
+                  agent: { id: "banking-agent", version: "v1" },
+                  dataset: { name: "regression-dataset", version: "v2" },
+                  evaluators: [{ id: "intent_match", version: "1.0.0" }],
+                  runner: { runner_version: "v0.2.0", mapping_engine_version: "engine-v1" },
+                },
+                execution: { total: 6, succeeded: 6, failed: 0 },
+                quality: scenario.quality,
+              },
+            }),
+          );
+          await page.route(
+            `**/api/v1/experiment-launches/${historicalLaunchId}/result-snapshots/${snapshotId}`,
+            (route) =>
+              route.fulfill({
+                json: {
+                  launch_id: historicalLaunchId,
+                  snapshot_id: snapshotId,
+                  revision: 2,
+                  created_at: "2026-09-23T08:00:05Z",
+                  evidence_state: scenario.evidenceState,
+                  evidence_reasons: scenario.releasable ? [] : ["REQUIRED_EVIDENCE_MISSING"],
+                  releasable: scenario.releasable,
+                  manifest: { schema_version: "1.0", agent: { version: "v1" } },
+                  versions: { agent: { id: "banking-agent", version: "v1" } },
+                  summary: {
+                    quality_pass_count: scenario.quality.pass,
+                    quality_fail_count: scenario.quality.fail,
+                    quality_unknown_count: scenario.quality.unknown,
+                    total_cases: 6,
+                  },
+                  items: frozenItems,
+                },
+              }),
+          );
+        }
+
+        await page.goto(`/launches/${historicalLaunchId}`);
+        await expect(page.getByRole("heading", { name: historicalLaunchId })).toBeVisible();
+        await expect(page.getByTestId("status-badge").first()).toHaveText(scenario.status);
+        expect(await page.evaluate(() => window.scrollY), "initial decision view starts at the top").toBe(0);
+
+        const viewportSize = await page.evaluate(() => ({
+          width: document.documentElement.clientWidth,
+          height: document.documentElement.clientHeight,
+        }));
+        const tablist = page.getByRole("tablist").first();
+        await expect(tablist).toBeVisible();
+        const tablistBox = await tablist.boundingBox();
+        expect(tablistBox).not.toBeNull();
+        expect(tablistBox!.y + tablistBox!.height, "tab navigation remains above the fold").toBeLessThanOrEqual(
+          viewportSize.height + 1,
+        );
+
+        const compareTab = page.getByRole("tab", { name: /门禁与版本对比/ });
+        await expect(compareTab).toHaveAttribute("aria-selected", "true");
+        await expect(compareTab).toBeInViewport();
+        const panel = page.getByRole("tabpanel");
+        await expect(panel).toBeVisible();
+        const panelBox = await panel.boundingBox();
+        expect(panelBox).not.toBeNull();
+
+        if (scenario.hasSnapshot) {
+          const revision = page.getByTestId("snapshot-revision").first();
+          await expect(revision).toContainText("Revision 2");
+          await expect(revision).toBeInViewport();
+          const qualityEntry = page.getByRole("button", {
+            name: "综合质量通过率，点击前往用例排查",
+          });
+          await expect(qualityEntry).toBeVisible();
+          await expect(qualityEntry).toBeInViewport();
+        }
+
+        await testInfo.attach("launch-detail-first-screen-state.json", {
+          body: JSON.stringify({
+            state: scenario.name,
+            launchStatus: scenario.status,
+            hasFrozenSnapshot: scenario.hasSnapshot,
+            evidenceState: scenario.evidenceState,
+            viewport: viewportSize,
+            scrollY: await page.evaluate(() => window.scrollY),
+            tablist: tablistBox,
+            selectedPanel: panelBox,
+          }, null, 2),
+          contentType: "application/json",
+        });
+      });
+    }
+  }
+
   test("Launch detail Tabs support Arrow, Home and End keyboard navigation", async ({ page }) => {
     await page.goto(`/launches/${historicalLaunchId}?snapshot_id=snap-v2&tab=cases`);
     const compareTab = page.getByRole("tab", { name: /门禁与版本对比/ });

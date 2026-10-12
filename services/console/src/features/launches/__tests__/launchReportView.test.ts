@@ -52,7 +52,7 @@ describe("launchReportView pure functions", () => {
 
   it("validates identity and marks missing items as contract error", () => {
     const invalidLaunch = validateSnapshotDetail(
-      { launch_id: "other-launch", snapshot_id: "s1", items: [] },
+      { launch_id: "other-launch", snapshot_id: "s1", manifest: {}, items: [] },
       "l1",
       "s1",
     );
@@ -60,7 +60,7 @@ describe("launchReportView pure functions", () => {
     expect(invalidLaunch.error).toContain("快照归属 Launch 不一致");
 
     const invalidSnapshot = validateSnapshotDetail(
-      { launch_id: "l1", snapshot_id: "other-snap", items: [] },
+      { launch_id: "l1", snapshot_id: "other-snap", manifest: {}, items: [] },
       "l1",
       "s1",
     );
@@ -68,7 +68,7 @@ describe("launchReportView pure functions", () => {
     expect(invalidSnapshot.error).toContain("快照 ID 不一致");
 
     const missingItems = validateSnapshotDetail(
-      { launch_id: "l1", snapshot_id: "s1" },
+      { launch_id: "l1", snapshot_id: "s1", manifest: {} },
       "l1",
       "s1",
     );
@@ -76,7 +76,7 @@ describe("launchReportView pure functions", () => {
     expect(missingItems.error).toContain("items 字段缺失或非数组");
 
     const validEmpty = validateSnapshotDetail(
-      { launch_id: "l1", snapshot_id: "s1", items: [] },
+      { launch_id: "l1", snapshot_id: "s1", manifest: {}, items: [] },
       "l1",
       "s1",
     );
@@ -86,15 +86,15 @@ describe("launchReportView pure functions", () => {
   it("treats a missing identity as a contract failure rather than an optional check", () => {
     // A payload without identity cannot be attributed to the revision the user asked for, so
     // it must be rejected exactly like a mismatched one.
-    const noLaunch = validateSnapshotDetail({ snapshot_id: "s1", items: [] }, "l1", "s1");
+    const noLaunch = validateSnapshotDetail({ snapshot_id: "s1", manifest: {}, items: [] }, "l1", "s1");
     expect(noLaunch.isValid).toBe(false);
     expect(noLaunch.error).toContain("快照归属 Launch 不一致");
 
-    const noSnapshot = validateSnapshotDetail({ launch_id: "l1", items: [] }, "l1", "s1");
+    const noSnapshot = validateSnapshotDetail({ launch_id: "l1", manifest: {}, items: [] }, "l1", "s1");
     expect(noSnapshot.isValid).toBe(false);
     expect(noSnapshot.error).toContain("快照 ID 不一致");
 
-    const noIdentity = validateSnapshotDetail({ items: [] }, "l1", "s1");
+    const noIdentity = validateSnapshotDetail({ manifest: {}, items: [] }, "l1", "s1");
     expect(noIdentity.isValid).toBe(false);
   });
 
@@ -104,7 +104,7 @@ describe("launchReportView pure functions", () => {
     }
 
     const rowWithoutCaseId = validateSnapshotDetail(
-      { launch_id: "l1", snapshot_id: "s1", items: [{ latency_ms: 5 }] },
+      { launch_id: "l1", snapshot_id: "s1", manifest: {}, items: [{ latency_ms: 5 }] },
       "l1",
       "s1",
     );
@@ -112,7 +112,7 @@ describe("launchReportView pure functions", () => {
     expect(rowWithoutCaseId.error).toContain("dataset_item_id");
 
     const nullRow = validateSnapshotDetail(
-      { launch_id: "l1", snapshot_id: "s1", items: [null] },
+      { launch_id: "l1", snapshot_id: "s1", manifest: {}, items: [null] },
       "l1",
       "s1",
     );
@@ -121,7 +121,7 @@ describe("launchReportView pure functions", () => {
 
   it("still accepts a legitimately empty revision and unknown-safe optional evidence", () => {
     const emptyRevision = validateSnapshotDetail(
-      { launch_id: "l1", snapshot_id: "s1", items: [] },
+      { launch_id: "l1", snapshot_id: "s1", manifest: {}, items: [] },
       "l1",
       "s1",
     );
@@ -131,6 +131,7 @@ describe("launchReportView pure functions", () => {
       {
         launch_id: "l1",
         snapshot_id: "s1",
+        manifest: {},
         evidence_state: "DIAGNOSTIC",
         releasable: false,
         items: [

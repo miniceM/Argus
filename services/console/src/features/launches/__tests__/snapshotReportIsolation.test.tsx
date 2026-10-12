@@ -85,6 +85,7 @@ const validDetail = (overrides: Record<string, unknown> = {}) => ({
   manifest_digest: "sha256:manifest-digest",
   evidence_state: "COMPLETE",
   releasable: true,
+  manifest: launch.manifest,
   versions: {},
   summary: {},
   items: [frozenItem],

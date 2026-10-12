@@ -21,7 +21,11 @@ import {
 import { Button } from "../../../components/ui/Primitives";
 import { Badge } from "../../../components/Badge";
 import { JsonViewer } from "../../../components/JsonViewer";
-import { SnapshotEvidenceBadge } from "../resultSnapshot";
+import {
+  SnapshotEvidenceBadge,
+  formatSnapshotQualityCounts,
+  snapshotQualityCounts,
+} from "../resultSnapshot";
 import { bindingVerification } from "../frozenIdentity";
 import { useCopyFeedback } from "../useCopyFeedback";
 
@@ -44,14 +48,6 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
   snapshotId,
   onSelectSnapshot,
 }) => {
-  const manifest = (launch.manifest || {}) as any;
-  const manifestAgent = manifest.agent || {};
-  const manifestEvaluators = manifest.evaluators || [];
-  const manifestRunner = manifest.runner || {};
-  const manifestPolicy = manifest.execution_policy || manifest.policy || {};
-  const manifestPolicyData = manifest.quality_policy || {};
-  const frozenPolicyRules = manifestPolicyData?.rules ?? [];
-
   // Fetch revisions list — shared entry so this tab can never observe an unverified payload
   const historyQuery = useQuery<SnapshotList>(snapshotListQueryOptions(launch.id));
 
@@ -72,16 +68,48 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
         : null,
     ),
   );
+  const selectedDetail = detailQuery.data?.snapshot_id === effectiveSnapshotId
+    ? detailQuery.data
+    : undefined;
+  const hasMatchingFrozenDetail = !effectiveSnapshotId || Boolean(selectedDetail);
+  const frozenManifestUnavailable = Boolean(effectiveSnapshotId) && !hasMatchingFrozenDetail;
+
+  // Once a revision is selected, every displayed manifest dimension comes from
+  // that revision's frozen Manifest, never the Launch-level copy.
+  const manifest = (effectiveSnapshotId
+    ? selectedDetail?.manifest ?? {}
+    : launch.manifest ?? {}) as any;
+  const manifestAgent = manifest.agent || {};
+  const manifestEvaluators = manifest.evaluators || [];
+  const manifestRunner = manifest.runner || {};
+  const manifestPolicy = manifest.execution_policy || manifest.policy || {};
+  const manifestPolicyData = manifest.quality_policy || {};
+  const frozenPolicyRules = manifestPolicyData?.rules ?? [];
+  const schemaVersionValue = [manifest.schema_version, manifest.manifest_version].find(
+    (value) =>
+      (typeof value === "string" && value.trim().length > 0) ||
+      (typeof value === "number" && Number.isFinite(value)),
+  );
+  // Trim only to decide whether a recorded identity exists; display the original value.
+  const schemaVersion = typeof schemaVersionValue === "string" || typeof schemaVersionValue === "number"
+    ? String(schemaVersionValue)
+    : "";
+  const manifestField = (frozenValue: string | number | null | undefined, liveValue?: string | number | null) =>
+    frozenValue ?? (effectiveSnapshotId ? "未记录" : liveValue ?? "未记录");
+  const activeQualityCounts = snapshotQualityCounts(
+    activeSnapshot,
+    selectedDetail,
+  );
 
   const handleCopyJson = () => {
-    const payload = detailQuery.data;
+    const payload = selectedDetail;
     if (!payload) return;
     void copyJson.copy(JSON.stringify(payload, null, 2));
   };
   // Download JSON
   const handleDownloadJson = () => {
-    if (!detailQuery.data || !effectiveSnapshotId) return;
-    const payload = detailQuery.data;
+    if (!selectedDetail || !effectiveSnapshotId) return;
+    const payload = selectedDetail;
     const jsonStr = JSON.stringify(payload, null, 2);
     const blob = new Blob([jsonStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -97,7 +125,7 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
     setTimeout(() => setDownloadNotice(null), 3000);
   };
 
-  const isExportDisabled = Boolean(!effectiveSnapshotId || detailQuery.isLoading || detailQuery.error || !detailQuery.data);
+  const isExportDisabled = Boolean(!effectiveSnapshotId || detailQuery.isLoading || detailQuery.error || !selectedDetail);
 
   const shareUrl = effectiveSnapshotId
     ? `${typeof window !== "undefined" ? window.location.origin : ""}/launches/${launch.id}?snapshot_id=${effectiveSnapshotId}`
@@ -117,7 +145,9 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
               data-testid="manifest-schema-version"
               className="px-2 py-0.5 rounded text-micro font-mono bg-primary-subtle text-primary border border-primary-border font-semibold"
             >
-              Schema v{manifest.schema_version || manifest.manifest_version || "1.0"}
+              {frozenManifestUnavailable
+                ? detailQuery.isError ? "快照加载失败" : "正在加载快照..."
+                : schemaVersion ? `Schema v${schemaVersion}` : "Schema 版本未记录"}
             </span>
           </div>
 
@@ -153,7 +183,7 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
               onClick={() => setShowRawJson(!showRawJson)}
             >
               <FileCode className="w-3.5 h-3.5" />
-              <span>{showRawJson ? "收起 Manifest JSON" : "查看完整 Manifest JSON"}</span>
+              <span>{showRawJson ? "收起快照 JSON" : "查看完整快照 JSON"}</span>
             </Button>
           </div>
         </div>
@@ -164,7 +194,34 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
           </div>
         )}
 
+        {frozenManifestUnavailable && (detailQuery.isError ? (
+          <div
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-fail-border bg-fail-subtle p-3 text-xs text-fail"
+            role="alert"
+            data-testid="frozen-manifest-error"
+          >
+            <span>无法加载当前 Revision 的冻结 Manifest：{formatApiError(detailQuery.error)}</span>
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-6 px-2 text-2xs"
+              onClick={() => void detailQuery.refetch()}
+            >
+              重试加载冻结 Manifest
+            </Button>
+          </div>
+        ) : (
+          <p
+            className="rounded-lg border border-border bg-surface-subtle p-3 text-xs text-muted-foreground"
+            role="status"
+            data-testid="frozen-manifest-loading"
+          >
+            正在加载当前 Revision 的冻结 Manifest...
+          </p>
+        ))}
+
         {/* 四维网格 */}
+        {!frozenManifestUnavailable && (
         <div data-testid="manifest-4d-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
           {/* Dimension 1: Agent Snapshot */}
           <div className="p-3.5 bg-surface-subtle rounded-lg border border-border space-y-2">
@@ -175,11 +232,11 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
             <div className="space-y-1 text-muted-foreground">
               <div>
                 <span>Agent: </span>
-                <strong className="text-foreground">{manifestAgent.id || launch.agent_id}</strong>
+                <strong className="text-foreground">{manifestField(manifestAgent.id, launch.agent_id)}</strong>
               </div>
               <div>
                 <span>Version: </span>
-                <strong className="font-mono text-foreground">{manifestAgent.version || launch.agent_version}</strong>
+                <strong className="font-mono text-foreground">{manifestField(manifestAgent.version, launch.agent_version)}</strong>
               </div>
               <div className="truncate" title={manifestAgent.endpoint || ""}>
                 <span>Endpoint: </span>
@@ -201,7 +258,7 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
             <div className="space-y-1 text-muted-foreground">
               <div>
                 <span>Name: </span>
-                <strong className="text-foreground">{manifest.dataset?.dataset_name || manifest.dataset?.name || launch.dataset_name}</strong>
+                <strong className="text-foreground">{manifestField(manifest.dataset?.dataset_name ?? manifest.dataset?.name, launch.dataset_name)}</strong>
               </div>
               <div>
                 <span>Version: </span>
@@ -311,19 +368,20 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
               </div>
               <div>
                 <span>Concurrency: </span>
-                <span className="font-semibold text-foreground">{manifestPolicy.max_concurrency ?? manifestRunner.concurrency ?? 1}</span>
+                <span className="font-semibold text-foreground">{manifestField(manifestPolicy.max_concurrency ?? manifestRunner.concurrency, 1)}</span>
               </div>
               <div>
                 <span>Timeout: </span>
-                <span>{manifestPolicy.timeout_seconds ?? 30}s</span>
+                <span>{manifestField(manifestPolicy.timeout_seconds, 30)}{manifestPolicy.timeout_seconds != null || !effectiveSnapshotId ? "s" : ""}</span>
               </div>
               <div>
                 <span>Retries: </span>
-                <span>{manifestPolicy.max_retries ?? 0}</span>
+                <span>{manifestField(manifestPolicy.max_retries, 0)}</span>
               </div>
             </div>
           </div>
         </div>
+        )}
 
         {/* 原始 JSON 查看抽屉 / 面板 */}
         {showRawJson && (
@@ -351,8 +409,8 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
                   重试加载快照
                 </Button>
               </div>
-            ) : detailQuery.data ? (
-              <JsonViewer data={detailQuery.data} title="Immutable Manifest JSON" />
+            ) : selectedDetail ? (
+              <JsonViewer data={selectedDetail} title="Frozen Result Snapshot JSON" />
             ) : (
               <p className="text-xs text-muted-foreground" role="status">
                 当前没有可查看的冻结快照。
@@ -363,6 +421,7 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
       </div>
 
       {/* 2. 冻结质量策略详情 */}
+      {!frozenManifestUnavailable && (
       <div className="bg-surface border border-border rounded-xl p-5 shadow-xs space-y-3" data-testid="frozen-quality-policy">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
           <div className="flex items-center gap-2">
@@ -430,6 +489,7 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
           </>
         )}
       </div>
+      )}
 
       {/* 3. 快照修订历史面板 (Result Snapshot Panel) */}
       <div className="bg-surface border border-border rounded-xl p-5 shadow-xs space-y-4" data-testid="result-snapshot-panel">
@@ -469,7 +529,7 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
             </p>
             {activeSnapshot && (
               <p className="text-micro text-muted-foreground" data-testid="snapshot-quality-counts">
-                PASS {activeSnapshot.quality_pass_count} · FAIL {activeSnapshot.quality_fail_count} · UNKNOWN {activeSnapshot.quality_unknown_count}
+                {formatSnapshotQualityCounts(activeQualityCounts)}
               </p>
             )}
             <p className="text-micro text-muted-foreground font-mono break-all" data-testid="snapshot-share-url">
@@ -482,28 +542,35 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
           <div className="pt-3 border-t border-border">
             <h4 className="text-xs font-semibold text-foreground mb-2">历史版本列表 (Revision History)</h4>
             <ul className="space-y-1.5" data-testid="snapshot-history">
-              {revisions.map((row) => (
-                <li key={row.snapshot_id}>
-                  <button
-                    type="button"
-                    onClick={() => onSelectSnapshot?.(row.snapshot_id)}
-                    aria-current={row.snapshot_id === activeSnapshot?.snapshot_id ? "true" : undefined}
-                    data-testid={`snapshot-revision-${row.revision}`}
-                    className={`w-full text-left text-xs px-3 py-2 rounded-lg border transition cursor-pointer flex items-center justify-between ${
-                      row.snapshot_id === activeSnapshot?.snapshot_id
-                        ? "border-primary bg-primary-subtle text-primary font-semibold"
-                        : "border-border bg-surface-subtle text-muted-foreground hover:bg-surface-muted"
-                    }`}
-                  >
-                    <span>
-                      Revision {row.revision} {row.is_latest ? "(最新)" : ""}
-                    </span>
-                    <span className="font-mono text-micro">
-                      PASS {row.quality_pass_count} / FAIL {row.quality_fail_count} / UNKNOWN {row.quality_unknown_count}
-                    </span>
-                  </button>
-                </li>
-              ))}
+              {revisions.map((row) => {
+                const rowCounts = snapshotQualityCounts(
+                  row,
+                  row.snapshot_id === effectiveSnapshotId ? selectedDetail : undefined,
+                );
+                return (
+                  <li key={row.snapshot_id}>
+                    <button
+                      type="button"
+                      onClick={() => onSelectSnapshot?.(row.snapshot_id)}
+                      aria-current={row.snapshot_id === activeSnapshot?.snapshot_id ? "true" : undefined}
+                      data-testid={`snapshot-revision-${row.revision}`}
+                      title={formatSnapshotQualityCounts(rowCounts)}
+                      className={`w-full text-left text-xs px-3 py-2 rounded-lg border transition cursor-pointer flex items-center justify-between ${
+                        row.snapshot_id === activeSnapshot?.snapshot_id
+                          ? "border-primary bg-primary-subtle text-primary font-semibold"
+                          : "border-border bg-surface-subtle text-muted-foreground hover:bg-surface-muted"
+                      }`}
+                    >
+                      <span>
+                        Revision {row.revision} {row.is_latest ? "(最新)" : ""}
+                      </span>
+                      <span className="font-mono text-micro">
+                        {formatSnapshotQualityCounts(rowCounts)}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}

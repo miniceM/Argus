@@ -287,6 +287,16 @@ const failItem = {
 };
 
 async function mockDetail(page: Page, items: unknown[]) {
+  const frozenManifest = {
+    schema_version: "1.2",
+    dataset: { dataset_name: "banking-regression", items_count: items.length, snapshot_digest: "sha256:ds83" },
+    agent: { id: AGENT_ID, version: "v2", endpoint: "http://127.0.0.1:18082/invoke", spec_digest: "sha256:spec83" },
+    evaluators: [],
+    quality_policy: frozenPolicy,
+    measurement_digest: "sha256:" + "e".repeat(64),
+    execution_policy: { max_concurrency: 2, timeout_seconds: 30, max_retries: 1 },
+    runner: { runner_version: "0.1.0", mapping_engine_version: "sha256-mapping-engine-v1" },
+  };
   await page.route("**/api/v1/system/info", (route) =>
     route.fulfill({
       json: { service: "argus-eval-runner", version: "0.2.0", build_id: "issue-83", environment: "test" },
@@ -317,22 +327,14 @@ async function mockDetail(page: Page, items: unknown[]) {
     await route.fulfill({
       json: {
         ...baseLaunch,
-        manifest: {
-          schema_version: "1.2",
-          dataset: { dataset_name: "banking-regression", items_count: items.length, snapshot_digest: "sha256:ds83" },
-          agent: { id: AGENT_ID, version: "v2", endpoint: "http://127.0.0.1:18082/invoke", spec_digest: "sha256:spec83" },
-          evaluators: [],
-          quality_policy: frozenPolicy,
-          measurement_digest: "sha256:" + "e".repeat(64),
-          execution_policy: { max_concurrency: 2, timeout_seconds: 30, max_retries: 1 },
-          runner: { runner_version: "0.1.0", mapping_engine_version: "sha256-mapping-engine-v1" },
-        },
+        manifest: frozenManifest,
       },
     });
   });
   await installSingleSnapshotFixture(page, {
     launchId: "launch-83",
     snapshotId: "snapshot-issue-83",
+    manifest: frozenManifest,
     items,
   });
 }

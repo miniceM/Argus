@@ -439,7 +439,19 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   const overrideGet = (overrides: Record<string, any>) => {
     const original = (api.GET as any).getMockImplementation();
     (api.GET as any).mockImplementation((path: string, options?: any) => {
-      if (path in overrides) return Promise.resolve(overrides[path]);
+      if (path in overrides) {
+        const response = overrides[path];
+        // Most review fixtures predate the frozen Manifest field. Supply the
+        // realistic default unless a case explicitly includes the field.
+        if (
+          path === "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}" &&
+          response?.data && typeof response.data === "object" && !Array.isArray(response.data) &&
+          !Object.prototype.hasOwnProperty.call(response.data, "manifest")
+        ) {
+          return Promise.resolve({ ...response, data: { manifest: mockLaunch.manifest, ...response.data } });
+        }
+        return Promise.resolve(response);
+      }
       return original(path, options);
     });
   };

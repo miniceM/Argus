@@ -29,6 +29,54 @@ export type SnapshotRevision = Schema["ResultSnapshotRevisionResponse"];
 export type SnapshotList = Schema["ResultSnapshotListResponse"];
 export type SnapshotDetail = Schema["ResultSnapshotDetailResponse"];
 
+export type SnapshotQualityCounts = {
+  pass: number | null;
+  fail: number | null;
+  unknown: number | null;
+};
+
+const readQualityCount = (value: unknown): number | null =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+
+/**
+ * Prefer counters frozen in the snapshot summary. For early snapshots whose
+ * summary omitted them, derive from the same immutable detail items. Directory
+ * values remain a fallback for non-selected revisions and preserve real zeroes.
+ */
+export function snapshotQualityCounts(
+  revision: SnapshotRevision | null,
+  detail?: SnapshotDetail,
+): SnapshotQualityCounts {
+  // Even callers that render multiple revisions may supply a stale or otherwise
+  // unrelated detail while switching. A detail is evidence for this row only
+  // when its immutable ID matches the revision being summarized.
+  const matchingDetail = revision?.snapshot_id === detail?.snapshot_id ? detail : undefined;
+  const summary = matchingDetail?.summary as unknown as Record<string, unknown> | undefined;
+  const itemCount = (outcome: "pass" | "fail" | "unknown"): number | null => {
+    if (!Array.isArray(matchingDetail?.items)) return null;
+    return matchingDetail.items.filter((item) => {
+      if (!item || typeof item !== "object") return false;
+      const rawConclusion = (item as Record<string, unknown>).quality_conclusion;
+      const conclusion = typeof rawConclusion === "string" ? rawConclusion.toLowerCase() : "";
+      const normalizedConclusion = conclusion === "pass" || conclusion === "fail" ? conclusion : "unknown";
+      return normalizedConclusion === outcome;
+    }).length;
+  };
+  const resolve = (summaryKey: string, outcome: "pass" | "fail" | "unknown", directoryValue: unknown) =>
+    readQualityCount(summary?.[summaryKey]) ?? itemCount(outcome) ?? readQualityCount(directoryValue);
+
+  return {
+    pass: resolve("quality_pass_count", "pass", revision?.quality_pass_count),
+    fail: resolve("quality_fail_count", "fail", revision?.quality_fail_count),
+    unknown: resolve("quality_unknown_count", "unknown", revision?.quality_unknown_count),
+  };
+}
+
+export function formatSnapshotQualityCounts(counts: SnapshotQualityCounts): string {
+  const format = (value: number | null) => value === null ? "未记录" : String(value);
+  return `PASS ${format(counts.pass)} · FAIL ${format(counts.fail)} · UNKNOWN ${format(counts.unknown)}`;
+}
+
 /**
  * COMPLETE may back a formal decision; DIAGNOSTIC may only explain a failure.
  * `neutral` is deliberate: a diagnostic snapshot is not a product failure, it
@@ -83,6 +131,11 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
       launchId && active?.snapshot_id ? { launchId, snapshotId: active.snapshot_id } : null,
     ),
   );
+
+  const matchingDetail = detail.data && detail.data.snapshot_id === active?.snapshot_id
+    ? detail.data
+    : undefined;
+  const activeQualityCounts = snapshotQualityCounts(active, matchingDetail);
 
   const historyRefreshError = history.isError && history.data ? (
     <div
@@ -207,7 +260,9 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
                           ? "border-primary bg-primary-subtle text-primary font-semibold"
                           : "border-border bg-surface text-muted-foreground hover:bg-surface-hover hover:text-foreground"
                       }`}
-                      title={`Revision ${row.revision}${row.is_latest ? " (最新)" : ""} · PASS ${row.quality_pass_count} / FAIL ${row.quality_fail_count} / UNKNOWN ${row.quality_unknown_count}`}
+                      title={`Revision ${row.revision}${row.is_latest ? " (最新)" : ""} · ${formatSnapshotQualityCounts(
+                        snapshotQualityCounts(row, row.snapshot_id === active?.snapshot_id ? matchingDetail : undefined),
+                      )}`}
                     >
                       <span>Rev {row.revision}</span>
                       {row.is_latest ? " (最新)" : ""}
@@ -221,7 +276,7 @@ export const ResultSnapshotPanel: React.FC<PanelProps> = ({
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-micro text-muted-foreground pt-1 border-t border-border">
             <span data-testid="snapshot-evidence-help">{evidenceHelp(active.evidence_state)}</span>
             <span data-testid="snapshot-quality-counts">
-              PASS {active.quality_pass_count} · FAIL {active.quality_fail_count} · UNKNOWN {active.quality_unknown_count}
+              {formatSnapshotQualityCounts(activeQualityCounts)}
             </span>
             {(active.evidence_reasons ?? []).length > 0 && (
               <ul className="inline-flex items-center gap-2 list-none p-0 m-0" data-testid="snapshot-evidence-reasons">

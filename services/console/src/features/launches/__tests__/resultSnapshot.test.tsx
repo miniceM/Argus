@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ResultSnapshotPanel, evidenceTone } from "../resultSnapshot";
+import { ResultSnapshotPanel, evidenceTone, snapshotQualityCounts } from "../resultSnapshot";
 import { api } from "../../../api/client";
 import { snapshotListKey } from "../launchSnapshotQueries";
 
@@ -32,7 +32,7 @@ const list = (revisions: Rev[]) => ({
   revisions,
 });
 
-const detail = (rev: Rev) => ({
+const detail = (rev: Rev, over: Record<string, unknown> = {}) => ({
   launch_id: "launch-85",
   snapshot_id: rev.snapshot_id,
   revision: rev.revision,
@@ -42,9 +42,11 @@ const detail = (rev: Rev) => ({
   evidence_state: rev.evidence_state,
   evidence_reasons: rev.evidence_reasons,
   releasable: rev.evidence_state === "COMPLETE",
+  manifest: {},
   versions: {},
   summary: {},
   items: [],
+  ...over,
 });
 
 function renderPanel(
@@ -63,15 +65,15 @@ function renderPanel(
   );
 }
 
-const mockApi = (revisions: Rev[]) => {
-  (api.GET as any).mockImplementation((path: string) => {
+const mockApi = (revisions: Rev[], details: Record<string, Record<string, unknown>> = {}) => {
+  (api.GET as any).mockImplementation((path: string, options?: any) => {
     if (path.endsWith("/result-snapshots")) {
       return Promise.resolve({ data: list(revisions) });
     }
     if (path.includes("/result-snapshots/")) {
-      const id = path.split("/").pop();
+      const id = options?.params?.path?.snapshot_id ?? path.split("/").pop() ?? "";
       const found = revisions.find((r) => r.snapshot_id === id) ?? revisions[0];
-      return Promise.resolve({ data: detail(found) });
+      return Promise.resolve({ data: detail(found, details[id] ?? {}) });
     }
     return Promise.resolve({ data: null });
   });
@@ -191,6 +193,127 @@ describe("Issue #85 ResultSnapshotPanel", () => {
     expect(older).toBeInTheDocument();
     older.click();
     await waitFor(() => expect(onSelect).toHaveBeenCalledWith("snap-1"));
+  });
+
+  it("derives missing legacy revision counts from the selected frozen detail and labels other missing counts", async () => {
+    const revisions = [
+      revision({ snapshot_id: "snap-2", revision: 2, is_latest: true }),
+      revision({
+        snapshot_id: "snap-1",
+        revision: 1,
+        is_latest: false,
+        quality_pass_count: null,
+        quality_fail_count: null,
+        quality_unknown_count: null,
+      }),
+    ];
+    mockApi(revisions, {
+      "snap-1": {
+        summary: {},
+        items: [
+          { dataset_item_id: "case-pass", quality_conclusion: "PASS" },
+          { dataset_item_id: "case-fail", quality_conclusion: "FAIL" },
+          { dataset_item_id: "case-unknown", quality_conclusion: "UNKNOWN" },
+        ],
+      },
+    });
+
+    renderPanel({ selectedSnapshotId: "snap-1" });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("snapshot-quality-counts")).toHaveTextContent(
+        "PASS 1 · FAIL 1 · UNKNOWN 1",
+      );
+    });
+    expect(screen.getByTestId("snapshot-revision-1")).toHaveAttribute(
+      "title",
+      expect.stringContaining("PASS 1 · FAIL 1 · UNKNOWN 1"),
+    );
+    expect(screen.getByTestId("snapshot-revision-2")).toHaveAttribute(
+      "title",
+      expect.stringContaining("PASS 6 · FAIL 0 · UNKNOWN 0"),
+    );
+    expect((api.GET as any).mock.calls.filter(([path]: [string]) => path.includes("/result-snapshots/")))
+      .toHaveLength(1);
+  });
+
+  it("does not derive one revision's counts from another revision's frozen detail", () => {
+    const selectedRevision = revision({
+      snapshot_id: "snap-1",
+      quality_pass_count: null,
+      quality_fail_count: null,
+      quality_unknown_count: null,
+    });
+    const otherRevisionDetail = detail(revision({ snapshot_id: "snap-2" }), {
+      summary: { quality_pass_count: 4, quality_fail_count: 1, quality_unknown_count: 1 },
+      items: [{ dataset_item_id: "other-case", quality_conclusion: "pass" }],
+    });
+
+    expect(snapshotQualityCounts(selectedRevision as any, otherRevisionDetail as any)).toEqual({
+      pass: null,
+      fail: null,
+      unknown: null,
+    });
+  });
+
+  it("treats an explicitly empty frozen items array as zero items", async () => {
+    const row = revision({
+      snapshot_id: "snap-empty",
+      quality_pass_count: null,
+      quality_fail_count: null,
+      quality_unknown_count: null,
+    });
+    mockApi([row], { "snap-empty": { summary: {}, items: [] } });
+
+    renderPanel({ selectedSnapshotId: "snap-empty" });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("snapshot-quality-counts")).toHaveTextContent(
+        "PASS 0 · FAIL 0 · UNKNOWN 0",
+      );
+    });
+  });
+
+  it("counts a missing frozen item conclusion as UNKNOWN", async () => {
+    const row = revision({
+      snapshot_id: "snap-1",
+      quality_pass_count: null,
+      quality_fail_count: null,
+      quality_unknown_count: null,
+    });
+    mockApi([row], {
+      "snap-1": {
+        summary: {},
+        items: [
+          { dataset_item_id: "case-pass", quality_conclusion: "pass" },
+          { dataset_item_id: "case-missing-conclusion" },
+        ],
+      },
+    });
+
+    renderPanel({ selectedSnapshotId: "snap-1" });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("snapshot-quality-counts")).toHaveTextContent(
+        "PASS 1 · FAIL 0 · UNKNOWN 1",
+      );
+    });
+  });
+
+  it("does not replace a frozen zero count with an item-derived count", async () => {
+    const row = revision({ quality_pass_count: 0, quality_fail_count: 0, quality_unknown_count: 0 });
+    mockApi([row], {
+      "snap-1": {
+        summary: { quality_pass_count: 0, quality_fail_count: 0, quality_unknown_count: 0 },
+        items: [{ dataset_item_id: "case-fail", quality_conclusion: "fail" }],
+      },
+    });
+
+    renderPanel();
+
+    expect(await screen.findByTestId("snapshot-quality-counts")).toHaveTextContent(
+      "PASS 0 · FAIL 0 · UNKNOWN 0",
+    );
   });
 
   it("does not render a history switcher for a single revision", async () => {

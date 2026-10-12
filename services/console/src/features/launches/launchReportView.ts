@@ -104,6 +104,14 @@ export function validateSnapshotDetail(
     };
   }
 
+  if (!detail.manifest || typeof detail.manifest !== "object" || Array.isArray(detail.manifest)) {
+    return {
+      isValid: false,
+      error: "快照响应缺少有效的冻结 Manifest (manifest 必须是对象)",
+      kind: "contract",
+    };
+  }
+
   if (!("items" in detail) || !Array.isArray(detail.items)) {
     return {
       isValid: false,

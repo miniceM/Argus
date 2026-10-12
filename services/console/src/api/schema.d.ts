@@ -1885,6 +1885,10 @@ export interface components {
              * @default false
              */
             releasable: boolean;
+            /** Manifest */
+            manifest: {
+                [key: string]: unknown;
+            };
             /** Versions */
             versions: {
                 [key: string]: unknown;
@@ -1933,21 +1937,12 @@ export interface components {
              * @default 0
              */
             total_cases: number;
-            /**
-             * Quality Pass Count
-             * @default 0
-             */
-            quality_pass_count: number;
-            /**
-             * Quality Fail Count
-             * @default 0
-             */
-            quality_fail_count: number;
-            /**
-             * Quality Unknown Count
-             * @default 0
-             */
-            quality_unknown_count: number;
+            /** Quality Pass Count */
+            quality_pass_count?: number | null;
+            /** Quality Fail Count */
+            quality_fail_count?: number | null;
+            /** Quality Unknown Count */
+            quality_unknown_count?: number | null;
             /**
              * Is Latest
              * @default false

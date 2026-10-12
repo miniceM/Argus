@@ -439,7 +439,19 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   const overrideGet = (overrides: Record<string, any>) => {
     const original = (api.GET as any).getMockImplementation();
     (api.GET as any).mockImplementation((path: string, options?: any) => {
-      if (path in overrides) return Promise.resolve(overrides[path]);
+      if (path in overrides) {
+        const response = overrides[path];
+        // Most review fixtures predate the frozen Manifest field. Supply the
+        // realistic default unless a case explicitly includes the field.
+        if (
+          path === "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}" &&
+          response?.data && typeof response.data === "object" && !Array.isArray(response.data) &&
+          !Object.prototype.hasOwnProperty.call(response.data, "manifest")
+        ) {
+          return Promise.resolve({ ...response, data: { manifest: mockLaunch.manifest, ...response.data } });
+        }
+        return Promise.resolve(response);
+      }
       return original(path, options);
     });
   };
@@ -887,7 +899,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   it("EXTRA: explicit null frozen evidence never borrows live Trace or latency",async()=>{
     const original=(api.GET as any).getMockImplementation();
     (api.GET as any).mockImplementation(async(path:string,options:any)=>{
-      if(path==="/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}")return {data:{launch_id:mockLaunch.id,snapshot_id:"snap-v2-001",items:[{...realFrozenItem,trace_url:null,trace_id:null,latency_ms:null,final_attempt_id:null}]}};
+      if(path==="/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}")return {data:{launch_id:mockLaunch.id,snapshot_id:"snap-v2-001",manifest:mockLaunch.manifest,items:[{...realFrozenItem,trace_url:null,trace_id:null,latency_ms:null,final_attempt_id:null}]}};
       const res=await original(path,options);
       if(path==="/api/v1/experiment-launches/{launch_id}/items")return {data:res.data.map((i:any)=>({...i,langfuse_trace_url:"https://cloud.langfuse.com/trace/LIVE-S2",final_attempt_latency_ms:777,final_attempt_id:"LIVE-S2-final"}))};
       return res;

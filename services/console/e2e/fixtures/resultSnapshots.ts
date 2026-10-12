@@ -9,6 +9,7 @@ type SingleSnapshotOptions = {
   launchId: string;
   snapshotId: string;
   items: unknown[];
+  manifest?: Record<string, unknown>;
   revision?: number;
 };
 
@@ -19,7 +20,7 @@ type SingleSnapshotOptions = {
  */
 export async function installSingleSnapshotFixture(
   page: Page,
-  { launchId, snapshotId, items, revision = 1 }: SingleSnapshotOptions,
+  { launchId, snapshotId, items, manifest = {}, revision = 1 }: SingleSnapshotOptions,
 ) {
   const rows = items as SnapshotFixtureItem[];
   const passCount = rows.filter(
@@ -63,24 +64,24 @@ export async function installSingleSnapshotFixture(
       }),
   );
 
+  const detail = {
+    launch_id: launchId,
+    snapshot_id: snapshotId,
+    revision,
+    created_at: createdAt,
+    source_result_digest: sourceResultDigest,
+    manifest_digest: manifestDigest,
+    evidence_state: evidenceState,
+    evidence_reasons: [],
+    releasable: failCount === 0 && unknownCount === 0,
+    manifest,
+    versions: {},
+    summary: {},
+    items,
+  };
   await page.route(
     `**/api/v1/experiment-launches/${launchId}/result-snapshots/${snapshotId}`,
-    (route) =>
-      route.fulfill({
-        json: {
-          launch_id: launchId,
-          snapshot_id: snapshotId,
-          revision,
-          created_at: createdAt,
-          source_result_digest: sourceResultDigest,
-          manifest_digest: manifestDigest,
-          evidence_state: evidenceState,
-          evidence_reasons: [],
-          releasable: failCount === 0 && unknownCount === 0,
-          versions: {},
-          summary: {},
-          items,
-        },
-      }),
+    (route) => route.fulfill({ json: detail }),
   );
+  return { detail };
 }

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";
 import { LaunchDetail } from "../LaunchDetail";
@@ -20,6 +20,9 @@ const LocationWatcher = () => {
 
 describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   let queryClient: QueryClient;
+  let snapshotManifestOverride: Record<string, unknown> | null = null;
+  let snapshotListOverride: Record<string, unknown> | null = null;
+  let snapshotDetailOverride: Record<string, unknown> | null = null;
 
   const mockLaunch = {
     id: "ff04d66b-3d00-4d67-8cf4-d36772fff708",
@@ -243,6 +246,9 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
       defaultOptions: { queries: { retry: false } },
     });
     vi.clearAllMocks();
+    snapshotManifestOverride = null;
+    snapshotListOverride = null;
+    snapshotDetailOverride = null;
 
     (api.GET as any).mockImplementation((path: string, options?: any) => {
       if (path === "/api/v1/experiment-launches/{launch_id}") {
@@ -252,15 +258,16 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
         return Promise.resolve({ data: mockItems });
       }
       if (path === "/api/v1/experiment-launches/{launch_id}/result-snapshots") {
-        return Promise.resolve({ data: mockSnapshotList });
+        return Promise.resolve({ data: snapshotListOverride ?? mockSnapshotList });
       }
       if (path.includes("/result-snapshots/")) {
         return Promise.resolve({
-          data: {
+          data: snapshotDetailOverride ?? {
             ...mockSnapshotList.revisions[0],
             launch_id: mockLaunch.id,
             releasable: true,
-            manifest: mockLaunch.manifest,
+            manifest: snapshotManifestOverride ?? mockLaunch.manifest,
+            summary: mockSummary.summary,
             items: mockItems.map((item) => ({
               ...item,
               trace_url: item.langfuse_trace_url,
@@ -326,9 +333,11 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   };
 
   const renderAuditTab = (manifestOverrides: Record<string, unknown>) => {
+    const launchManifest = { ...mockLaunch.manifest, ...manifestOverrides };
+    snapshotManifestOverride = launchManifest;
     const launch = {
       ...mockLaunch,
-      manifest: { ...mockLaunch.manifest, ...manifestOverrides },
+      manifest: launchManifest,
     };
 
     return render(
@@ -431,14 +440,189 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     });
   });
 
-  it("AC7: shows an unrecorded Runner version instead of inventing a default", () => {
+  it("AC7: shows an unrecorded Runner version instead of inventing a default", async () => {
     renderAuditTab({ runner: { mapping_engine_version: "engine-v1" } });
 
-    expect(screen.getByTestId("runner-version")).toHaveTextContent("未记录");
+    await waitFor(() => expect(screen.getByTestId("runner-version")).toHaveTextContent("未记录"));
     expect(screen.getByTestId("runner-version")).not.toHaveTextContent("1.0.0");
   });
 
-  it("AC7: resolves result types from the matching frozen evaluator and labels missing types", () => {
+  it("AC7: labels a missing historical Manifest schema version as unrecorded", async () => {
+    renderAuditTab({ schema_version: undefined, manifest_version: undefined });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("manifest-schema-version")).toHaveTextContent("未记录");
+    });
+    expect(screen.getByTestId("manifest-schema-version")).not.toHaveTextContent("1.0");
+  });
+
+  it("AC5: keeps selected historical quality counts consistent in the audit history and tooltip", async () => {
+    const latest = {
+      ...mockSnapshotList.revisions[0],
+      snapshot_id: "snap-v2-002",
+      revision: 2,
+      is_latest: true,
+      quality_pass_count: 3,
+      quality_fail_count: 1,
+      quality_unknown_count: 2,
+    };
+    const historical = {
+      ...mockSnapshotList.revisions[0],
+      snapshot_id: "snap-v2-001",
+      revision: 1,
+      is_latest: false,
+      quality_pass_count: null,
+      quality_fail_count: null,
+      quality_unknown_count: null,
+    };
+    snapshotListOverride = {
+      ...mockSnapshotList,
+      latest_snapshot_id: latest.snapshot_id,
+      latest_revision: latest.revision,
+      revisions: [latest, historical],
+    };
+    snapshotDetailOverride = {
+      ...historical,
+      launch_id: mockLaunch.id,
+      releasable: false,
+      manifest: mockLaunch.manifest,
+      summary: {},
+      items: [
+        { dataset_item_id: "legacy-pass", quality_conclusion: "PASS" },
+        { dataset_item_id: "legacy-fail", quality_conclusion: "FAIL" },
+        { dataset_item_id: "legacy-unknown" },
+      ],
+    };
+
+    renderComponent(`/launches/${mockLaunch.id}?snapshot_id=${historical.snapshot_id}&tab=audit`);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("snapshot-quality-counts").length).toBeGreaterThan(0);
+      expect(screen.getAllByTestId("snapshot-revision-1").length).toBeGreaterThan(0);
+    });
+
+    const histories = screen.getAllByTestId("snapshot-history");
+    const auditHistory = within(histories[histories.length - 1]);
+    const historicalRow = auditHistory.getByTestId("snapshot-revision-1");
+    expect(historicalRow).toHaveTextContent("PASS 1 · FAIL 1 · UNKNOWN 1");
+    expect(historicalRow).toHaveAttribute("title", "PASS 1 · FAIL 1 · UNKNOWN 1");
+    expect(auditHistory.getByTestId("snapshot-revision-2")).toHaveTextContent(
+      "PASS 3 · FAIL 1 · UNKNOWN 2",
+    );
+
+    const detailRequests = (api.GET as any).mock.calls.filter(([path]: [string]) =>
+      path.includes("/result-snapshots/"),
+    );
+    expect(detailRequests).toHaveLength(1);
+    expect(detailRequests[0][1].params.path.snapshot_id).toBe(historical.snapshot_id);
+  });
+
+  it.each([
+    ["recorded schema_version", "2.4", undefined, "Schema v2.4"],
+    ["recorded manifest_version fallback", undefined, "legacy-3", "Schema vlegacy-3"],
+    ["blank schema_version with recorded fallback", "   ", "1.7", "Schema v1.7"],
+    ["both version fields blank", "", "  ", "Schema 版本未记录"],
+  ])("uses only a recorded Manifest schema identity: %s", async (_case, schemaVersion, manifestVersion, expected) => {
+    renderAuditTab({ schema_version: schemaVersion, manifest_version: manifestVersion });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("manifest-schema-version")).toHaveTextContent(expected);
+    });
+    expect(screen.getByTestId("manifest-schema-version")).not.toHaveTextContent("Schema v1.0");
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["array", []],
+  ])("rejects a %s frozen Manifest before displaying audit data or enabling export", async (_case, manifest) => {
+    snapshotDetailOverride = {
+      ...mockSnapshotList.revisions[0],
+      launch_id: mockLaunch.id,
+      releasable: true,
+      manifest,
+      summary: mockSummary.summary,
+      items: [],
+    };
+
+    renderComponent("/launches/ff04d66b-3d00-4d67-8cf4-d36772fff708?tab=audit");
+
+    const error = await screen.findByTestId("frozen-manifest-error");
+    expect(error).toHaveTextContent("冻结 Manifest");
+    expect(screen.queryByTestId("manifest-4d-grid")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("frozen-quality-policy-legacy")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制 JSON" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "下载原始 JSON" })).toBeDisabled();
+  });
+
+  it("does not present live Launch fields as frozen Manifest data when the selected snapshot cannot load", async () => {
+    (api.GET as any).mockImplementation((path: string) => {
+      if (path.includes("/result-snapshots/")) {
+        return Promise.resolve({ error: new Error("frozen detail unavailable") });
+      }
+      if (path === "/api/v1/experiment-launches/{launch_id}") {
+        return Promise.resolve({ data: mockLaunch });
+      }
+      if (path === "/api/v1/experiment-launches/{launch_id}/result-snapshots") {
+        return Promise.resolve({ data: mockSnapshotList });
+      }
+      return Promise.resolve({ data: null });
+    });
+
+    renderComponent("/launches/ff04d66b-3d00-4d67-8cf4-d36772fff708?tab=audit");
+
+    const error = await screen.findByTestId("frozen-manifest-error");
+    expect(error).toHaveTextContent("frozen detail unavailable");
+    expect(screen.queryByTestId("manifest-4d-grid")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("frozen-quality-policy-legacy")).not.toBeInTheDocument();
+  });
+
+  it("AC7 & AC9: downloads the selected revision payload with its exact frozen Manifest", async () => {
+    const frozenManifest = {
+      schema_version: "2.3",
+      runner: { runner_version: "v0.3.0" },
+      evaluators: [{ id: "frozen-evaluator", version: "7.1.0" }],
+      quality_policy: { policy_id: "frozen-policy", rules: [{ evaluator_id: "frozen-evaluator" }] },
+    };
+    snapshotManifestOverride = frozenManifest;
+
+    const downloaded: string[] = [];
+    const NativeBlob = globalThis.Blob;
+    class CapturingBlob extends NativeBlob {
+      constructor(parts?: BlobPart[], options?: BlobPropertyBag) {
+        super(parts, options);
+        downloaded.push((parts ?? []).map((part) => typeof part === "string" ? part : "").join(""));
+      }
+    }
+    class CapturingURL extends URL {
+      static createObjectURL = vi.fn(() => "blob:snapshot-test");
+      static revokeObjectURL = vi.fn();
+    }
+    vi.stubGlobal("Blob", CapturingBlob);
+    vi.stubGlobal("URL", CapturingURL);
+
+    renderComponent("/launches/ff04d66b-3d00-4d67-8cf4-d36772fff708?tab=audit");
+    await waitFor(() => {
+      expect(screen.getByTestId("manifest-schema-version")).toHaveTextContent("Schema v2.3");
+    });
+    const manifestGrid = screen.getByTestId("manifest-4d-grid");
+    expect(manifestGrid).toHaveTextContent("frozen-evaluator");
+    expect(manifestGrid).not.toHaveTextContent("pii_safe");
+    fireEvent.click(screen.getByRole("button", { name: /下载原始 JSON/ }));
+
+    expect(downloaded).toHaveLength(1);
+    const exported = JSON.parse(downloaded[0]);
+    expect(exported).toMatchObject({
+      launch_id: mockLaunch.id,
+      snapshot_id: "snap-v2-001",
+      manifest: frozenManifest,
+      summary: mockSummary.summary,
+    });
+    expect(exported.items.map((item: { dataset_item_id: string }) => item.dataset_item_id)).toEqual(
+      mockItems.map((item) => item.dataset_item_id),
+    );
+  });
+
+  it("AC7: resolves result types from the matching frozen evaluator and labels missing types", async () => {
     renderAuditTab({
       evaluators: [
         { id: "typed_metric", version: "1.0.0", result_type: "categorical" },
@@ -454,10 +638,16 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
       },
     });
 
-    expect(screen.getByText("结果类型 categorical")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("结果类型 categorical")).toBeInTheDocument();
+    });
     expect(screen.getByText("结果类型 类型未声明")).toBeInTheDocument();
     expect(screen.getByText("结果类型 boolean")).toBeInTheDocument();
     expect(screen.queryByText("结果类型 numeric")).not.toBeInTheDocument();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("AC7 & AC9 & #124: Tab 3 offers 4D manifest, JSON copy/download, and baseline set modal", async () => {

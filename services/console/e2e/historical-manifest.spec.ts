@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { test, expect } from "@playwright/test";
 import { installSingleSnapshotFixture } from "./fixtures/resultSnapshots";
 
@@ -93,9 +94,10 @@ test.describe("E2E-02: Frozen Manifest Absolute Immutability Verification", () =
         ],
       });
     });
-    await installSingleSnapshotFixture(page, {
+    const snapshotFixture = await installSingleSnapshotFixture(page, {
       launchId: historicalLaunchId,
       snapshotId: "snapshot-historical-launch",
+      manifest: frozenManifest,
       items: [
         {
           dataset_item_id: "case-001",
@@ -143,8 +145,26 @@ test.describe("E2E-02: Frozen Manifest Absolute Immutability Verification", () =
     await expect(page.getByText("四维不可变冻结快照")).toBeVisible();
     await expect(page.getByText("exact_match", { exact: true })).toBeVisible();
 
-    // Verify Raw JSON Viewer toggle
-    await page.getByRole("button", { name: "查看完整 Manifest JSON" }).click();
-    await expect(page.getByText("Immutable Manifest JSON")).toBeVisible();
+    // The raw viewer and download are the selected Result Snapshot detail, including its
+    // frozen Manifest; the browser artifact must parse to the exact mocked API payload.
+    await page.getByRole("button", { name: "查看完整快照 JSON" }).click();
+    await expect(page.getByText("Frozen Result Snapshot JSON")).toBeVisible();
+    await expect(page.locator("pre")).toContainText(frozenEndpoint);
+
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByRole("button", { name: "下载原始 JSON" }).click(),
+    ]);
+    const downloadPath = await download.path();
+    expect(downloadPath).not.toBeNull();
+    const exported = JSON.parse(await readFile(downloadPath!, "utf8"));
+    expect(exported).toEqual(snapshotFixture.detail);
+    expect(exported).toMatchObject({
+      launch_id: historicalLaunchId,
+      snapshot_id: "snapshot-historical-launch",
+      manifest: frozenManifest,
+    });
+    expect(JSON.stringify(exported)).not.toContain("Authorization");
+    expect(JSON.stringify(exported)).not.toContain("Cookie");
   });
 });

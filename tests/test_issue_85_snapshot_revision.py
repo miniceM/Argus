@@ -9,6 +9,7 @@ now.
 
 from __future__ import annotations
 
+import copy
 import sys
 import uuid
 from datetime import UTC, datetime
@@ -366,6 +367,13 @@ def test_shared_snapshot_link_returns_the_same_revision_after_a_new_one_exists(s
 
     client = _api_client(monkeypatch, db_mgr)
 
+    # The export must include the frozen Manifest, not re-read the mutable Launch.
+    frozen_manifest = copy.deepcopy(first.manifest)
+    with db_mgr.get_session() as session:
+        launch = session.get(ExperimentLaunchRecord, launch_id)
+        launch.manifest = {**launch.manifest, "schema_version": "9.9", "evaluators": []}
+        session.commit()
+
     # The shareable link: /result-snapshots/{snapshot_id} never means "latest".
     pinned = client.get(f"/api/v1/experiment-launches/{launch_id}/result-snapshots/{first.id}")
     assert pinned.status_code == 200, pinned.text
@@ -375,6 +383,8 @@ def test_shared_snapshot_link_returns_the_same_revision_after_a_new_one_exists(s
     assert pinned_body["evidence_state"] == EVIDENCE_COMPLETE
     assert pinned_body["releasable"] is True
     assert pinned_body["summary"]["pass_rate"] == 1.0
+    assert pinned_body["manifest"] == frozen_manifest
+    assert pinned_body["manifest"]["schema_version"] == "1.2"
     # Typed results round-trip with their provenance.
     typed = pinned_body["items"][0]["evaluation_results"]
     assert typed and typed[0]["provenance"]["binding_id"] == "bind-1"
@@ -405,6 +415,46 @@ def test_shared_snapshot_link_returns_the_same_revision_after_a_new_one_exists(s
     assert [row["revision"] for row in body["revisions"]] == [2, 1]
     assert body["revisions"][0]["is_latest"] is True
     assert body["revisions"][1]["is_latest"] is False
+
+
+def test_revision_directory_preserves_missing_quality_counts_as_unknown(setup_runtime, monkeypatch):
+    db_mgr, *_ = setup_runtime
+    launch_id = _create_launch(db_mgr)
+    snapshot = _freeze(db_mgr, launch_id)
+    client = _api_client(monkeypatch, db_mgr)
+
+    # An explicitly frozen zero is different from a field absent in an old summary.
+    current = client.get(f"/api/v1/experiment-launches/{launch_id}/result-snapshots")
+    assert current.status_code == 200, current.text
+    current_row = current.json()["revisions"][0]
+    assert current_row["quality_pass_count"] == 2
+    assert current_row["quality_fail_count"] == 0
+    assert current_row["quality_unknown_count"] == 0
+
+    with db_mgr.get_session() as session:
+        stored = session.get(RunResultSnapshotRecord, snapshot.id)
+        legacy_summary = dict(stored.summary)
+        for key in ("quality_pass_count", "quality_fail_count", "quality_unknown_count"):
+            legacy_summary.pop(key, None)
+        stored.summary = legacy_summary
+        session.commit()
+
+    legacy = client.get(f"/api/v1/experiment-launches/{launch_id}/result-snapshots")
+    assert legacy.status_code == 200, legacy.text
+    legacy_row = legacy.json()["revisions"][0]
+    assert legacy_row["quality_pass_count"] is None
+    assert legacy_row["quality_fail_count"] is None
+    assert legacy_row["quality_unknown_count"] is None
+
+    legacy_detail = client.get(
+        f"/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot.id}"
+    )
+    assert legacy_detail.status_code == 200, legacy_detail.text
+    detail_summary = legacy_detail.json()["summary"]
+    assert all(
+        key not in detail_summary
+        for key in ("quality_pass_count", "quality_fail_count", "quality_unknown_count")
+    )
 
 
 def test_snapshot_endpoint_rejects_an_id_from_another_launch(setup_runtime, monkeypatch):

@@ -240,7 +240,8 @@ def test_checkpoint_acquisition_under_the_original_worker_lease(local_langfuse, 
         "production_coordinator": True})
 
 
-def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id, *, scenario="serial"):
+def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id, *, scenario="serial",
+                                     calibration_payload=None, started_at=None, capacity_boundaries=False):
     from decimal import Decimal
 
     from app.registry import AgentRegistry
@@ -256,9 +257,10 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id,
 
     version = AgentRegistry(s40_runtime[0]).get_version("test-agent", identity["agent_version"])
     assert version.id == identity["agent_version_id"] and version.trajectory_source_profile_id == profile_id
-    payload = observed_banking_contract_payload()
+    payload = calibration_payload or observed_banking_contract_payload()
     # 此处验证真实采集消费链，短观察窗不冒充生产延迟 SLA；校准另行归档。
-    payload["limits"] = {"page_size": 2, "deadline_seconds": Decimal(3), "quiet_window_seconds": Decimal("0.05")}
+    if calibration_payload is None:
+        payload["limits"] = {"page_size": 2, "deadline_seconds": Decimal(3), "quiet_window_seconds": Decimal("0.05")}
     contract = TrajectoryContract.model_validate(payload).bind_source_version(version)
     scope = TrajectoryScope(launch_id=identity["launch_id"], item_execution_id=identity["item_id"],
         dataset_item_id=identity["dataset_item_id"], attempt_id=identity["attempt_id"],
@@ -338,14 +340,37 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id,
             assert "synthetic-secret" not in canonical_dumps(causal)
         assert "synthetic-secret" not in canonical_dumps(trajectory)
         assert inventory_complete(trajectory, contract)
-    acquired, acquisition_bytes, _first = asyncio.run(acquire_real_trajectory(runtime, s40_runtime[0], scope, contract))
+    acquired, acquisition_bytes, _first = asyncio.run(
+        acquire_real_trajectory(runtime, s40_runtime[0], scope, contract, started_at=started_at))
     assert acquired.state == "READY" and acquired.evidence_ref is not None, acquired.reason_code
     assert acquired.completeness.status == ("ROOT_ONLY" if profile_id == "http-only-v1" else "OBSERVED_COMPLETE")
     assert 0 < acquisition_bytes <= contract.limits.max_source_bytes
+    if started_at is not None:
+        from datetime import UTC, datetime, timedelta
+        assert acquired.deadline_at == started_at + timedelta(seconds=float(contract.limits.deadline_seconds))
+        response_to_ready_ms = (datetime.now(UTC) - started_at).total_seconds() * 1000
+        # 截止内完成或在截止收尾；250ms 只允许测试主线程/DB 发布调度开销。
+        assert response_to_ready_ms <= float(contract.limits.deadline_seconds) * 1000 + 250
+    else:
+        response_to_ready_ms = None
     with s40_runtime[0].get_session() as session:
         restored = load_trajectory_evidence(session, acquired.evidence_ref, scope=scope, contract=contract)
     assert canonical_dumps(restored.steps) == canonical_dumps(trajectory.steps)
     assert restored.completeness == acquired.completeness
+    assert len(canonical_dumps(restored).encode()) <= contract.limits.max_artifact_bytes
+    if capacity_boundaries:
+        for limits, warning in (({"max_steps": 3}, "GRAPH_STEP_LIMIT"),
+                               ({"max_artifact_bytes": len(canonical_dumps(restored).encode()) // 2},
+                                "TRAJECTORY_ARTIFACT_LIMIT")):
+            limited_payload = contract.model_dump()
+            limited_payload["limits"].update(limits)
+            limited = TrajectoryContract.model_validate(limited_payload).bind_source_version(version)
+            # 使用生产 Reader 的 Decimal wire 解码结果，而非测试 HTTP 客户端的 float DTO。
+            truncated = assemble_trajectory(scope, normalize_observations(rows, limited, scope=scope), limited)
+            assert truncated.completeness.status == "PARTIAL" and warning in truncated.completeness.warnings
+            assert scope.root_observation_id in {step.step_id for step in truncated.steps}
+            assert len(truncated.steps) <= limited.limits.max_steps
+            assert len(canonical_dumps(truncated).encode()) <= limited.limits.max_artifact_bytes
     with s40_runtime[0].get_session() as session:
         assert canonical_dumps(load_trajectory_evidence(session, acquired.evidence_ref, scope=scope, contract=contract)) == canonical_dumps(restored)
     single_read_completeness = trajectory.completeness.status
@@ -361,18 +386,23 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id,
             "assembled_steps": len(trajectory.steps), "completeness": trajectory.completeness.status,
             "trajectory_digest": trajectory.provenance.trajectory_digest,
             "artifact_roundtrip": True,
+            "artifact_bytes": len(canonical_dumps(restored).encode()),
+            "response_to_ready_ms": response_to_ready_ms,
+            "original_deadline_preserved": started_at is not None,
+            "real_capacity_boundaries": capacity_boundaries,
             "acquisition_state": acquired.state, "acquisition_source_bytes": acquisition_bytes,
             "single_read_completeness": single_read_completeness,
             "parent_closed": True, "structural_tool_capabilities": "NONE"}
 
 
-async def acquire_real_trajectory(runtime, db, scope, contract):
+async def acquire_real_trajectory(runtime, db, scope, contract, *, started_at=None):
     from datetime import UTC, datetime
 
     from app.trajectory.acquisition import AcquisitionRuntime, acquire_trajectory
     from app.trajectory.reader import LangfuseObservationReader
 
-    acquisition_runtime = AcquisitionRuntime(scope, contract, session_factory=db.get_session, started_at=datetime.now(UTC))
+    acquisition_runtime = AcquisitionRuntime(scope, contract, session_factory=db.get_session,
+                                            started_at=started_at or datetime.now(UTC))
     first = None
     async with LangfuseObservationReader(server_url=runtime.base_url, public_key=runtime.env["S4_PUBLIC_KEY"],
             secret_key=runtime.env["S4_SECRET_KEY"]) as reader:
@@ -385,6 +415,83 @@ async def acquire_real_trajectory(runtime, db, scope, contract):
                 if result.state != "PENDING":
                     return result, acquisition_runtime._wire_bytes, first
                 await asyncio.sleep(0.05)
+
+
+def calibrated_banking_payload():
+    """受控夹具的独立校准身份；不修改通用默认值或失败样本的预算。"""
+    from decimal import Decimal
+
+    from trajectory_contract_fixtures import observed_banking_contract_payload
+    payload = observed_banking_contract_payload()
+    payload["limits"] = {"deadline_seconds": Decimal(12), "quiet_window_seconds": Decimal("0.3"),
+        "max_steps": 64, "page_size": 2, "max_pages": 20,
+        "max_source_bytes": 1024 * 1024, "max_artifact_bytes": 64 * 1024}
+    return payload
+
+
+@pytest.mark.parametrize("profile,scenario", [
+    (profile, scenario) for profile in ("native_otel", "pydantic_ai")
+    for scenario in ("serial", "blocked", "parallel", "late_all")
+] + [("http_only", "serial")])
+def test_reader_qualification_repeated_real_samples(local_langfuse, s40_runtime, monkeypatch, tmp_path,
+                                                    profile, scenario):
+    import hashlib
+    from datetime import UTC
+
+    from app.db_models import ExecutionCheckpointRecord
+    from app.registry import AgentRegistry
+    from app.trajectory.contract import TrajectoryContract
+    from app.trajectory.factory import QualifiedReaderFactory, ReaderApproval, reader_artifact_digest
+    from app.trajectory.schema import TrajectoryScope
+
+    profile_id = {"native_otel": "native-otel-v1", "pydantic_ai": "pydantic-ai-v1", "http_only": "http-only-v1"}[profile]
+    api_digest = "sha256:" + hashlib.sha256((local_langfuse.directory / "langfuse-openapi.yaml").read_bytes()).hexdigest()
+    artifact_digest = reader_artifact_digest()
+    samples = []
+    with AgentProcess(local_langfuse, tmp_path, profile,
+                      export_mode="late_all" if scenario == "late_all" else "immediate") as agent:
+        for _ in range(10):
+            identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint,
+                "serial" if scenario == "late_all" else scenario, trajectory_source_profile_id=profile_id)
+            with s40_runtime[0].get_session() as session:
+                cp = session.scalar(select(ExecutionCheckpointRecord).where(
+                    ExecutionCheckpointRecord.item_execution_id == identity["item_id"]))
+                assert cp.final_attempt_id == identity["attempt_id"] and cp.trace_id == identity["trace_id"]
+                started_at = cp.created_at.replace(tzinfo=UTC) if cp.created_at.tzinfo is None else cp.created_at
+            rows = local_langfuse.wait_observations(identity["trace_id"], minimum=2 if profile == "http_only" else 8)
+            assert_lineage(rows, identity)
+            normalization = assert_real_normalized_structure(local_langfuse, s40_runtime, identity, profile_id,
+                scenario="serial" if scenario == "late_all" else scenario,
+                calibration_payload=calibrated_banking_payload(), started_at=started_at,
+                capacity_boundaries=profile != "http_only" and scenario == "serial")
+            normalization.update(calibration_sample=True, reader_artifact_digest=artifact_digest,
+                                 api_document_digest=api_digest, qualification_group=profile + ":" + scenario)
+            if scenario == "late_all":
+                assert normalization["response_to_ready_ms"] >= 7500, "8s delayed export was bypassed"
+            local_langfuse.record(profile, "calibration-" + scenario, identity, rows, normalization=normalization)
+            assert all(field["absent"] == 0 for field in local_langfuse.reports[-1]["fields"].values())
+            samples.append(normalization)
+        assert len(samples) == 10 and len({sample["trajectory_contract_digest"] for sample in samples}) == 1
+        # 只有全部实测通过后，测试控制面才批准这个受控合同；生产部署须独立校准。
+        version = AgentRegistry(s40_runtime[0]).get_version("test-agent", identity["agent_version"])
+        contract = TrajectoryContract.model_validate(calibrated_banking_payload()).bind_source_version(version)
+        scope = TrajectoryScope(launch_id=identity["launch_id"], item_execution_id=identity["item_id"],
+            dataset_item_id=identity["dataset_item_id"], attempt_id=identity["attempt_id"],
+            dispatch_generation=identity["generation"], trace_id=identity["trace_id"], root_observation_id=identity["root_id"])
+        factory = QualifiedReaderFactory(server_url=local_langfuse.base_url,
+            public_key=local_langfuse.env["S4_PUBLIC_KEY"], secret_key=local_langfuse.env["S4_SECRET_KEY"],
+            approvals=(ReaderApproval(contract.digest, artifact_digest, api_digest),))
+        async def read_qualified():
+            async with factory.open(contract) as reader:
+                page = await reader.read_page(scope, cursor=None, page_size=2, timeout_seconds=5,
+                                              max_bytes=contract.limits.max_source_bytes)
+                assert page.rows and all(row["traceId"] == scope.trace_id for row in page.rows)
+            assert reader.is_closed
+        asyncio.run(read_qualified())
+        # metadata-only 记录追加后重新归档最后一个样本，避免保存原始业务数据。
+        normalization["qualified_factory_read"] = True
+        local_langfuse.record(profile, "calibration-" + scenario + "-admission", identity, rows,
+                              normalization=normalization)
 
 
 def test_sync_entry_injects_remote_observation_parent(local_langfuse, s40_runtime, tmp_path):

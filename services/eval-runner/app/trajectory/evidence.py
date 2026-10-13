@@ -63,7 +63,7 @@ def _contract(contract):
     if type(contract) is not TrajectoryContract:
         _fail("CONTRACT_INVALID")
     try:
-        checked = TrajectoryContract.model_validate(contract.model_dump())
+        checked = TrajectoryContract.model_validate(contract.model_dump(warnings=False))
         profile = contract.source_profile
     except ValueError:
         _fail("CONTRACT_INVALID")

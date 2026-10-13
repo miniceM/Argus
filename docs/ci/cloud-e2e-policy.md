@@ -37,7 +37,9 @@ Unknown、API 限流/超时、分页错误、解析错误、未支持文件格�
 
 ### 2026-10-13 远端配置基线（只读核对）
 
-当日只读观察到 `main-quality-gate`（Ruleset ID `23715475`）为 active、strict，且无 bypass actor；required contexts 仍是 `Full Python Tests`、`Code Quality`、`Docker / Compose Validation`、`Langfuse Cloud E2E`，尚无 `Console Quality & E2E` 或 `Cloud Integration Policy`。本地实现没有修改此 Ruleset，也没有证明 Environment reviewer / ref 限制或测试 Secrets 已设置。该状态必须在实施管理员 rollout 前重新读取；本段是时点记录，不是长期事实。
+2026-10-13 对 `miniceM/Argus` 做只读核对，远端 `main` 为 `560af37f68c102ca4f70916e48e1a3a8eef43ed3`。`main-quality-gate`（Ruleset ID `23715475`）为 active、strict、无 bypass actor；required contexts 仍是 `Full Python Tests`、`Code Quality`、`Docker / Compose Validation`、`Langfuse Cloud E2E`，尚无 `Console Quality & E2E` 或 `Cloud Integration Policy`。
+
+同次核对发现：仓库变量 `LANGFUSE_E2E_ENABLED=true`；`langfuse-e2e` Environment 存在，但 `reviewers` 和 `deployment_branch_policy` 均未配置。只读 Secrets API 仅确认该 Environment 有 `LANGFUSE_BASE_URL`、`LANGFUSE_PUBLIC_KEY`、`LANGFUSE_SECRET_KEY` 三个名称；**未读取或导出任何 Secret 值，因此无法确认它们指向专用测试 project**。`langfuse-e2e-candidate` Environment 不存在（API 404）。本轮未修改 Ruleset、Environment、变量或 Secrets。管理员 rollout 前仍须重新读取；本段是时点记录，不是长期事实。
 
 ## 脱敏验收与范围限制
 

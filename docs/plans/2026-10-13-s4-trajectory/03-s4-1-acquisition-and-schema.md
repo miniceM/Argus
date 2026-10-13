@@ -124,6 +124,8 @@ Step.duration_ms 表达 Step 执行语义；若来源提供且 profile 验证该
 
 本期提供 trajectory contract 的 Manifest 1.3 序列化与 checkpoint/artifact；Manifest 1.2 及其它已注册历史版本按原逻辑执行。Snapshot 引用的 serializer/validator 可在本期实现，但不提前写 evidence_contract_version=trajectory-1.0。T4 同时接入 required_evidence_status、新聚合合同与该 discriminator 后，才生成新资格快照，避免出现缺字段的半契约 Snapshot。
 
+内部 `LaunchService` 显式冻结 trajectory contract 时提供 Manifest 1.3：局部 canonical JSON TEXT 保持 JSONB 往返的 Decimal 精度，完整合同参与 measurement 和幂等请求身份，选中 AgentVersion profile 另记执行元数据。执行计划与共享重评入口校验合同及测量声明；无合同路径保持 1.2，来源准入、正式 Worker 采集和 Binding 选择仍须接入。格式与验收见 [轨迹 Manifest 验收](../../validation/s4-1/trajectory-manifest.md)。
+
 S4.1 不添加 rule_results、不改质量状态、不改变 Baseline/Gate 资格；Context Adapter 与正式 Binding 启用在 #129。测试证明旧 Snapshot 字节语义兼容、EvidenceRef 可校验以及本期不会提前激活资格分支。不按字符串排序比较版本，不回填历史 Snapshot。
 
 恢复读取 checkpoint 时，校验 Agent output digest、冻结 Binding provenance、trajectory contract digest 和 acquisition ref。已有 READY artifact 必须从 Argus 的不可变制品恢复，不读当前 Langfuse Trace；PENDING 状态仅可在原 deadline 尚未过期时续查同一 scope/contract，恢复不能重置 deadline；deadline 已过则固化可用的 ROOT_ONLY/PARTIAL/UNAVAILABLE 结果。READY artifact 的保留跟随引用它的 Result Snapshot，不继承 execution checkpoint TTL，也不另设自动 TTL/清理任务。Artifact 因授权保留/删除策略、损坏或身份不符而不可用时，必须明确记录 unavailable 原因，后续消费降为 UNKNOWN。所有路径均禁止静默改用最新 Trace 或重调 Agent。

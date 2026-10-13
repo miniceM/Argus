@@ -31,6 +31,12 @@ from .quality_policy import (
 )
 from .registry import AgentRegistry
 from .runner_identity import current_runner_identity, validate_runner_identity
+from .trajectory.contract import TrajectoryContract
+from .trajectory.manifest import (
+    TRAJECTORY_MANIFEST_SCHEMA_VERSION,
+    bind_trajectory_manifest,
+    freeze_trajectory_contract,
+)
 
 
 def compute_payload_digest(payload: dict[str, Any]) -> str:
@@ -79,10 +85,12 @@ class LaunchService:
         dataset_client: Any | None = None,
         allow_run_scope: bool = False,
         quality_policy_rules: list[dict[str, Any]] | None = None,
+        trajectory_contract: TrajectoryContract | None = None,
     ) -> ExperimentLaunchRecord:
         from .baselines import normalize_environment
 
         normalized_environment = normalize_environment(environment)
+        frozen_trajectory = freeze_trajectory_contract(trajectory_contract) if trajectory_contract is not None else None
         runner_identity = current_runner_identity(runner_version=self.runner_version)
         identity_error = validate_runner_identity(runner_identity.model_dump(), runner_identity)
         if identity_error:
@@ -187,6 +195,8 @@ class LaunchService:
             "name": name,
             "quality_policy_digest": policy.policy_digest,
         }
+        if frozen_trajectory is not None:
+            payload_data["trajectory_contract_digest"] = frozen_trajectory["trajectory_contract_digest"]
         payload_digest = compute_payload_digest(payload_data)
 
         # Upfront idempotency check: never call external services if key already exists
@@ -206,6 +216,7 @@ class LaunchService:
             raise ValueError(f"AgentVersion '{agent_id}:{agent_version}' not found")
         if not ver_rec.is_active:
             raise ValueError(f"AgentVersion '{agent_id}:{agent_version}' is archived/inactive")
+        trajectory = bind_trajectory_manifest(frozen_trajectory, ver_rec) if frozen_trajectory is not None else None
 
         version_environment = ver_rec.environment or ("production" if ver_rec.credential_id else None)
         if version_environment is not None and normalize_environment(version_environment) != normalized_environment:
@@ -241,8 +252,9 @@ class LaunchService:
         launch_name = name or f"{agent_id}-{agent_version}-{dataset_name}"
 
         # Build 4D Manifest snapshot
+        manifest_schema = TRAJECTORY_MANIFEST_SCHEMA_VERSION if trajectory is not None else MANIFEST_BINDING_SCHEMA_VERSION
         manifest = {
-            "schema_version": MANIFEST_BINDING_SCHEMA_VERSION,
+            "schema_version": manifest_schema,
             "dataset": resolved_snapshot,
             "comparison": {
                 "environment": normalized_environment,
@@ -269,10 +281,6 @@ class LaunchService:
             "evaluators": eval_specs,
             # Issue #83: the real, digested policy replaces the old placeholder.
             "quality_policy": policy.to_payload(),
-            # What was measured, kept separate from how it is judged.
-            "measurement_digest": manifest_measurement_digest(
-                {"schema_version": MANIFEST_BINDING_SCHEMA_VERSION, "evaluators": eval_specs}
-            ),
             "runner": {
                 **runner_identity.model_dump(),
             },
@@ -283,6 +291,12 @@ class LaunchService:
                 "rate_limit_per_minute": ver_rec.rate_limit_per_minute,
             },
         }
+        if ver_rec.trajectory_source_profile_id is not None:
+            manifest["agent"]["trajectory_source_profile_id"] = ver_rec.trajectory_source_profile_id
+        if trajectory is not None:
+            manifest["trajectory"] = trajectory
+        # Measurement 与 QualityPolicy 分开，完整轨迹合同不因实际 profile 分支改变。
+        manifest["measurement_digest"] = manifest_measurement_digest(manifest)
 
         # ---- Issue #86: freeze the three comparison contracts independently ----
         # Measurement, judgement and comparison semantics move independently, so
@@ -291,7 +305,7 @@ class LaunchService:
         measurement_digest = manifest["measurement_digest"]
         manifest["contract_digests"] = {
             "schema_version": COMPARISON_CONTRACT_SCHEMA_VERSION,
-            "measurement": {"digest": measurement_digest, "version": MANIFEST_BINDING_SCHEMA_VERSION},
+            "measurement": {"digest": measurement_digest, "version": manifest_schema},
             "quality_policy": {
                 "digest": policy.policy_digest,
                 "version": f"{policy.policy_id}@{policy.version}",

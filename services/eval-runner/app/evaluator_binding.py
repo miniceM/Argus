@@ -692,7 +692,7 @@ def manifest_contract_status(manifest: dict[str, Any] | None) -> str:
     manifest = manifest or {}
     schema = str(manifest.get("schema_version") or "")
     bindings = manifest.get("evaluators") or []
-    if schema >= MANIFEST_BINDING_SCHEMA_VERSION and bindings and all(
+    if schema in (MANIFEST_BINDING_SCHEMA_VERSION, "1.3") and bindings and all(
         isinstance(entry, dict) and entry.get("binding_digest") for entry in bindings
     ):
         return FROZEN_CONTRACT_STATUS
@@ -708,16 +708,20 @@ def manifest_measurement_digest(manifest: dict[str, Any] | None) -> str:
     decision.
     """
     manifest = manifest or {}
-    return canonical_digest(
-        {
-            "schema_version": str(manifest.get("schema_version") or ""),
-            "bindings": [
-                EvaluatorBinding.from_payload(dict(entry)).measurement_digest
-                for entry in (manifest.get("evaluators") or [])
-                if isinstance(entry, dict)
-            ],
-        }
-    )
+    measured = {
+        "schema_version": str(manifest.get("schema_version") or ""),
+        "bindings": [
+            EvaluatorBinding.from_payload(dict(entry)).measurement_digest
+            for entry in (manifest.get("evaluators") or [])
+            if isinstance(entry, dict)
+        ],
+    }
+    from .trajectory.manifest import load_trajectory_contract
+
+    trajectory = load_trajectory_contract(manifest)
+    if trajectory is not None:
+        measured["trajectory_contract_digest"] = trajectory.digest
+    return canonical_digest(measured)
 
 
 def manifest_quality_policy(manifest: dict[str, Any] | None) -> Any | None:
@@ -738,6 +742,22 @@ def manifest_quality_policy(manifest: dict[str, Any] | None) -> Any | None:
         return None
 
 
+def _verify_trajectory_manifest(manifest):
+    from .trajectory.manifest import TrajectoryManifestError, load_trajectory_contract
+
+    try:
+        trajectory = load_trajectory_contract(manifest)
+        if trajectory is not None:
+            measured = manifest_measurement_digest(manifest)
+            block = manifest.get("contract_digests")
+            declared = block.get("measurement") if type(block) is dict else None
+            if (manifest.get("measurement_digest") != measured or type(declared) is not dict
+                or declared.get("digest") != measured or declared.get("version") != "1.3"):
+                raise TrajectoryManifestError("MEASUREMENT_MISMATCH")
+    except TrajectoryManifestError as error:
+        raise EvaluatorBindingError(error.reason_code, code=error.reason_code) from None
+
+
 def resolve_execution_plan(
     manifest: dict[str, Any] | None,
     *,
@@ -745,6 +765,7 @@ def resolve_execution_plan(
     executors: dict[str, EvaluatorExecutor] | None = None,
 ) -> list[ResolvedEvaluator]:
     """Validate every frozen binding of a Launch before any Agent call."""
+    _verify_trajectory_manifest(manifest)
     registry = registry or default_evaluator_registry
     executors = executors if executors is not None else build_executor_registry(registry)
     plan: list[ResolvedEvaluator] = []
@@ -832,6 +853,7 @@ def evaluate_frozen_item(
 
     plan: list[ResolvedEvaluator] = []
     try:
+        _verify_trajectory_manifest(manifest)
         plan = [
             resolved
             for resolved in (

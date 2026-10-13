@@ -64,7 +64,8 @@ else
 fi
 
 echo "[7/8] Run local behavior tests"
-"$PYTHON_BIN" -m pytest -q tests
+"$PYTHON_BIN" -m pytest -q tests -m "not trajectory_local"
+echo "S4 real ingestion is a separate mandatory gate: make trajectory-test"
 
 echo "[8/8] Docker Compose validation"
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then

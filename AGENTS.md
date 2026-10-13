@@ -126,7 +126,7 @@ make validate
 4. Runner 远程实验与 W3C 传播标记校验
 5. OpenAPI 快照同步（scripts/export_openapi.py 后 git diff 必须为空）
 6. Console：schema 同步 → typecheck → vitest → build
-7. pytest -q tests
+7. pytest -q tests -m "not trajectory_local"（S4 真实采集另执行 make trajectory-test）
 8. docker compose --env-file .env.poc config -q（无 Docker 时 SKIP）
 ```
 
@@ -140,14 +140,16 @@ make validate
 
 ### 4.4 CI 与分支保护
 
-`.github/workflows/ci.yml` 共 5 个 Job：
+`.github/workflows/ci.yml` 共 6 个 Job：
 
 ```text
 Code Quality → Full Python Tests → Docker / Compose Validation
              → Console Quality & E2E → Langfuse Cloud E2E
+S4 Local Langfuse Integration（独立本地服务、随机凭据与临时数据）
 ```
 
-`main` 分支保护 SHOULD 要求以上 5 项全部通过。
+`main` 分支保护 SHOULD 要求以上 6 项全部通过。
+涉及 S4 观测链路时，另执行 `make trajectory-prepare`（准备固定制品）与 `make trajectory-test`（真实本地采集）；普通单元测试通过不代替此门禁。
 `.github/workflows/langfuse-i18n.yml` 仅在 `deploy/langfuse/**` 或工作流自身变化时触发。
 
 ### 4.5 回归基线

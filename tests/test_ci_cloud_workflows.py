@@ -105,6 +105,20 @@ def test_regular_ci_checks_keep_names_and_workflow_actions_are_sha_pinned() -> N
                 assert _is_sha(_action(step)[1]), f"unpinned Action: {step['uses']}"
 
 
+def test_cloud_summary_imports_without_optional_policy_dependencies() -> None:
+    import subprocess
+    import sys
+
+    completed = subprocess.run(
+        [sys.executable, "-S", "-c", "import scripts.ci.write_cloud_summary"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
 def test_cloud_summary_reports_coverage_without_conflating_policy_and_cloud() -> None:
     workflow = _workflow(".github/workflows/ci.yml")
     jobs = workflow["jobs"]

@@ -246,7 +246,7 @@ class _PreparationClient:
             "id": 8001,
             "run_attempt": 1,
             "event": "pull_request",
-            "path": ".github/workflows/ci.yml@refs/pull/118/merge",
+            "path": ".github/workflows/ci.yml",
             "pull_requests": [{
                 "number": 118,
                 "head": {"sha": HEAD, "repo": {"full_name": REPOSITORY}},
@@ -384,7 +384,7 @@ def test_archive_rejects_path_traversal_symlinks_duplicates_and_unexpected_membe
             "id": 8002,
             "run_attempt": 1,
             "event": "pull_request",
-            "path": ".github/workflows/ci.yml@refs/pull/118/merge",
+            "path": ".github/workflows/ci.yml",
             "pull_requests": [{"number": 118, "head": {"sha": HEAD, "repo": {"full_name": REPOSITORY}}, "base": {"sha": BASE}}],
             "status": "completed",
             "conclusion": "success",

@@ -162,6 +162,7 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id,
     from app.trajectory.causal import validate_causal_links
     from app.trajectory.codec import canonical_dumps
     from app.trajectory.contract import TrajectoryContract
+    from app.trajectory.evidence import inventory_complete, load_trajectory_evidence, persist_trajectory_evidence
     from app.trajectory.normalizer import normalize_observations
     from app.trajectory.reader import LangfuseObservationReader
     from app.trajectory.schema import TrajectoryScope
@@ -247,6 +248,13 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id,
             assert action.argument_visibility == expected_visibility
             assert "synthetic-secret" not in canonical_dumps(causal)
         assert "synthetic-secret" not in canonical_dumps(trajectory)
+        assert inventory_complete(trajectory, contract)
+    with s40_runtime[0].get_session() as session:
+        evidence_ref = persist_trajectory_evidence(session, trajectory, contract)
+    with s40_runtime[0].get_session() as session:
+        restored = load_trajectory_evidence(session, evidence_ref, scope=scope, contract=contract)
+    assert canonical_dumps(restored) == canonical_dumps(trajectory)
+    assert restored.completeness == trajectory.completeness
     return {"profile_id": profile_id, "source_profile_version": contract.source_profile.version,
             "trajectory_contract_digest": contract.digest, "scoped_steps": len(scoped),
             "structural_steps": len(structural), "business_tool_steps": len(tools),
@@ -257,6 +265,7 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id,
             "call_pairs": len(causal.request_by_execution_id),
             "assembled_steps": len(trajectory.steps), "completeness": trajectory.completeness.status,
             "trajectory_digest": trajectory.provenance.trajectory_digest,
+            "artifact_roundtrip": True,
             "parent_closed": True, "structural_tool_capabilities": "NONE"}
 
 

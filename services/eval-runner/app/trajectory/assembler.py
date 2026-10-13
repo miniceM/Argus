@@ -146,6 +146,13 @@ def assemble_trajectory(
                          for reason in graph.warnings) or any(record.observation.step is None for record in graph.records)
     closed = inventory and converged and not graph.truncated and batch.source_bytes_complete and not structural_gap
     step_data, arguments = _arguments(causal, candidates, profile, warnings)
+    for observation in business:
+        if _terminal(observation) and observation.terminal_event_ids is not None:
+            events = [{"step_id": member.step.step_id, "event_id": member.event_id, "sequence": member.sequence}
+                      for member in business if member.step.workflow_scope_id == observation.step.workflow_scope_id
+                      and _opaque(member.event_id) and member.sequence is not None]
+            step_data[observation.step.step_id]["result_summary"]["terminal_inventory"]["observed_events"] = sorted(
+                events, key=lambda event: (event["sequence"], event["step_id"]))
     caps = _capabilities(profile, business, arguments, closed=closed,
                          invalid_ordering=bool(causal.invalid_ordering_ids), clock_skew="GRAPH_CLOCK_SKEW" in warnings)
     required_complete = all(caps[key] == "COMPLETE" for key in contract.required_capabilities)
@@ -172,6 +179,11 @@ def assemble_trajectory(
         for index, identity in enumerate(retained):
             data = deepcopy(step_data[identity])
             data["index"] = index
+            summary = data["result_summary"]
+            if _terminal(candidates[identity]) and type(summary) is dict and "terminal_inventory" in summary:
+                inventory = summary["terminal_inventory"]
+                if "observed_events" in inventory:
+                    inventory["observed_events"] = [event for event in inventory["observed_events"] if event["step_id"] in ids]
             references = causal.predecessors_by_id[identity]
             data["causal_predecessor_ids"] = [ref for ref in references if ref in ids]
             if len(data["causal_predecessor_ids"]) != len(references):

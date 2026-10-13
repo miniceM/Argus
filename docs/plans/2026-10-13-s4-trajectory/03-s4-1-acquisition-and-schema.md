@@ -110,6 +110,8 @@ Step.duration_ms 表达 Step 执行语义；若来源提供且 profile 验证该
 
 新增trajectory_evidence_artifacts表按01的字段清单保存一份最小StandardTrajectory JSON和所属身份：id、launch_id、item_execution_id、attempt_id、trajectory_contract_digest、trajectory_digest、schema_version、payload_json、created_at。payload_json用TEXT存canonical UTF-8 JSON，局部Decimal decoder/encoder完成精确往返；不改变ORM全局JSON序列化。外键复用既有Launch/Item/Attempt身份；唯一键为item_execution_id + attempt_id + trajectory_contract_digest + trajectory_digest。payload不超过冻结max_artifact_bytes，数据库以octet_length约束字节上限；仅保存脱敏内容。写入使用insert-only：命中唯一键时读取并校验既有记录，不更新旧payload。读取时重算digest，并验证Launch/Item/Attempt/Schema/contract/ref相互一致。
 
+内部 `trajectory/evidence.py` 已复用 `017` 的表实现 Session 所有权明确的 insert-only 保存/读取，重新验证安全投影、provenance、原 checkpoint scope 和 DB 归属；历史制品读取不依赖 checkpoint TTL。terminal summary 增补已规范化的 `observed_events(step_id/event_id/sequence)` 安全映射，解决公开 Step 未保存业务 event 身份而无法重算覆盖的缺口，映射进入摘要并随展示裁剪。协议补充、边界与实测见 [不可变轨迹证据验收](../../validation/s4-1/trajectory-evidence.md)。生产 Acquisition、checkpoint lease/CAS 和恢复仍须继续实施。
+
 现有execution_checkpoints按item_execution_id + dispatch_generation唯一，保存Agent输出及其冻结Manifest provenance。迁移增加可空JSON字段trajectory_acquisition_json，值只序列化01的TrajectoryAcquisition，不保存Observations或第二份完整Trace。T1统一拥有AgentVersion profile列、artifact表及checkpoint扩展的Schema迁移，T2复用它接入持久化；本次基线最高016，候选文件migrations/017_trajectory_evidence.sql。真正实施时必须重新查看最新main和并行迁移，按序号追加；不得改已发布迁移。
 
 执行顺序保持不重调 Agent：成功收到业务响应后，先写现有 execution checkpoint；随后完成有界 Acquisition；READY 时写 evidence artifact，再以当前 generation/lease/CAS 更新 checkpoint acquisition ref；最后才交由后续阶段的冻结 Evaluator 消费。UNAVAILABLE 表达采集不可用；READY 可携带 ROOT_ONLY 或 PARTIAL completeness。它们只表达证据状态，不回滚 Agent 成功响应，也不在 #128 判断规则或质量。S4.1 不改变旧 Manifest 的行为。

@@ -328,3 +328,18 @@ def test_truncation_to_a_root_display_is_partial_and_not_a_genuinely_root_only_s
     assert result.completeness.status == "PARTIAL"
     assert "GRAPH_STEP_LIMIT" in result.completeness.warnings
     assert all(value == "NONE" for value in result.completeness.capabilities.values())
+
+
+def test_terminal_inventory_retains_safe_event_to_step_mapping_for_frozen_recomputation():
+    rows, contract, scope = prepared()
+    result = assemble(rows, contract, scope)
+    inventory = by_id(result)["terminal"].result_summary["terminal_inventory"]
+    assert inventory["observed_events"] == [
+        {"step_id": identity, "event_id": f"{sequence:032x}", "sequence": sequence}
+        for sequence, identity in enumerate(["req-a", "exec-a", "req-b", "exec-b", "terminal"], 1)]
+    cap = len(canonical_dumps(result).encode()) - 400
+    limited = assemble(rows, configured(contract, limits={"max_artifact_bytes": cap}), scope)
+    for step in limited.steps:
+        if step.phase == "EVENT" and step.result_summary and "terminal_inventory" in step.result_summary:
+            assert all(event["step_id"] in by_id(limited)
+                       for event in step.result_summary["terminal_inventory"]["observed_events"])

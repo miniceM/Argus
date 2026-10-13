@@ -714,6 +714,100 @@ test.describe("Issue #120: launch detail narrow-viewport action geometry", () =>
     });
   }
 
+  // PR 134 review gap F3: a menu with no executable entry at all — every
+  // capability is a read-only note, or every allowed action is pending — has no
+  // `role=menuitem` to receive focus, so the overlay used to become impossible
+  // to dismiss from the keyboard. These assertions drive real focus through
+  // `page.keyboard.press`; they never dispatch a key event onto the menu node.
+  for (const width of [360, 390, 768]) {
+    test(`a menu holding only read-only notes closes on Escape at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.route(`**/api/v1/experiment-launches/${LAUNCH_ID}`, (route) =>
+        route.fulfill({
+          json: {
+            ...launch,
+            allowed_actions: [],
+            langfuse_experiment_url: null,
+            langfuse_sync_status: "SYNCED",
+          },
+        }),
+      );
+      await page.goto(`/launches/${LAUNCH_ID}`);
+      await expect(page.getByRole("heading", { level: 1, name: AGENT_ID })).toBeVisible();
+
+      const { trigger, menu } = await openMoreMenu(page);
+      await expect(menu.getByRole("menuitem")).toHaveCount(0);
+      await expect(menu.getByText(/Langfuse/)).toBeVisible();
+
+      const focusedRole = await page.evaluate(() => document.activeElement?.getAttribute("role"));
+      expect(focusedRole, "focus must fall back to the menu container").toBe("menu");
+
+      await page.keyboard.press("Escape");
+      await expect(menu).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+
+      // ArrowDown from the trigger opens the overlay without moving focus, so
+      // the trigger path must close it as well.
+      await trigger.focus();
+      await page.keyboard.press("ArrowDown");
+      await expect(menu).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(menu).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+
+      // Tab leaves the overlay instead of trapping focus inside it, and focus
+      // lands on a real control outside the closed menu.
+      await trigger.focus();
+      await page.keyboard.press("ArrowDown");
+      await expect(menu).toBeVisible();
+      await page.keyboard.press("Tab");
+      await expect(menu).toHaveCount(0);
+      const afterTab = await page.evaluate(() => {
+        const el = document.activeElement;
+        return { tag: el?.tagName ?? "", insideMenu: Boolean(el?.closest('[role="menu"]')) };
+      });
+      expect(afterTab.insideMenu, "Tab must not keep focus inside the closed overlay").toBe(false);
+      expect(afterTab.tag, "focus must leave the overlay on a real control").not.toBe("BODY");
+    });
+
+    test(`a menu whose only action stays pending closes on Escape at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.route(`**/api/v1/experiment-launches/${LAUNCH_ID}`, (route) =>
+        route.fulfill({
+          json: { ...launch, allowed_actions: ["retry_evaluation"], langfuse_experiment_url: null },
+        }),
+      );
+      // The evaluation retry never settles, so the only allowed action stays
+      // pending for the whole assertion.
+      await page.route(`**/api/v1/experiment-launches/${LAUNCH_ID}/retry-evaluation`, () => new Promise(() => {}));
+      await page.goto(`/launches/${LAUNCH_ID}`);
+      await expect(page.getByRole("heading", { level: 1, name: AGENT_ID })).toBeVisible();
+
+      const { menu: firstMenu } = await openMoreMenu(page);
+      const retryItem = firstMenu.getByRole("menuitem", { name: "重试评测 (Retry Eval)" });
+      await expect(retryItem).toBeEnabled();
+      await retryItem.click();
+
+      // Reopen the menu: the only allowed action is still pending, so nothing in
+      // it is executable.
+      const { trigger, menu } = await openMoreMenu(page);
+      const pendingItem = menu.getByRole("menuitem", { name: "重评中..." });
+      await expect(pendingItem).toBeDisabled();
+      await expect(pendingItem).toHaveAttribute("data-testid", "retry-evaluation-button");
+      const executableCount = await menu.evaluate(
+        (el) => el.querySelectorAll('[role="menuitem"]:not([aria-disabled="true"])').length,
+      );
+      expect(executableCount, "no executable entry while the only action is pending").toBe(0);
+
+      const focusedRole = await page.evaluate(() => document.activeElement?.getAttribute("role"));
+      expect(focusedRole, "focus must fall back to the menu container").toBe("menu");
+
+      await page.keyboard.press("Escape");
+      await expect(menu).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+    });
+  }
+
   for (const width of [1024, 1280, 1440]) {
     test(`desktop launch actions remain one-line 32px controls with long identity at ${width}px`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 900 });

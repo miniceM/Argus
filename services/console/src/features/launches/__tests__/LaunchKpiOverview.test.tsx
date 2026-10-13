@@ -236,4 +236,37 @@ describe("LaunchKpiOverview regression count unknown-safe (issue 119 U2)", () =>
     expect(regressionValue()).not.toHaveTextContent("0");
     expect(screen.queryByText(/未发现回归/)).not.toBeInTheDocument();
   });
+
+  // PR 134 review gap F2: a comparability field that never came back is not
+  // comparable evidence. Missing/null/malformed eligibility must stay
+  // unknown-safe instead of falling through to the numeric branch.
+  it("does not display a formal count when comparability is absent", () => {
+    renderRegression({
+      classificationCounts: { REGRESSION: 3 },
+      formal: { available: true, verdict: "REGRESSION" },
+    });
+    expect(regressionValue()).not.toHaveTextContent("3");
+    expect(regressionNote()).not.toHaveTextContent("3 项性能退化");
+    expect(screen.queryByText(/正式比较/)).not.toBeInTheDocument();
+  });
+
+  it("does not display a formal count when comparability is null", () => {
+    renderRegression({
+      classificationCounts: { REGRESSION: 0 },
+      comparability: null,
+      formal: { available: true, verdict: "UNCHANGED" },
+    });
+    expect(regressionValue()).not.toHaveTextContent("0");
+    expect(screen.queryByText(/未发现回归/)).not.toBeInTheDocument();
+  });
+
+  it("does not treat a missing comparable flag as comparable evidence", () => {
+    renderRegression({
+      classificationCounts: { REGRESSION: 3 },
+      comparability: { reason_codes: [] } as any,
+      formal: { available: true, verdict: "REGRESSION" },
+    });
+    expect(regressionValue()).not.toHaveTextContent("3");
+    expect(screen.queryByText(/未发现回归/)).not.toBeInTheDocument();
+  });
 });

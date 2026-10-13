@@ -215,6 +215,140 @@ describe("LaunchActionMenu (U4 menu contract)", () => {
     expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
     expect(link.getAttribute("href")).not.toBe("#");
   });
+
+  /**
+   * PR 134 review gap F3 — a menu with nothing executable must stay dismissable.
+   *
+   * When every entry is a read-only note, or every action is pending, there is no
+   * `role=menuitem` to focus. The old implementation focused nothing and left
+   * focus on the trigger, so the menu subtree never saw the keydown and a keyboard
+   * user could not close the overlay with Escape. The trigger itself had no Escape
+   * path either. These tests use a controlled harness whose `open` state really
+   * updates, not only a spy.
+   */
+  describe("LaunchActionMenu keyboard dismissal without executable entries (U4/F3)", () => {
+    const NOTE: LaunchActionMenuItem = {
+      kind: "note",
+      id: "langfuse-reason",
+      label: "尚未创建 Langfuse Run",
+      title: "not created",
+    };
+    const ONLY_NOTE: LaunchActionMenuItem[] = [NOTE];
+    const ALL_PENDING: LaunchActionMenuItem[] = [
+      {
+        kind: "action",
+        id: "retry_evaluation",
+        label: "重试评测 (Retry Eval)",
+        testId: "retry-evaluation-button",
+        pending: true,
+        pendingLabel: "重评中...",
+        onSelect: vi.fn(),
+      },
+    ];
+
+    const ControlledMenu: React.FC<{ items: LaunchActionMenuItem[]; onOpenChange?: (open: boolean) => void }> = ({
+      items,
+      onOpenChange,
+    }) => {
+      const [open, setOpen] = useState(true);
+      return (
+        <LaunchActionMenu
+          items={items}
+          open={open}
+          onOpenChange={(next) => {
+            onOpenChange?.(next);
+            setOpen(next);
+          }}
+        />
+      );
+    };
+
+    it("a note-only menu keeps a focus target so Escape can reach it", () => {
+      render(<LaunchActionMenu items={ONLY_NOTE} open onOpenChange={vi.fn()} />);
+      expect(document.activeElement).toBe(screen.getByRole("menu"));
+      expect(screen.getByRole("menu")).toHaveAttribute("tabindex", "-1");
+    });
+
+    it("an all-pending menu keeps a focus target so Escape can reach it", () => {
+      render(<LaunchActionMenu items={ALL_PENDING} open onOpenChange={vi.fn()} />);
+      expect(screen.getByTestId("retry-evaluation-button")).toBeDisabled();
+      expect(document.activeElement).toBe(screen.getByRole("menu"));
+    });
+
+    it("a menu that lost every entry keeps a focus target so Escape can reach it", () => {
+      const { rerender } = render(<LaunchActionMenu items={baseItems()} open onOpenChange={vi.fn()} />);
+      expect(document.activeElement).toBe(screen.getByTestId("run-button"));
+      rerender(<LaunchActionMenu items={[]} open onOpenChange={vi.fn()} />);
+      expect(document.activeElement).toBe(screen.getByRole("menu"));
+    });
+
+    it("Escape closes a note-only menu and restores trigger focus", () => {
+      render(<ControlledMenu items={ONLY_NOTE} />);
+      const trigger = screen.getByTestId("launch-more-actions");
+      expect(screen.getByRole("menu")).toBeInTheDocument();
+      fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    it("Escape reaches the menu through the trigger path too", () => {
+      // ArrowDown from the trigger opens the menu without moving focus, so focus
+      // can legitimately stay on the trigger while the overlay is open.
+      render(<ControlledMenu items={ONLY_NOTE} />);
+      const trigger = screen.getByTestId("launch-more-actions");
+      act(() => trigger.focus());
+      fireEvent.keyDown(trigger, { key: "Escape" });
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    it("does not intercept Escape while the menu is closed", () => {
+      const onOpenChange = vi.fn();
+      renderMenu({ items: ONLY_NOTE, open: false, onOpenChange });
+      const trigger = screen.getByTestId("launch-more-actions");
+      act(() => trigger.focus());
+      fireEvent.keyDown(trigger, { key: "Escape" });
+      expect(onOpenChange).not.toHaveBeenCalled();
+    });
+
+    it("repairs focus when the focused item turns pending without resetting the others", () => {
+      const { rerender } = render(<ControlledMenu items={baseItems()} />);
+      const second = screen.getByTestId("cancel-button");
+      act(() => second.focus());
+      expect(document.activeElement).toBe(second);
+
+      // The user's item becomes pending: it is still there but no longer
+      // executable, so focus must fall back instead of staying on dead control.
+      rerender(<ControlledMenu items={baseItems({ pending: true })} />);
+      expect(document.activeElement).not.toBe(screen.getByTestId("cancel-button"));
+      expect(document.activeElement).toBe(screen.getByTestId("run-button"));
+    });
+
+    it("keeps the item the user navigated to when items are rebuilt", () => {
+      const { rerender } = render(<ControlledMenu items={baseItems()} />);
+      const third = screen.getByTestId("retry-evaluation-button");
+      act(() => third.focus());
+      // A plain rerender rebuilds the items array with fresh object identities;
+      // focus must not jump back to the first entry.
+      rerender(<ControlledMenu items={baseItems()} />);
+      expect(document.activeElement).toBe(screen.getByTestId("retry-evaluation-button"));
+    });
+
+    it("repairs focus when the focused item is removed entirely", () => {
+      const { rerender } = render(<ControlledMenu items={baseItems()} />);
+      const third = screen.getByTestId("retry-evaluation-button");
+      act(() => third.focus());
+      rerender(<ControlledMenu items={baseItems().filter((item) => item.id !== "retry_evaluation")} />);
+      expect(screen.queryByTestId("retry-evaluation-button")).not.toBeInTheDocument();
+      expect(document.activeElement).toBe(screen.getByTestId("run-button"));
+    });
+
+    it("never turns a read-only note into an executable menu item", () => {
+      render(<LaunchActionMenu items={ONLY_NOTE} open onOpenChange={vi.fn()} />);
+      expect(screen.queryByRole("menuitem")).not.toBeInTheDocument();
+      expect(screen.getByText("尚未创建 Langfuse Run")).toBeInTheDocument();
+    });
+  });
 });
 
 describe("LaunchHeader layout parity (U4)", () => {

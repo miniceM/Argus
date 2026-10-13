@@ -11,8 +11,13 @@
  *   - role=menu with menuitem buttons and real links (never href="#");
  *   - ArrowUp/ArrowDown/Home/End move between enabled items, disabled and
  *     pending items are skipped and never execute;
- *   - Escape closes and returns focus to the trigger; Tab closes and lets focus
- *     leave naturally; click-outside closes;
+ *   - when no entry is executable (note-only / all pending / empty) focus falls
+ *     back to the menu container itself, so Escape still reaches the overlay;
+ *   - Escape closes and returns focus to the trigger, on the menu path and on
+ *     the trigger path, and is never consumed while the menu is closed; Tab
+ *     closes and lets focus leave naturally; click-outside closes;
+ *   - a content change repairs a focus that is no longer valid but never pulls
+ *     focus off an item the user navigated to;
  *   - selecting an item closes the menu first and restores focus to the visible
  *     trigger before the existing handler runs, so a confirmation Modal owns
  *     focus while open and returns to the trigger when dismissed.
@@ -56,6 +61,14 @@ const ITEM_ROW_CLASS =
 
 const focusableSelector = '[role="menuitem"]:not([aria-disabled="true"]):not([tabindex="-1"])';
 
+/** True when `node` is currently a live, executable entry of `menu`. */
+const isLiveMenuItem = (menu: HTMLElement | null, node: Element | null): node is HTMLElement =>
+  menu instanceof HTMLElement &&
+  node instanceof HTMLElement &&
+  node !== menu &&
+  menu.contains(node) &&
+  node.matches(focusableSelector);
+
 export const LaunchActionMenu: React.FC<{
   items: LaunchActionMenuItem[];
   open: boolean;
@@ -87,15 +100,38 @@ export const LaunchActionMenu: React.FC<{
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [open, onOpenChange]);
 
-  // Land on the first executable item when the menu opens.
+  const focusableItems = useCallback(
+    () => Array.from(menuRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? []),
+    [],
+  );
+
+  // Identity of the rendered content, so a focus repair can tell "the entries
+  // changed" apart from "the same entries were rebuilt".
+  const itemsSignature = items
+    .map((item) =>
+      item.kind === "action" ? `${item.id}:${item.pending ? "pending" : "ready"}` : `${item.id}:${item.kind}`,
+    )
+    .join("|");
+  const repairedSignatureRef = useRef<string | null>(null);
+
+  // Opening lands on the first executable item. When nothing is executable
+  // (note-only, all pending, or no entry at all) focus falls back to the menu
+  // container itself, so the overlay always owns the keyboard and Escape.
   useEffect(() => {
     if (!open) return;
-    const first = menuRef.current?.querySelectorAll<HTMLElement>(focusableSelector)[0];
-    first?.focus();
-  }, [open]);
+    (focusableItems()[0] ?? menuRef.current)?.focus();
+  }, [open, focusableItems]);
 
-  const focusableItems = () =>
-    Array.from(menuRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? []);
+  // A content change repairs a focus that is no longer valid: the focused item
+  // may have been removed or turned pending. Focus that is still on a live item
+  // is left exactly where the user put it.
+  useEffect(() => {
+    if (!open) return;
+    if (repairedSignatureRef.current === itemsSignature) return;
+    repairedSignatureRef.current = itemsSignature;
+    if (isLiveMenuItem(menuRef.current, document.activeElement)) return;
+    (focusableItems()[0] ?? menuRef.current)?.focus();
+  }, [open, itemsSignature, focusableItems]);
 
   const onMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
@@ -130,8 +166,20 @@ export const LaunchActionMenu: React.FC<{
     item.onSelect();
   };
 
+  const onContainerKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    // Escape is only consumed while this menu owns the overlay. With the menu
+    // closed the key belongs to the page or to an open Modal, and intercepting
+    // it there would dismiss a dialog the user did not mean to touch.
+    if (event.key !== "Escape" || !open) return;
+    // The menu subtree handles its own Escape and stops propagation, so this
+    // path is the one that runs when focus sits outside the menu — typically on
+    // the trigger, which is how a keyboard-only user opens the overlay.
+    event.stopPropagation();
+    closeMenu(true);
+  };
+
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative" onKeyDown={onContainerKeyDown}>
       <Button
         ref={triggerRef}
         variant="secondary"
@@ -158,6 +206,9 @@ export const LaunchActionMenu: React.FC<{
           id={menuId}
           role="menu"
           aria-label="当前 Launch 操作"
+          // Programmatic focus target only: never part of the tab order, so Tab
+          // still leaves the overlay instead of cycling inside it.
+          tabIndex={-1}
           onKeyDown={onMenuKeyDown}
           className="absolute right-0 top-full z-50 mt-1 max-h-60 min-w-56 max-w-80 overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-lg"
         >

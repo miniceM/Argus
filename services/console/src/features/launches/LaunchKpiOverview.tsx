@@ -34,7 +34,7 @@ interface LaunchKpiOverviewProps {
   decisionCoverage: number | null;
   itemsError?: boolean;
   comparisonSummary?: ComparisonSummary | null;
-  classificationCounts?: Record<string, number>;
+  classificationCounts?: Record<string, unknown> | null;
   comparability?: { comparable: boolean; reason_codes: string[] } | null;
   formal?: { available: boolean; verdict?: string | null; withheld_reasons?: string[] } | null;
   onNavigateTab?: (tabId: string, filter?: string) => void;
@@ -53,6 +53,33 @@ const formatMoney = (value: number | null | undefined, currency: string | null |
     return `${currency || "$"} ${value.toFixed(4)}`;
   }
 };
+
+
+/**
+ * Reads the formal REGRESSION count with unknown-safe semantics (issue 119 U2).
+ *
+ * Only a real, non-negative integer is a count. A missing key, null, a numeric
+ * string, a negative value, a fraction or a non-finite value is *unknown*: it
+ * must never be rendered as a green "no regression" zero, because the backend
+ * contract only types `classification_counts` as a dictionary.
+ */
+export type RegressionCountState =
+  | { kind: "value"; value: number }
+  | { kind: "missing" }
+  | { kind: "invalid" };
+
+export function readRegressionCount(
+  classificationCounts: Record<string, unknown> | null | undefined,
+): RegressionCountState {
+  if (classificationCounts == null) return { kind: "missing" };
+  if (!("REGRESSION" in classificationCounts)) return { kind: "missing" };
+  const raw = classificationCounts.REGRESSION;
+  if (raw == null) return { kind: "missing" };
+  if (typeof raw !== "number") return { kind: "invalid" };
+  // Number.isInteger rejects NaN and the infinities as well.
+  if (!Number.isInteger(raw) || raw < 0) return { kind: "invalid" };
+  return { kind: "value", value: raw };
+}
 
 export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
   totalItems,
@@ -114,17 +141,27 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
     }
   }
 
-  // 2. Regression items calculation
-  const isComparable = comparability?.comparable ?? false;
-  const isFormalAvailable = formal?.available ?? false;
+  // 2. Regression items calculation (issue 119 U2): a formal no-regression claim
+  // requires formal AND comparable evidence plus a legal REGRESSION count. A
+  // missing or malformed count stays unknown instead of becoming a green zero.
+  const comparabilityProvided = comparability != null;
+  const isComparable = comparability?.comparable === true;
+  const isFormalAvailable = formal?.available === true;
+  const regressionCount = readRegressionCount(classificationCounts);
   let regressionValueText = "—";
   let regressionSubText = "基线未绑定或不可比";
   let regressionStatusTone: "pass" | "timeout" | "neutral" = "neutral";
 
-  if (!isComparable && comparability?.reason_codes?.length) {
+  if (!isComparable && comparabilityProvided && comparability?.reason_codes?.length) {
     regressionValueText = "不可比";
     regressionSubText = "判定规则或测量版本不同";
     regressionStatusTone = "timeout";
+  } else if (!isComparable && comparabilityProvided) {
+    // comparable=false without reasons (or verdict withheld): the comparison
+    // premise itself is unmet, so no formal count may be presented.
+    regressionValueText = "不可比";
+    regressionSubText = "比较前提不满足，暂不给出正式回归计数";
+    regressionStatusTone = "neutral";
   } else if (!isFormalAvailable) {
     if (formal?.withheld_reasons?.includes("BASELINE_NOT_BOUND")) {
       regressionValueText = "—";
@@ -135,16 +172,18 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
       regressionSubText = "证据不足，暂无法给出正式结论";
       regressionStatusTone = "timeout";
     }
+  } else if (regressionCount.kind !== "value") {
+    regressionValueText = "不可用";
+    regressionSubText = "回归计数未返回或不可用，无法判定无回归";
+    regressionStatusTone = "neutral";
+  } else if (regressionCount.value === 0) {
+    regressionValueText = "0";
+    regressionSubText = "正式比较未发现回归";
+    regressionStatusTone = "pass";
   } else {
-    const regCount = classificationCounts?.REGRESSION ?? 0;
-    regressionValueText = String(regCount);
-    if (regCount === 0) {
-      regressionSubText = "历史通过项全部保持绿灯";
-      regressionStatusTone = "pass";
-    } else {
-      regressionSubText = `${regCount} 项性能退化，需排查`;
-      regressionStatusTone = "timeout";
-    }
+    regressionValueText = String(regressionCount.value);
+    regressionSubText = `${regressionCount.value} 项性能退化，需排查`;
+    regressionStatusTone = "timeout";
   }
 
   // 3. P95 Latency
@@ -305,6 +344,7 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
               <div className="text-xs font-medium text-muted-foreground mb-2">正式回归用例数</div>
               <div className="flex items-baseline gap-2">
                 <span
+                  data-testid="regression-count-value"
                   className={clsx(
                     "text-2xl font-bold font-mono tracking-tight",
                     regressionStatusTone === "pass" ? "text-pass" : regressionStatusTone === "timeout" ? "text-timeout" : "text-foreground"
@@ -321,15 +361,15 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
               {regressionStatusTone === "pass" ? (
                 <span className="inline-flex items-center gap-1 text-pass">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>{regressionSubText}</span>
+                  <span data-testid="regression-count-note">{regressionSubText}</span>
                 </span>
               ) : regressionStatusTone === "timeout" ? (
                 <span className="inline-flex items-center gap-1 text-timeout">
                   <AlertCircle className="w-3.5 h-3.5" />
-                  <span>{regressionSubText}</span>
+                  <span data-testid="regression-count-note">{regressionSubText}</span>
                 </span>
               ) : (
-                <span>{regressionSubText}</span>
+                <span data-testid="regression-count-note">{regressionSubText}</span>
               )}
             </div>
           </div>

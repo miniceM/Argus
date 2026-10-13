@@ -448,42 +448,115 @@ test.describe("Issue #120: launch detail narrow-viewport action geometry", () =>
     await mockApi(page);
   });
 
+  // Issue #119 gap U4: below the 1024px lg boundary the header keeps a compact
+  // primary action row (icon refresh + 设为新 Baseline + 更多操作) and every
+  // remaining capability lives in the accessible menu. The menu is a placement
+  // change only: permission, pending, labels and confirmation stay identical.
+
+  const ALL_ACTION_LABELS = [
+    "启动评测 (Run)",
+    "取消评测 (Cancel)",
+    "断点恢复 (Resume)",
+    "重试失败用例 (Retry Failed)",
+    "重试评测 (Retry Eval)",
+  ];
+
+  const expectControlGeometry = (name: string, geometry: {
+    labelLeft: number;
+    labelRight: number;
+    vw: number;
+    labelScrollWidth: number | null;
+    labelClientWidth: number | null;
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+    vh: number;
+    clippedByAncestors: string[];
+    hitTestPoints: boolean[];
+  }) => {
+    expect(geometry.labelLeft, `${name} label clipped on the left`).toBeGreaterThanOrEqual(-1);
+    expect(geometry.labelRight, `${name} label clipped on the right`).toBeLessThanOrEqual(geometry.vw + 1);
+    if (geometry.labelScrollWidth !== null && geometry.labelClientWidth !== null) {
+      expect(geometry.labelScrollWidth, `${name} label text is clipped`).toBeLessThanOrEqual(
+        geometry.labelClientWidth + 1,
+      );
+    }
+    expect(geometry.left, `${name} clipped on the left`).toBeGreaterThanOrEqual(-1);
+    expect(geometry.right, `${name} clipped on the right`).toBeLessThanOrEqual(geometry.vw + 1);
+    expect(geometry.top, `${name} clipped above the viewport`).toBeGreaterThanOrEqual(-1);
+    expect(geometry.bottom, `${name} clipped below the viewport`).toBeLessThanOrEqual(geometry.vh + 1);
+    expect(geometry.clippedByAncestors, `${name} is clipped by an ancestor`).toEqual([]);
+    expect(geometry.hitTestPoints, `${name} is obstructed or not fully pointer-reachable`).toEqual(
+      Array(9).fill(true),
+    );
+  };
+
+  async function openMoreMenu(page: Page) {
+    const trigger = page.getByTestId("launch-more-actions");
+    await expect(trigger, "更多操作 trigger must be present at narrow widths").toBeVisible();
+    await trigger.click();
+    const menu = page.getByRole("menu", { name: "当前 Launch 操作" });
+    await expect(menu).toBeVisible();
+    return { trigger, menu };
+  }
+
   for (const width of [360, 390, 768]) {
-    test(`launch actions and their labels stay fully visible at ${width}px`, async ({ page }, testInfo) => {
+    test(`compact primary actions and the 更多操作 menu stay fully reachable at ${width}px`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 800 });
       await page.goto(`/launches/${LAUNCH_ID}`);
       await expectPageReady(page, `/launches/${LAUNCH_ID}`);
 
-      const controlNames = ["刷新", "设为新 Baseline", "重试评测 (Retry Eval)", "在 Langfuse 中查看"];
       const measuredControls = [];
-      for (const name of controlNames) {
-        const control = page
-          .getByRole("button", { name })
-          .or(page.getByRole("link", { name }))
-          .first();
+      for (const name of ["刷新", "设为新 Baseline"]) {
+        const control = page.getByRole("button", { name }).first();
         await expect(control, `${name} must be present`).toBeVisible();
-
         const geometry = await control.evaluate(readActionGeometry);
-
-        expect(geometry.labelLeft, `${name} label clipped on the left`).toBeGreaterThanOrEqual(-1);
-        expect(geometry.labelRight, `${name} label clipped on the right`).toBeLessThanOrEqual(
-          geometry.vw + 1,
-        );
-        if (geometry.labelScrollWidth !== null && geometry.labelClientWidth !== null) {
-          expect(geometry.labelScrollWidth, `${name} label text is clipped`).toBeLessThanOrEqual(
-            geometry.labelClientWidth + 1,
-          );
-        }
-        expect(geometry.left, `${name} clipped on the left`).toBeGreaterThanOrEqual(-1);
-        expect(geometry.right, `${name} clipped on the right`).toBeLessThanOrEqual(geometry.vw + 1);
-        expect(geometry.top, `${name} above the viewport`).toBeGreaterThanOrEqual(-1);
-        expect(geometry.bottom, `${name} below the fold at 800px`).toBeLessThanOrEqual(geometry.vh + 1);
-        expect(geometry.clippedByAncestors, `${name} is clipped by an ancestor`).toEqual([]);
-        expect(geometry.hitTestPoints, `${name} is obstructed or not fully pointer-reachable`).toEqual(
-          Array(9).fill(true),
-        );
+        expectControlGeometry(name, geometry);
         measuredControls.push({ name, ...geometry });
       }
+
+      // No execution action stays inline below the lg boundary.
+      for (const name of ALL_ACTION_LABELS) {
+        await expect(
+          page.getByRole("button", { name, exact: true }),
+          `${name} must not be an inline button at ${width}px`,
+        ).toHaveCount(0);
+      }
+
+      const { trigger, menu } = await openMoreMenu(page);
+
+      // The floating menu layer itself stays inside the viewport.
+      const menuBox = await menu.boundingBox();
+      expect(menuBox, "menu has layout geometry").not.toBeNull();
+      expect(menuBox!.x, "menu clipped on the left").toBeGreaterThanOrEqual(-1);
+      expect(menuBox!.x + menuBox!.width, "menu clipped on the right").toBeLessThanOrEqual(width + 1);
+
+      // The allowed execution capability is a real, fully visible menu item.
+      const retryItem = menu.getByRole("menuitem", { name: "重试评测 (Retry Eval)" });
+      await expect(retryItem).toBeVisible();
+      expectControlGeometry("重试评测 (Retry Eval) menu item", await retryItem.evaluate(readActionGeometry));
+
+      // The Langfuse capability stays reachable as a real link, never href="#".
+      const langfuseItem = menu.getByRole("menuitem", { name: "在 Langfuse 中查看" });
+      await expect(langfuseItem).toBeVisible();
+      expect(await langfuseItem.evaluate((el) => el.tagName)).toBe("A");
+      expect(await langfuseItem.evaluate((el) => el.getAttribute("href"))).toBe(
+        launch.langfuse_experiment_url,
+      );
+
+      // Escape closes the menu and restores focus to the visible trigger.
+      await page.keyboard.press("Escape");
+      await expect(menu).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+
+      // The trigger opens the menu from the keyboard and focus lands on the
+      // first executable item.
+      await trigger.focus();
+      await page.keyboard.press("ArrowDown");
+      await expect(menu).toBeVisible();
+      await expect(langfuseItem).toBeFocused();
+
       await testInfo.attach("narrow-launch-action-geometry.json", {
         body: JSON.stringify({ viewport: { width, height: 800 }, controls: measuredControls }, null, 2),
         contentType: "application/json",
@@ -516,7 +589,7 @@ test.describe("Issue #120: launch detail narrow-viewport action geometry", () =>
 
   for (const width of [360, 390, 768]) {
     for (const scenario of executionActionScenarios) {
-      test(`${scenario.name} stay fully reachable at ${width}px`, async ({ page }, testInfo) => {
+      test(`${scenario.name} stay fully reachable in the 更多操作 menu at ${width}px`, async ({ page }, testInfo) => {
         await page.setViewportSize({ width, height: 800 });
         await page.route(`**/api/v1/experiment-launches/${LAUNCH_ID}`, (route) =>
           route.fulfill({
@@ -532,34 +605,28 @@ test.describe("Issue #120: launch detail narrow-viewport action geometry", () =>
         await expect(page.getByRole("heading", { level: 1, name: AGENT_ID })).toBeVisible();
         await expect(page.getByTestId("status-badge").first()).toHaveText(scenario.status);
 
+        const { menu } = await openMoreMenu(page);
         const measuredControls = [];
         for (const name of scenario.labels) {
-          const control = page.getByRole("button", { name, exact: true });
-          await expect(control, `${name} must be present for ${scenario.name}`).toBeVisible();
-          await control.scrollIntoViewIfNeeded();
-          const geometry = await control.evaluate(readActionGeometry);
-          expect(geometry.left, `${name} clipped on the left`).toBeGreaterThanOrEqual(-1);
-          expect(geometry.right, `${name} clipped on the right`).toBeLessThanOrEqual(geometry.vw + 1);
-          expect(geometry.top, `${name} clipped above the viewport`).toBeGreaterThanOrEqual(-1);
-          expect(geometry.bottom, `${name} clipped below the viewport`).toBeLessThanOrEqual(geometry.vh + 1);
-          if (geometry.labelScrollWidth !== null && geometry.labelClientWidth !== null) {
-            expect(geometry.labelScrollWidth, `${name} label text is clipped`).toBeLessThanOrEqual(
-              geometry.labelClientWidth + 1,
-            );
-          }
-          if (geometry.labelText !== null) {
-            expect(geometry.labelText.trim().length, `${name} has visible button text`).toBeGreaterThan(0);
-          }
-          expect(geometry.labelLeft, `${name} label clipped on the left`).toBeGreaterThanOrEqual(-1);
-          expect(geometry.labelRight, `${name} label clipped on the right`).toBeLessThanOrEqual(
-            geometry.vw + 1,
-          );
-          expect(geometry.clippedByAncestors, `${name} is clipped by an ancestor`).toEqual([]);
-          expect(geometry.hitTestPoints, `${name} is obstructed or not fully pointer-reachable`).toEqual(
-            Array(9).fill(true),
-          );
+          const item = menu.getByRole("menuitem", { name, exact: true });
+          await expect(item, `${name} must be a menu item for ${scenario.name}`).toBeVisible();
+          const geometry = await item.evaluate(readActionGeometry);
+          expectControlGeometry(name, geometry);
           measuredControls.push({ name, ...geometry });
         }
+
+        // A disallowed action never becomes an executable menu entry.
+        for (const name of ALL_ACTION_LABELS) {
+          if (scenario.labels.includes(name)) continue;
+          await expect(
+            menu.getByRole("menuitem", { name, exact: true }),
+            `${name} must not be executable for ${scenario.name}`,
+          ).toHaveCount(0);
+        }
+
+        await page.keyboard.press("Escape");
+        await expect(menu).toHaveCount(0);
+
         await testInfo.attach("execution-action-geometry.json", {
           body: JSON.stringify({
             viewport: { width, height: 800 },
@@ -571,6 +638,80 @@ test.describe("Issue #120: launch detail narrow-viewport action geometry", () =>
         });
       });
     }
+  }
+
+  for (const width of [360, 390, 768]) {
+    test(`menu confirmations keep payload gating, pending state and focus restoration at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      const posts: string[] = [];
+      await page.route(`**/api/v1/experiment-launches/${LAUNCH_ID}/cancel`, async (route) => {
+        posts.push("cancel");
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        await route.fulfill({
+          json: { ...launch, status: "PARTIAL_FAILED", allowed_actions: ["cancel", "retry_failed", "retry_evaluation"] },
+        });
+      });
+      await page.route(`**/api/v1/experiment-launches/${LAUNCH_ID}/retry-failed`, async (route) => {
+        posts.push("retry-failed");
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        await route.fulfill({ json: { ...launch, allowed_actions: ["retry_evaluation"] } });
+      });
+      await page.route(`**/api/v1/experiment-launches/${LAUNCH_ID}`, (route) =>
+        route.fulfill({
+          json: {
+            ...launch,
+            status: "PARTIAL_FAILED",
+            allowed_actions: ["cancel", "retry_failed", "retry_evaluation"],
+            progress: {
+              total: 6, completed: 6, percentage: 100, pending: 0, queued: 0, running: 0,
+              retry_wait: 0, succeeded: 4, failed: 1, timed_out: 0, cancelled: 1,
+            },
+          },
+        }),
+      );
+      await page.goto(`/launches/${LAUNCH_ID}`);
+      await expect(page.getByTestId("status-badge").first()).toHaveText("PARTIAL_FAILED");
+
+      // Cancel confirmation: opening the modal from the menu issues no request;
+      // Escape closes it and focus returns to the visible 更多操作 entry.
+      let { trigger, menu } = await openMoreMenu(page);
+      await menu.getByRole("menuitem", { name: "取消评测 (Cancel)" }).click();
+      const cancelDialog = page.getByRole("dialog", { name: "确认取消评测任务" });
+      await expect(cancelDialog).toBeVisible();
+      await expect(async () => {
+        expect(posts, "no POST before the cancel confirmation").toEqual([]);
+      }).toPass();
+      await page.keyboard.press("Escape");
+      await expect(cancelDialog).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+
+      // Confirming posts exactly once, shows the scoped pending state, and
+      // returns focus to the trigger afterwards.
+      ({ trigger, menu } = await openMoreMenu(page));
+      await menu.getByRole("menuitem", { name: "取消评测 (Cancel)" }).click();
+      await cancelDialog.getByRole("button", { name: "确认取消" }).focus();
+      await page.keyboard.press("Enter");
+      await expect(cancelDialog.getByRole("button", { name: "正在取消..." })).toBeDisabled();
+      await expect(cancelDialog).toHaveCount(0);
+      expect(posts).toEqual(["cancel"]);
+      await expect(trigger).toBeFocused();
+
+      // Retry-failed confirmation from the same menu, with the force replay
+      // control preserved and one POST only after 确认重新调度.
+      ({ trigger, menu } = await openMoreMenu(page));
+      await menu.getByRole("menuitem", { name: "重试失败用例 (Retry Failed)" }).click();
+      const retryDialog = page.getByRole("dialog", { name: "重试失败用例 (Retry Failed Items)" });
+      await expect(retryDialog).toBeVisible();
+      await expect(async () => {
+        expect(posts, "no POST before the retry confirmation").toEqual(["cancel"]);
+      }).toPass();
+      await expect(retryDialog.getByRole("checkbox")).toBeVisible();
+      await retryDialog.getByRole("button", { name: "确认重新调度" }).focus();
+      await page.keyboard.press("Enter");
+      await expect(retryDialog).toHaveCount(0);
+      expect(posts).toEqual(["cancel", "retry-failed"]);
+      await expect(trigger).toBeFocused();
+    });
   }
 
   for (const width of [1024, 1280, 1440]) {

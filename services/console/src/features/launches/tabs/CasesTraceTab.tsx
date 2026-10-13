@@ -13,12 +13,11 @@ import {
   XCircle,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../../../api/client";
-import { queryKeys } from "../../../api/query-keys";
 import { formatApiError } from "../../../api/errors";
 import { Button } from "../../../components/ui/Primitives";
 import { JsonViewer } from "../../../components/JsonViewer";
 import { AttemptDrawer } from "../AttemptDrawer";
+import { caseOutputQueryOptions } from "../launchComparisonQueries";
 import { EvaluationResultList } from "../EvaluationResultList";
 import { frozenFailureRecovery, isFrozenIdentityFailure } from "../frozenIdentity";
 import { EvaluationRecoveryBadge, recoveryExplanation } from "../evaluationRecovery";
@@ -26,7 +25,6 @@ import type { QualityEvaluation } from "../qualityDecision";
 import type { EvaluationResult } from "../evaluationResults";
 
 type ItemExecution = import("../../../api/schema").components["schemas"]["ExperimentItemExecutionResponse"];
-type ComparisonCaseOutput = import("../../../api/schema").components["schemas"]["ComparisonCaseOutputResponse"];
 
 interface CasesTraceTabProps {
   launchId: string;
@@ -458,22 +456,12 @@ const CaseDetailPanel: React.FC<{
   manifestDataset?: any;
   onOpenAttemptDrawer: () => void;
 }> = ({ launchId, snapshotId, item, manifestDataset, onOpenAttemptDrawer }) => {
-  // Lazy query comparison case for output
-  const caseOutputQuery = useQuery({
-    queryKey: queryKeys.launches.case(launchId, snapshotId ?? "live", item.dataset_item_id),
-    queryFn: async () => {
-      if (!snapshotId) return null;
-      const res = await api.GET("/api/v1/experiment-launches/{launch_id}/comparison/case", {
-        params: {
-          path: { launch_id: launchId },
-          query: { snapshot_id: snapshotId, dataset_item_id: item.dataset_item_id },
-        },
-      });
-      if (res.error) throw res.error;
-      return res.data as ComparisonCaseOutput | null;
-    },
-    enabled: Boolean(launchId && snapshotId),
-  });
+  // Shared validated entry with the ComparisonCaseDrawer: same key, same fetch,
+  // same triple identity check (launch_id / snapshot_id / dataset_item_id), so a
+  // foreign payload can never enter the shared success cache (issue 119 gap U1).
+  const caseOutputQuery = useQuery(
+    caseOutputQueryOptions({ launchId, snapshotId, datasetItemId: item.dataset_item_id }),
+  );
 
   // Extract frozen input if available in manifest
   const datasetItems = manifestDataset?.items || [];

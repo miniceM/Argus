@@ -167,6 +167,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   };
 
   const mockComparison = {
+    launch_id: mockLaunch.id,
     candidate_snapshot_id: "snap-v2-001",
     baseline_snapshot_id: "base-snap-001",
     classification_counts: {
@@ -337,8 +338,8 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     });
 
     // 2. Gate conclusion badge & evidence status badge
-    expect(screen.getByText("门禁准入通过 (PASS)")).toBeInTheDocument();
-    expect(screen.getAllByText("证据完整").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("冻结质量通过 (PASS)")).toBeInTheDocument();
+    expect(screen.getAllByText("冻结证据完整").length).toBeGreaterThanOrEqual(1);
 
     // 3. Compact UUID display with copy button
     expect(screen.getByText(/ID: ff04d66b…f708/)).toBeInTheDocument();

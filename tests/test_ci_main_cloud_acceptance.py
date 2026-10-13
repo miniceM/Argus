@@ -30,7 +30,7 @@ def _client() -> object:
     class FakeClient:
         def __init__(self) -> None:
             self.run = {
-                "path": "/.github/workflows/ci.yml@refs/heads/main",
+                "path": ".github/workflows/ci.yml",
                 "event": "push",
                 "head_branch": "main",
                 "head_sha": SHA,
@@ -93,6 +93,7 @@ def test_main_acceptance_requires_same_current_main_run_and_actual_cloud_steps()
         client, run_id=77, run_attempt=2, commit_sha=SHA, event_name="push", ref="refs/heads/main"
     )
     assert receipt["cloud_state"] == "passed"
+    assert receipt["workflow_path"] == ".github/workflows/ci.yml"
     assert receipt["suite_results"] == {"managed-cloud": "passed", "async-link": "passed"}
     assert receipt["baseline"] == {"v1": {"passed": 2, "total": 6}, "v2": {"passed": 6, "total": 6}}
     assert receipt["run_url"].endswith("/77")

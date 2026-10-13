@@ -158,6 +158,7 @@ def test_http_only_preserves_answer_evaluation(local_langfuse, s40_runtime, monk
 
 def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id, *, scenario="serial"):
     from app.registry import AgentRegistry
+    from app.trajectory.assembler import assemble_trajectory, trajectory_digest
     from app.trajectory.causal import validate_causal_links
     from app.trajectory.codec import canonical_dumps
     from app.trajectory.contract import TrajectoryContract
@@ -198,6 +199,10 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id,
     assert batch.source_profile_id == profile_id and batch.source_bytes_complete and not batch.truncated
     normalized = [record.observation for record in batch.records]
     causal = validate_causal_links(scope, batch, contract)
+    trajectory = assemble_trajectory(scope, batch, contract)
+    assert trajectory.provenance.trajectory_digest == trajectory_digest(trajectory)
+    assert canonical_dumps(trajectory) == canonical_dumps(
+        assemble_trajectory(scope, normalize_observations(list(reversed(rows)), contract, scope=scope), contract))
     root_graph = causal.root_graph
     assert root_graph.depth_by_id[scope.root_observation_id] == 0 and not root_graph.truncated
     assert {record.observation_id for record in root_graph.records} == expected
@@ -216,6 +221,8 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id,
         assert len(scoped) == 1 and not tools and not structural
         assert all(value == "NONE" for value in scoped[0].capabilities.values())
         assert causal.request_by_execution_id == {} and not any(causal.predecessors_by_id.values())
+        assert trajectory.completeness.status == "ROOT_ONLY"
+        assert all(value == "NONE" for value in trajectory.completeness.capabilities.values())
     else:
         assert cursor_hops and structural
         assert len(tools) == 4 and {result.step.phase for result in tools} == (
@@ -224,13 +231,22 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id,
         assert all(result.step.duration_ms is not None for result in tools if result.step.phase == "EXECUTED")
         assert len(causal.request_by_execution_id) == 2 and causal.warnings_by_id == {}
         assert sum(len(refs) for refs in causal.predecessors_by_id.values()) == (2 if scenario == "parallel" else 3)
+        assert trajectory.completeness.status == "PARTIAL"  # 这条消费链尚未提供生产 Acquisition quiet 证明。
+        assert "ACQUISITION_CONVERGENCE_UNPROVEN" in trajectory.completeness.warnings
+        assert not any(reason.startswith("TERMINAL_INVENTORY_") for reason in trajectory.completeness.warnings)
+        assembled_tools = [step for step in trajectory.steps if step.type == "TOOL"]
+        assert sum(len(step.causal_predecessor_ids) for step in assembled_tools) == (2 if scenario == "parallel" else 3)
         if scenario in {"missing", "redacted", "uncollected"}:
             request = next(result for result in tools if result.step.phase == "REQUESTED"
                            and result.step.tool_identity == "banking.balance.read")
             expected_visibility = {"missing": {"$.customer_id": "MISSING"},
                                    "redacted": {"$.customer_id": "REDACTED"}, "uncollected": {}}[scenario]
             assert request.step.argument_visibility == expected_visibility
+            action = next(step for step in assembled_tools if step.phase in {"EXECUTED", "BLOCKED"}
+                          and step.tool_identity == "banking.balance.read")
+            assert action.argument_visibility == expected_visibility
             assert "synthetic-secret" not in canonical_dumps(causal)
+        assert "synthetic-secret" not in canonical_dumps(trajectory)
     return {"profile_id": profile_id, "source_profile_version": contract.source_profile.version,
             "trajectory_contract_digest": contract.digest, "scoped_steps": len(scoped),
             "structural_steps": len(structural), "business_tool_steps": len(tools),
@@ -239,6 +255,8 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id,
             "graph_nodes": len(root_graph.records), "graph_max_depth": max(root_graph.depth_by_id.values()),
             "causal_edges": sum(len(refs) for refs in causal.predecessors_by_id.values()),
             "call_pairs": len(causal.request_by_execution_id),
+            "assembled_steps": len(trajectory.steps), "completeness": trajectory.completeness.status,
+            "trajectory_digest": trajectory.provenance.trajectory_digest,
             "parent_closed": True, "structural_tool_capabilities": "NONE"}
 
 

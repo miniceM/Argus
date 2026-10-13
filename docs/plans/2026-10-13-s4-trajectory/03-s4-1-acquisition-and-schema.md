@@ -102,6 +102,8 @@ Assembler 校验因果边时要求 predecessor 与当前 Step 都在同一个冻
 
 canonical digest 使用 UTF-8、键排序、紧凑 JSON、UTC 微秒、拒绝 NaN/Infinity、按稳定规则排序 Step 与 warnings，再计算 SHA-256。摘要主体按 01 中 StandardTrajectory 的冻结 scope、脱敏输入/输出、completeness、steps 组成；计算时排除 provenance 内自身的 trajectory_digest，避免循环。source profile、schema、assembler、mapping 与 redaction 的配置身份由 trajectory_contract_digest 固定。
 
+`trajectory/assembler.py` 已组合 Root/因果内部阶段，核对含 terminal 自身的逐 workflow inventory、按业务角色聚合能力、保留可信调用参数状态，并按最终字节预算裁剪和计算语义摘要。内部可选 `ObservationConvergence` 随批次绑定全部规范化输入；没有来自 Acquisition 的分页/quiet 证明时不发布 OBSERVED_COMPLETE。真实 Reader 的单次消费验证也保持该边界。实现和实测见 [冻结轨迹组装验收](../../validation/s4-1/trajectory-assembly.md)；生产 Acquisition 和制品恢复仍须继续实施。
+
 Step.duration_ms 表达 Step 执行语义；若来源提供且 profile 验证该值，则它属于 StandardTrajectory 的语义字段，必须进入 trajectory_digest，值变化必须改变摘要。字段缺失保持 null 并降低 timing capability，不得用采集时间推算。仅排除采集/组装运行耗时、采集时刻、临时 Worker ID 和不稳定错误文本。完全相同的冻结规范化输入必须字节级得到相同 digest；增加/删除/修改一个证据 Step 或其已提供的 duration_ms 必须改变摘要。
 
 ## Artifact、checkpoint 与恢复

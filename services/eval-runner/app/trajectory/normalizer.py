@@ -1,5 +1,6 @@
 """冻结字段映射生成脱敏候选 Step；不证明闭包、因果或完整度。"""
 
+import hashlib
 import re
 from datetime import UTC, datetime
 from typing import get_args
@@ -61,6 +62,14 @@ class NormalizedRecord(_ContractModel):
         return self
 
 
+class ObservationConvergence(_ContractModel):
+    """仅由内部 Acquisition 提供的分页/静默证明；不从 Observation metadata 读取。"""
+
+    normalized_digest: Digest
+    paging_complete: bool
+    quiet_window_seconds: Duration = Field(le=60)
+
+
 class NormalizedObservations(_ContractModel):
     scope: TrajectoryScope
     trajectory_contract_digest: Digest
@@ -71,6 +80,24 @@ class NormalizedObservations(_ContractModel):
     source_bytes_complete: bool
     truncated: bool
     warnings: list[ReasonCode] = Field(max_length=1000)
+    convergence: ObservationConvergence | None = Field(default=None, exclude_if=lambda proof: proof is None)
+
+    @property
+    def semantic_digest(self) -> str:
+        # 证明绑定全部候选与拒绝行；到达顺序和临时 index 不构成输入身份。
+        data = self.model_dump(exclude={"convergence"})
+        for record in data["records"]:
+            observation = record["observation"]
+            observation["warnings"] = sorted(set(observation["warnings"]))
+            observation["causal_event_ids"] = sorted(set(observation["causal_event_ids"]))
+            if observation["terminal_event_ids"] is not None:
+                observation["terminal_event_ids"].sort()
+            if observation["step"] is not None:
+                observation["step"]["index"] = 0
+        data["records"].sort(key=lambda record: canonical_dumps(record, max_bytes=8 * 1024 * 1024))
+        data["warnings"] = sorted(set(data["warnings"]))
+        raw = canonical_dumps(data, max_bytes=8 * 1024 * 1024).encode("utf-8")
+        return "sha256:" + hashlib.sha256(raw).hexdigest()
 
     @model_validator(mode="after")
     def retained_steps_match_scope(self):
@@ -78,6 +105,8 @@ class NormalizedObservations(_ContractModel):
             record.observation.step is not None and record.trace_id != self.scope.trace_id for record in self.records
         ):
             raise ValueError("TRAJECTORY_NORMALIZED_SCOPE_MISMATCH")
+        if self.convergence is not None and self.convergence.normalized_digest != self.semantic_digest:
+            raise ValueError("TRAJECTORY_CONVERGENCE_BATCH_MISMATCH")
         return self
 
 

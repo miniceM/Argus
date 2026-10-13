@@ -59,6 +59,10 @@ make console-e2e
 
 Console UI 改动请先阅读 `.agents/skills/argus-design-system/SKILL.md`。
 
+### Dependabot 依赖更新
+
+根目录 `requirements-dev.txt` 通过 `-r` 引用 Eval Runner 与 Demo Agent 的运行依赖；新增 Python manifest 时，须核对引用链和 Dependabot 实际覆盖，不能假定根目录会扫描所有子项目。CI 共享 Python 环境在安装聚合依赖后执行 `python -m pip check`；依赖改动还应在干净的 Python 3.12 环境验证安装与依赖一致性。Runtime major 升级仍需人工准入，并验证受影响服务的真实运行路径；解析成功或静态配置测试不能替代该准入。
+
 ### Playwright E2E：隔离服务与端口
 
 从仓库根目录运行。先完成上述 Python 虚拟环境和 Console 依赖安装；浏览器项目使用 `channel: "chrome"`，本机需有可启动的 Google Chrome。配置来源为 `services/console/playwright.config.ts`、`services/console/vite.config.ts` 和 `services/console/package.json`。

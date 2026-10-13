@@ -190,6 +190,7 @@ def test_i18n_workflow_filters_changes_and_publishes_ghcr_image() -> None:
     # quietly gets deleted. The set is still closed, so an accidental grant
     # (e.g. `actions: write`) still fails here.
     allowed_permissions = {
+        "actions": "read",
         "contents": "read",
         "packages": "write",
         "attestations": "write",
@@ -240,7 +241,7 @@ def test_i18n_workflow_filters_changes_and_publishes_ghcr_image() -> None:
     qemu = next(
         step
         for step in steps
-        if action(step)[0] == "docker/setup-qemu-action"
+        if "uses" in step and action(step)[0] == "docker/setup-qemu-action"
     )
     assert qemu["with"] == {"platforms": "arm64"}
     buildx_index = next(
@@ -285,3 +286,43 @@ def test_remote_acceptance_isolates_env_and_verifies_image_identity() -> None:
     assert "/api/public/argus-image-identity" in identity
     assert "manifests" in identity and "blobs" in identity
     assert "ARGUS_CLOUD_ENV_FILE:-.env.cloud" in compose_cloud
+
+
+def test_i18n_publication_requires_exact_current_main_cloud_acceptance() -> None:
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "langfuse-i18n.yml").read_text())
+    jobs = workflow["jobs"]
+    gate = jobs["main-cloud-release-gate"]
+    image = jobs["image"]
+
+    assert gate["if"] == "github.event_name != 'pull_request' && github.ref == 'refs/heads/main'"
+    assert gate["permissions"] == {"actions": "read", "contents": "read"}
+    assert "--wait-for-current-main" in str(gate["steps"])
+    assert "--timeout-seconds 3600" in str(gate["steps"])
+    gate_checkout = next(step for step in gate["steps"] if step.get("uses", "").startswith("actions/checkout@"))
+    assert gate_checkout["with"]["ref"] == "${{ github.workflow_sha }}"
+    assert gate_checkout["with"]["persist-credentials"] is False
+
+    assert image["needs"] == ["patch-and-ui", "main-cloud-release-gate"]
+    assert image["permissions"]["actions"] == "read"
+    assert "always()" in image["if"]
+    assert "needs.patch-and-ui.result == 'success'" in image["if"]
+    assert "github.event_name == 'pull_request'" in image["if"]
+    assert "needs.main-cloud-release-gate.result == 'success'" in image["if"]
+    assert "continue-on-error" not in str(gate) + str(image)
+    image_steps = image["steps"]
+    revalidate = next(i for i, step in enumerate(image_steps) if step.get("name") == "Revalidate current main Cloud receipt immediately before publication")
+    login = next(i for i, step in enumerate(image_steps) if step.get("name") == "Log in to GHCR")
+    build = next(i for i, step in enumerate(image_steps) if step.get("id") == "build")
+    assert login < revalidate < build
+    assert build == revalidate + 1
+    assert image_steps[revalidate]["if"] == "github.event_name != 'pull_request'"
+    assert "--timeout-seconds 0" in image_steps[revalidate]["run"]
+    assert "PyYAML==6.0.3" in str(gate) + str(image)
+    remote = jobs["remote-integration"]
+    assert "github.ref == 'refs/heads/main'" in remote["if"]
+
+    for job in jobs.values():
+        for step in job.get("steps", []):
+            if "uses" in step:
+                ref = step["uses"].partition("@")[2]
+                assert len(ref) == 40 and all(char in "0123456789abcdef" for char in ref)

@@ -1,20 +1,44 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    column,
+    text,
 )
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.sql.functions import FunctionElement
+
+
+class _OctetLength(FunctionElement):
+    """仅用于最小证据表的 UTF-8 字节容量约束。"""
+
+    type = Integer()
+    inherit_cache = True
+
+
+@compiles(_OctetLength)
+def _compile_octet_length(element, compiler, **kw):
+    return f"octet_length({compiler.process(element.clauses, **kw)})"
+
+
+@compiles(_OctetLength, "sqlite")
+def _compile_sqlite_octet_length(element, compiler, **kw):
+    return f"length(CAST({compiler.process(element.clauses, **kw)} AS BLOB))"
 
 
 class Base(DeclarativeBase):
@@ -72,6 +96,7 @@ class AgentVersionRecord(Base):
     trace_propagation: Mapped[str] = mapped_column(String(32), default="W3C", nullable=False)
     is_idempotent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     environment: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    trajectory_source_profile_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
@@ -120,7 +145,10 @@ class ExperimentLaunchRecord(Base):
 
 class ExperimentItemExecutionRecord(Base):
     __tablename__ = "experiment_item_executions"
-    __table_args__ = (UniqueConstraint("launch_id", "dataset_item_id", name="uq_item_executions_launch_item"),)
+    __table_args__ = (
+        UniqueConstraint("launch_id", "dataset_item_id", name="uq_item_executions_launch_item"),
+        Index("uq_item_executions_id_launch", "id", "launch_id", unique=True),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     launch_id: Mapped[str] = mapped_column(
@@ -303,6 +331,7 @@ class ExecutionCheckpointRecord(Base):
     # The frozen Binding provenance this output must be judged under.
     binding_provenance: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
     manifest_digest: Mapped[str] = mapped_column(String(128), nullable=False)
+    trajectory_acquisition_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     final_attempt_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     observation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -361,7 +390,10 @@ class EvaluationAttemptRecord(Base):
 
 class ExecutionAttemptRecord(Base):
     __tablename__ = "execution_attempts"
-    __table_args__ = (UniqueConstraint("item_execution_id", "attempt_no", name="uq_execution_attempts_item_attempt"),)
+    __table_args__ = (
+        UniqueConstraint("item_execution_id", "attempt_no", name="uq_execution_attempts_item_attempt"),
+        Index("uq_execution_attempts_id_item", "id", "item_execution_id", unique=True),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     item_execution_id: Mapped[str] = mapped_column(
@@ -391,6 +423,47 @@ class ExecutionAttemptRecord(Base):
         "ExperimentItemExecutionRecord",
         back_populates="attempts",
         foreign_keys=[item_execution_id],
+    )
+
+
+class TrajectoryEvidenceArtifactRecord(Base):
+    """最小获准证据文本；后续写入边界负责校验、脱敏和 insert-only。"""
+
+    __tablename__ = "trajectory_evidence_artifacts"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["item_execution_id", "launch_id"], ["experiment_item_executions.id", "experiment_item_executions.launch_id"],
+            name="fk_trajectory_artifact_item_launch", ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["attempt_id", "item_execution_id"], ["execution_attempts.id", "execution_attempts.item_execution_id"],
+            name="fk_trajectory_artifact_attempt_item", ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "item_execution_id", "attempt_id", "trajectory_contract_digest", "trajectory_digest",
+            name="uq_trajectory_artifact_identity",
+        ),
+        CheckConstraint(
+            _OctetLength(column("payload_json")).between(1, 2097152),
+            name="ck_trajectory_artifact_payload_bytes",
+        ),
+        Index("idx_trajectory_artifact_launch", "launch_id"),
+        Index("idx_trajectory_artifact_attempt_item", "attempt_id", "item_execution_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    launch_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("experiment_launches.id", ondelete="RESTRICT"), nullable=False
+    )
+    item_execution_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    attempt_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    trajectory_contract_digest: Mapped[str] = mapped_column(String(128), nullable=False)
+    trajectory_digest: Mapped[str] = mapped_column(String(128), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(16), nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"), nullable=False,
     )
 
 

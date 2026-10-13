@@ -38,6 +38,7 @@ make validate
 准备阶段下载固定制品；测试阶段 `--pull never`，不回退到线上服务。若需要固定报告目录，在一个新建的、仅用于本次测试的目录执行：
 
 ```bash
+mkdir -p artifacts
 python -m pytest -q tests/test_trajectory_observation_integration.py -m trajectory_local \
   --basetemp=artifacts/s4-local --junitxml=artifacts/s4-junit.xml --tb=short
 python tests/fixtures/trajectory_agents/summarize.py \

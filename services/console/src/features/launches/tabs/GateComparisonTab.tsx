@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from "react";
 import { ExternalLink, ShieldCheck, Sparkles } from "lucide-react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { api } from "../../../api/client";
-import { queryKeys } from "../../../api/query-keys";
 import { formatApiError } from "../../../api/errors";
 import { Button } from "../../../components/ui/Primitives";
 import { ComparisonCaseDrawer } from "../ComparisonCaseDrawer";
 import { LangfuseSyncPanel } from "../langfuseSyncStatus";
+import { comparisonPagesQueryOptions } from "../launchComparisonQueries";
+import { readRegressionCount } from "../LaunchKpiOverview";
 import { resolveMetricDirection, evaluateMetricChange, evaluateMetricRule } from "../metricComparison";
 
 type GeneratedRunSummary = import("../../../api/schema").components["schemas"]["RunSummaryResponse"];
@@ -170,6 +170,20 @@ const percentagePointDelta = (before: number | null | undefined, after: number |
   return `${delta > 0 ? "+" : ""}${delta.toFixed(1)} pp`;
 };
 
+/**
+ * Filter chip label (issue 119 U2): a classification count that the payload did
+ * not return is "未返回", never a default zero that reads as "no regression".
+ */
+const filterChipLabel = (
+  value: string,
+  counts: Record<string, unknown> | undefined,
+): string => {
+  if (value === "ALL") return "全部";
+  const raw = counts?.[value];
+  const count = typeof raw === "number" && Number.isInteger(raw) && raw >= 0 ? raw : null;
+  return count == null ? `${value} (未返回)` : `${value} (${count})`;
+};
+
 interface GateComparisonTabProps {
   launchId: string;
   snapshotId: string | null;
@@ -233,40 +247,29 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
     onSelectedCaseChange?.(next);
   };
 
-  const comparisonQuery = useInfiniteQuery({
-    queryKey: queryKeys.launches.comparison(launchId, snapshotId ?? "unresolved", filter),
-    initialPageParam: 0,
-    queryFn: async ({ pageParam }) => {
-      const response = await api.GET("/api/v1/experiment-launches/{launch_id}/comparison", {
-        params: {
-          path: { launch_id: launchId },
-          query: {
-            snapshot_id: snapshotId ?? undefined,
-            classification: filter === "ALL" ? undefined : filter,
-            limit: 50,
-            cursor: pageParam,
-          },
-        },
-      });
-      if (response.error) throw response.error;
-      if (!response.data) throw new Error("Comparison response is empty");
-      if (response.data.candidate_snapshot_id !== snapshotId) {
-        throw new Error("Comparison page belongs to a different result snapshot; refusing to mix revisions");
-      }
-      return response.data as unknown as Comparison;
-    },
-    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
-    enabled: Boolean(launchId && snapshotId),
-  });
+  // Shared validated comparison entry (issue 119 gap U1): every page must prove
+  // the exact (launch_id, candidate_snapshot_id) identity before it can join the
+  // table, so a foreign page is never appended to the verified first page.
+  const comparisonQuery = useInfiniteQuery(
+    comparisonPagesQueryOptions(
+      launchId && snapshotId ? { launchId, snapshotId } : null,
+      filter,
+    ),
+  );
 
-  const comparison = comparisonQuery.data?.pages[0];
+  // The shared entry validated the identity; project the generated DTO onto the
+  // local table view type (the old queryFn used the same explicit projection).
+  const comparison = comparisonQuery.data?.pages[0] as unknown as Comparison | undefined;
   const comparisonSummary = comparison?.summary as ComparisonSummary | undefined;
+  // Same unknown-safe read as the KPI card (issue 119 U2): the summary must not
+  // invent a zero regression count when the payload did not return one.
+  const regressionCountState = readRegressionCount(comparison?.classification_counts);
   const cohort = comparisonSummary?.comparable_cohort;
   const versions = comparison?.versions;
   const metrics = summary?.summary;
 
   const displayRows = useMemo(
-    () => comparisonQuery.data?.pages.flatMap((page) => page.items ?? []) ?? [],
+    () => comparisonQuery.data?.pages.flatMap((page) => (page.items ?? []) as unknown as ComparisonItem[]) ?? [],
     [comparisonQuery.data],
   );
 
@@ -630,7 +633,9 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
                   {!formal?.available
                     ? "由于比较证据不足或 Baseline 未绑定，暂无法给出相对变化结论。"
                     : formal.verdict === "REGRESSION"
-                    ? `正式比较发现 ${comparison?.classification_counts?.REGRESSION ?? 0} 个回归 Case；此结论只描述相对变化。`
+                    ? regressionCountState.kind === "value"
+                      ? `正式比较发现 ${regressionCountState.value} 个回归 Case；此结论只描述相对变化。`
+                      : "正式比较判定存在回归，但回归计数未返回或不可用；此结论只描述相对变化。"
                     : formal.verdict === "IMPROVEMENT"
                     ? "正式比较显示相对基线有所改善；Candidate 是否达到门禁仍以其冻结质量结论为准。"
                     : formal.verdict === "UNCHANGED"
@@ -981,7 +986,7 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
                     : "border-border text-muted-foreground hover:bg-surface-muted"
                 }`}
               >
-                {value === "ALL" ? "全部" : `${value} (${comparison.classification_counts[value] ?? 0})`}
+                {filterChipLabel(value, comparison.classification_counts)}
               </button>
             ))}
           </div>

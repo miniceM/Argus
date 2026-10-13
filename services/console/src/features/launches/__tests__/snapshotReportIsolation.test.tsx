@@ -121,6 +121,25 @@ const mockApi = (route: (path: string, options?: any) => any, liveItems: unknown
   });
 };
 
+const comparisonPayload = {
+  launch_id: LAUNCH_ID,
+  candidate_snapshot_id: SNAPSHOT_ID,
+  baseline_snapshot_id: "base-snap-001",
+  versions: {},
+  summary: {
+    comparable_case_count: 0,
+    candidate: {},
+    baseline: null,
+    comparable_cohort: null,
+    cost_comparison: { status: "NOT_COMPARABLE", reason: "BASELINE_NOT_BOUND" },
+  },
+  classification_counts: { ALL: 0, REGRESSION: 0, IMPROVEMENT: 0, UNCHANGED: 0, NOT_COMPARABLE: 0 },
+  comparability: { comparable: false, reason_codes: [], provenance: "VERIFIED", dimensions: [] },
+  formal: { available: false, verdict: null, required_cases: 0, comparable_cases: 0, coverage: 0 },
+  diagnostic: { note: "", comparable_cases: 0, classification_counts: {} },
+  items: [],
+};
+
 const detailRoute = (payload: any) => (path: string) => {
   if (path === "/api/v1/experiment-launches/{launch_id}/result-snapshots") {
     return { data: directory };
@@ -136,7 +155,7 @@ const detailRoute = (payload: any) => (path: string) => {
       },
     };
   }
-  if (path === "/api/v1/experiment-launches/{launch_id}/comparison") return { data: null };
+  if (path === "/api/v1/experiment-launches/{launch_id}/comparison") return { data: comparisonPayload };
   return { data: null };
 };
 
@@ -211,6 +230,9 @@ describe("snapshot report identity isolation (F01)", () => {
             evidence_state: "COMPLETE",
           },
         });
+      }
+      if (path === "/api/v1/experiment-launches/{launch_id}/comparison") {
+        return Promise.resolve({ data: comparisonPayload });
       }
       return Promise.resolve({ data: null });
     });

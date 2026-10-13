@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertCircle,
@@ -10,12 +10,13 @@ import {
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
-import { Button, buttonClassName } from "../../components/ui/Primitives";
+import { Button, type ButtonProps } from "../../components/ui/Primitives";
 import { StatusBadge } from "../../components/StatusBadge";
 import { QualityBadge } from "../../components/QualityBadge";
 import { useCopyFeedback } from "./useCopyFeedback";
 import { SyncStatusBadge } from "../../components/SyncStatusBadge";
 import type { LangfuseLinkView } from "./langfuseLink";
+import { LaunchActionMenu, type LaunchActionMenuItem } from "./LaunchActionMenu";
 
 type LaunchResponse = import("../../api/schema").components["schemas"]["ExperimentLaunchResponse"];
 type SnapshotRevision = import("../../api/schema").components["schemas"]["ResultSnapshotRevisionResponse"];
@@ -39,6 +40,47 @@ interface LaunchHeaderProps {
   isResumePending?: boolean;
   isRetryFailedPending?: boolean;
   isRetryEvaluationPending?: boolean;
+}
+
+type ActionVariant = NonNullable<ButtonProps["variant"]>;
+
+type LaunchActionDefinition = {
+  id: string;
+  label: string;
+  pendingLabel: string;
+  icon?: React.ReactNode;
+  variant: ActionVariant;
+  title?: string;
+  testId?: string;
+  allowed: boolean;
+  pending: boolean;
+  onSelect?: () => void;
+};
+
+/**
+ * The 1024px `lg` layout boundary from the design system: below it the header is
+ * narrow and the secondary actions live in the "more actions" menu; at or above
+ * it they remain inline beside the two primary actions.
+ */
+const DESKTOP_QUERY = "(min-width: 64rem)";
+
+function useIsDesktopViewport(): boolean {
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia(DESKTOP_QUERY).matches
+      : true,
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(DESKTOP_QUERY);
+    const onChange = (event: MediaQueryListEvent) => setIsDesktop(event.matches);
+    setIsDesktop(query.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+
+  return isDesktop;
 }
 
 export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
@@ -91,6 +133,128 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
     void copyId.copy(launch.id);
   };
 
+  // One definition list drives both layouts: identical permission, pending and
+  // handler wiring, so the menu can never drift from the inline buttons.
+  const actionDefinitions: LaunchActionDefinition[] = [
+    {
+      id: "run",
+      label: "启动评测 (Run)",
+      pendingLabel: "正在运行...",
+      icon: <Play className="h-3.5 w-3.5 fill-current" />,
+      variant: "primary",
+      allowed: allowedActions.includes("run") && Boolean(onRun),
+      pending: Boolean(isRunPending),
+      onSelect: onRun,
+    },
+    {
+      id: "cancel",
+      label: "取消评测 (Cancel)",
+      pendingLabel: "正在取消...",
+      variant: "danger",
+      allowed: allowedActions.includes("cancel") && Boolean(onCancel),
+      pending: Boolean(isCancelPending),
+      onSelect: onCancel,
+    },
+    {
+      id: "resume",
+      label: "断点恢复 (Resume)",
+      pendingLabel: "正在恢复...",
+      icon: <RefreshCw className="h-3.5 w-3.5" />,
+      variant: "primary",
+      allowed: allowedActions.includes("resume") && Boolean(onResume),
+      pending: Boolean(isResumePending),
+      onSelect: onResume,
+    },
+    {
+      id: "retry_failed",
+      label: "重试失败用例 (Retry Failed)",
+      pendingLabel: "重试中...",
+      variant: "warning",
+      allowed: allowedActions.includes("retry_failed") && Boolean(onRetryFailed),
+      pending: Boolean(isRetryFailedPending),
+      onSelect: onRetryFailed,
+    },
+    {
+      id: "retry_evaluation",
+      label: "重试评测 (Retry Eval)",
+      pendingLabel: "重评中...",
+      variant: "secondary",
+      title: "仅重新评测失败的指标，复用原 Agent 输出，不会再次调用 Agent",
+      testId: "retry-evaluation-button",
+      allowed: allowedActions.includes("retry_evaluation") && Boolean(onRetryEvaluation),
+      pending: Boolean(isRetryEvaluationPending),
+      onSelect: onRetryEvaluation,
+    },
+  ];
+  const visibleActions = actionDefinitions.filter((action) => action.allowed);
+
+  const isDesktopLayout = useIsDesktopViewport();
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Crossing the breakpoint closes the menu so no focus stays on a control of
+  // the layout that is no longer rendered.
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [isDesktopLayout]);
+
+  const menuItems: LaunchActionMenuItem[] = [
+    ...(langfuseLink.kind === "link"
+      ? [
+          {
+            kind: "link" as const,
+            id: "langfuse",
+            label: langfuseLink.detailLabel || "Langfuse Trace",
+            href: langfuseLink.href,
+            title: langfuseLink.title,
+          },
+        ]
+      : [
+          {
+            kind: "note" as const,
+            id: "langfuse-reason",
+            label: langfuseLink.label,
+            title: langfuseLink.title,
+          },
+        ]),
+    ...visibleActions.map((action) => ({
+      kind: "action" as const,
+      id: action.id,
+      label: action.label,
+      pendingLabel: action.pendingLabel,
+      pending: action.pending,
+      icon: action.icon,
+      variant: action.variant,
+      title: action.title,
+      testId: action.testId,
+      onSelect: action.onSelect ?? (() => {}),
+    })),
+  ];
+
+  const refreshButton = (
+    <Button
+      variant="secondary"
+      aria-label="刷新"
+      onClick={onRefresh}
+      disabled={isFetching}
+      title="刷新"
+      className="min-h-8 h-auto py-1 px-2.5 text-xs whitespace-nowrap"
+    >
+      <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin text-primary" : ""}`} />
+    </Button>
+  );
+
+  const baselineButton = (compact: boolean) =>
+    isComplete && onOpenBaselineModal ? (
+      <Button
+        variant="primary"
+        onClick={onOpenBaselineModal}
+        className={`min-h-8 h-auto py-1 px-2.5 text-xs font-semibold whitespace-nowrap ${compact ? "" : ""}`}
+        title="将当前固定版本设为该环境的 Baseline"
+      >
+        <ShieldCheck className="h-3.5 w-3.5" />
+        <span>设为新 Baseline</span>
+      </Button>
+    ) : null;
+
   return (
     <div className="space-y-3">
       {/* 顶栏面包屑与快捷状态 */}
@@ -129,23 +293,33 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
               <div className="flex items-center gap-1.5">
                 <QualityBadge quality={effectiveQuality || "unknown"} />
                 <span className="text-xs font-semibold text-muted-foreground">
-                  {isPass ? "门禁准入通过 (PASS)" : isFail ? "门禁未通过 (FAIL)" : "门禁状态未知 (UNKNOWN)"}
+                  {isPass ? "冻结质量通过 (PASS)" : isFail ? "冻结质量未通过 (FAIL)" : "冻结质量未知 (UNKNOWN)"}
                 </span>
               </div>
 
-              {/* 证据完整状态徽章 */}
-              {isComplete ? (
+              {/* 证据状态徽章：无快照 / 证据完整 / 仅诊断 三态分离 */}
+              {!activeSnapshot ? (
                 <span
                   className="px-2 py-0.5 rounded text-xs text-muted-foreground bg-surface-muted border border-border flex items-center gap-1"
-                  title="数据签名完整，可作为基线"
+                  title="当前 Launch 尚未产出冻结结果，不可作为 Baseline"
+                  data-testid="snapshot-evidence-state"
+                >
+                  尚未生成冻结结果
+                </span>
+              ) : isComplete ? (
+                <span
+                  className="px-2 py-0.5 rounded text-xs text-muted-foreground bg-surface-muted border border-border flex items-center gap-1"
+                  title="当前选定 Revision 的冻结证据完整"
+                  data-testid="snapshot-evidence-state"
                 >
                   <ShieldCheck className="w-3.5 h-3.5 text-pass" />
-                  证据完整
+                  冻结证据完整
                 </span>
               ) : (
                 <span
                   className="px-2 py-0.5 rounded text-xs text-muted-foreground bg-surface-muted border border-border flex items-center gap-1"
                   title="证据不足，仅供诊断"
+                  data-testid="snapshot-evidence-state"
                 >
                   诊断快照
                 </span>
@@ -196,91 +370,70 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
             </div>
           </div>
 
-          {/* 右侧：操作区（自适应文字高度与屏幕宽度，防止窄屏文字溢出或挤出视口） */}
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full lg:w-auto max-w-full self-start lg:self-center">
-            <Button
-              variant="secondary"
-              aria-label="刷新"
-              onClick={onRefresh}
-              disabled={isFetching}
-              title="刷新"
-              className="min-h-8 h-auto py-1 px-2.5 text-xs whitespace-nowrap"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin text-primary" : ""}`} />
-            </Button>
+          {/* 右侧：操作区 */}
+          {isDesktopLayout ? (
+            /* 宽屏：两个主动作（Baseline / Langfuse）+ 次级运行动作同行铺开，
+               主动作保持 32px 且不折行；空间不足时次级动作收入同一 More 菜单。 */
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full lg:w-auto max-w-full self-start lg:self-center">
+              {refreshButton}
+              {baselineButton(false)}
 
-            {isComplete && onOpenBaselineModal && (
-              <Button
-                variant="primary"
-                onClick={onOpenBaselineModal}
-                className="min-h-8 h-auto py-1 px-2.5 text-xs font-semibold whitespace-nowrap"
-                title="将当前固定版本设为该环境的 Baseline"
-              >
-                <ShieldCheck className="h-3.5 w-3.5" />
-                <span>设为新 Baseline</span>
-              </Button>
-            )}
+              {visibleActions.map((action) => (
+                <Button
+                  key={action.id}
+                  variant={action.variant}
+                  onClick={action.onSelect}
+                  disabled={action.pending}
+                  className={`min-h-8 h-auto py-1 px-2.5 text-xs whitespace-normal sm:whitespace-nowrap ${
+                    action.id === "retry_evaluation" ? "" : ""
+                  }`}
+                  data-testid={action.testId}
+                  title={action.title}
+                >
+                  {action.icon}
+                  <span>{action.pending ? action.pendingLabel : action.label}</span>
+                </Button>
+              ))}
 
-            {allowedActions.includes("run") && onRun && (
-              <Button onClick={onRun} disabled={isRunPending} className="min-h-8 h-auto py-1 px-2.5 text-xs whitespace-normal sm:whitespace-nowrap">
-                <Play className="h-3.5 w-3.5 fill-current" />
-                <span>{isRunPending ? "正在运行..." : "启动评测 (Run)"}</span>
-              </Button>
-            )}
-
-            {allowedActions.includes("cancel") && onCancel && (
-              <Button variant="danger" onClick={onCancel} disabled={isCancelPending} className="min-h-8 h-auto py-1 px-2.5 text-xs whitespace-normal sm:whitespace-nowrap">
-                <span>{isCancelPending ? "正在取消..." : "取消评测 (Cancel)"}</span>
-              </Button>
-            )}
-
-            {allowedActions.includes("resume") && onResume && (
-              <Button onClick={onResume} disabled={isResumePending} className="min-h-8 h-auto py-1 px-2.5 text-xs whitespace-normal sm:whitespace-nowrap">
-                <RefreshCw className="h-3.5 w-3.5" />
-                <span>{isResumePending ? "正在恢复..." : "断点恢复 (Resume)"}</span>
-              </Button>
-            )}
-
-            {allowedActions.includes("retry_failed") && onRetryFailed && (
-              <Button variant="warning" onClick={onRetryFailed} disabled={isRetryFailedPending} className="min-h-8 h-auto py-1 px-2.5 text-xs whitespace-normal sm:whitespace-nowrap">
-                <span>{isRetryFailedPending ? "重试中..." : "重试失败用例 (Retry Failed)"}</span>
-              </Button>
-            )}
-
-            {allowedActions.includes("retry_evaluation") && onRetryEvaluation && (
-              <Button
-                variant="secondary"
-                onClick={onRetryEvaluation}
-                disabled={isRetryEvaluationPending}
-                className="min-h-8 h-auto py-1 px-2.5 text-xs whitespace-normal sm:whitespace-nowrap"
-                data-testid="retry-evaluation-button"
-                title="仅重新评测失败的指标，复用原 Agent 输出，不会再次调用 Agent"
-              >
-                <span>{isRetryEvaluationPending ? "重评中..." : "重试评测 (Retry Eval)"}</span>
-              </Button>
-            )}
-
-            {langfuseLink.kind === "link" ? (
-              <a
-                href={langfuseLink.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="在 Langfuse 中查看"
-                className={buttonClassName("secondary", "min-h-8 h-auto py-1 px-2.5 text-xs whitespace-nowrap")}
-              >
-                <span>{langfuseLink.detailLabel || "Langfuse Trace"}</span>
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            ) : (
-              <span
-                className="text-xs text-muted-foreground px-2"
-                title={langfuseLink.title}
-                data-testid="langfuse-link-reason"
-              >
-                {langfuseLink.label}
-              </span>
-            )}
-          </div>
+              {langfuseLink.kind === "link" ? (
+                <a
+                  href={langfuseLink.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="在 Langfuse 中查看"
+                  className="ui-button ui-button--secondary min-h-8 h-auto py-1 px-2.5 text-xs whitespace-nowrap"
+                >
+                  <span>{langfuseLink.detailLabel || "Langfuse Trace"}</span>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              ) : (
+                <span
+                  className="text-xs text-muted-foreground px-2"
+                  title={langfuseLink.title}
+                  data-testid="langfuse-link-reason"
+                >
+                  {langfuseLink.label}
+                </span>
+              )}
+            </div>
+          ) : (
+            /* 窄屏 (<1024px)：紧凑主动作 + 图标刷新 + 更多操作菜单，
+               全部允许能力经菜单可达，不绕过任何确认。 */
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full lg:w-auto max-w-full self-start lg:self-center">
+              {baselineButton(true)}
+              {refreshButton}
+              <LaunchActionMenu items={menuItems} open={menuOpen} onOpenChange={setMenuOpen} />
+              {langfuseLink.kind !== "link" && (
+                <span
+                  className="text-xs text-muted-foreground px-2"
+                  title={langfuseLink.title}
+                  data-testid="langfuse-link-reason"
+                >
+                  {langfuseLink.label}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </header>
     </div>

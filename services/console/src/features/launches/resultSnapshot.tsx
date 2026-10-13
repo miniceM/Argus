@@ -86,11 +86,11 @@ export const evidenceTone = (state?: string | null): BadgeTone =>
   (state || "").toUpperCase() === "COMPLETE" ? "pass" : "neutral";
 
 export const evidenceLabel = (state?: string | null): string =>
-  (state || "").toUpperCase() === "COMPLETE" ? "证据完整" : "诊断快照";
+  (state || "").toUpperCase() === "COMPLETE" ? "冻结证据完整" : "诊断快照";
 
 export const evidenceHelp = (state?: string | null): string =>
   (state || "").toUpperCase() === "COMPLETE"
-    ? "该版本的证据完整，可作为正式 Baseline 与发布依据。"
+    ? "该版本的证据完整；Baseline 绑定与发布准入以服务端绑定结果与独立 Release Gate 为准。"
     : "该版本仅用于诊断失败，证据不足，不可作为正式 Baseline 或发布依据。";
 
 const shortId = (id: string) => (id.length > 12 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id);

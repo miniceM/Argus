@@ -170,6 +170,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   };
 
   const mockComparison = {
+    launch_id: mockLaunch.id,
     candidate_snapshot_id: "snap-v2-001",
     baseline_snapshot_id: "base-snap-001",
     classification_counts: {
@@ -340,8 +341,8 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     });
 
     // 2. Gate conclusion badge & evidence status badge
-    expect(screen.getByText("门禁准入通过 (PASS)")).toBeInTheDocument();
-    expect(screen.getAllByText("证据完整").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("冻结质量通过 (PASS)")).toBeInTheDocument();
+    expect(screen.getAllByText("冻结证据完整").length).toBeGreaterThanOrEqual(1);
 
     // 3. Compact UUID display with copy button
     expect(screen.getByText(/ID: ff04d66b…f708/)).toBeInTheDocument();
@@ -537,7 +538,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
 
     renderComponent(`/launches/${mockLaunch.id}?snapshot_id=snap-v2-001`);
 
-    expect(await screen.findByText("证据完整")).toBeInTheDocument();
+    expect(await screen.findByText("冻结证据完整")).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "设为新 Baseline" }));
 
     expect(await screen.findByRole("button", { name: "确认设为 Baseline" })).toBeEnabled();
@@ -563,7 +564,9 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
 
     renderComponent(`/launches/${mockLaunch.id}?snapshot_id=snap-v2-001`);
 
-    expect(await screen.findByText("诊断快照")).toBeInTheDocument();
+    // No resolvable fixed snapshot for the pinned identity: the header says so
+    // plainly instead of implying a diagnostic snapshot or baseline eligibility.
+    expect(await screen.findByText("尚未生成冻结结果")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "设为新 Baseline" })).not.toBeInTheDocument();
   });
 
@@ -578,6 +581,24 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     await screen.findByText(/共同可比用例通过率从 100.0%/);
     expect(screen.getByText(/共同可比用例通过率从 100.0%/)).not.toHaveTextContent("提升至");
     expect(screen.queryByText("质量通过率提升")).not.toBeInTheDocument();
+  });
+
+  it("R119-U2: a missing regression count must not be reported as zero regressions", async () => {
+    const c = structuredClone(mockComparison);
+    c.formal.verdict = "REGRESSION";
+    delete (c.classification_counts as Record<string, unknown>).REGRESSION;
+    overrideGet({ "/api/v1/experiment-launches/{launch_id}/comparison": { data: c } });
+    renderComponent();
+
+    await screen.findByTestId("formal-comparison-verdict");
+    // 摘要不能把缺失计数说成 0 个回归 Case
+    expect(screen.getByText(/正式比较判定存在回归/)).toBeInTheDocument();
+    expect(screen.queryByText(/发现 0 个回归/)).not.toBeInTheDocument();
+    // 筛选 chip 同样不默认 0
+    expect(screen.getByRole("button", { name: "REGRESSION (未返回)" })).toBeInTheDocument();
+    // KPI 卡片与摘要一致：计数不可用，不是绿色 0
+    expect(screen.getByTestId("regression-count-value")).toHaveTextContent("不可用");
+    expect(screen.getByText(/无法判定无回归/)).toBeInTheDocument();
   });
 
   it("REVIEW: no frozen 90 percent rule means no fabricated overall gate", async () => {
@@ -757,7 +778,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     });
     renderComponent();
     await screen.findByRole("tab",{name:/用例排查与 Trace/});
-    expect(screen.queryByText("门禁准入通过 (PASS)")).not.toBeInTheDocument();
+    expect(screen.queryByText("冻结质量通过 (PASS)")).not.toBeInTheDocument();
   });
 
   it("R126: legacy revision zero defaults cannot override frozen detail item verdicts", async () => {
@@ -799,7 +820,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
 
     renderComponent(`/launches/${mockLaunch.id}?snapshot_id=S1&tab=cases`);
 
-    expect(await screen.findByText("门禁未通过 (FAIL)")).toBeInTheDocument();
+    expect(await screen.findByText("冻结质量未通过 (FAIL)")).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "未通过 (2)" })).toBeInTheDocument();
   });
 
@@ -825,8 +846,8 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
 
     renderComponent();
 
-    expect(await screen.findByText("门禁状态未知 (UNKNOWN)")).toBeInTheDocument();
-    expect(screen.queryByText("门禁准入通过 (PASS)")).not.toBeInTheDocument();
+    expect(await screen.findByText("冻结质量未知 (UNKNOWN)")).toBeInTheDocument();
+    expect(screen.queryByText("冻结质量通过 (PASS)")).not.toBeInTheDocument();
   });
 
   it("R126: no latency policy must show no fabricated 500ms requirement", async () => {
@@ -1079,7 +1100,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     expect(screen.queryByTestId("case-row-expand-item-001")).not.toBeInTheDocument();
     expect(screen.getByTestId("quality-pass-rate")).toHaveTextContent("—");
     expect(screen.getByRole("tab", { name: /用例排查与 Trace/ })).toHaveTextContent("(—)");
-    expect(screen.getByText("门禁状态未知 (UNKNOWN)")).toBeInTheDocument();
+    expect(screen.getByText("冻结质量未知 (UNKNOWN)")).toBeInTheDocument();
 
     await act(async () => resolveHistory({ data: mockSnapshotList }));
     expect(await screen.findByTestId("case-row-expand-item-001")).toBeInTheDocument();

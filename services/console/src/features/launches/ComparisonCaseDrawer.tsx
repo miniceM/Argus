@@ -1,8 +1,7 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../../api/client";
-import { queryKeys } from "../../api/query-keys";
 import { formatApiError } from "../../api/errors";
+import { caseOutputQueryOptions } from "./launchComparisonQueries";
 import { Button } from "../../components/ui/Primitives";
 import { SideDrawer } from "../../components/ui/Overlay";
 import { JsonViewer } from "../../components/JsonViewer";
@@ -30,23 +29,10 @@ export const ComparisonCaseDrawer: React.FC<{
   datasetItemId: string;
   onClose: () => void;
 }> = ({ launchId, snapshotId, datasetItemId, onClose }) => {
-  const query = useQuery({
-    queryKey: queryKeys.launches.case(launchId, snapshotId, datasetItemId),
-    queryFn: async () => {
-      const response = await api.GET("/api/v1/experiment-launches/{launch_id}/comparison/case", {
-        params: {
-          path: { launch_id: launchId },
-          query: { snapshot_id: snapshotId, dataset_item_id: datasetItemId },
-        },
-      });
-      if (response.error) throw response.error;
-      if (!response.data) throw new Error("Case output response is empty");
-      if (response.data.candidate_snapshot_id !== snapshotId || response.data.dataset_item_id !== datasetItemId) {
-        throw new Error("Case output belongs to a different frozen result reference");
-      }
-      return response.data as ComparisonCaseOutput;
-    },
-  });
+  // Shared validated entry with the inline accordion: same key, same fetch, same
+  // identity check, so a bypassing consumer cannot place a foreign payload in the
+  // common success cache (issue 119 gap U1).
+  const query = useQuery(caseOutputQueryOptions({ launchId, snapshotId, datasetItemId }));
 
   return (
     <SideDrawer

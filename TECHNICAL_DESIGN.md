@@ -5,6 +5,8 @@
 **日期：** 2026-09-16  
 **方案：** Langfuse Evaluation System of Record + Enterprise Remote Agent Eval Runner
 
+**S4 待实施方案：** [Issue #5 轨迹评测方案集](docs/plans/2026-10-13-s4-trajectory/README.md)，包含 #127–#132 的技术契约、实施计划和验收矩阵。该方案为提议，不表示以下已交付模型或 API 已具备轨迹能力。
+
 ---
 
 ## 1. 文档目的

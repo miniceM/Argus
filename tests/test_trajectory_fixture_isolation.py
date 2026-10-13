@@ -103,5 +103,3 @@ def test_remote_docker_rejected_before_compose(tmp_path, monkeypatch, context):
     with pytest.raises(ValueError, match="local Unix"):
         runtime.__enter__()
     runtime.compose.assert_not_called()
-
-

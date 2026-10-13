@@ -287,4 +287,3 @@ class LocalLangfuse:
             original.add_note("S4 fixture cleanup failures: " + ", ".join(type(error).__name__ for error in errors))
             if exc_value is None:
                 raise original
-

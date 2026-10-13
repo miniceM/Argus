@@ -157,13 +157,15 @@ jobs:
           cache: pip
           cache-dependency-path: |
             requirements-dev.txt
+            tests/fixtures/trajectory_agents/requirements.txt
       - name: Install Runner test dependencies
         run: python -m pip install -r requirements-dev.txt
-      - name: Prepare digest-pinned local services
+      - name: Prepare hash-locked Agents and digest-pinned local services
         run: make trajectory-prepare
-      - name: Verify real local ingestion and paginated API
+      - name: Verify real local ingestion and production invocation
         run: |
-          python -m pytest -q tests/test_trajectory_backend_integration.py -m trajectory_local \
+          mkdir -p artifacts
+          python -m pytest -q tests/test_trajectory_backend_integration.py tests/test_trajectory_observation_integration.py -m trajectory_local \
             --basetemp=artifacts/s4-local --junitxml=artifacts/s4-junit.xml --tb=short
       - name: Upload field and lineage evidence
         if: always()

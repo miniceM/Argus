@@ -7,13 +7,15 @@ S4_PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 validate:
 	./scripts/validate.sh
 
-# 固定制品只在准备阶段下载；测试不连接 Cloud 或远端 Docker。
+# 准备阶段允许下载固定镜像/哈希锁定依赖；测试阶段只使用预装的本地制品。
 trajectory-prepare:
 	$(S4_PYTHON) -c 'import sys; assert sys.version_info[:2] == (3, 12), "S4 requires Python 3.12"'
+	$(S4_PYTHON) -m venv tests/fixtures/trajectory_agents/.venv
+	tests/fixtures/trajectory_agents/.venv/bin/python -m pip install --require-hashes -r tests/fixtures/trajectory_agents/requirements.txt
 	$(S4_PYTHON) tests/fixtures/trajectory_agents/prepare.py
 
 trajectory-test:
-	$(S4_PYTHON) -m pytest -q tests/test_trajectory_backend_integration.py -m trajectory_local
+	$(S4_PYTHON) -m pytest -q tests/test_trajectory_backend_integration.py tests/test_trajectory_observation_integration.py -m trajectory_local
 
 validate-i18n:
 	./deploy/langfuse/scripts/validate-i18n.sh

@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent / "fixtures"))
-from trajectory_agents.local_runtime import LocalLangfuse  # noqa: E402
+from trajectory_agents.local_runtime import AgentProcess, LocalLangfuse  # noqa: E402
 
 
 def test_sdk_has_explicit_non_proxy_transports_and_environment(tmp_path, monkeypatch):
@@ -88,6 +88,26 @@ def test_startup_failure_preserved_even_when_cleanup_fails(tmp_path, monkeypatch
     assert caught.value is original
 
 
+@pytest.mark.parametrize("method", ["connect", "connect_ex", "getaddrinfo"])
+def test_agent_rejects_external_network_before_any_io(monkeypatch, method):
+    import socket
+
+    from trajectory_agents.business import deny_external_network
+
+    original_io = Mock(return_value=0)
+    monkeypatch.setattr(socket.socket, "connect", original_io)
+    monkeypatch.setattr(socket.socket, "connect_ex", original_io)
+    monkeypatch.setattr(socket, "getaddrinfo", original_io)
+    deny_external_network()
+    with pytest.raises(OSError, match="fixture offline network policy"):
+        if method == "getaddrinfo":
+            socket.getaddrinfo("example.invalid", 443)
+        else:
+            with socket.socket() as sock:
+                getattr(sock, method)(("192.0.2.1", 443))
+    original_io.assert_not_called()
+
+
 @pytest.mark.parametrize("context", [False, True])
 def test_remote_docker_rejected_before_compose(tmp_path, monkeypatch, context):
     import json
@@ -103,3 +123,24 @@ def test_remote_docker_rejected_before_compose(tmp_path, monkeypatch, context):
     with pytest.raises(ValueError, match="local Unix"):
         runtime.__enter__()
     runtime.compose.assert_not_called()
+
+
+def test_invalid_approval_readiness_cleans_started_process_and_log(tmp_path, monkeypatch):
+    import json
+
+    from trajectory_agents import local_runtime
+
+    (tmp_path / "approval-ready.json").write_text("invalid json")
+    fake_python = tmp_path / ".venv" / "bin" / "python"
+    fake_python.parent.mkdir(parents=True)
+    fake_python.touch()
+    monkeypatch.setattr(local_runtime, "FIXTURES", tmp_path)
+    process = Mock()
+    monkeypatch.setattr(local_runtime.subprocess, "Popen", Mock(return_value=process))
+    runtime = SimpleNamespace(agent_packages={}, base_url="http://127.0.0.1:12345", auth_header="synthetic")
+    agent = AgentProcess(runtime, tmp_path, "native_otel", approval=True)
+    with pytest.raises(json.JSONDecodeError):
+        agent.__enter__()
+    process.terminate.assert_called_once()
+    process.wait.assert_called_once_with(timeout=10)
+    assert agent.approval_log.closed

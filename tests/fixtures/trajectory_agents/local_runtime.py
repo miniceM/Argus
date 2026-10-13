@@ -287,3 +287,101 @@ class LocalLangfuse:
             original.add_note("S4 fixture cleanup failures: " + ", ".join(type(error).__name__ for error in errors))
             if exc_value is None:
                 raise original
+
+
+class AgentProcess:
+    def __init__(self, runtime, directory, profile, *, export_mode="immediate", approval=False):
+        self.runtime, self.directory, self.profile = runtime, Path(directory), profile
+        self.export_mode, self.approval = export_mode, approval
+        self.approval_process = self.approval_log = None
+        self.process = self.log = None
+
+    def __enter__(self):
+        python = FIXTURES / ".venv" / "bin" / "python"
+        if not python.is_file():
+            raise RuntimeError("Prepare the isolated Agent environment from the hash-locked requirements first")
+        if self.runtime.agent_packages is None:
+            closure = subprocess.check_output([str(python), "-c", "import importlib.metadata,json; "
+                "print(json.dumps({d.metadata['Name'].lower().replace('_','-'):d.version "
+                "for d in importlib.metadata.distributions()}))"], text=True)
+            packages = json.loads(closure)
+            forbidden = {"langfuse", "langsmith", "pydantic-evals", "pydantic-ai", "logfire", "argus-eval", "argus-eval-sdk"}
+            if forbidden.intersection(packages):
+                raise AssertionError("An Evaluation SDK is installed in the business Agent environment")
+            self.runtime.agent_packages = packages
+        self.ready = self.directory / (self.profile + "-ready.json")
+        env = {"PATH": os.environ.get("PATH", ""), "PYTHONUNBUFFERED": "1", "PYTHONNOUSERSITE": "1",
+               "S4_READY_FILE": str(self.ready), "S4_PROFILE": self.profile,
+               "S4_EXPORT_MODE": self.export_mode,
+               "S4_OTLP_URL": self.runtime.base_url + "/api/public/otel/v1/traces",
+               "S4_OTLP_AUTH": self.runtime.auth_header}
+        try:
+            if self.approval:
+                approval_ready = self.directory / "approval-ready.json"
+                self.approval_log = (self.directory / "approval.log").open("w")
+                self.approval_process = subprocess.Popen([str(python), str(FIXTURES / "approval_system.py")],
+                    env={**env, "S4_READY_FILE": str(approval_ready)}, stdout=self.approval_log, stderr=self.approval_log)
+                deadline = time.monotonic() + 20
+                while not approval_ready.exists():
+                    if self.approval_process.poll() is not None or time.monotonic() >= deadline:
+                        raise RuntimeError("S4 approval system readiness failed")
+                    time.sleep(0.05)
+                env["S4_APPROVAL_URL"] = json.loads(approval_ready.read_text())["endpoint"]
+                require_loopback(env["S4_APPROVAL_URL"])
+            self.log = (self.directory / (self.profile + ".log")).open("w")
+            self.process = subprocess.Popen([str(python), str(FIXTURES / self.profile / "agent.py")],
+                                            env=env, stdout=self.log, stderr=self.log)
+            deadline = time.monotonic() + 20
+            while not self.ready.exists():
+                if self.process.poll() is not None:
+                    raise RuntimeError(f"S4 {self.profile} process failed; inspect its redacted fixture log")
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("S4 Agent readiness deadline")
+                time.sleep(0.05)
+            self.endpoint = json.loads(self.ready.read_text())["endpoint"]
+            require_loopback(self.endpoint)
+            self.runtime.agent_profiles[self.endpoint] = self.profile
+            return self
+        except BaseException:
+            self.__exit__(*sys.exc_info())
+            raise
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        errors = []
+        for process, log in ((self.process, self.log), (self.approval_process, self.approval_log)):
+            try:
+                if process:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=10)
+            except Exception as error:
+                errors.append(error)
+            finally:
+                if log:
+                    log.close()
+        if errors:
+            original = exc_value if exc_value is not None else errors[0]
+            original.add_note("S4 process cleanup failures: " + ", ".join(type(error).__name__ for error in errors))
+            if exc_value is None:
+                raise original
+
+
+def assert_lineage(rows, identity):
+    by_id = {row["id"]: row for row in rows}
+    assert identity["root_id"] in by_id
+    assert by_id[identity["root_id"]]["name"] == "remote-agent-http"
+    assert all(row["traceId"] == identity["trace_id"] for row in rows)
+    for row in rows:
+        seen = set()
+        current = row
+        while current.get("parentObservationId"):
+            parent = current["parentObservationId"]
+            assert parent not in seen, "parent cycle"
+            seen.add(parent)
+            if parent not in by_id:
+                raise AssertionError("orphan observation in this attempt scope")
+            current = by_id[parent]
+        assert current["name"] == "eval_item_execution:synthetic-case"

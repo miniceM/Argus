@@ -91,7 +91,7 @@ def frozen_manifest(endpoint, scenario="serial", *, db, profile, trajectory_sour
 
 
 def invoke_worker(s40_runtime, monkeypatch, runtime, endpoint, scenario="serial", *, trajectory_source_profile_id=None,
-                  trajectory_contract=None):
+                  trajectory_contract=None, recovery_stage=None):
     db, queue, _limiter, orchestrator, worker, _reconciler = s40_runtime
     manifest = frozen_manifest(endpoint, scenario, db=db, profile=runtime.agent_profiles[endpoint],
                                trajectory_source_profile_id=trajectory_source_profile_id,
@@ -100,6 +100,32 @@ def invoke_worker(s40_runtime, monkeypatch, runtime, endpoint, scenario="serial"
     orchestrator.start_launch(launch.id)
     monkeypatch.setattr("app.worker.get_langfuse_client_safe", lambda: runtime.sdk)
     message = queue.read_group("s40", count=1)[0]
+    if recovery_stage:
+        from datetime import UTC, datetime, timedelta
+
+        from app.db_models import ExecutionCheckpointRecord
+        original_collector = worker.trajectory_collector
+        class Interrupted:
+            async def collect(self, *args, **kwargs):
+                if recovery_stage == "ready":
+                    await original_collector.collect(*args, **kwargs)
+                raise asyncio.CancelledError
+        monkeypatch.setattr(worker, "trajectory_collector", Interrupted())
+        with pytest.raises(asyncio.CancelledError):
+            asyncio.run(worker.execute_item_message(*message))
+        with db.get_session() as session:
+            item = session.get(ExperimentItemExecutionRecord, message[1])
+            checkpoint = session.scalar(select(ExecutionCheckpointRecord).where(
+                ExecutionCheckpointRecord.item_execution_id == item.id))
+            original_response = (checkpoint.created_at, checkpoint.output_digest, checkpoint.final_attempt_id)
+            item.lease_expires_at = datetime.now(UTC) - timedelta(seconds=5)
+        assert _reconciler.reconcile_expired_leases() == 1
+        recovered_message = queue.read_group("s40", count=1)[0]
+        assert recovered_message[1:3] == message[1:3]
+        message = recovered_message
+        monkeypatch.setattr(worker, "trajectory_collector", original_collector)
+        if recovery_stage == "ready":
+            monkeypatch.setattr(original_collector, "_get_factory", lambda: pytest.fail("terminal resume opened Reader"))
     assert asyncio.run(worker.execute_item_message(*message)) is True
     runtime.sdk.flush()
     with db.get_session() as session:
@@ -113,6 +139,10 @@ def invoke_worker(s40_runtime, monkeypatch, runtime, endpoint, scenario="serial"
         assert version.endpoint == endpoint and version.spec_digest == manifest["agent"]["spec_digest"]
         assert version.trajectory_source_profile_id == trajectory_source_profile_id
         assert len(attempts) == 1 and item.final_attempt_id == attempts[0].id
+        if recovery_stage:
+            checkpoint = session.scalar(select(ExecutionCheckpointRecord).where(
+                ExecutionCheckpointRecord.item_execution_id == item.id))
+            assert (checkpoint.created_at, checkpoint.output_digest, checkpoint.final_attempt_id) == original_response
         assert item.execution_status.lower() == "succeeded", item.execution_error
         assert item.eval_status.lower() == "succeeded", item.eval_error
         assert item.scores == {"intent_match": 1.0}
@@ -508,8 +538,9 @@ def test_reader_qualification_repeated_real_samples(local_langfuse, s40_runtime,
 @pytest.mark.parametrize("profile,mode,approved", [("native_otel", "immediate", True),
     ("pydantic_ai", "immediate", True), ("http_only", "immediate", True),
     ("native_otel", "late_all", True), ("native_otel", "immediate", False)])
+@pytest.mark.parametrize("recovery_stage", [None, "before_acquisition", "ready"])
 def test_formal_worker_automatically_freezes_trajectory(local_langfuse, s40_runtime, monkeypatch, tmp_path,
-                                                       profile, mode, approved):
+                                                       profile, mode, approved, recovery_stage):
     from datetime import UTC, timedelta
 
     from app.db_models import ExecutionCheckpointRecord
@@ -535,7 +566,7 @@ def test_formal_worker_automatically_freezes_trajectory(local_langfuse, s40_runt
     profile_id = {"native_otel": "native-otel-v1", "pydantic_ai": "pydantic-ai-v1", "http_only": "http-only-v1"}[profile]
     with AgentProcess(local_langfuse, tmp_path, profile, export_mode=mode) as agent:
         identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint,
-            trajectory_source_profile_id=profile_id, trajectory_contract=contract)
+            trajectory_source_profile_id=profile_id, trajectory_contract=contract, recovery_stage=recovery_stage)
     with s40_runtime[0].get_session() as session:
         cp = session.scalar(select(ExecutionCheckpointRecord).where(
             ExecutionCheckpointRecord.item_execution_id == identity["item_id"]))
@@ -557,10 +588,12 @@ def test_formal_worker_automatically_freezes_trajectory(local_langfuse, s40_runt
         assert saved.source_bytes_used == 0 and acquired.evidence_ref is None
     rows = local_langfuse.wait_observations(identity["trace_id"], minimum=2 if profile == "http_only" else 8)
     assert_lineage(rows, identity)
-    local_langfuse.record(profile, "automatic-worker-" + mode + ("" if approved else "-unqualified"), identity, rows,
+    local_langfuse.record(profile, "automatic-worker-" + mode + ("" if approved else "-unqualified")
+        + ("-resume-" + recovery_stage if recovery_stage else ""), identity, rows,
         normalization={"automatic_worker": True, "profile_id": profile_id, "acquisition_state": acquired.state,
             "completeness": acquired.completeness.status if acquired.completeness else None,
             "reason_code": acquired.reason_code, "original_deadline_preserved": True,
+            "recovery_stage": recovery_stage,
             "single_attempt_preserved": True, "agent_output_evaluation_preserved": True})
 
 

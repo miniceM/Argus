@@ -10,6 +10,7 @@ from sqlalchemy import func, select, update
 
 from app.db_models import (  # noqa: E402
     ExecutionAttemptRecord,
+    ExecutionCheckpointRecord,
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
     LangfuseSyncTaskRecord,
@@ -299,6 +300,7 @@ class ExecutionWorker:
         dataset_version: str | None = None,
         dataset_run_name: str | None = None,
         dataset_source: str | None = None,
+        respect_launch_cancellation: bool = False,
     ) -> bool:
         """Atomic finalization for all outcome branches.
         Requires active_attempt_id CAS matching and Attempt status RUNNING.
@@ -307,6 +309,17 @@ class ExecutionWorker:
         is_pg = self.db_mgr.engine.dialect.name == "postgresql"
 
         with self.db_mgr.get_session() as session:
+            if respect_launch_cancellation:
+                launch_stmt = select(ExperimentLaunchRecord).where(ExperimentLaunchRecord.id == launch_id)
+                if is_pg:
+                    launch_stmt = launch_stmt.with_for_update()
+                frozen_launch = session.scalar(launch_stmt)
+                if frozen_launch is None:
+                    return False
+                if frozen_launch.cancel_requested_at or frozen_launch.status in {"CANCELLING", "CANCELLED"}:
+                    target_item_status, target_eval_status, target_quality_conclusion = "CANCELLED", "skipped", "unknown"
+                    scores, typed_results, quality_evaluation = None, None, None
+                    eval_error = "TRAJECTORY_RECOVERY_CANCELLED"
             # Phase 1: Lock row
             lock_stmt = select(ExperimentItemExecutionRecord).where(ExperimentItemExecutionRecord.id == item_id)
             if is_pg:
@@ -498,6 +511,13 @@ class ExecutionWorker:
 
             token = claim_info["lease_token"]
             launch_id = claim_info["launch_id"]
+
+            from .trajectory.execution_recovery import resume_successful_response
+            resumed = await resume_successful_response(self, item_id=item_id, generation=generation, lease_token=token)
+            if resumed is not None:
+                if resumed:
+                    self.queue.ack(message_id)
+                return resumed
 
             # Retrieve launch manifest and item input before authorizing attempt
             with self.db_mgr.get_session() as session:
@@ -845,7 +865,7 @@ class ExecutionWorker:
                         # evaluating, so a failed evaluation can be retried later
                         # without ever calling the Agent again — even if Langfuse
                         # is unavailable or has not synced.
-                        self._persist_execution_checkpoint(
+                        checkpoint_saved = self._persist_execution_checkpoint(
                             item_id=item_id,
                             launch_id=launch_id,
                             dataset_item_id=claim_info["dataset_item_id"],
@@ -858,7 +878,10 @@ class ExecutionWorker:
                             trace_id=trace_id,
                             trace_url=trace_url,
                             observation_id=obs_id,
+                            lease_token=token,
                         )
+                        if checkpoint_saved is False:
+                            return False
 
                         if manifest.get("schema_version") == "1.3":
                             try:
@@ -1049,7 +1072,8 @@ class ExecutionWorker:
         trace_id: str | None,
         trace_url: str | None,
         observation_id: str | None,
-    ) -> None:
+        lease_token: str | None = None,
+    ) -> bool | None:
         """Write the recoverable Agent output for a successful execution (#84).
 
         Best-effort: a checkpoint failure must never turn a successful execution
@@ -1060,6 +1084,30 @@ class ExecutionWorker:
 
         try:
             with self.db_mgr.get_session() as session:
+                if manifest.get("schema_version") == "1.3":
+                    is_pg = session.bind.dialect.name == "postgresql"
+                    def locked(model, identity):
+                        stmt = select(model).where(model.id == identity)
+                        return session.scalar(stmt.with_for_update() if is_pg else stmt)
+                    launch = locked(ExperimentLaunchRecord, launch_id)
+                    item = locked(ExperimentItemExecutionRecord, item_id)
+                    attempt = locked(ExecutionAttemptRecord, final_attempt_id)
+                    now = session.scalar(select(func.clock_timestamp())) if is_pg else datetime.now(UTC)
+                    expiry = item.lease_expires_at if item else None
+                    if expiry and expiry.tzinfo is None:
+                        expiry = expiry.replace(tzinfo=UTC)
+                    if (launch is None or item is None or attempt is None or item.launch_id != launch_id
+                        or item.dataset_item_id != dataset_item_id or item.active_attempt_id != final_attempt_id
+                        or item.dispatch_generation != generation or item.execution_status != "running"
+                        or not lease_token or item.lease_token != lease_token or expiry is None or expiry <= now
+                        or attempt.item_execution_id != item_id or attempt.dispatch_generation != generation
+                        or attempt.status != "RUNNING" or attempt.lease_token != lease_token):
+                        return False
+                    existing = session.scalar(select(ExecutionCheckpointRecord).where(
+                        ExecutionCheckpointRecord.item_execution_id == item_id,
+                        ExecutionCheckpointRecord.dispatch_generation == generation))
+                    if existing is not None:
+                        return True
                 write_execution_checkpoint(
                     session,
                     item_execution_id=item_id,
@@ -1075,6 +1123,9 @@ class ExecutionWorker:
                     observation_id=observation_id,
                     langfuse_trace_url=trace_url,
                 )
+                if manifest.get("schema_version") == "1.3":
+                    # 与响应写入同事务保存业务已回答的事实，清理 CP 后仍不重调 Agent。
+                    attempt.request_phase = "RESPONSE_RECEIVED"
                 session.commit()
         except Exception:  # noqa: BLE001 - recovery metadata must not fail execution
             pass

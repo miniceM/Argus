@@ -11,6 +11,7 @@ from .db import DatabaseManager
 from .db_models import (
     EvaluationAttemptRecord,
     ExecutionAttemptRecord,
+    ExecutionCheckpointRecord,
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
     LangfuseSyncTaskRecord,
@@ -200,6 +201,28 @@ class ExecutionReconciler:
                         .where(ExecutionAttemptRecord.item_execution_id == it.id)
                         .order_by(ExecutionAttemptRecord.attempt_no.desc())
                     ).first()
+
+                # 1.3 已保存业务成功响应：仅恢复采集/评测，scope 与 Attempt 不变。
+                saved_response = session.scalar(select(ExecutionCheckpointRecord.id).where(
+                    ExecutionCheckpointRecord.item_execution_id == it.id,
+                    ExecutionCheckpointRecord.dispatch_generation == it.dispatch_generation)) if manifest.get("schema_version") == "1.3" else None
+                received_response = (manifest.get("schema_version") == "1.3" and active_att is not None
+                    and active_att.item_execution_id == it.id and active_att.dispatch_generation == it.dispatch_generation
+                    and active_att.request_phase == "RESPONSE_RECEIVED")
+                if saved_response or received_response:
+                    res = session.execute(update(ExperimentItemExecutionRecord).where(
+                        ExperimentItemExecutionRecord.id == it.id,
+                        ExperimentItemExecutionRecord.dispatch_generation == it.dispatch_generation,
+                        ExperimentItemExecutionRecord.lease_token == it.lease_token,
+                        ExperimentItemExecutionRecord.execution_status == "running",
+                        ExperimentItemExecutionRecord.lease_expires_at <= now_sql).values(
+                            execution_status="queued", queued_at=now, available_at=None,
+                            lease_owner=None, lease_token=None, lease_expires_at=None, updated_at=now))
+                    if res.rowcount == 1:
+                        reenqueue_items.append((it.id, it.dispatch_generation))
+                        recovered_count += 1
+                        runtime_metrics.record_lease_expiry()
+                    continue
 
                 # Non-idempotent crash window: request may have been sent before worker crashed
                 has_ambiguous_risk = (

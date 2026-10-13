@@ -57,7 +57,9 @@ Langfuse API 的物理字段名仅存在 Normalizer source profile。最初的 p
 
 调用方只从完成中的 ExperimentItemExecutionRecord、Attempt 和冻结 Manifest 构造 scope/contract。不得另加 trace_id、attempt_id、profile、cursor 或 timeout 的旁路 API 参数；分页状态属于 acquisition 内部，reader 仅由依赖注入提供。
 
-内部 `AcquisitionRuntime` 通过调用上下文注入原始开始时间、事务工厂及共享限流器，公开采集签名保持上述约定；每调用读取一个有界分页轮次，协调器负责持久化 PENDING 与后续调度。静默只计算两次完整分页的观测时刻差，语义变化重置，不计归一化/组装耗时。READY 由真实制品仓储生成；读截止后保存另受冻结单请求 timeout 限制。实现与实测见 [有界采集验收](../../validation/s4-1/trajectory-acquisition.md)。正式 Worker/Manifest、checkpoint deadline/预算持久化、lease/CAS 与恢复仍须接通，不把入口交付当作完整 S4.1。
+内部 `AcquisitionRuntime` 通过调用上下文注入原始开始时间、事务工厂及共享限流器，公开采集签名保持上述约定；每调用读取一个有界分页轮次，协调器负责持久化 PENDING 与后续调度。静默只计算两次完整分页的观测时刻差，语义变化重置，不计归一化/组装耗时。READY 由真实制品仓储生成；读截止后保存另受冻结单请求 timeout 限制。实现与实测见 [有界采集验收](../../validation/s4-1/trajectory-acquisition.md)。正式 Worker/Manifest 与执行恢复仍须接通，不把入口交付当作完整 S4.1。
+
+`TrajectoryCoordinator` 已统一消费 [checkpoint 事务边界](../../validation/s4-1/trajectory-checkpoint.md)：原时间/累计扣减恢复、quiet 重建、真实候选保留/失效、独立线程事务、取消及截止收尾。运行合同不共享调用方可变容器；正式 Worker/Manifest、执行/评测恢复和 qualified 工厂仍须启用，边界与实测见 [协调器验收](../../validation/s4-1/trajectory-coordinator.md)。
 
 Normalizer 先校验原始字段类型，再依据冻结 source profile 做一对一映射：Langfuse observation ID → observation_id；trace ID → scope.trace_id；parent observation ID → parent_step_id；开始/结束时间 → started_at/ended_at；provider type/name → type/raw_name；获准的 input/output → redacted arguments/result 和轨迹 input/output。最终别名以 S4.0 实测为准。别名同时存在且值冲突时不挑一个赢家，丢弃冲突记录并降低完整度。
 

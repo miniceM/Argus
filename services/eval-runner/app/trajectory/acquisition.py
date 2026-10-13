@@ -57,14 +57,15 @@ class AcquisitionRuntime:
     恢复使用同一 started_at；quiet 证明只能由新进程重新观测，不能继承。
     """
 
-    def __init__(self, scope, contract, *, session_factory, started_at, clock=None, limiter=None):
+    def __init__(self, scope, contract, *, session_factory, started_at, source_bytes_used=0, clock=None, limiter=None):
         _contract(contract)
         self.scope = TrajectoryScope.model_validate(scope.model_dump())
         self.contract = deepcopy(contract)
         self.clock = clock or _Clock()
         now = self.clock.utcnow()
         if (type(started_at) is not datetime or started_at.tzinfo is None
-            or started_at > now or not callable(session_factory)):
+            or started_at > now or not callable(session_factory)
+            or type(source_bytes_used) is not int or not 0 <= source_bytes_used <= contract.limits.max_source_bytes):
             raise ValueError("TRAJECTORY_ACQUISITION_RUNTIME_INVALID")
         self.deadline_at = started_at.astimezone(UTC) + timedelta(seconds=float(contract.limits.deadline_seconds))
         self._mono_deadline = self.clock.monotonic() + max(0, (self.deadline_at - now).total_seconds())
@@ -74,7 +75,8 @@ class AcquisitionRuntime:
         self.limiter, self._session_factory = limiter, session_factory
         self._lock = asyncio.Lock()
         self._latest = self._final = self._signature = self._stable_since = self._last_error = None
-        self._wire_bytes = 0
+        self._wire_bytes = source_bytes_used
+        self._candidate_invalidated = False
 
     @contextmanager
     def activate(self):
@@ -271,6 +273,8 @@ async def acquire_trajectory(scope, contract: TrajectoryContract, *, client: Obs
         remaining = runtime.remaining()
         if remaining <= 0:
             return await runtime.finish()
+        runtime._candidate_invalidated = False
+        normalized = None
         try:
             async with asyncio.timeout(remaining) as gate_timeout:
                 async with runtime.limiter.slot(contract.limits.max_inflight_acquisitions):
@@ -292,11 +296,14 @@ async def acquire_trajectory(scope, contract: TrajectoryContract, *, client: Obs
                 result = runtime.result("UNAVAILABLE", reason=code, retryable=retryable)
                 runtime._final = result
                 runtime._latest = None
+                runtime._candidate_invalidated = not retryable
                 return result
             return runtime.result("PENDING", reason=code, retryable=True)
         except ValueError:
             # Root 尚不可验证时继续等；不能补造 Root 或保留原始异常文本。
             runtime._latest = runtime._signature = runtime._stable_since = None
+            runtime._candidate_invalidated = normalized is None or any(
+                record.observation_id == scope.root_observation_id for record in normalized.records)
             if runtime.remaining() <= 0:
                 return await runtime.finish()
             return runtime.result("PENDING", reason=runtime._last_error or "TRAJECTORY_ROOT_UNAVAILABLE", retryable=True)

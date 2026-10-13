@@ -164,16 +164,10 @@ def test_checkpoint_acquisition_under_the_original_worker_lease(local_langfuse, 
 
     from app.db_models import ExecutionCheckpointRecord
     from app.registry import AgentRegistry
-    from app.trajectory.acquisition import AcquisitionRuntime, acquire_trajectory
-    from app.trajectory.assembler import assemble_trajectory
-    from app.trajectory.checkpoint import (
-        TrajectoryCheckpointError,
-        begin_trajectory_round,
-        load_trajectory_checkpoint,
-        publish_trajectory_round,
-    )
+    from app.trajectory.checkpoint import load_trajectory_checkpoint
     from app.trajectory.codec import canonical_dumps
     from app.trajectory.contract import TrajectoryContract
+    from app.trajectory.coordinator import TrajectoryCoordinator
     from app.trajectory.reader import LangfuseObservationReader
     from app.trajectory.schema import TrajectoryScope
     from trajectory_contract_fixtures import observed_banking_contract_payload
@@ -209,45 +203,24 @@ def test_checkpoint_acquisition_under_the_original_worker_lease(local_langfuse, 
             payload["limits"] = {"page_size": 2, "deadline_seconds": Decimal(3), "quiet_window_seconds": Decimal("0.05")}
             contract = TrajectoryContract.model_validate(payload).bind_source_version(version)
             async def consume():
-                runtime = None
                 deadline_race = False
+
+                class CrossingCoordinator(TrajectoryCoordinator):
+                    async def _publish(self, claim, contract, lease_token, result, source_bytes_used, candidate):
+                        nonlocal deadline_race
+                        if profile == "http_only" and result.state == "PENDING" and candidate is not None and not deadline_race:
+                            # 在可信候选之后注入同一原截止；正式协调器负责收尾。
+                            deadline_race = True
+                            remaining = (result.deadline_at - self._clock.utcnow()).total_seconds()
+                            await asyncio.sleep(max(0, remaining) + 0.01)
+                        return await super()._publish(claim, contract, lease_token, result, source_bytes_used, candidate)
+
                 async with LangfuseObservationReader(server_url=local_langfuse.base_url,
                         public_key=local_langfuse.env["S4_PUBLIC_KEY"], secret_key=local_langfuse.env["S4_SECRET_KEY"]) as reader:
-                    while True:
-                        with db.get_session() as session:
-                            claim = begin_trajectory_round(session, scope, contract, lease_token=lease_token)
-                        if claim.round_token is None:
-                            return claim.acquisition
-                        if runtime is None:
-                            runtime = AcquisitionRuntime(scope, contract, session_factory=db.get_session, started_at=claim.started_at)
-                        assert runtime._wire_bytes == claim.source_bytes_used
-                        with runtime.activate():
-                            result = await acquire_trajectory(scope, contract, client=reader)
-                        candidate = assemble_trajectory(scope, runtime._latest, contract) if (
-                            result.state == "PENDING" and runtime._latest is not None) else None
-                        if profile == "http_only" and result.state == "PENDING" and candidate is not None:
-                            # 确定性覆盖：读取后、发布前原截止到达；不延长 deadline。
-                            await asyncio.sleep(runtime.remaining() + 0.01)
-                        try:
-                            with db.get_session() as session:
-                                frozen = publish_trajectory_round(session, claim, contract, lease_token=lease_token, result=result,
-                                    source_bytes_used=runtime._wire_bytes, candidate=candidate)
-                        except TrajectoryCheckpointError as error:
-                            if error.reason_code != "TRAJECTORY_CHECKPOINT_DEADLINE_EXPIRED" or result.state != "PENDING":
-                                raise
-                            before = runtime._wire_bytes
-                            with runtime.activate():
-                                result = await acquire_trajectory(scope, contract, client=reader)
-                            assert result.state != "PENDING" and runtime._wire_bytes == before
-                            with db.get_session() as session:
-                                frozen = publish_trajectory_round(session, claim, contract, lease_token=lease_token, result=result,
-                                    source_bytes_used=runtime._wire_bytes, candidate=None)
-                            deadline_race = True
-                        if frozen.acquisition.state != "PENDING":
-                            if profile == "http_only":
-                                assert deadline_race
-                            return frozen.acquisition
-                        await asyncio.sleep(0.05)
+                    result = await CrossingCoordinator(db.get_session).run(scope, contract, client=reader, lease_token=lease_token)
+                    if profile == "http_only":
+                        assert deadline_race
+                    return result
             acquired = asyncio.run(consume())
             assert acquired.state == "READY", acquired.reason_code
             assert acquired.completeness.status == ("ROOT_ONLY" if profile == "http_only" else "OBSERVED_COMPLETE")
@@ -263,7 +236,8 @@ def test_checkpoint_acquisition_under_the_original_worker_lease(local_langfuse, 
     assert_lineage(rows, identity)
     local_langfuse.record(profile, "checkpoint-acquisition", identity, rows, normalization={
         "profile_id": profile_id, "acquisition_state": acquired.state, "completeness": acquired.completeness.status,
-        "artifact_roundtrip": True, "checkpoint_restored": True, "original_worker_lease": True})
+        "artifact_roundtrip": True, "checkpoint_restored": True, "original_worker_lease": True,
+        "production_coordinator": True})
 
 
 def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id, *, scenario="serial"):

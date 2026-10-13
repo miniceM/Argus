@@ -81,6 +81,9 @@ def _utc(value):
 
 
 def _now(value):
+    # 协调器传入时钟函数，锁等待及制品校验之后分别重新取时。
+    if callable(value):
+        value = value()
     if value is not None and (type(value) is not datetime or value.tzinfo is None):
         raise TrajectoryCheckpointError("CLOCK_INVALID")
     return value.astimezone(UTC) if value is not None else datetime.now(UTC)

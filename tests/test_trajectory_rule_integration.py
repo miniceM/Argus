@@ -61,6 +61,17 @@ def test_real_frozen_rule_consumers(local_langfuse, s40_runtime, monkeypatch, tm
         launch = session.get(ExperimentLaunchRecord, identity["launch_id"])
         launch.status = "COMPLETED"
         original = create_result_snapshot(session, launch)
+        assert original.items[0]["required_evidence_status"] == ("COMPLETE" if observed else "INCOMPLETE")
+        assert original.evidence_state == ("COMPLETE" if observed else "DIAGNOSTIC")
+        from app.baselines import validate_baseline_snapshot
+        from app.release_gates import evaluate_gate
+        from test_issue_7_release_gates import policy
+        if observed:
+            validate_baseline_snapshot(original, launch, "test-agent")
+        else:
+            with pytest.raises(ValueError):
+                validate_baseline_snapshot(original, launch, "test-agent")
+        assert evaluate_gate(policy(), original).decision == ("FAIL" if observed else "UNKNOWN")
         old_items = deepcopy(original.items)
         results = session.scalars(select(EvaluationResultRecord).where(EvaluationResultRecord.item_execution_id == identity["item_id"])).all()
         measured = {r.evaluator_id: (r.status, r.value, r.evidence) for r in results if r.evaluator_id.startswith("trajectory.")}
@@ -97,3 +108,50 @@ def test_real_frozen_rule_consumers(local_langfuse, s40_runtime, monkeypatch, tm
     local_langfuse.record(profile, "formal-rules-" + mode + ("-unqualified" if not approved else "") + str(recovery_stage or ""), identity, rows,
         normalization={"formal_rules": True, "original_ref_preserved": True, "eval_only_zero_agent_reader": True,
             "quality_conclusion": quality, "recovery_stage": recovery_stage})
+
+
+@pytest.mark.parametrize("profile,profile_id", [("native_otel", "native-otel-v1"), ("pydantic_ai", "pydantic-ai-v1")])
+def test_real_optional_no_result_keeps_required_complete_through_eval_only(local_langfuse, s40_runtime, monkeypatch, tmp_path, profile, profile_id):
+    from app.baselines import validate_baseline_snapshot
+    from app.release_gates import evaluate_gate
+    from test_issue_7_release_gates import policy
+    report = json.loads((Path(__file__).resolve().parents[1] / "docs/validation/s4-1/reader-calibration.json").read_text())
+    approval = report["groups"][profile + ":serial"]["approved_identity"]
+    contract = TrajectoryContract.model_validate(calibrated_banking_payload())
+    factory = QualifiedReaderFactory(server_url=local_langfuse.base_url, public_key=local_langfuse.env["S4_PUBLIC_KEY"],
+        secret_key=local_langfuse.env["S4_SECRET_KEY"], approvals=(ReaderApproval(**approval),))
+    worker = s40_runtime[4]
+    monkeypatch.setattr(worker, "trajectory_collector", WorkerTrajectoryCollector(s40_runtime[0].get_session, factory_provider=lambda: factory))
+    selections = [{"id": "trajectory.require_tool", "params": PARAMS[0]}, {"id": "trajectory.tool_order",
+        "params": PARAMS[3] | {"scope": "WORKFLOW", "workflow_scope_id": "optional-unobserved-workflow"}}]
+    rules = [{"evaluator_id": "intent_match", "result_type": "numeric", "operator": ">=", "threshold": 1, "required": True},
+        {"evaluator_id": "trajectory.require_tool", "result_type": "boolean", "operator": "==", "expected_value": True, "required": True},
+        {"evaluator_id": "trajectory.tool_order", "result_type": "boolean", "operator": "==", "expected_value": True, "required": False}]
+    with AgentProcess(local_langfuse, tmp_path, profile) as agent:
+        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint, trajectory_source_profile_id=profile_id,
+            trajectory_contract=contract, rule_selections=selections, quality_policy_rules=rules, expected_quality="pass", expected_eval_status="partial")
+    with s40_runtime[0].get_session() as session:
+        launch = session.get(ExperimentLaunchRecord, identity["launch_id"])
+        launch.status = "COMPLETED"
+        snapshot = create_result_snapshot(session, launch)
+        assert snapshot.evidence_state == "COMPLETE" and snapshot.items[0]["eval_status"] == "partial"
+        assert snapshot.summary["pass_rate"] == snapshot.summary["evaluation_coverage"] == 1
+        validate_baseline_snapshot(snapshot, launch, "test-agent")
+        assert evaluate_gate(policy(), snapshot).decision == "PASS"
+        item = session.get(ExperimentItemExecutionRecord, identity["item_id"])
+        assert item.quality_evaluation["required_evidence_status"] == "COMPLETE"
+        item.evaluation_status, item.evaluation_generation = "evaluating", 1
+        item.eval_status, item.quality_conclusion = "failed", "unknown"
+        for result in session.scalars(select(EvaluationResultRecord).where(EvaluationResultRecord.item_execution_id == item.id)):
+            result.status = "failed"
+    monkeypatch.setattr(worker.trajectory_collector, "_get_factory", lambda: pytest.fail("eval-only reopened Reader"))
+    outcome = recover_evaluation(s40_runtime[0], item_id=identity["item_id"], evaluation_generation=1, worker_id="optional-qualification")
+    assert outcome["finalized"] and outcome["quality_conclusion"] == "pass"
+    with s40_runtime[0].get_session() as session:
+        item = session.get(ExperimentItemExecutionRecord, identity["item_id"])
+        assert item.eval_status == "partial" and item.quality_evaluation["required_evidence_status"] == "COMPLETE"
+        refreshed = create_result_snapshot(session, session.get(ExperimentLaunchRecord, identity["launch_id"]))
+        assert refreshed.evidence_state == "COMPLETE" and evaluate_gate(policy(), refreshed).decision == "PASS"
+    rows = local_langfuse.wait_observations(identity["trace_id"], minimum=8)
+    local_langfuse.record(profile, "required-complete-optional-no-result", identity, rows, normalization={
+        "required_evidence_status": "COMPLETE", "optional_status": "no_result", "eval_status": "partial", "gate": "PASS", "eval_only": True})

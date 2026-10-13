@@ -4837,6 +4837,21 @@
               }
             ]
           },
+          "required_evidence_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "COMPLETE",
+                  "INCOMPLETE"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Evidence Status"
+          },
           "evaluation_status": {
             "type": "string",
             "title": "Evaluation Status",
@@ -5784,6 +5799,33 @@
             "type": "string",
             "title": "Conclusion"
           },
+          "required_evidence_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "COMPLETE",
+                  "INCOMPLETE"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Evidence Status"
+          },
+          "evidence_contract_version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "trajectory-1.0"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Contract Version"
+          },
           "policy_id": {
             "anyOf": [
               {
@@ -6615,6 +6657,55 @@
       },
       "RunCostSummaryResponse": {
         "properties": {
+          "required_evidence_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "COMPLETE",
+                  "INCOMPLETE"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Evidence Status"
+          },
+          "evidence_contract_version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "trajectory-1.0"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Contract Version"
+          },
+          "required_evidence_complete_cases": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Evidence Complete Cases"
+          },
+          "required_evidence_incomplete_cases": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Evidence Incomplete Cases"
+          },
           "total_cost": {
             "anyOf": [
               {

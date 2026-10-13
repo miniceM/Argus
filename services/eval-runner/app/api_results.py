@@ -91,20 +91,39 @@ def _get_snapshot(
         if snapshot is None:
             # Do not reveal whether an ID exists under another Launch.
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Result snapshot not found")
+        _validate_snapshot_read(snapshot)
         return launch, snapshot
 
     # 发布门禁显式要求当前已完成的结果，不能回退到评测重试前的快照。
     if refresh:
-        snapshot = create_result_snapshot(session, launch)
+        snapshot = _freeze_snapshot(session, launch)
         session.commit()
     else:
         snapshot = latest_result_snapshot(session, launch_id)
     if not refresh and snapshot is None and launch.status in {"COMPLETED", "PARTIAL_FAILED", "FAILED", "CANCELLED"}:
-        snapshot = create_result_snapshot(session, launch)
+        snapshot = _freeze_snapshot(session, launch)
         session.commit()
     if snapshot is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Launch result snapshot is not ready")
+    _validate_snapshot_read(snapshot)
     return launch, snapshot
+
+
+def _validate_snapshot_read(snapshot):
+    from .required_evidence import validate_snapshot_contract
+    try:
+        validate_snapshot_contract(snapshot)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="EVIDENCE_CONTRACT_INVALID") from None
+
+
+def _freeze_snapshot(session, launch):
+    try:
+        return create_result_snapshot(session, launch)
+    except ValueError as exc:
+        if str(exc) == "EVIDENCE_CONTRACT_INVALID":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="EVIDENCE_CONTRACT_INVALID") from None
+        raise
 
 
 def _dataset_identity(manifest: dict[str, Any]) -> tuple[str, str] | None:
@@ -159,6 +178,7 @@ def freeze_run_results(launch_id: str) -> RunSummaryResponse:
 
 
 def _revision_row(snapshot: RunResultSnapshotRecord, is_latest: bool) -> ResultSnapshotRevisionResponse:
+    _validate_snapshot_read(snapshot)
     summary = snapshot.summary or {}
     return ResultSnapshotRevisionResponse(
         snapshot_id=snapshot.id,
@@ -229,6 +249,7 @@ def get_launch_result_snapshot(launch_id: str, snapshot_id: str) -> ResultSnapsh
         if snapshot is None:
             # Do not reveal whether an ID exists under another Launch.
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Result snapshot not found")
+        _validate_snapshot_read(snapshot)
         evidence_state = (snapshot.evidence_state or EVIDENCE_COMPLETE).upper()
         return ResultSnapshotDetailResponse(
             launch_id=launch_id,
@@ -269,6 +290,12 @@ def _formal_verdict(
     if not baseline_bound:
         withheld.append("BASELINE_NOT_BOUND")
     for label, snapshot in (("BASELINE", baseline_snapshot), ("CANDIDATE", candidate_snapshot)):
+        if snapshot is not None:
+            from .required_evidence import validate_snapshot_contract
+            try:
+                validate_snapshot_contract(snapshot)
+            except ValueError:
+                withheld.append(f"{label}_EVIDENCE_CONTRACT_INVALID")
         state = ((snapshot.evidence_state if snapshot else None) or EVIDENCE_COMPLETE).upper()
         if state != EVIDENCE_COMPLETE:
             withheld.append(f"{label}_EVIDENCE_INCOMPLETE")

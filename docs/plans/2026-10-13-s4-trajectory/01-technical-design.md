@@ -169,6 +169,8 @@ Executor outcome 扩展为旧 Evaluation 或 TypedEvaluationResult，不复制�
 
 既有汇总存在 optional skipped→eval_status partial→Snapshot DIAGNOSTIC 的断层。修订分为三个维度：原有 `eval_status` 保留运行诊断兼容；新冻结 `required_evidence_status=COMPLETE|INCOMPLETE` 按 QualityPolicy 的 required 集合计算；Snapshot/Gate 对新 schema 使用 required_evidence_status 和质量结论决定资格，旧 schema 继续原判断。optional 失败仍可见，不能把 required 的 skipped 当 COMPLETE。该规则属于 #129 的集成交付。
 
+T4 的版本标记、聚合/比较口径、原子冻结和兼容验证见 [required 证据验收记录](../../validation/s4-2/required-evidence.md)。诊断状态与证据完整度分别暴露，不以 Snapshot 的正式证据资格代替 Release Gate 的发布决策。
+
 ## 6. Digest、持久化与恢复
 
 | 身份 | 内容 | 比较要求 |

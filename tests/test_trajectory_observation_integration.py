@@ -52,7 +52,7 @@ def s40_runtime(tmp_path_factory):
 
 
 def frozen_manifest(endpoint, scenario="serial", *, db, profile, trajectory_source_profile_id=None,
-                    trajectory_contract=None, rule_selections=None):
+                    trajectory_contract=None, rule_selections=None, quality_policy_rules=None):
     from app.registry import AgentRegistry
     identity = current_runner_identity().model_dump()
     registry = default_evaluator_registry
@@ -87,22 +87,34 @@ def frozen_manifest(endpoint, scenario="serial", *, db, profile, trajectory_sour
         manifest["trajectory"] = bind_trajectory_manifest(freeze_trajectory_contract(trajectory_contract), registered)
         if rule_selections:
             from app.evaluator_binding import EvaluatorBinding
-            from app.quality_policy import default_quality_policy
+            from app.quality_policy import QualityRule, default_quality_policy, freeze_quality_policy
             for selected in rule_selections:
                 manifest["evaluators"].append(freeze_binding(registry.definition(selected["id"]),
                     registry.version(selected["id"], "1.0.0"), runner_identity=identity, params=selected["params"]).to_payload())
             manifest["quality_policy"] = default_quality_policy([EvaluatorBinding.from_payload(b) for b in manifest["evaluators"]]).to_payload()
+            if quality_policy_rules is not None:
+                manifest["quality_policy"] = freeze_quality_policy(policy_id="custom", version="1.0",
+                    rules=[QualityRule.from_payload(r) for r in quality_policy_rules],
+                    bindings={b["id"]: EvaluatorBinding.from_payload(b) for b in manifest["evaluators"]}).to_payload()
         manifest["measurement_digest"] = manifest_measurement_digest(manifest)
         manifest["contract_digests"] = {"measurement": {"version": "1.3", "digest": manifest["measurement_digest"]}}
+        if rule_selections:
+            from app.comparison_contracts import aggregation_comparison_digest
+            from app.required_evidence import COMPARISON_POLICY_VERSION, EVIDENCE_CONTRACT_VERSION
+            manifest["evidence_contract_version"] = EVIDENCE_CONTRACT_VERSION
+            manifest["comparison"] = {"environment": "production", "baseline_snapshot_id": None, "comparison_policy_version": COMPARISON_POLICY_VERSION}
+            manifest["dataset"].update(source="seed", dataset_id="s40-local", dataset_version="fixture-v1")
+            manifest["contract_digests"].update(quality_policy={"digest": manifest["quality_policy"]["policy_digest"], "version": "test-policy"},
+                aggregation_comparison={"digest": aggregation_comparison_digest(evidence_contract_version=EVIDENCE_CONTRACT_VERSION), "version": COMPARISON_POLICY_VERSION})
     return manifest
 
 
 def invoke_worker(s40_runtime, monkeypatch, runtime, endpoint, scenario="serial", *, trajectory_source_profile_id=None,
-                  trajectory_contract=None, recovery_stage=None, rule_selections=None, expected_quality="pass", expected_eval_status="succeeded"):
+                  trajectory_contract=None, recovery_stage=None, rule_selections=None, quality_policy_rules=None, expected_quality="pass", expected_eval_status="succeeded"):
     db, queue, _limiter, orchestrator, worker, _reconciler = s40_runtime
     manifest = frozen_manifest(endpoint, scenario, db=db, profile=runtime.agent_profiles[endpoint],
                                trajectory_source_profile_id=trajectory_source_profile_id,
-                               trajectory_contract=trajectory_contract, rule_selections=rule_selections)
+                               trajectory_contract=trajectory_contract, rule_selections=rule_selections, quality_policy_rules=quality_policy_rules)
     launch = orchestrator.create_launch("test-agent", manifest["agent"]["version"], "s40-local", "fixture-v1", "S40", manifest)
     orchestrator.start_launch(launch.id)
     monkeypatch.setattr("app.worker.get_langfuse_client_safe", lambda: runtime.sdk)

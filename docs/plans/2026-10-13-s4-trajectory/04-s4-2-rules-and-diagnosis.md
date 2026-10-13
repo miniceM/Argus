@@ -6,9 +6,9 @@
 
 核验基线：2026-10-13，`main@4b043739c63357ecc10131e1ba54bc1bc53d862a`。
 
-实施跟踪（2026-10-14）：四规则纯测量核心与严格冻结参数已形成独立增量，见 [工具规则核心记录](../../validation/s4-2/tool-rules.md)。正式 Evaluator 注册与 TypedResult Adapter、required evidence/资格契约、API/Console 仍按下文实施；本记录不宣称 S4.2 全部交付。
+实施跟踪（2026-10-14）：四规则纯测量核心与严格冻结参数见 [工具规则核心记录](../../validation/s4-2/tool-rules.md)，正式 Evaluator 注册、TypedResult Adapter 与冻结输入见下述 T3 记录。required evidence/资格契约见 [T4 验证记录](../../validation/s4-2/required-evidence.md)；Console 诊断继续按下文实施，本记录不宣称 S4.2 全部交付。
 
-后续 T3 增量见[正式冻结与执行记录](../../validation/s4-2/frozen-rule-execution.md)：独立版本、参数/制品身份、公开 opt-in 创建入口及真实正常/恢复消费者；required 资格与 Console 诊断继续分批实施。
+T3 增量见[正式冻结与执行记录](../../validation/s4-2/frozen-rule-execution.md)：独立版本、参数/制品身份、公开 opt-in 创建入口及真实正常/恢复消费者。实施提交汇总至 PR #181，保留各阶段单一目的 commit。
 
 ## 1. 目标和当前实现
 
@@ -211,7 +211,7 @@ E2E 在完成最小 API fixture 后执行：`pnpm --dir services/console test:e2
 - [ ] **S42-02**：`REQUESTED/EXECUTED/BLOCKED` 区分可测；禁止执行默认 EXECUTED、显式禁止尝试按 REQUESTED；计数遵循冻结 phase/上限并输出 boolean 与 observed_count 证据。
 - [ ] **S42-03**：每次 B 都有成功完成且可信因果先行 A 才 PASS；完整 `B → A → B` 必须 FAIL；先 UNKNOWN 后确证违规仍 FAIL；PARTIAL 中仅见较晚 A 不冒充完整负证据；时间/数组/parent 单独不足时 UNKNOWN。
 - [ ] **S42-04**：PARTIAL 中已观察到的 forbid/order 违规逐规则仍为 FAIL；未见违规但覆盖不足为 UNKNOWN；HTTP-only 不伪造过程结论。
-- [ ] **S42-05**：optional failed/skipped/no_result保持诊断且不降低required完整度；required缺Binding、failed/skipped/no_result、无值或provenance不符为INCOMPLETE/DIAGNOSTIC；required false为完整FAIL，Snapshot可COMPLETE、Gate仍拒绝；覆盖DB→Snapshot→Baseline/Gate；Writer序列化/提交故障整体回滚、无半契约Snapshot，Reader缺字段fail closed，旧Snapshot语义不变。
+- [x] **S42-05**：optional failed/skipped/no_result保持诊断且不降低required完整度；required缺Binding、failed/skipped/no_result、无值或provenance不符为INCOMPLETE/DIAGNOSTIC；required false为完整FAIL，Snapshot可COMPLETE、Gate仍拒绝；覆盖DB→Snapshot→Baseline/Gate；Writer序列化/提交故障整体回滚、无半契约Snapshot，Reader缺字段fail closed，旧Snapshot语义不变。
 - [ ] **S42-06**：新API只返回选定Snapshot的冻结证据；历史缺证据、跨Case身份和Snapshot错配都有稳定响应；大于2^53的整数/高精度小数在artifact/API与Console参数显示不舍入，显示字符串与同artifact一致。
 - [ ] **S42-07**：CaseDetail 懒加载、三态、并行/阶段、规则↔Step 定位及历史/在线标签通过 Vitest 与 Playwright。
 - [ ] **S42-08**：规则变化进入 Measurement identity；Console OpenAPI 类型同步；`make validate` 通过，Demo 原有预期基线未改。

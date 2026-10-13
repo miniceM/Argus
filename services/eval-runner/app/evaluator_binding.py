@@ -789,6 +789,12 @@ def _verify_trajectory_manifest(manifest):
                 raise TrajectoryManifestError("MEASUREMENT_MISMATCH")
     except TrajectoryManifestError as error:
         raise EvaluatorBindingError(error.reason_code, code=error.reason_code) from None
+    from .required_evidence import frozen_required_policy, uses_required_contract
+    if manifest is not None and uses_required_contract(manifest):
+        try:
+            frozen_required_policy(manifest)
+        except ValueError:
+            raise EvaluatorBindingError("EVIDENCE_CONTRACT_INVALID", code="EVIDENCE_CONTRACT_INVALID") from None
 
 
 def resolve_execution_plan(
@@ -842,6 +848,7 @@ class FrozenItemEvaluation:
     # Issue #83: the per-rule decision, so a reviewer can read *why* this item
     # is pass / fail / unknown instead of only seeing the verdict.
     quality_decision: Any = None
+    required_evidence_status: str | None = None
 
     @property
     def failed_result_count(self) -> int:
@@ -896,12 +903,14 @@ def evaluate_frozen_item(
             if resolved.binding.scope == "item"
         ]
     except EvaluatorBindingError as exc:
+        from .required_evidence import uses_required_contract
         return FrozenItemEvaluation(
             scores={},
             quality_conclusion="unknown",
             eval_status="failed",
             eval_error=str(exc),
             verification_status=manifest_contract_status(manifest),
+            required_evidence_status="INCOMPLETE" if uses_required_contract(manifest) else None,
         )
 
     if only_binding_ids is not None:
@@ -995,6 +1004,7 @@ def evaluate_frozen_item(
         quality_policy=quality_policy,
         evaluators=evaluators,
         verification_status=verification_status,
+        context=context,
     )
 
 
@@ -1026,6 +1036,7 @@ def summarize_typed_results(
     quality_policy: dict[str, Any] | None = None,
     evaluators: list[dict[str, Any]] | None = None,
     verification_status: str | None = None,
+    context: EvaluationContext | None = None,
 ) -> FrozenItemEvaluation:
     """Turn a complete set of typed results into the recorded verdict.
 
@@ -1068,6 +1079,11 @@ def summarize_typed_results(
         policy = legacy_quality_policy([resolved.binding for resolved in plan])
         decided_by = "LEGACY_MANIFEST_POLICY"
     decision = evaluate_quality_policy(typed_results, policy, decided_by=decided_by)
+    if manifest is not None and "evidence_contract_version" in manifest:
+        from .required_evidence import required_quality_decision
+        owned_input = getattr(context, "trajectory_input", None)
+        decision = required_quality_decision(manifest, typed_results,
+            trajectory_input=owned_input.to_payload() if owned_input is not None else {})
     quality_conclusion = decision.conclusion
 
     # An evaluation anomaly is always surfaced, even when it does not change the
@@ -1092,6 +1108,7 @@ def summarize_typed_results(
         evaluators=tuple(evaluators or ()),
         typed_results=tuple(typed_results),
         quality_decision=decision,
+        required_evidence_status=decision.required_evidence_status,
     )
 
 

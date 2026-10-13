@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from .db import DatabaseManager
 from .db_models import BaselineBindingRecord, ExperimentLaunchRecord, RunResultSnapshotRecord
+from .required_evidence import EVIDENCE_CONTRACT_VERSION, validate_snapshot_contract
 
 
 class BaselineConflictError(ValueError):
@@ -36,6 +37,7 @@ def validate_baseline_snapshot(
     """
     if snapshot.agent_id != agent_id or launch.agent_id != agent_id:
         raise ValueError("Baseline result snapshot belongs to a different Agent")
+    validate_snapshot_contract(snapshot)
 
     # Legacy rows predate Issue #85 and carry no explicit verdict. They were
     # only ever created from settled executions, and #85 forbids inventing
@@ -52,7 +54,9 @@ def validate_baseline_snapshot(
     total = int(summary.get("total_cases", 0))
     if total <= 0 or int(summary.get("evaluated_cases", 0)) != total:
         raise ValueError("Baseline requires a non-empty run with complete successful evaluation coverage")
-    if int(summary.get("execution_error_count", 0)) or int(summary.get("evaluator_error_count", 0)):
+    if int(summary.get("execution_error_count", 0)) or (
+        snapshot.manifest.get("evidence_contract_version") != EVIDENCE_CONTRACT_VERSION and int(summary.get("evaluator_error_count", 0))
+    ):
         raise ValueError("Baseline cannot contain execution or Evaluator errors")
     # Issue #83: UNKNOWN is missing evidence, not a pass. A snapshot whose
     # quality evidence is incomplete must never become a formal Baseline.

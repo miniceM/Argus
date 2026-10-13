@@ -485,7 +485,7 @@ def recover_evaluation(
             )
 
     # One shared truth table decides the new verdict (Issue #83 rules).
-    summary = summarize_typed_results(full_plan, merged, manifest=manifest)
+    summary = summarize_typed_results(full_plan, merged, manifest=manifest, context=context)
 
     finalized = finalize_evaluation(
         db_mgr,

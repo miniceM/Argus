@@ -148,14 +148,16 @@ assert result.evidence["evidence_step_ids"] == [first_b_step_id]
 
 ## 8. T4：修复 optional 与正式证据资格断层
 
+实施记录（2026-10-14）：[T4 资格链路与验收](../../validation/s4-2/required-evidence.md)及[版本/命令/制品摘要](../../validation/s4-2/required-evidence-receipt.json)，随汇总 PR #181 提交。T5 及后续任务继续实施。
+
 **Files:** evaluator_binding.py、quality_policy.py、result_snapshots.py、aggregation.py、models.py、comparison_contracts.py、release_gates.py/baselines.py；test_trajectory_required_evidence.py；扩展#83/#85测试。
 
 **Interfaces:** 原 eval_status 保持诊断；新 `required_evidence_status` 按冻结 required 集合生成，Snapshot 按 discriminator 使用新契约。
 
-- [ ] RED：先锁定当前复现：required 全 PASS、optional skipped，质量 PASS 但 Snapshot DIAGNOSTIC；新期望为保留 optional skipped 而 Snapshot COMPLETE。
-- [ ] 运行 `python -m pytest -q tests/test_trajectory_required_evidence.py tests/test_issue_83_quality_policy.py tests/test_issue_85_snapshot_revision.py`。
-- [ ] 实现required集合完整度，同一Writer事务写required_evidence_status/资格discriminator与聚合合同；注入序列化/提交故障验证整体回滚，不留下半契约Snapshot；手工缺字段的新快照读取fail closed；旧Snapshot不重新分类。
-- [ ] GREEN：覆盖optional failed/skipped/no_result；required缺Binding、failed/skipped/no_result、无值、provenance mismatch均INCOMPLETE；required false为完整FAIL；1.0/1.1 legacy与1.2旧Reader保持。
+- [x] RED：先锁定当前复现：required 全 PASS、optional skipped，质量 PASS 但 Snapshot DIAGNOSTIC；新期望为保留 optional skipped 而 Snapshot COMPLETE。
+- [x] 运行 `python -m pytest -q tests/test_trajectory_required_evidence.py tests/test_issue_83_quality_policy.py tests/test_issue_85_snapshot_revision.py`。
+- [x] 实现required集合完整度，同一Writer事务写required_evidence_status/资格discriminator与聚合合同；注入序列化/提交故障验证整体回滚，不留下半契约Snapshot；手工缺字段的新快照读取fail closed；旧Snapshot不重新分类。
+- [x] GREEN：覆盖optional failed/skipped/no_result；required缺Binding、failed/skipped/no_result、无值、provenance mismatch均INCOMPLETE；required false为完整FAIL；1.0/1.1 legacy与1.2旧Reader保持。
 
 ```python
 assert new_item.eval_status == "partial"
@@ -168,7 +170,7 @@ assert required_false_gate.decision == "FAIL"
 assert required_false_gate.releasable is False
 ```
 
-- [ ] 提交 `fix: separate required evidence completeness from diagnostic status`；完成真实持久化到 Snapshot/Gate 的集成测试，不能只测试 Policy 函数。
+- [x] 提交 `fix: separate required evidence completeness from diagnostic status`；完成真实持久化到 Snapshot/Gate 的集成测试，不能只测试 Policy 函数。
 
 ## 9. T5：固定 Snapshot 的 Case 诊断闭环
 

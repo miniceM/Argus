@@ -1,0 +1,206 @@
+{
+  "schema_version": "1.0",
+  "verified_at": "2026-10-13T23:28:31.063800+00:00",
+  "scope": "T4 required evidence qualification",
+  "pull_request": "https://github.com/miniceM/Argus/pull/181",
+  "source_base": "87d09e3979e17e02e5607b019a1128f3e1fecac5",
+  "source_sha256": {
+    "docs/openapi.json": "d810214e88bb26552d9c76df19624cda3817d12e84aef91cee4e93513fe8992b",
+    "services/console/src/api/schema.d.ts": "64d73971be1c8fe4a2e19b87f493b92b4651a79e1b2e8d5bcc413c4600c481ec",
+    "services/eval-runner/app/aggregation.py": "4405a5d843428fedf6252362f4731f2e68fbda19c26dd17d57d10b52d0414c7f",
+    "services/eval-runner/app/api_launches.py": "f5301ca442f101e8a1015db2ec400cb9e194dbe25c8ae2168b849d98699ed80f",
+    "services/eval-runner/app/api_results.py": "0621db42215fe5352a1d02e90589e0a74e9979aba3e6f803e5f6d10717fe1d74",
+    "services/eval-runner/app/baselines.py": "6c6f571012352343bd035c7719903ea39b1c00e0fcbf43c3ea29887ed46cc600",
+    "services/eval-runner/app/comparison_contracts.py": "f12d52119fb6d6ca5d450d50e1cbf2a7b488c5a099eaebb6a6905958ee32306e",
+    "services/eval-runner/app/evaluation_recovery.py": "bb68ad14351667fcd972af662da2e829d74ff125334578194e9d7cc4a1843e97",
+    "services/eval-runner/app/evaluator_binding.py": "2d8de82b3119e849cbcd0424a45a45a72b73df9cf1a6e2f80467abddb7afe9f4",
+    "services/eval-runner/app/manifest.py": "fc91ba7cd7ef9ea761d31192479d44812058ff8cf646f57becddc31f893234f9",
+    "services/eval-runner/app/models.py": "eeb13b5e4c07766fdce12ea452afe14d991a8fa64ad25ca89b7aafeade2c8fba",
+    "services/eval-runner/app/quality_policy.py": "ef3e309601a92bb7f67becca154136c54b2cd3abb0454e16ea8ab754a91f67c1",
+    "services/eval-runner/app/release_gates.py": "6afcf2e19673570d90212c8344b272f3efae3cb606582b76375fc34999409a36",
+    "services/eval-runner/app/required_evidence.py": "af22f68ae2d784f9e592f31041adfb1ade704d9cfbc997d167e7bbc7a69cab05",
+    "services/eval-runner/app/result_snapshots.py": "892df7cabb4e044baaabe0d6d9f81de3a8a21d28da599ea8db76d8dded986590",
+    "services/eval-runner/app/trajectory/inputs.py": "09b56562d8f9e563508a8504a756ffaf0221e349feeadaa38b2528054e969587",
+    "tests/test_trajectory_observation_integration.py": "a5cbefc851d01d586490ec3cc599a1e235ccef557bed995493a6ea43b50bbd8a",
+    "tests/test_trajectory_required_evidence.py": "cb167e2d9a57ab5fff3b8e7d2c626ecc82436810840e5c8384dd2428f9b2433f",
+    "tests/test_trajectory_rule_integration.py": "c1e35caec3b2bcbed909d22525a7fb8367ba045f55f5193b98a3739022b36927"
+  },
+  "runtime_python": "3.12.14",
+  "contracts": {
+    "manifest": "1.3",
+    "trajectory": "1.0",
+    "evidence": "trajectory-1.0",
+    "comparison": "comparison-v2-required-evidence"
+  },
+  "reproduction_commands": [
+    "python -m pytest -q tests/test_trajectory_required_evidence.py",
+    "make validate",
+    "make console-e2e",
+    "make trajectory-test"
+  ],
+  "assertions": [
+    "optional failed/skipped/no_result retain diagnostics without disqualifying complete required evidence",
+    "required false is COMPLETE but Gate FAIL",
+    "missing/invalid required evidence is INCOMPLETE/UNKNOWN",
+    "serialization/summary/outbox/commit failures roll back Snapshot and projection together",
+    "synthetic live references are not eligible",
+    "partial/deleted/corrupt/wrong-scope artifacts reject formal use",
+    "malformed JSON returns finite API 409, Baseline rejection, Gate UNKNOWN",
+    "historical snapshots are not rewritten",
+    "frozen dataset remains the coverage denominator",
+    "real normal/recovery/eval-only paths use frozen evidence"
+  ],
+  "verification": {
+    "postgresql_targeted_regression": {
+      "passed": 1190,
+      "failed": 0,
+      "skipped": 0,
+      "duration_seconds": 62.685,
+      "junit_sha256": "c4e3d4d4f7ea079b47e0c604370de55233c737fa2792a219f5b001b2a0fdecfe",
+      "database_image": "postgres@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3",
+      "command": "python -m pytest -q tests/test_trajectory_required_evidence.py tests/test_trajectory_rule_execution.py tests/test_trajectory_rules.py tests/test_issue_80_evaluator_versioning.py tests/test_issue_82_typed_results.py tests/test_trajectory_inputs.py tests/test_trajectory_execution_recovery.py tests/test_trajectory_worker.py tests/test_issue_84_eval_only_retry.py tests/test_orchestrator_and_worker_s2.py tests/test_trajectory_reader_factory.py tests/test_trajectory_reader.py tests/test_trajectory_manifest.py tests/test_launch_manifest_freeze.py tests/test_issue_81_frozen_execution_identity.py tests/test_issue_83_quality_policy.py tests/test_issue_85_snapshot_revision.py tests/test_issue_86_comparability.py tests/test_trajectory_coordinator.py tests/test_trajectory_checkpoint.py tests/test_trajectory_acquisition.py tests/test_trajectory_evidence.py tests/test_trajectory_storage_schema.py tests/test_trajectory_assembler.py tests/test_trajectory_causal_links.py tests/test_trajectory_root_graph.py tests/test_trajectory_normalized_batches.py tests/test_trajectory_structural_roles.py tests/test_trajectory_contract.py tests/test_trajectory_schema.py tests/test_trajectory_normalizer_context.py tests/test_trajectory_normalizer.py tests/test_trajectory_redaction.py tests/test_migration_and_schema.py tests/test_idempotency_and_atomic_lock.py tests/test_pr17_review_regressions.py tests/test_issue_7_release_gates.py -k 'trajectory_required_evidence or trajectory_rule_execution or trajectory_rules or issue_80 or issue_82 or trajectory_inputs or postgres or trajectory_execution_recovery or trajectory_worker or issue_84 or orchestrator_and_worker or trajectory_reader or trajectory_manifest or launch_manifest or issue_81 or issue_83 or issue_85 or issue_86 or trajectory_coordinator or trajectory_checkpoint or trajectory_acquisition or trajectory_evidence or trajectory_storage_schema or trajectory_assembler or trajectory_causal_links or trajectory_root_graph or trajectory_normalized_batches or trajectory_normalizer or trajectory_redaction or trajectory_structural_roles or trajectory_contract or trajectory_schema'",
+      "required_matrix": {
+        "sqlite": 49,
+        "postgresql": 49
+      }
+    },
+    "make_validate": {
+      "status": "PASS",
+      "python_passed": 1894,
+      "python_skipped": 0,
+      "real_deselected": 84,
+      "console_files_passed": 52,
+      "console_tests_passed": 847,
+      "checks": [
+        "OpenAPI/types sync",
+        "Token lint",
+        "typecheck",
+        "build",
+        "Compose"
+      ]
+    },
+    "console_e2e": {
+      "passed": 124,
+      "failed": 0,
+      "isolated_ports_released": true
+    },
+    "trajectory_local": {
+      "passed": 84,
+      "failed": 0,
+      "skipped": 0,
+      "duration_seconds": 785.054,
+      "junit_sha256": "9096f4f5b6a177f097be835410332928e8216ed7c4a3dba141c2a589e7230adf"
+    }
+  },
+  "review": {
+    "rounds": 1,
+    "critical": 0,
+    "required": 3,
+    "required_fixed": 3,
+    "required_fix_red": {
+      "failed": 10,
+      "already_passed": 2,
+      "postgresql_not_configured_skipped": 12
+    }
+  },
+  "real_artifacts": [
+    {
+      "artifact": "s400/field-matrix.json",
+      "sha256": "42b597295445a5c5bb5a2aff078fb58081beb48786827757bacef9bbcbccabf2",
+      "captured_at": "2026-10-13T23:14:59.909551+00:00",
+      "server": "4.38.0",
+      "runner_sdk": "4.16.0",
+      "agent_packages": {},
+      "case_reports": 2,
+      "calibration_samples": 0,
+      "required_optional_reports": []
+    },
+    {
+      "artifact": "s401/field-matrix.json",
+      "sha256": "498b4d9bbcc6d5b5ed4b2c067c5330e908a893dd455069e8884c54512674a610",
+      "captured_at": "2026-10-13T23:25:52.411343+00:00",
+      "server": "4.38.0",
+      "runner_sdk": "4.16.0",
+      "agent_packages": {
+        "opentelemetry-sdk": "1.45.1",
+        "opentelemetry-api": "1.45.1",
+        "pydantic-ai-slim": "2.55.0",
+        "pydantic-graph": "2.55.0"
+      },
+      "case_reports": 156,
+      "calibration_samples": 90,
+      "required_optional_reports": []
+    },
+    {
+      "artifact": "s402/field-matrix.json",
+      "sha256": "c7740c21493177c13bc7937aaa808b0d55a6dd1a447247d3d36e1bffba115cd6",
+      "captured_at": "2026-10-13T23:27:43.496035+00:00",
+      "server": "4.38.0",
+      "runner_sdk": "4.16.0",
+      "agent_packages": {
+        "opentelemetry-sdk": "1.45.1",
+        "opentelemetry-api": "1.45.1",
+        "pydantic-ai-slim": "2.55.0",
+        "pydantic-graph": "2.55.0"
+      },
+      "case_reports": 17,
+      "calibration_samples": 0,
+      "required_optional_reports": [
+        {
+          "profile": "native_otel",
+          "required_evidence_status": "COMPLETE",
+          "optional_status": "no_result",
+          "eval_status": "partial",
+          "gate": "PASS",
+          "eval_only": true
+        },
+        {
+          "profile": "pydantic_ai",
+          "required_evidence_status": "COMPLETE",
+          "optional_status": "no_result",
+          "eval_status": "partial",
+          "gate": "PASS",
+          "eval_only": true
+        }
+      ]
+    }
+  ],
+  "raw_evidence": [
+    {
+      "file": "t4-required-review-valid-red.log",
+      "sha256": "40f731abb2f5ce1353ef3d0073edcfecc8f108797737bc3d6c4e6d88da947889"
+    },
+    {
+      "file": "t4-required-final-reviewed-pg-targeted.log",
+      "sha256": "11bb55959451775e8217597e5aed4a212dbb26ab43fbe0fcbc0cc504690f94de"
+    },
+    {
+      "file": "t4-required-final-reviewed-pg-targeted-junit.xml",
+      "sha256": "c4e3d4d4f7ea079b47e0c604370de55233c737fa2792a219f5b001b2a0fdecfe"
+    },
+    {
+      "file": "t4-required-final-reviewed-validate.log",
+      "sha256": "b4cefe753c7bdfc88165f44c9a8901302f5a9565cf7b7e57e62acbeba33ad478"
+    },
+    {
+      "file": "t4-required-final-reviewed-console-e2e.log",
+      "sha256": "31b2c0c92a6a52605fa2b6793c1a7b23eed60e5910ef3793816af155b9630504"
+    },
+    {
+      "file": "t4-required-final-reviewed-real.log",
+      "sha256": "46c0650109ea3e7f3a0b95c26c5f0565eab468414edc55c09132aa469807832f"
+    },
+    {
+      "file": "t4-required-final-reviewed-real-junit.xml",
+      "sha256": "9096f4f5b6a177f097be835410332928e8216ed7c4a3dba141c2a589e7230adf"
+    }
+  ],
+  "remaining": [
+    "T5 diagnostics",
+    "T6 remaining deterministic rules",
+    "T7 gate/projection",
+    "T8 Judge",
+    "T9 overall acceptance"
+  ],
+  "full_s4_complete": false
+}

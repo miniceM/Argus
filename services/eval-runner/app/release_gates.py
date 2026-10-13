@@ -107,7 +107,11 @@ def frozen_environment(snapshot) -> str | None:
 
 
 def _summary(snapshot) -> dict[str, Any]:
-    summary = aggregate_run(snapshot.items, snapshot.manifest.get("evaluators", []))
+    options = {}
+    if "evidence_contract_version" in snapshot.manifest:
+        options = {"required_case_ids": [i.get("id") for i in snapshot.manifest.get("dataset", {}).get("items", [])],
+            "evidence_contract_version": snapshot.manifest["evidence_contract_version"]}
+    summary = aggregate_run(snapshot.items, snapshot.manifest.get("evaluators", []), **options)
     if any((latency := _finite(item.get("latency_ms"))) is None or latency < 0 for item in snapshot.items):
         summary["p95_latency_ms"] = None
     # S3.1 的逐规则 critical 证据比旧数字阈值聚合更精确（也支持布尔与分类）。
@@ -122,6 +126,11 @@ def _summary(snapshot) -> dict[str, Any]:
 
 def _evidence_reasons(snapshot, label: str) -> list[str]:
     reasons = []
+    from .required_evidence import validate_snapshot_contract
+    try:
+        validate_snapshot_contract(snapshot)
+    except ValueError:
+        return [f"{label}_EVIDENCE_CONTRACT_INVALID"]
     if frozen_environment(snapshot) is None:
         reasons.append(f"{label}_ENVIRONMENT_UNKNOWN")
     if snapshot.evidence_state != "COMPLETE" or not snapshot.items:
@@ -136,7 +145,11 @@ def _evidence_reasons(snapshot, label: str) -> list[str]:
     if not provenance.comparable:
         reasons.extend(provenance.reason_codes)
     frozen_aggregation = snapshot.manifest.get("contract_digests", {}).get("aggregation_comparison", {}).get("digest")
-    if frozen_aggregation and frozen_aggregation != aggregation_comparison_digest():
+    try:
+        supported = aggregation_comparison_digest(evidence_contract_version=snapshot.manifest.get("evidence_contract_version"))
+    except ValueError:
+        supported = None
+    if frozen_aggregation and frozen_aggregation != supported:
         reasons.append("AGGREGATION_CONTRACT_UNSUPPORTED")
     dataset = snapshot.manifest.get("dataset", {})
     def frozen_version(value):
@@ -163,10 +176,12 @@ def _comparison(candidate, baseline) -> tuple[dict[str, Any], list[str]]:
         return {}, ["BASELINE_NOT_BOUND"]
     if baseline.id != frozen_id or baseline.agent_id != candidate.agent_id:
         return {}, ["BASELINE_IDENTITY_MISMATCH"]
+    reasons = _evidence_reasons(baseline, "BASELINE")
+    if "BASELINE_EVIDENCE_CONTRACT_INVALID" in reasons:
+        return {}, reasons
     baseline_environment, candidate_environment = frozen_environment(baseline), frozen_environment(candidate)
     if baseline_environment is not None and candidate_environment is not None and baseline_environment != candidate_environment:
         return {}, ["BASELINE_ENVIRONMENT_MISMATCH"]
-    reasons = _evidence_reasons(baseline, "BASELINE")
     comparability = assess_comparability(baseline.manifest, candidate.manifest)
     reasons.extend(comparability.reason_codes)
     before = {item["dataset_item_id"]: item for item in baseline.items}
@@ -195,6 +210,12 @@ def _comparison(candidate, baseline) -> tuple[dict[str, Any], list[str]]:
 
 def evaluate_gate(policy: ReleasePolicy, candidate, baseline=None) -> GateEvaluation:
     reasons = _evidence_reasons(candidate, "CANDIDATE")
+    if "CANDIDATE_EVIDENCE_CONTRACT_INVALID" in reasons:
+        return GateEvaluation(
+            decision="UNKNOWN", releasable=False, candidate_snapshot_id=candidate.id,
+            reason_codes=reasons, rules=[GateRuleResult(**rule.model_dump(), actual=None,
+                conclusion="UNKNOWN", reason=reasons[0]) for rule in policy.rules],
+        )
     environment = frozen_environment(candidate)
     if environment is not None and environment != policy.environment:
         reasons.append("CANDIDATE_ENVIRONMENT_MISMATCH")

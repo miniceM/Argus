@@ -1,5 +1,7 @@
 """仅装载冻结的本地证据；不采集来源、不创建质量或 Snapshot 资格。"""
 
+from __future__ import annotations
+
 from copy import deepcopy
 from dataclasses import dataclass
 
@@ -20,6 +22,7 @@ class EvaluationContext:
     input_payload: object
     trajectory: StandardTrajectory | None
     trajectory_evidence_ref: TrajectoryEvidenceRef | None
+    trajectory_input: FrozenTrajectoryInput | None = None
 
 
 @dataclass(frozen=True)
@@ -77,7 +80,7 @@ def make_evaluation_context(session, checkpoint, manifest):
         "TRAJECTORY_INPUT_MANIFEST_INVALID", "TRAJECTORY_INPUT_CHECKPOINT_INVALID"}:
         return None
     return EvaluationContext(deepcopy(checkpoint.agent_output), deepcopy(checkpoint.expected_output),
-        deepcopy(checkpoint.input_payload), loaded.trajectory, loaded.trajectory_evidence_ref)
+        deepcopy(checkpoint.input_payload), loaded.trajectory, loaded.trajectory_evidence_ref, loaded)
 
 
 def context_for_item(session, *, item_id, generation, manifest):
@@ -101,8 +104,13 @@ def freeze_trajectory_input(session, *, item, manifest):
 
 def load_snapshot_input(session, *, snapshot_id, dataset_item_id):
     """历史引用只使用 Snapshot 自己的合同，不查 CP/在线 Trace 或当前最新配置。"""
-    from ..result_snapshots import _canonical_digest
     snapshot = session.get(RunResultSnapshotRecord, snapshot_id)
+    return load_frozen_snapshot_input(session, snapshot=snapshot, dataset_item_id=dataset_item_id)
+
+
+def load_frozen_snapshot_input(session, *, snapshot, dataset_item_id):
+    """同一受控 Loader 也验证待写入的 Snapshot，不要求制品依赖活跃 checkpoint。"""
+    from ..result_snapshots import _canonical_digest
     if snapshot is None:
         return FrozenTrajectoryInput(None, reason_code="TRAJECTORY_INPUT_SNAPSHOT_MISSING")
     if type(snapshot.manifest) is not dict:

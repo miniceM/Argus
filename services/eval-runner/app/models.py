@@ -456,6 +456,8 @@ class QualityEvaluationResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     conclusion: str
+    required_evidence_status: Literal["COMPLETE", "INCOMPLETE"] | None = None
+    evidence_contract_version: Literal["trajectory-1.0"] | None = None
     policy_id: str | None = None
     policy_version: str | None = None
     policy_digest: str | None = None
@@ -542,6 +544,11 @@ class RunCostSummaryResponse(BaseModel):
     """Typed cost portion of a frozen run summary; retain other metrics for compatibility."""
 
     model_config = ConfigDict(extra="allow")
+
+    required_evidence_status: Literal["COMPLETE", "INCOMPLETE"] | None = None
+    evidence_contract_version: Literal["trajectory-1.0"] | None = None
+    required_evidence_complete_cases: int | None = None
+    required_evidence_incomplete_cases: int | None = None
 
     total_cost: float | None = None
     cost_per_case: float | None = None
@@ -925,6 +932,7 @@ class ExperimentItemExecutionResponse(BaseModel):
     # before QualityPolicy existed — their verdict stands, it is just not
     # re-explained under a policy they never had.
     quality_evaluation: QualityEvaluationResponse | None = None
+    required_evidence_status: Literal["COMPLETE", "INCOMPLETE"] | None = None
     # Issue #84: the independent evaluation-recovery lifecycle. `eval_status`
     # stays the measurement outcome; these describe whether a re-evaluation is
     # idle / running / recovered / failed, and which output digest it reused.

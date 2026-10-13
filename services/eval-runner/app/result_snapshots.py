@@ -20,6 +20,12 @@ from .db_models import (
     LangfuseRunScoreTaskRecord,
     RunResultSnapshotRecord,
 )
+from .required_evidence import (
+    EVIDENCE_CONTRACT_VERSION,
+    item_is_evaluated,
+    required_quality_decision,
+    validate_snapshot_contract,
+)
 
 
 def _canonical_digest(value: Any) -> str:
@@ -97,7 +103,7 @@ EVIDENCE_DIAGNOSTIC = "DIAGNOSTIC"
 _UNSETTLED_EXECUTION = {"pending", "queued", "running", "retry_wait"}
 
 
-def evaluate_snapshot_evidence(items: list[dict[str, Any]]) -> tuple[str, list[str]]:
+def evaluate_snapshot_evidence(items: list[dict[str, Any]], *, manifest: dict[str, Any] | None = None) -> tuple[str, list[str]]:
     """Classify a frozen result set by its own evidence, not by Launch status.
 
     Issue #85: an evaluation-only retry (#84) leaves the Launch terminal while
@@ -109,6 +115,14 @@ def evaluate_snapshot_evidence(items: list[dict[str, Any]]) -> tuple[str, list[s
     """
     if not items:
         return EVIDENCE_DIAGNOSTIC, ["快照没有任何用例结果 (snapshot contains no case results)"]
+
+    if any("evidence_contract_version" in i or "required_evidence_status" in i for i in items):
+        expected = [i["id"] for i in manifest["dataset"]["items"]] if manifest is not None else [i["dataset_item_id"] for i in items]
+        actual = [i["dataset_item_id"] for i in items]
+        if sorted(expected) != sorted(actual) or len(set(actual)) != len(actual):
+            return EVIDENCE_DIAGNOSTIC, ["REQUIRED_CASE_COVERAGE_INCOMPLETE"]
+        incomplete = sum(not item_is_evaluated(i) for i in items)
+        return (EVIDENCE_DIAGNOSTIC, [f"REQUIRED_EVIDENCE_INCOMPLETE: {incomplete}/{len(items)}"]) if incomplete else (EVIDENCE_COMPLETE, [])
 
     reasons: list[str] = []
     execution_failed = [i for i in items if str(i.get("execution_status", "")).lower() != "succeeded"]
@@ -239,7 +253,13 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
         for result_item in result_items:
             result_item["trajectory_input"] = freeze_trajectory_input(session,
                 item=by_dataset[result_item["dataset_item_id"]], manifest=launch.manifest)
-    evidence_state, evidence_reasons = evaluate_snapshot_evidence(result_items)
+    if "evidence_contract_version" in launch.manifest:
+        for result_item in result_items:
+            decision = required_quality_decision(launch.manifest, result_item["evaluation_results"], trajectory_input=result_item.get("trajectory_input") or {})
+            result_item.update(evidence_contract_version=EVIDENCE_CONTRACT_VERSION,
+                required_evidence_status=decision.required_evidence_status,
+                quality_evaluation=decision.payload(), quality_conclusion=decision.conclusion)
+    evidence_state, evidence_reasons = evaluate_snapshot_evidence(result_items, manifest=launch.manifest)
     source_digest = _canonical_digest(result_items)
     existing = session.scalars(select(RunResultSnapshotRecord).where(
         RunResultSnapshotRecord.launch_id == launch.id,
@@ -249,7 +269,11 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
         return existing
 
     evaluator_specs = launch.manifest.get("evaluators", [])
-    summary = aggregate_run(result_items, evaluator_specs)
+    options = {}
+    if "evidence_contract_version" in launch.manifest:
+        options = {"required_case_ids": [i["id"] for i in launch.manifest["dataset"]["items"]],
+            "evidence_contract_version": launch.manifest["evidence_contract_version"]}
+    summary = aggregate_run(result_items, evaluator_specs, **options)
     latest_revision = session.scalar(select(func.max(RunResultSnapshotRecord.revision)).where(
         RunResultSnapshotRecord.launch_id == launch.id
     )) or 0
@@ -267,6 +291,7 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
         evidence_state=evidence_state,
         evidence_reasons=evidence_reasons,
     )
+    validate_snapshot_contract(snapshot, session=session)
     session.add(snapshot)
     session.flush()
 

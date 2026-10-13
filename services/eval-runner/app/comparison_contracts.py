@@ -60,14 +60,24 @@ AGGREGATION_CONTRACT: dict[str, Any] = {
 }
 
 
-def aggregation_comparison_digest() -> str:
+def aggregation_comparison_digest(*, evidence_contract_version: str | None = None) -> str:
     """Digest of the comparison semantics themselves.
 
     Changing the denominator, the coverage requirement or the classification
     algorithm changes this digest, and therefore any comparison that spans the
     change is no longer formal.
     """
-    return canonical_digest(AGGREGATION_CONTRACT)
+    if evidence_contract_version is None:
+        return canonical_digest(AGGREGATION_CONTRACT)
+    from .required_evidence import EVIDENCE_CONTRACT_VERSION
+    if evidence_contract_version != EVIDENCE_CONTRACT_VERSION:
+        raise ValueError("EVIDENCE_CONTRACT_UNSUPPORTED")
+    return canonical_digest(AGGREGATION_CONTRACT | {
+        "evidence_contract_version": evidence_contract_version,
+        "coverage_requirement": "all_required_measurements_complete_and_cases_decided",
+        "classification_algorithm": "required_quality_then_required_typed_score_deltas",
+        "optional_diagnostics": "retained_without_disqualifying_required_complete_cases",
+    })
 
 
 def _version_of(entry: Any) -> str | None:

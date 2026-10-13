@@ -1664,6 +1664,8 @@ export interface components {
             /** Evaluation Results */
             evaluation_results?: components["schemas"]["EvaluationResultResponse"][];
             quality_evaluation?: components["schemas"]["QualityEvaluationResponse"] | null;
+            /** Required Evidence Status */
+            required_evidence_status?: ("COMPLETE" | "INCOMPLETE") | null;
             /**
              * Evaluation Status
              * @default none
@@ -2062,6 +2064,10 @@ export interface components {
         QualityEvaluationResponse: {
             /** Conclusion */
             conclusion: string;
+            /** Required Evidence Status */
+            required_evidence_status?: ("COMPLETE" | "INCOMPLETE") | null;
+            /** Evidence Contract Version */
+            evidence_contract_version?: "trajectory-1.0" | null;
             /** Policy Id */
             policy_id?: string | null;
             /** Policy Version */
@@ -2408,6 +2414,14 @@ export interface components {
          * @description Typed cost portion of a frozen run summary; retain other metrics for compatibility.
          */
         RunCostSummaryResponse: {
+            /** Required Evidence Status */
+            required_evidence_status?: ("COMPLETE" | "INCOMPLETE") | null;
+            /** Evidence Contract Version */
+            evidence_contract_version?: "trajectory-1.0" | null;
+            /** Required Evidence Complete Cases */
+            required_evidence_complete_cases?: number | null;
+            /** Required Evidence Incomplete Cases */
+            required_evidence_incomplete_cases?: number | null;
             /** Total Cost */
             total_cost?: number | null;
             /** Cost Per Case */

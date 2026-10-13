@@ -554,9 +554,13 @@ class QualityDecision:
     rule_evaluations: tuple[RuleEvaluation, ...] = ()
     unknown_reasons: tuple[str, ...] = ()
     releasable: bool = False
+    required_evidence_status: str | None = None
+    evidence_contract_version: str | None = None
 
     def payload(self) -> dict[str, Any]:
         return {
+            **({"required_evidence_status": self.required_evidence_status,
+                "evidence_contract_version": self.evidence_contract_version} if self.evidence_contract_version is not None else {}),
             "conclusion": self.conclusion,
             "policy_id": self.policy_id,
             "policy_version": self.policy_version,

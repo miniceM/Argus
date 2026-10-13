@@ -309,6 +309,10 @@ class LaunchService:
             manifest["agent"]["trajectory_source_profile_id"] = ver_rec.trajectory_source_profile_id
         if trajectory is not None:
             manifest["trajectory"] = trajectory
+        if has_trajectory_rules:
+            from .required_evidence import COMPARISON_POLICY_VERSION, EVIDENCE_CONTRACT_VERSION
+            manifest["evidence_contract_version"] = EVIDENCE_CONTRACT_VERSION
+            manifest["comparison"]["comparison_policy_version"] = COMPARISON_POLICY_VERSION
         # Measurement 与 QualityPolicy 分开，完整轨迹合同不因实际 profile 分支改变。
         manifest["measurement_digest"] = manifest_measurement_digest(manifest)
 
@@ -325,7 +329,7 @@ class LaunchService:
                 "version": f"{policy.policy_id}@{policy.version}",
             },
             "aggregation_comparison": {
-                "digest": aggregation_comparison_digest(),
+                "digest": aggregation_comparison_digest(evidence_contract_version=manifest.get("evidence_contract_version")),
                 "version": manifest["comparison"]["comparison_policy_version"],
             },
         }

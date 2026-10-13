@@ -233,6 +233,30 @@ def test_incomplete_or_unparseable_change_set_is_high() -> None:
     )["risk"] == "high"
 
 
+def test_s4_local_integration_is_required_for_policy_success() -> None:
+    four_existing_checks = {
+        "Code Quality": "success",
+        "Full Python Tests": "success",
+        "Docker / Compose Validation": "success",
+        "Console Quality & E2E": "success",
+    }
+    missing_s4 = evaluate_integration_policy(
+        risk="low", checks=four_existing_checks, receipt=None
+    )
+    assert missing_s4 == {
+        "status": "pending",
+        "state": "waiting_for_ci",
+        "cloud_state": "skipped_by_policy",
+    }
+
+    skipped_s4 = evaluate_integration_policy(
+        risk="low",
+        checks={**four_existing_checks, "S4 Local Langfuse Integration": "skipped"},
+        receipt=None,
+    )
+    assert skipped_s4["status"] == "failure"
+
+
 def test_required_check_and_receipt_decisions_are_fail_closed() -> None:
     green = {name: "success" for name in REQUIRED_CI_CHECKS}
     assert evaluate_integration_policy(risk="low", checks=green, receipt=None)["status"] == "success"

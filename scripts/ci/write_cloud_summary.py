@@ -48,6 +48,7 @@ def main() -> int:
         "unit-tests": "Full Python Tests",
         "docker-build": "Docker / Compose Validation",
         "console": "Console Quality & E2E",
+        "trajectory-local": "S4 Local Langfuse Integration",
     }
     check_results = {
         check_names.get(key, str(job.get("name", key))): str(job.get("result", "not run"))

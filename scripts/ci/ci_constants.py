@@ -10,6 +10,7 @@ REQUIRED_CI_CHECKS = (
     "Full Python Tests",
     "Docker / Compose Validation",
     "Console Quality & E2E",
+    "S4 Local Langfuse Integration",
 )
 REQUIRED_SUITES = ("managed-cloud", "async-link")
 REQUIRED_SECRETS = ("LANGFUSE_BASE_URL", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY")

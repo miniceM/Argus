@@ -61,7 +61,7 @@ def decide_cloud_execution(
 
     if any(upstream_results.get(name) != "success" for name in REQUIRED_CI_CHECKS):
         return _decision(
-            "not_run_upstream_failed", False, False, "all four regular CI jobs must succeed first"
+            "not_run_upstream_failed", False, False, "all five regular CI jobs must succeed first"
         )
     if enabled != "true":
         return _decision("blocked_disabled", False, False, "LANGFUSE_E2E_ENABLED must equal true")

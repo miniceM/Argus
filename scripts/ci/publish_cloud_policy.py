@@ -408,7 +408,7 @@ def evaluate_pull_request_policy(client: Any, pr_number: int) -> dict[str, Any]:
                 cloud_state=initial["cloud_state"],
                 risk=risk,
                 reason=(
-                    "all four current-identity CI checks passed; Cloud is not required for this low-risk change"
+                    "all five current-identity CI checks passed; Cloud is not required for this low-risk change"
                     if initial["status"] == "success"
                     else f"regular CI policy: {initial['state']}"
                 ),

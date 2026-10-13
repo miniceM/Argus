@@ -66,12 +66,25 @@ def test_main_cloud_acceptance_aggregates_real_jobs_and_actual_cloud_steps() -> 
 def test_regular_ci_checks_keep_names_and_workflow_actions_are_sha_pinned() -> None:
     workflow = _workflow(".github/workflows/ci.yml")
     jobs = workflow["jobs"]
-    assert [jobs[name]["name"] for name in ("quality", "unit-tests", "docker-build", "console")] == [
+    assert [jobs[name]["name"] for name in ("quality", "unit-tests", "docker-build", "console", "trajectory-local")] == [
         "Code Quality",
         "Full Python Tests",
         "Docker / Compose Validation",
         "Console Quality & E2E",
+        "S4 Local Langfuse Integration",
     ]
+    assert all(
+        "trajectory-local" in jobs[job_name]["needs"]
+        for job_name in ("cloud-e2e-policy", "cloud-e2e-main", "main-cloud-acceptance")
+    )
+    policy_summary = str(jobs["cloud-e2e-policy"]["steps"])
+    assert 'needs.get("trajectory-local", {}).get("result", "not run")' in policy_summary
+    main_gate = next(
+        step for step in jobs["cloud-e2e-main"]["steps"]
+        if step.get("name") == "Validate main Cloud prerequisites"
+    )
+    assert "S4_RESULT" in main_gate["env"]
+    assert '"$S4_RESULT" != success' in main_gate["run"]
     assert "needs" not in jobs["quality"] and "needs" not in jobs["unit-tests"]
     quality_run = next(step["run"] for step in jobs["quality"]["steps"] if step.get("name") == "Ruff")
     compile_run = next(step["run"] for step in jobs["quality"]["steps"] if step.get("name") == "Compile Python sources")

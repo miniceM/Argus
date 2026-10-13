@@ -294,7 +294,7 @@ jobs:
 
   cloud-e2e-policy:
     name: Langfuse Cloud E2E
-    needs: [quality, unit-tests, docker-build, console]
+    needs: [quality, unit-tests, docker-build, console, trajectory-local]
     if: >-
       always() &&
       (github.event_name == 'pull_request' ||
@@ -327,6 +327,7 @@ jobs:
               "Full Python Tests": needs.get("unit-tests", {}).get("result", "not run"),
               "Docker / Compose Validation": needs.get("docker-build", {}).get("result", "not run"),
               "Console Quality & E2E": needs.get("console", {}).get("result", "not run"),
+              "S4 Local Langfuse Integration": needs.get("trajectory-local", {}).get("result", "not run"),
           }
           lines = [
               "## Langfuse Cloud E2E coverage",
@@ -348,7 +349,7 @@ jobs:
 
   cloud-e2e-main:
     name: Main Langfuse Cloud E2E
-    needs: [quality, unit-tests, docker-build, console]
+    needs: [quality, unit-tests, docker-build, console, trajectory-local]
     if: >-
       always() &&
       github.ref == 'refs/heads/main' &&
@@ -371,12 +372,13 @@ jobs:
           PYTHON_RESULT: ${{ needs.unit-tests.result }}
           DOCKER_RESULT: ${{ needs.docker-build.result }}
           CONSOLE_RESULT: ${{ needs.console.result }}
+          S4_RESULT: ${{ needs.trajectory-local.result }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$QUALITY_RESULT" != success || "$PYTHON_RESULT" != success || "$DOCKER_RESULT" != success || "$CONSOLE_RESULT" != success ]]; then
+          if [[ "$QUALITY_RESULT" != success || "$PYTHON_RESULT" != success || "$DOCKER_RESULT" != success || "$CONSOLE_RESULT" != success || "$S4_RESULT" != success ]]; then
             echo "cloud_state=not_run_upstream_failed" >> "$GITHUB_OUTPUT"
-            echo "Main Cloud E2E blocked: all four regular CI jobs must succeed." >&2
+            echo "Main Cloud E2E blocked: all five regular CI jobs must succeed." >&2
             exit 1
           fi
           if [[ "$LANGFUSE_E2E_ENABLED" != true ]]; then
@@ -481,7 +483,7 @@ jobs:
 
   main-cloud-acceptance:
     name: Main Cloud Acceptance
-    needs: [quality, unit-tests, docker-build, console, cloud-e2e-policy, cloud-e2e-main]
+    needs: [quality, unit-tests, docker-build, console, trajectory-local, cloud-e2e-policy, cloud-e2e-main]
     if: >-
       always() &&
       github.ref == 'refs/heads/main' &&

@@ -86,6 +86,8 @@ input/output/arguments 进入 StandardTrajectory 前先运行统一 redaction po
 
 ## 图闭包、时序与 digest
 
+实现按中等规模增量拆分：内部 `trajectory/graph.py` 的 `assemble_root_graph` 先输出绑定 scope/合同/来源的 `RootObservationGraph`，只负责身份闭包、去重、稳定展示顺序和 Step 预算；后续 `assemble_trajectory` 消费它完成因果、terminal inventory、能力/完整度、最终制品预算和 digest。内部图不替代 `StandardTrajectory` 或完成协议。实现与验证见 [Root 图验收](../../validation/s4-1/root-graph.md)。
+
 Assembler 先确认 scope.root_observation_id 对应的唯一 root，随后只沿真实 parent_step_id 递归收集其后代；父边之外的同 Trace 兄弟树不进入本 Attempt。每条记录的 trace_id 必须等于冻结 scope.trace_id。root 的 Launch/Item/Attempt/generation 来源是 Runner 数据库身份，不从 Trace metadata 或请求 Header 自报覆盖。其它 Attempt 即使 Trace ID 相同也不并入当前闭包。
 
 使用 observation_id 建索引，验证父引用存在性、唯一性、同 Trace 和无环。缺 parent、跨 Trace 子节点、重复冲突、孤立节点、父环均保留稳定 warning。Assembler 可按 01 规则断开无效边以形成可展示子图，但相关工具执行/时序能力降级；不能虚构 parent。成环节点不能参与因果判定。

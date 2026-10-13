@@ -158,7 +158,9 @@ def test_http_only_preserves_answer_evaluation(local_langfuse, s40_runtime, monk
 
 def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id):
     from app.registry import AgentRegistry
+    from app.trajectory.codec import canonical_dumps
     from app.trajectory.contract import TrajectoryContract
+    from app.trajectory.graph import assemble_root_graph
     from app.trajectory.normalizer import normalize_observations
     from app.trajectory.reader import LangfuseObservationReader
     from app.trajectory.schema import TrajectoryScope
@@ -195,6 +197,12 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id)
     assert batch.scope == scope and batch.trajectory_contract_digest == contract.digest
     assert batch.source_profile_id == profile_id and batch.source_bytes_complete and not batch.truncated
     normalized = [record.observation for record in batch.records]
+    root_graph = assemble_root_graph(scope, batch, contract)
+    assert root_graph.depth_by_id[scope.root_observation_id] == 0 and not root_graph.truncated
+    assert {record.observation_id for record in root_graph.records} == expected
+    assert canonical_dumps(root_graph) == canonical_dumps(
+        assemble_root_graph(scope, normalize_observations(list(reversed(rows)), contract, scope=scope), contract)
+    ), "real parent closure must be independent of API arrival order"
     scoped = [result for result in normalized if result.step and result.step.step_id in expected]
     assert {result.step.step_id for result in scoped} == expected, "a real framework parent bridge was discarded"
     structural = [result for result in scoped if result.structural]
@@ -216,6 +224,7 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id)
             "structural_steps": len(structural), "business_tool_steps": len(tools),
             "cursor_hops": cursor_hops, "source_bytes": source_bytes,
             "normalized_source_bytes": batch.source_bytes,
+            "graph_nodes": len(root_graph.records), "graph_max_depth": max(root_graph.depth_by_id.values()),
             "parent_closed": True, "structural_tool_capabilities": "NONE"}
 
 

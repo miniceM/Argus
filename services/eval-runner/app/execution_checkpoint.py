@@ -24,7 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import settings
-from .db_models import ExecutionCheckpointRecord
+from .db_models import ExecutionAttemptRecord, ExecutionCheckpointRecord, ExperimentItemExecutionRecord
 
 # Stable, user-facing reasons why an evaluation-only retry is blocked. They are
 # never silently downgraded to "call the Agent again".
@@ -243,8 +243,37 @@ def load_recoverable_checkpoint(
         stored = record.binding_provenance or []
         if _provenance_key(stored) != _provenance_key(expected_provenance):
             raise CheckpointUnavailableError(CHECKPOINT_BINDING_MISMATCH)
+        validate_checkpoint_manifest(record, manifest, session=session)
 
     return record
+
+
+def validate_checkpoint_manifest(record: ExecutionCheckpointRecord, manifest: dict[str, Any], *, session: Session) -> None:
+    """1.3 的原输入与完整 Manifest 身份；不改变历史 1.2 校验约定。"""
+    if manifest.get("schema_version") != "1.3":
+        return
+    from .evaluator_binding import canonical_digest
+    if record.manifest_digest != canonical_digest(manifest):
+        raise CheckpointUnavailableError(CHECKPOINT_BINDING_MISMATCH)
+    item = session.get(ExperimentItemExecutionRecord, record.item_execution_id)
+    attempt = session.get(ExecutionAttemptRecord, record.final_attempt_id) if record.final_attempt_id else None
+    if (item is None or attempt is None
+        or (record.launch_id, record.dataset_item_id, record.dispatch_generation) != (
+            item.launch_id, item.dataset_item_id, item.dispatch_generation)
+        or (attempt.item_execution_id, attempt.dispatch_generation) != (item.id, record.dispatch_generation)
+        or attempt.id not in {item.active_attempt_id, item.final_attempt_id}):
+        raise CheckpointUnavailableError(CHECKPOINT_CORRUPT)
+    dataset = manifest.get("dataset")
+    rows = dataset.get("items") if type(dataset) is dict else None
+    if type(rows) is not list or any(type(row) is not dict for row in rows):
+        raise CheckpointUnavailableError(CHECKPOINT_CORRUPT)
+    matches = [row for row in rows if str(row.get("id")) == record.dataset_item_id]
+    if len(matches) != 1:
+        raise CheckpointUnavailableError(CHECKPOINT_CORRUPT)
+    value = matches[0].get("input")
+    expected = {"input": value if value is not None else {}, "expected_output": matches[0].get("expected_output")}
+    if canonical_output_digest(expected) != canonical_output_digest({"input": record.input_payload, "expected_output": record.expected_output}):
+        raise CheckpointUnavailableError(CHECKPOINT_CORRUPT)
 
 
 def _provenance_key(provenance: list[dict[str, Any]] | None) -> list[tuple[Any, ...]]:

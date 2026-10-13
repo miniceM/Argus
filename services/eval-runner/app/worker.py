@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -9,6 +10,7 @@ from sqlalchemy import func, select, update
 
 from app.db_models import (  # noqa: E402
     ExecutionAttemptRecord,
+    ExecutionCheckpointRecord,
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
     LangfuseSyncTaskRecord,
@@ -24,6 +26,9 @@ from .metrics import runtime_metrics
 from .queue import QueueAdapter
 from .registry import AgentVersionSpec, map_request
 from .runner_identity import RunnerIdentity, current_runner_identity, validate_runner_identity
+from .trajectory.worker_acquisition import WorkerTrajectoryCollector, WorkerTrajectoryError
+
+logger = logging.getLogger(__name__)
 
 try:
     from opentelemetry.propagate import inject
@@ -42,6 +47,8 @@ class ExecutionWorker:
         limiter: DistributedAgentLimiter,
         worker_id: str | None = None,
         runner_identity: RunnerIdentity | None = None,
+        *,
+        trajectory_collector: WorkerTrajectoryCollector | None = None,
     ):
         self.db_mgr = db_mgr
         self.queue = queue
@@ -50,6 +57,7 @@ class ExecutionWorker:
         self.runner_identity = runner_identity or current_runner_identity()
         self.local_concurrency = asyncio.Semaphore(10)
         self.heartbeat_interval = 5.0
+        self.trajectory_collector = trajectory_collector or WorkerTrajectoryCollector(db_mgr.get_session)
 
     def poll_queue(self, count: int = 10, block_ms: int = 1000) -> list[tuple[str, str, int, str]]:
         """Synchronously reads/claims items from the queue adapter, meant to be run in asyncio.to_thread."""
@@ -292,6 +300,7 @@ class ExecutionWorker:
         dataset_version: str | None = None,
         dataset_run_name: str | None = None,
         dataset_source: str | None = None,
+        respect_launch_cancellation: bool = False,
     ) -> bool:
         """Atomic finalization for all outcome branches.
         Requires active_attempt_id CAS matching and Attempt status RUNNING.
@@ -300,6 +309,17 @@ class ExecutionWorker:
         is_pg = self.db_mgr.engine.dialect.name == "postgresql"
 
         with self.db_mgr.get_session() as session:
+            if respect_launch_cancellation:
+                launch_stmt = select(ExperimentLaunchRecord).where(ExperimentLaunchRecord.id == launch_id)
+                if is_pg:
+                    launch_stmt = launch_stmt.with_for_update()
+                frozen_launch = session.scalar(launch_stmt)
+                if frozen_launch is None:
+                    return False
+                if frozen_launch.cancel_requested_at or frozen_launch.status in {"CANCELLING", "CANCELLED"}:
+                    target_item_status, target_eval_status, target_quality_conclusion = "CANCELLED", "skipped", "unknown"
+                    scores, typed_results, quality_evaluation = None, None, None
+                    eval_error = "TRAJECTORY_RECOVERY_CANCELLED"
             # Phase 1: Lock row
             lock_stmt = select(ExperimentItemExecutionRecord).where(ExperimentItemExecutionRecord.id == item_id)
             if is_pg:
@@ -491,6 +511,13 @@ class ExecutionWorker:
 
             token = claim_info["lease_token"]
             launch_id = claim_info["launch_id"]
+
+            from .trajectory.execution_recovery import resume_successful_response
+            resumed = await resume_successful_response(self, item_id=item_id, generation=generation, lease_token=token)
+            if resumed is not None:
+                if resumed:
+                    self.queue.ack(message_id)
+                return resumed
 
             # Retrieve launch manifest and item input before authorizing attempt
             with self.db_mgr.get_session() as session:
@@ -838,7 +865,7 @@ class ExecutionWorker:
                         # evaluating, so a failed evaluation can be retried later
                         # without ever calling the Agent again — even if Langfuse
                         # is unavailable or has not synced.
-                        self._persist_execution_checkpoint(
+                        checkpoint_saved = self._persist_execution_checkpoint(
                             item_id=item_id,
                             launch_id=launch_id,
                             dataset_item_id=claim_info["dataset_item_id"],
@@ -851,15 +878,40 @@ class ExecutionWorker:
                             trace_id=trace_id,
                             trace_url=trace_url,
                             observation_id=obs_id,
+                            lease_token=token,
                         )
+                        if checkpoint_saved is False:
+                            return False
+
+                        if manifest.get("schema_version") == "1.3":
+                            try:
+                                await self.trajectory_collector.collect(manifest, item_id=item_id,
+                                    generation=generation, lease_token=token, cancelled=lease_lost)
+                            except WorkerTrajectoryError as error:
+                                if error.abandoned:
+                                    return False
+                                # 采集诊断不把已成功 Agent 响应变为执行失败；不打印原值。
+                                logger.warning("Trajectory collection diagnostic: %s", error.reason_code)
+                            except asyncio.CancelledError:
+                                if lease_lost.is_set():
+                                    return False
+                                raise
+                            if lease_lost.is_set():
+                                return False
 
                         # Successful execution -> evaluate quality (ASYNC offloaded via asyncio.to_thread)
                         def _do_evaluation():
                             # Issue #81: shared frozen evaluation boundary; no per-id lookup.
+                            from .trajectory.inputs import context_for_item
+                            context = None
+                            if manifest.get("schema_version") == "1.3":
+                                with self.db_mgr.get_session() as session:
+                                    context = context_for_item(session, item_id=item_id, generation=generation, manifest=manifest)
                             result = evaluate_frozen_item(
                                 manifest,
                                 output=inv_res.body,
                                 expected_output=expected_output,
+                                context=context,
                             )
                             return (
                                 result.scores,
@@ -1026,7 +1078,8 @@ class ExecutionWorker:
         trace_id: str | None,
         trace_url: str | None,
         observation_id: str | None,
-    ) -> None:
+        lease_token: str | None = None,
+    ) -> bool | None:
         """Write the recoverable Agent output for a successful execution (#84).
 
         Best-effort: a checkpoint failure must never turn a successful execution
@@ -1037,6 +1090,30 @@ class ExecutionWorker:
 
         try:
             with self.db_mgr.get_session() as session:
+                if manifest.get("schema_version") == "1.3":
+                    is_pg = session.bind.dialect.name == "postgresql"
+                    def locked(model, identity):
+                        stmt = select(model).where(model.id == identity)
+                        return session.scalar(stmt.with_for_update() if is_pg else stmt)
+                    launch = locked(ExperimentLaunchRecord, launch_id)
+                    item = locked(ExperimentItemExecutionRecord, item_id)
+                    attempt = locked(ExecutionAttemptRecord, final_attempt_id)
+                    now = session.scalar(select(func.clock_timestamp())) if is_pg else datetime.now(UTC)
+                    expiry = item.lease_expires_at if item else None
+                    if expiry and expiry.tzinfo is None:
+                        expiry = expiry.replace(tzinfo=UTC)
+                    if (launch is None or item is None or attempt is None or item.launch_id != launch_id
+                        or item.dataset_item_id != dataset_item_id or item.active_attempt_id != final_attempt_id
+                        or item.dispatch_generation != generation or item.execution_status != "running"
+                        or not lease_token or item.lease_token != lease_token or expiry is None or expiry <= now
+                        or attempt.item_execution_id != item_id or attempt.dispatch_generation != generation
+                        or attempt.status != "RUNNING" or attempt.lease_token != lease_token):
+                        return False
+                    existing = session.scalar(select(ExecutionCheckpointRecord).where(
+                        ExecutionCheckpointRecord.item_execution_id == item_id,
+                        ExecutionCheckpointRecord.dispatch_generation == generation))
+                    if existing is not None:
+                        return True
                 write_execution_checkpoint(
                     session,
                     item_execution_id=item_id,
@@ -1052,6 +1129,9 @@ class ExecutionWorker:
                     observation_id=observation_id,
                     langfuse_trace_url=trace_url,
                 )
+                if manifest.get("schema_version") == "1.3":
+                    # 与响应写入同事务保存业务已回答的事实，清理 CP 后仍不重调 Agent。
+                    attempt.request_phase = "RESPONSE_RECEIVED"
                 session.commit()
         except Exception:  # noqa: BLE001 - recovery metadata must not fail execution
             pass

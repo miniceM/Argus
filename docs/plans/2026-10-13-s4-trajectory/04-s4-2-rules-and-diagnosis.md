@@ -6,6 +6,10 @@
 
 核验基线：2026-10-13，`main@4b043739c63357ecc10131e1ba54bc1bc53d862a`。
 
+实施跟踪（2026-10-14）：四规则纯测量核心与严格冻结参数已形成独立增量，见 [工具规则核心记录](../../validation/s4-2/tool-rules.md)。正式 Evaluator 注册与 TypedResult Adapter、required evidence/资格契约、API/Console 仍按下文实施；本记录不宣称 S4.2 全部交付。
+
+后续 T3 增量见[正式冻结与执行记录](../../validation/s4-2/frozen-rule-execution.md)：独立版本、参数/制品身份、公开 opt-in 创建入口及真实正常/恢复消费者；required 资格与 Console 诊断继续分批实施。
+
 ## 1. 目标和当前实现
 
 S4.2 将过程规则接入现有冻结 Evaluator 链路，以 Langfuse Observations 组装的 `StandardTrajectory` 为唯一过程证据。

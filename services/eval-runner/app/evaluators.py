@@ -879,6 +879,9 @@ def _register_builtin_evaluators(registry: EvaluatorRegistry) -> EvaluatorRegist
         registry.register_definition(definition)
         registry.register_version(version)
 
+    from .trajectory.bindings import register_tool_rules
+    register_tool_rules(registry)
+
     composite_definition = EvaluatorDefinition(
         id="overall_pass",
         name="综合通过（历史兼容）",

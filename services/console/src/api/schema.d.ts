@@ -1524,6 +1524,13 @@ export interface components {
             id: string;
             /** Version */
             version: string;
+            /**
+             * Params
+             * @description 冻结的规则参数；现有 Output 规则仅接受空参数。
+             */
+            params?: {
+                [key: string]: unknown;
+            };
         };
         /**
          * EvaluatorVersionInfo
@@ -1712,6 +1719,11 @@ export interface components {
             agent_id: string;
             /** Agent Version */
             agent_version: string;
+            /**
+             * Trajectory Contract Json
+             * @description 显式启用轨迹采集的 canonical JSON 合同；字符串承载以保留十进制精度，来源须匹配不可变 AgentVersion。
+             */
+            trajectory_contract_json?: string | null;
             /** Dataset Name */
             dataset_name: string;
             /** Dataset Version */

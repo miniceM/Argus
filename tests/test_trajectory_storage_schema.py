@@ -297,7 +297,7 @@ def assert_upgrade_preserves_history(engine, tmp_path):
             )
         )
     runner = MigrationRunner(engine, ROOT / "migrations")
-    assert runner.apply_all() == [MIGRATION]
+    assert runner.apply_all() == [MIGRATION, "018_trajectory_acquisition_runtime.sql"]
     assert runner.apply_all() == []
     runner.check_schema_compatibility()
     with engine.connect() as conn:
@@ -309,6 +309,7 @@ def assert_upgrade_preserves_history(engine, tmp_path):
     with Session(engine) as session:
         checkpoint = session.get(ExecutionCheckpointRecord, "old-c")
         assert checkpoint.trajectory_acquisition_json is None
+        assert checkpoint.trajectory_runtime_json is None
         assert checkpoint.agent_output == {"result": "synthetic"}
         assert checkpoint.input_payload == {"request": "synthetic"}
         assert checkpoint.output_digest == "historical-output"

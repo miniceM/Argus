@@ -4440,6 +4440,12 @@
             "maxLength": 64,
             "minLength": 1,
             "title": "Version"
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params",
+            "description": "冻结的规则参数；现有 Output 规则仅接受空参数。"
           }
         },
         "type": "object",
@@ -4992,6 +4998,20 @@
           "agent_version": {
             "type": "string",
             "title": "Agent Version"
+          },
+          "trajectory_contract_json": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1048576,
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trajectory Contract Json",
+            "description": "显式启用轨迹采集的 canonical JSON 合同；字符串承载以保留十进制精度，来源须匹配不可变 AgentVersion。"
           },
           "dataset_name": {
             "type": "string",

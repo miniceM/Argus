@@ -59,6 +59,17 @@ _INVENTORY_FIELDS = {
     "terminal_event_ids",
     "terminal_final_sequence",
 }
+_STRUCTURAL_SEMANTIC_FIELDS = {
+    "phase",
+    "status",
+    "event_id",
+    "sequence",
+    "call_id",
+    "causal_event_ids",
+    "terminal_event_count",
+    "terminal_event_ids",
+    "terminal_final_sequence",
+}
 
 
 def _secret_field(name: str) -> bool:
@@ -111,6 +122,28 @@ class TrajectoryLimits(_ContractModel):
         return self
 
 
+class StructuralRole(_ContractModel):
+    provider_type: Identity
+    raw_name: Annotated[str, Field(pattern=r"^[\x20-\x7e]{1,64}$", max_length=64)]
+    step_type: Literal["CUSTOM", "AGENT", "LLM"]
+    safe_name: Identity
+    metadata_equals: dict[Identity, Identity] = Field(min_length=1, max_length=32)
+
+    @field_validator("raw_name")
+    @classmethod
+    def nonblank_name(cls, name):
+        if not name.strip():
+            raise ValueError("TRAJECTORY_STRUCTURAL_NAME_EMPTY")
+        return name
+
+    @field_validator("metadata_equals")
+    @classmethod
+    def safe_predicate_keys(cls, predicates):
+        if any(_secret_field(key) for key in predicates):
+            raise ValueError("TRAJECTORY_SOURCE_SECRET_PATH_FORBIDDEN")
+        return predicates
+
+
 class SourceProfile(_ContractModel):
     profile_id: Identity
     version: Identity
@@ -126,6 +159,18 @@ class SourceProfile(_ContractModel):
     capabilities: dict[Capability, CapabilityCoverage]
     completion_protocol: Literal["workflow-inventory-v1", "root-only-v1"]
     human_authority_id: Identity | None
+    # 空值不进入旧合同序列化；有声明时全部规则进入测量摘要。
+    structural_roles: list[StructuralRole] = Field(
+        default_factory=list, max_length=64, exclude_if=lambda roles: not roles
+    )
+
+    @field_validator("structural_roles")
+    @classmethod
+    def unambiguous_structural_roles(cls, roles):
+        keys = [(role.provider_type, role.raw_name) for role in roles]
+        if len(keys) != len(set(keys)):
+            raise ValueError("TRAJECTORY_STRUCTURAL_ROLE_DUPLICATE")
+        return sorted(roles, key=lambda role: (role.provider_type, role.raw_name))
 
     @field_validator("fields")
     @classmethod
@@ -147,6 +192,8 @@ class SourceProfile(_ContractModel):
 
     @model_validator(mode="after")
     def coherent_capabilities(self):
+        if self.structural_roles and not _STRUCTURAL_SEMANTIC_FIELDS <= self.fields.keys():
+            raise ValueError("TRAJECTORY_STRUCTURAL_GUARD_FIELDS_INCOMPLETE")
         identity_paths = {
             tuple(path)
             for field in ("provider_type", "raw_name", "tool_raw_name")
@@ -166,6 +213,8 @@ class SourceProfile(_ContractModel):
             self.capabilities[key] != "NONE" for key in get_args(Capability) if key != "timing"
         ):
             raise ValueError("TRAJECTORY_ROOT_ONLY_CAPABILITIES_INVALID")
+        if self.completion_protocol == "root-only-v1" and self.structural_roles:
+            raise ValueError("TRAJECTORY_ROOT_ONLY_STRUCTURE_FORBIDDEN")
         return self
 
 

@@ -3,6 +3,7 @@ from decimal import Decimal
 import pytest
 from app.trajectory.contract import TrajectoryLimits
 from app.trajectory.redaction import project_json
+from pydantic import BaseModel
 
 
 def test_allowlisted_nested_scalar_projection_preserves_exact_numbers_and_visibility():
@@ -47,6 +48,25 @@ def test_hidden_ancestor_overrides_available_nested_value():
     assert result.value == {} and result.visibility == {"$.customer.id": "REDACTED"}
 
 
+@pytest.mark.parametrize("paths,expected,warnings", [
+    (["$.customer.id"], {"$.customer.id": "REDACTED"}, []),
+    (["$.customer.id", "$.other"], {"$.customer.id": "REDACTED"}, ["ARGUMENTS_NOT_COLLECTED"]),
+    (["$.other"], {}, ["ARGUMENTS_NOT_COLLECTED"]),
+])
+def test_explicit_hidden_paths_survive_absent_payload_without_inventing_other_fields(paths, expected, warnings):
+    result = project_json(None, paths, limits=TrajectoryLimits(), hidden_paths=["$.customer"],
+                          source_visibility="REDACTED")
+    assert result.visibility == expected and result.warnings == warnings and not result.complete
+    assert result.value == ({} if expected else None)
+
+
+@pytest.mark.parametrize("value", [None, {"customer_id": "synthetic-secret"}])
+def test_explicit_uncollected_marker_is_not_invalid_or_available_parameter_evidence(value):
+    result = project_json(value, ["$.customer_id"], limits=TrajectoryLimits(), source_visibility="UNCOLLECTED")
+    assert result.value is None and result.visibility == {} and not result.complete
+    assert result.warnings == ["ARGUMENTS_NOT_COLLECTED"]
+
+
 @pytest.mark.parametrize(
     "limits,value",
     [
@@ -79,3 +99,17 @@ def test_large_existing_array_index_is_invalid_without_unbounded_projection_allo
     assert result.visibility == {"$.items[1000]": "INVALID"}
     assert result.value == {"items": []}
     assert not result.complete
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_sdk_model_is_rejected_before_any_serialization(nested):
+    class SdkPayload(BaseModel):
+        id: str = "synthetic-secret"
+
+        def model_dump(self, *args, **kwargs):
+            raise AssertionError("source SDK serialization must not execute")
+
+    value = {"id": SdkPayload()} if nested else SdkPayload()
+    result = project_json(value, ["$.id"], limits=TrajectoryLimits())
+    assert result.value == {} and result.visibility == {"$.id": "INVALID"}
+    assert result.warnings == ["ARGUMENTS_INVALID"] and not result.complete

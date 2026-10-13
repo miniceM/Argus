@@ -89,6 +89,8 @@ def project_json(
         raise ValueError("TRAJECTORY_CONTRACT_PATH_SEGMENT_LIMIT")
     if type(source_visibility) is str and source_visibility == "REDACTED" and not hidden:
         return JsonProjection(value={}, visibility={path: "REDACTED" for path in paths}, complete=False)
+    if type(source_visibility) is str and source_visibility == "UNCOLLECTED":
+        return JsonProjection(value=None, visibility={}, complete=False, warnings=["ARGUMENTS_NOT_COLLECTED"])
     if type(source_visibility) is not str or source_visibility not in {"AVAILABLE", "REDACTED", "MISSING"}:
         return JsonProjection(
             value={}, visibility={path: "INVALID" for path in paths}, complete=False, warnings=["ARGUMENTS_INVALID"]
@@ -99,10 +101,21 @@ def project_json(
         elif value is None:
             parsed = None
         else:
+            # 领域 codec 可以编码受控模型；外部来源必须先证明是精确 JSON 值。
+            validate_bounded_json(value, limits)
             parsed = canonical_loads(
                 canonical_dumps(value, max_bytes=limits.max_source_bytes), max_bytes=limits.max_source_bytes
             )
         if parsed is None and value is None:
+            if source_visibility == "REDACTED":
+                visibility = {
+                    path: "REDACTED" for path, tokens in compiled.items()
+                    if any(tokens[: len(prefix)] == prefix for prefix in hidden)
+                }
+                return JsonProjection(
+                    value={} if visibility else None, visibility=visibility, complete=False,
+                    warnings=[] if visibility and len(visibility) == len(paths) else ["ARGUMENTS_NOT_COLLECTED"],
+                )
             return JsonProjection(value=None, visibility={}, complete=False, warnings=["ARGUMENTS_NOT_COLLECTED"])
         if type(parsed) not in (dict, list):
             raise ValueError("TRAJECTORY_ARGUMENTS_SHAPE_INVALID")

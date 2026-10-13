@@ -440,7 +440,9 @@ def default_quality_policy(bindings: Sequence[Any]) -> QualityPolicy:
     for binding in bindings:
         result_type = _binding_result_type(binding)
         evaluator_id = str(getattr(binding, "evaluator_id", ""))
-        if result_type == "numeric":
+        if result_type == "boolean" and getattr(binding, "input_contract", {}).get("input_kind") == "trajectory":
+            rules.append(QualityRule(evaluator_id=evaluator_id, operator="==", expected_value=True, result_type="boolean", required=True))
+        elif result_type == "numeric":
             operator = "<=" if str(getattr(binding, "direction", "")) == "lower_is_better" else ">="
             rules.append(
                 QualityRule(

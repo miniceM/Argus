@@ -320,6 +320,8 @@ class ExperimentLaunchCreateRequest(BaseModel):
     name: str | None = Field(default=None, description="Optional experiment name")
     agent_id: str
     agent_version: str
+    trajectory_contract_json: str | None = Field(default=None, min_length=2, max_length=1_048_576,
+        description="显式启用轨迹采集的 canonical JSON 合同；字符串承载以保留十进制精度，来源须匹配不可变 AgentVersion。")
     dataset_name: str
     dataset_version: str | None = None
     environment: str = Field(default="production", min_length=1, max_length=64)
@@ -468,6 +470,7 @@ class EvaluatorSelection(BaseModel):
 
     id: str = Field(..., min_length=1, max_length=128)
     version: str = Field(..., min_length=1, max_length=64)
+    params: dict[str, Any] = Field(default_factory=dict, description="冻结的规则参数；现有 Output 规则仅接受空参数。")
 
 
 class EvaluatorSelectionErrorResponse(BaseModel):

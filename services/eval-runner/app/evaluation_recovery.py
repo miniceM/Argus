@@ -391,6 +391,8 @@ def recover_evaluation(
         output = checkpoint.agent_output
         expected_output = checkpoint.expected_output
         output_digest = checkpoint.output_digest
+        from .trajectory.inputs import make_evaluation_context
+        context = make_evaluation_context(session, checkpoint, manifest)
         # Preserve already-successful results verbatim.
         existing_rows = list(
             session.scalars(
@@ -453,6 +455,7 @@ def recover_evaluation(
         output=output,
         expected_output=expected_output,
         only_binding_ids=needed_ids or None,
+        context=context,
     )
     new_by_key: dict[str, Any] = {}
     for result in partial.typed_results:

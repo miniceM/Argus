@@ -205,7 +205,7 @@ QueryClient 级请求锁 store：新增 `launchActionLocks.ts`（模块私有 `W
 
 ## 交付与提交清单
 
-分支 `codex/fix-pr134-review-gaps`（based on PR #134 head `c1458c9`），本地 5 个 Conventional Commit：
+分支 `codex/fix-pr134-review-gaps`（based on PR #134 head `c1458c9`），本地 6 个 Conventional Commit：
 
 | Commit | 类别 | 内容 |
 |---|---|---|
@@ -214,12 +214,13 @@ QueryClient 级请求锁 store：新增 `launchActionLocks.ts`（模块私有 `W
 | `91e9527` | fix | F3：空菜单键盘关闭与焦点兜底 |
 | `6e85a1d` | docs | 本 PR #134 审查缺口验收记录（dated supplement） |
 | `10b015a` | fix | F1 后续修正：StrictMode 重挂载后仍可写运行动作反馈 |
+| `67323ba` | docs | 记录 StrictMode 修正与本交付清单（最终 HEAD；CI run `38342450008` 于该 SHA 5/5 通过） |
 
 交付：**PR #135**（https://github.com/miniceM/Argus/pull/135），base 为 PR #134 的分支 `codex/fix-issue119-main-acceptance`（`c1458c9`），因此 diff 只含三项审查缺口的修复；合并后 PR #134 自动更新为含修复的 head。
 
 ## 未提交/未授权事项与剩余风险
 
-1. **交付形态与远端 CI**：分支 `codex/fix-pr134-review-gaps` 已推送，并开为 **PR #135**（base = PR #134 的 `codex/fix-issue119-main-acceptance`，即 `c1458c9`），状态 OPEN / MERGEABLE。PR #135 head `10b015a` 的 workflow run `38341654775` **5/5 Job 通过**（Code Quality、Full Python Tests、Docker/Compose、Console Quality & E2E、Langfuse Cloud E2E）。远端 **Review 意见未处理**，也未回复 / resolve / merge（需另行授权）。更早的 5 Job 绿色记录属于 `c1458c9`，不能代表本 HEAD。
+1. **交付形态与远端 CI**：分支 `codex/fix-pr134-review-gaps` 已推送，并开为 **PR #135**（base = PR #134 的 `codex/fix-issue119-main-acceptance`，即 `c1458c9`），状态 OPEN / MERGEABLE。代码 head `10b015a`（run `38341654775`）与最终 HEAD `67323ba`（run `38342450008`）均 **5/5 Job 通过**（Code Quality、Full Python Tests、Docker/Compose、Console Quality & E2E、Langfuse Cloud E2E）。截至 2026-10-13 核对，PR #135 尚无 Review 评论或 inline thread 需要回复；亦未 resolve / merge（需另行授权）。更早的 5 Job 绿色记录属于 `c1458c9`，不能代表本 HEAD。
 2. **真实全链路未验证**：本次证据止于本地 mock UI、mock 浏览器与隔离真实本地 API；未执行真实 Worker→Agent→Langfuse 生产链路，远端 CI 也不构成该链路的证明。
 3. **`ComparisonReport.tsx` 残留**：该组件的正式裁决块仍只 gate `formal.available`。它当前**不在** `src/app/router.tsx` 的任何路由中（仅被其自身测试引用），且不含回归计数句子，因此不在本方案声明的修改范围内。若后续接入路由，应按 `comparisonPresentation.ts` 的同一 gate 收口。
 4. **前端锁的边界**：跨浏览器 reload、跨 Tab、跨设备、跨 QueryClient 不共享前端锁（方案 §6.1 明确不承诺）；相关边界由后端幂等保障。

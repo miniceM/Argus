@@ -151,7 +151,7 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python scripts/ci/verify_main_cloud_acceptance.py --wait-for-current-main --timeout-seconds 3600 --poll-seconds 20
+        run: python -m scripts.ci.verify_main_cloud_acceptance --wait-for-current-main --timeout-seconds 3600 --poll-seconds 20
 
   image:
     name: Build patched Langfuse image
@@ -223,7 +223,7 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python scripts/ci/verify_main_cloud_acceptance.py --wait-for-current-main --timeout-seconds 0 --poll-seconds 1
+        run: python -m scripts.ci.verify_main_cloud_acceptance --wait-for-current-main --timeout-seconds 0 --poll-seconds 1
 
       - name: Build and publish the release image
         id: build

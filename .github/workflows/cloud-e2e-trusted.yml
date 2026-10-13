@@ -62,7 +62,7 @@ jobs:
           PR_NUMBER: ${{ inputs.pr_number }}
           EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
           EXPECTED_BASE_SHA: ${{ inputs.expected_base_sha }}
-        run: python scripts/ci/cloud_e2e_receipt.py prepare
+        run: python -m scripts.ci.cloud_e2e_receipt prepare
 
       - name: Upload trusted candidate manifest
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -122,7 +122,7 @@ jobs:
           LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
           LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
           LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
-        run: python scripts/ci/cloud_e2e_receipt.py verify
+        run: python -m scripts.ci.cloud_e2e_receipt verify
 
       - name: Run cloud end-to-end tests
         working-directory: candidate
@@ -180,7 +180,7 @@ jobs:
           GITHUB_API_URL: ${{ github.api_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: python scripts/ci/cloud_e2e_receipt.py record
+        run: python -m scripts.ci.cloud_e2e_receipt record
 
       - name: Upload trusted candidate receipt
         if: always()

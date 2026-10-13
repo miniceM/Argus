@@ -440,6 +440,9 @@ jobs:
         if: github.ref == 'refs/heads/main' && steps.cloud-secrets.outputs.cloud_state == 'ready'
         env:
           E2E_RUN_SUFFIX: ${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
         run: bash scripts/ci-e2e-cloud.sh
 
       - name: Remove Cloud credentials file
@@ -479,7 +482,7 @@ jobs:
           POLICY_STATE: main acceptance verifies actual Cloud execution
           RISK_STATE: main push or authorized main dispatch
           CI_CHECKS_JSON: ${{ toJSON(needs) }}
-        run: python scripts/ci/write_cloud_summary.py
+        run: python -m scripts.ci.write_cloud_summary
 
   main-cloud-acceptance:
     name: Main Cloud Acceptance
@@ -508,7 +511,7 @@ jobs:
       - name: Verify exact main Cloud acceptance
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python scripts/ci/verify_main_cloud_acceptance.py
+        run: python -m scripts.ci.verify_main_cloud_acceptance
 
       - name: Upload main Cloud acceptance receipt
         if: success()

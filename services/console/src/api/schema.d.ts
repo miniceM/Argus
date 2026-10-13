@@ -927,6 +927,11 @@ export interface components {
             artifact_ref?: string | null;
             /** Environment */
             environment?: string | null;
+            /**
+             * Trajectory Source Profile Id
+             * @description 冻结来源 profile ID；声明本身不证明获准或完整，NULL 保持历史执行路径
+             */
+            trajectory_source_profile_id?: string | null;
             /** Metadata */
             metadata?: {
                 [key: string]: unknown;
@@ -991,6 +996,11 @@ export interface components {
             is_idempotent: boolean;
             /** Environment */
             environment?: string | null;
+            /**
+             * Trajectory Source Profile Id
+             * @description 冻结来源 profile ID；声明本身不证明获准或完整，NULL 保持历史执行路径
+             */
+            trajectory_source_profile_id?: string | null;
             /** Is Active */
             is_active: boolean;
             /**

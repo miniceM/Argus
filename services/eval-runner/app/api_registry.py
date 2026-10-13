@@ -221,6 +221,7 @@ def create_agent_version(
             is_idempotent=payload.is_idempotent,
             artifact_ref=payload.artifact_ref,
             environment=payload.environment,
+            trajectory_source_profile_id=payload.trajectory_source_profile_id,
             metadata=payload.metadata,
             trace_propagation=payload.trace_propagation,
         )

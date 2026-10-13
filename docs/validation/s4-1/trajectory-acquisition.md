@@ -29,6 +29,8 @@
 
 最终代码于 2026-10-14 复验：隔离 PostgreSQL 501 passed，JUnit 0 failure/error/skip（11.268 秒），容器按 owner label 清理；`make validate` 8 步 PASS，1445 Python / 847 Console，OpenAPI/schema 无 drift，Compose 校验通过。独立真实采集 40 passed，JUnit 0 failure/error/skip（144.536 秒）。field-matrix 核对 32 条真实采集保存/读取：22 OBSERVED_COMPLETE（native 12、Pydantic 10），10 ROOT_ONLY（HTTP-only）；两条延迟场景均首轮 PENDING、保留原 deadline。旧轮结果不替代本次最终证据。
 
+PR #171 首轮远端 Python CI 在 50ms 墙钟期限的分页单测失败，真实采集 CI 通过。单测改为控制逻辑截止在第二页实际被 asyncio.timeout 取消时推进，并增加首查/取消阶段断言；保留原超时、PARTIAL 与三条已读 Step 断言，排除机器 CPU 速度对前置条件的影响。该调整未改变采集实现；带 coverage 的定向测试已通过，最新远端 CI 另核验。
+
 ```bash
 python -m pytest -q tests/test_trajectory_acquisition.py tests/test_trajectory_evidence.py
 make trajectory-test

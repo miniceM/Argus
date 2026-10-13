@@ -478,16 +478,24 @@ async def test_deadline_round_preserves_snapshot_only_without_new_or_conflicting
 
 @run_async
 async def test_real_deadline_keeps_already_read_pages_when_next_page_times_out(db):
-    _, _, contract, rows = setup(db, deadline_seconds=Decimal("0.05"), quiet_window_seconds=Decimal("0.01"), page_size=3)
-    runtime = AcquisitionRuntime(db[1].scope, contract, session_factory=db[0].get_session, started_at=datetime.now(UTC))
+    runtime, clock, contract, rows = setup(db, deadline_seconds=Decimal("0.05"), quiet_window_seconds=Decimal("0.01"), page_size=3)
+    phases = []
     class SlowNext:
         async def read_page(self, *args, **options):
             if options["cursor"] is None:
+                phases.append("first-page")
                 return page(rows[:3], "1")
-            await asyncio.Event().wait()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                # 请求仍由真实 asyncio.timeout 取消；逻辑截止在此发生，
+                # 不让 CI 的合同校验/归一化 CPU 速度决定“首查已经到达”的前提。
+                clock.advance(0.05)
+                phases.append("second-page-cancelled")
     final = await collect(runtime, contract, SlowNext())
     assert final.state == "READY" and final.completeness.status == "PARTIAL"
     assert len(frozen(db, final, contract).steps) == 3
+    assert phases == ["first-page", "second-page-cancelled"]
 
 
 @run_async

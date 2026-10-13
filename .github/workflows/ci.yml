@@ -166,7 +166,7 @@ jobs:
       - name: Verify real local ingestion and production invocation
         run: |
           mkdir -p artifacts
-          python -m pytest -q tests/test_trajectory_backend_integration.py tests/test_trajectory_observation_integration.py -m trajectory_local \
+          python -m pytest -q tests/test_trajectory_backend_integration.py tests/test_trajectory_observation_integration.py tests/test_trajectory_rule_integration.py -m trajectory_local \
             --basetemp=artifacts/s4-local --junitxml=artifacts/s4-junit.xml --tb=short
       - name: Upload field and lineage evidence
         if: always()

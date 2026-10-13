@@ -1,0 +1,113 @@
+{
+  "captured_at": "2026-10-13T12:40:31.158571+00:00",
+  "server": "4.38.0",
+  "runner_sdk": "4.16.0",
+  "agent_packages": {
+    "opentelemetry-sdk": "1.45.1",
+    "opentelemetry-api": "1.45.1",
+    "pydantic-ai-slim": "2.55.0"
+  },
+  "raw_metadata_report_sha256": "ba39b4824fe536201984201a4beb15a35a0149a854e73d1b9ae0c602d1ee2523",
+  "profiles": {
+    "native_otel": {
+      "cases": 18,
+      "observations": 154,
+      "visibility_ms": {
+        "min": 373,
+        "p95": 8024,
+        "max": 8024
+      },
+      "normalized_cases": 3,
+      "scoped_steps": [
+        7
+      ],
+      "structural_steps": [
+        1
+      ],
+      "business_tool_steps": [
+        4
+      ],
+      "reader_source_bytes": {
+        "min": 13251,
+        "max": 13254
+      },
+      "cursor_hops": [
+        3
+      ],
+      "contract_digests": [
+        "sha256:1a2c802a44dbb284364545a55e44395a296ed8a3d240a11c786a8d0f17d92e87"
+      ],
+      "parent_closed_all": true,
+      "structural_tool_capabilities": "NONE"
+    },
+    "pydantic_ai": {
+      "cases": 11,
+      "observations": 157,
+      "visibility_ms": {
+        "min": 442,
+        "p95": 1262,
+        "max": 1262
+      },
+      "normalized_cases": 3,
+      "scoped_steps": [
+        13
+      ],
+      "structural_steps": [
+        7
+      ],
+      "business_tool_steps": [
+        4
+      ],
+      "reader_source_bytes": {
+        "min": 30621,
+        "max": 30625
+      },
+      "cursor_hops": [
+        6
+      ],
+      "contract_digests": [
+        "sha256:1a2c802a44dbb284364545a55e44395a296ed8a3d240a11c786a8d0f17d92e87"
+      ],
+      "parent_closed_all": true,
+      "structural_tool_capabilities": "NONE"
+    },
+    "http_only": {
+      "cases": 10,
+      "observations": 20,
+      "visibility_ms": {
+        "min": 339,
+        "p95": 1013,
+        "max": 1013
+      },
+      "normalized_cases": 10,
+      "scoped_steps": [
+        1
+      ],
+      "structural_steps": [
+        0
+      ],
+      "business_tool_steps": [
+        0
+      ],
+      "reader_source_bytes": {
+        "min": 2735,
+        "max": 2735
+      },
+      "cursor_hops": [
+        0
+      ],
+      "contract_digests": [
+        "sha256:1a2c802a44dbb284364545a55e44395a296ed8a3d240a11c786a8d0f17d92e87"
+      ],
+      "parent_closed_all": true,
+      "structural_tool_capabilities": "NONE"
+    }
+  },
+  "qualification": "local-fixture-field-and-topology-verification-only",
+  "pending": [
+    "production-profile-qualification",
+    "acquisition-convergence-and-load-calibration",
+    "assembler",
+    "manifest-and-artifact-recovery"
+  ]
+}

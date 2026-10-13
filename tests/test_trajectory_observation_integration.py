@@ -51,7 +51,7 @@ def s40_runtime(tmp_path_factory):
     db.engine.dispose()
 
 
-def frozen_manifest(endpoint, scenario="serial", *, db, profile):
+def frozen_manifest(endpoint, scenario="serial", *, db, profile, trajectory_source_profile_id=None):
     from app.registry import AgentRegistry
     identity = current_runner_identity().model_dump()
     registry = default_evaluator_registry
@@ -62,14 +62,16 @@ def frozen_manifest(endpoint, scenario="serial", *, db, profile):
     version = profile + "-" + uuid.uuid4().hex[:12]
     registered = AgentRegistry(db).create_version("test-agent", version, endpoint,
         request_mapping={"operation": "input.operation", "customer_id": "input.customer_id"},
-        is_idempotent=True, timeout_seconds=30, max_retries=2, max_concurrency=1, rate_limit_per_minute=60)
+        is_idempotent=True, timeout_seconds=30, max_retries=2, max_concurrency=1, rate_limit_per_minute=60,
+        trajectory_source_profile_id=trajectory_source_profile_id)
     return {
         "schema_version": "1.2", "runner": identity,
         "agent": {"agent_id": "test-agent", "version": version, "agent_version_id": registered.id,
                   "spec_digest": registered.spec_digest,
                   "endpoint": endpoint, "method": "POST",
                   "request_mapping": {"operation": "input.operation", "customer_id": "input.customer_id"},
-                  "is_idempotent": True},
+                  "is_idempotent": True,
+                  **({"trajectory_source_profile_id": trajectory_source_profile_id} if trajectory_source_profile_id else {})},
         "execution_policy": {"timeout_seconds": 30, "max_retries": 2, "max_concurrency": 1,
                              "rate_limit_per_minute": 60},
         "dataset": {"version": "fixture-v1", "items": [{"id": "synthetic-case", "input": {
@@ -79,9 +81,10 @@ def frozen_manifest(endpoint, scenario="serial", *, db, profile):
     }
 
 
-def invoke_worker(s40_runtime, monkeypatch, runtime, endpoint, scenario="serial"):
+def invoke_worker(s40_runtime, monkeypatch, runtime, endpoint, scenario="serial", *, trajectory_source_profile_id=None):
     db, queue, _limiter, orchestrator, worker, _reconciler = s40_runtime
-    manifest = frozen_manifest(endpoint, scenario, db=db, profile=runtime.agent_profiles[endpoint])
+    manifest = frozen_manifest(endpoint, scenario, db=db, profile=runtime.agent_profiles[endpoint],
+                               trajectory_source_profile_id=trajectory_source_profile_id)
     launch = orchestrator.create_launch("test-agent", manifest["agent"]["version"], "s40-local", "fixture-v1", "S40", manifest)
     orchestrator.start_launch(launch.id)
     monkeypatch.setattr("app.worker.get_langfuse_client_safe", lambda: runtime.sdk)
@@ -97,6 +100,7 @@ def invoke_worker(s40_runtime, monkeypatch, runtime, endpoint, scenario="serial"
         version = session.get(AgentVersionRecord, launch.agent_version_id)
         assert version.agent_id == launch.agent_id == "test-agent"
         assert version.endpoint == endpoint and version.spec_digest == manifest["agent"]["spec_digest"]
+        assert version.trajectory_source_profile_id == trajectory_source_profile_id
         assert len(attempts) == 1 and item.final_attempt_id == attempts[0].id
         assert item.execution_status.lower() == "succeeded", item.execution_error
         assert item.eval_status.lower() == "succeeded", item.eval_error
@@ -113,7 +117,9 @@ def invoke_worker(s40_runtime, monkeypatch, runtime, endpoint, scenario="serial"
 @pytest.mark.parametrize("repeat", range(3))
 def test_real_worker_serial(local_langfuse, s40_runtime, monkeypatch, tmp_path, profile, repeat):
     with AgentProcess(local_langfuse, tmp_path, profile) as agent:
-        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint)
+        source_profile_id = "pydantic-ai-v1" if profile == "pydantic_ai" else "native-otel-v1"
+        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint,
+                                 trajectory_source_profile_id=source_profile_id)
         observations = local_langfuse.wait_observations(identity["trace_id"], minimum=8)
         assert_lineage(observations, identity)
         agent_roots = [row for row in observations if row["name"] == f"{profile}.business"]
@@ -134,16 +140,80 @@ def test_real_worker_serial(local_langfuse, s40_runtime, monkeypatch, tmp_path, 
             if row.get("metadata", {}).get("attributes.workflow.phase") == "REQUESTED":
                 assert row["metadata"]["attributes.workflow.arguments_visibility"] == "AVAILABLE"
                 assert json.loads(row["input"]) == {"customer_id": "synthetic-001"}
-        local_langfuse.record(profile, "serial", identity, observations)
+        normalization = assert_real_normalized_structure(local_langfuse, s40_runtime, identity, source_profile_id)
+        local_langfuse.record(profile, "serial", identity, observations, normalization=normalization)
 
 
-def test_http_only_preserves_answer_evaluation(local_langfuse, s40_runtime, monkeypatch, tmp_path):
+@pytest.mark.parametrize("repeat", range(10))
+def test_http_only_preserves_answer_evaluation(local_langfuse, s40_runtime, monkeypatch, tmp_path, repeat):
     with AgentProcess(local_langfuse, tmp_path, "http_only") as agent:
-        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint)
+        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint,
+                                 trajectory_source_profile_id="http-only-v1")
         observations = local_langfuse.wait_observations(identity["trace_id"], minimum=2)
         assert {row["name"] for row in observations} == {"remote-agent-http", "eval_item_execution:synthetic-case"}
         assert_lineage(observations, identity)
-        local_langfuse.record("http_only", "serial", identity, observations)
+        normalization = assert_real_normalized_structure(local_langfuse, s40_runtime, identity, "http-only-v1")
+        local_langfuse.record("http_only", "serial", identity, observations, normalization=normalization)
+
+
+def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id):
+    from app.registry import AgentRegistry
+    from app.trajectory.contract import TrajectoryContract
+    from app.trajectory.normalizer import ObservationNormalizer
+    from app.trajectory.reader import LangfuseObservationReader
+    from app.trajectory.schema import TrajectoryScope
+    from trajectory_contract_fixtures import observed_banking_contract_payload
+
+    version = AgentRegistry(s40_runtime[0]).get_version("test-agent", identity["agent_version"])
+    assert version.id == identity["agent_version_id"] and version.trajectory_source_profile_id == profile_id
+    contract = TrajectoryContract.model_validate(observed_banking_contract_payload()).bind_source_version(version)
+    scope = TrajectoryScope(launch_id=identity["launch_id"], item_execution_id=identity["item_id"],
+        dataset_item_id=identity["dataset_item_id"], attempt_id=identity["attempt_id"],
+        dispatch_generation=identity["generation"], trace_id=identity["trace_id"], root_observation_id=identity["root_id"])
+    async def read():
+        rows, cursors, source_bytes = [], set(), 0
+        cursor = None
+        async with LangfuseObservationReader(server_url=runtime.base_url, public_key=runtime.env["S4_PUBLIC_KEY"],
+                secret_key=runtime.env["S4_SECRET_KEY"]) as reader:
+            for _ in range(contract.limits.max_pages):
+                page = await reader.read_page(scope, cursor=cursor, page_size=2, timeout_seconds=5,
+                                              max_bytes=contract.limits.max_source_bytes - source_bytes)
+                rows.extend(page.rows)
+                source_bytes += page.source_bytes
+                cursor = page.cursor
+                if cursor is None:
+                    return rows, len(cursors), source_bytes
+                assert cursor not in cursors
+                cursors.add(cursor)
+        pytest.fail("Production Reader did not exhaust real normalization pages")
+    rows, cursor_hops, source_bytes = asyncio.run(read())
+    assert len(rows) == len({row["id"] for row in rows})
+    expected = {scope.root_observation_id}
+    for _ in rows:
+        expected.update(row["id"] for row in rows if row["parentObservationId"] in expected)
+    normalizer = ObservationNormalizer(contract)
+    normalized = [normalizer.normalize(row, scope, index=index) for index, row in enumerate(rows)]
+    scoped = [result for result in normalized if result.step and result.step.step_id in expected]
+    assert {result.step.step_id for result in scoped} == expected, "a real framework parent bridge was discarded"
+    structural = [result for result in scoped if result.structural]
+    assert all(result.step.parent_step_id in expected for result in scoped if result.step.step_id != scope.root_observation_id)
+    assert all(not result.warnings for result in structural)
+    assert all(all(capability == "NONE" for capability in result.capabilities.values()) for result in structural)
+    assert all(result.step.tool_identity is None and result.step.arguments_redacted is None for result in structural)
+    tools = [result for result in scoped if result.step.type == "TOOL"]
+    if profile_id == "http-only-v1":
+        assert len(scoped) == 1 and not tools and not structural
+        assert all(value == "NONE" for value in scoped[0].capabilities.values())
+    else:
+        assert cursor_hops and structural
+        assert len(tools) == 4 and {result.step.phase for result in tools} == {"REQUESTED", "EXECUTED"}
+        assert all(result.step.tool_identity is not None for result in tools)
+        assert all(result.step.duration_ms is not None for result in tools if result.step.phase == "EXECUTED")
+    return {"profile_id": profile_id, "source_profile_version": contract.source_profile.version,
+            "trajectory_contract_digest": contract.digest, "scoped_steps": len(scoped),
+            "structural_steps": len(structural), "business_tool_steps": len(tools),
+            "cursor_hops": cursor_hops, "source_bytes": source_bytes,
+            "parent_closed": True, "structural_tool_capabilities": "NONE"}
 
 
 def test_sync_entry_injects_remote_observation_parent(local_langfuse, s40_runtime, tmp_path):

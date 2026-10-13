@@ -98,3 +98,78 @@ def contract_payload(**changes):
         "limits": {},
     }
     return value | changes
+
+
+def observed_banking_contract_payload():
+    """与真实门禁交叉验证的本地银行示例配置；不作为生产默认来源资格。"""
+    payload = contract_payload()
+    payload["assembler_version"] = "local-banking-structure-1"
+    entries = []
+    for profile in payload["source_profile_set"]:
+        pydantic = profile["profile_id"] == "pydantic-ai-v1"
+        service = "pydantic_ai" if pydantic else "native_otel"
+        profile["version"] = "local-banking-1"
+        profile["fields"]["tool_raw_name"] = [["metadata", "attributes.gen_ai.tool.name"]]
+        profile["structural_roles"] = [
+            {
+                "provider_type": "SPAN",
+                "raw_name": service + ".business",
+                "step_type": "AGENT",
+                "safe_name": "business-scope",
+                "metadata_equals": {
+                    "scope.name": "synthetic-banking-business",
+                    "scope.version": "1.0.0",
+                    "resourceAttributes.service.name": service,
+                    "resourceAttributes.service.version": "fixture-v1",
+                },
+            }
+        ]
+        if pydantic:
+            framework_source = {
+                "scope.name": "pydantic-ai",
+                "scope.version": "2.55.0",
+                "resourceAttributes.service.name": service,
+                "resourceAttributes.service.version": "fixture-v1",
+            }
+            profile["structural_roles"].extend(
+                [
+                    {
+                        "provider_type": kind,
+                        "raw_name": raw,
+                        "step_type": step_type,
+                        "safe_name": safe,
+                        "metadata_equals": framework_source,
+                    }
+                    for kind, raw, step_type, safe in (
+                        ("AGENT", "agent run", "AGENT", "framework-agent"),
+                        ("GENERATION", "chat function:plan:", "LLM", "framework-model"),
+                        ("TOOL", "account_crm_lookup", "CUSTOM", "framework-tool-container"),
+                        ("TOOL", "account_ledger_read", "CUSTOM", "framework-tool-container"),
+                    )
+                ]
+            )
+        for raw, logical in (
+            ("crm_lookup", "banking.customer.lookup"),
+            ("ledger_read", "banking.balance.read"),
+            ("escalate", "banking.escalate"),
+        ):
+            raw = "account_" + raw if pydantic else raw
+            entries.append(
+                {
+                    "source_profile_id": profile["profile_id"],
+                    "source_profile_version": profile["version"],
+                    "raw_name": raw,
+                    "tool_identity": logical,
+                }
+            )
+            profile["safe_names"].update({raw + suffix: raw + suffix for suffix in (".request", ".execution")})
+    http_profile = profile_payload(
+        "http-only-v1",
+        version="local-banking-1",
+        completion_protocol="root-only-v1",
+        capabilities={key: "NONE" for key in payload["source_profile_set"][0]["capabilities"]},
+    )
+    http_profile["fields"]["duration_ms"] = [["metadata", "duration_ms"]]
+    payload["source_profile_set"].append(http_profile)
+    payload["tool_mapping"]["entries"] = entries
+    return payload

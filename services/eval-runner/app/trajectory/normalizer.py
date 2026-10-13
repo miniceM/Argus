@@ -7,7 +7,7 @@ from typing import get_args
 from pydantic import Field, TypeAdapter, ValidationError
 
 from .codec import canonical_dumps, canonical_loads, validate_json_value
-from .contract import SourceProfile, TrajectoryContract
+from .contract import _STRUCTURAL_SEMANTIC_FIELDS, SourceProfile, TrajectoryContract
 from .redaction import project_json, validate_bounded_json
 from .schema import (
     Capability,
@@ -29,6 +29,7 @@ class NormalizedObservation(_ContractModel):
     step: TrajectoryStep | None
     capabilities: dict[Capability, CapabilityCoverage]
     warnings: list[ReasonCode]
+    structural: bool = False
     event_id: Identity | None = None
     call_id: Identity | None = None
     sequence: int | None = Field(default=None, ge=1, le=1000)
@@ -173,6 +174,9 @@ def _normalize_observation(
             capabilities = dict(empty)
         else:
             metadata = row.get("metadata")
+            structural_role = _structural_role(profile, values, metadata)
+            if structural_role is not None:
+                return _structural_observation(values, structural_role, observation_id, parent, index, limits, empty)
             if type(metadata) is not dict or any(
                 type(metadata.get(key, _MISSING)) is not str or metadata[key] != value
                 for key, value in profile.metadata_equals.items()
@@ -316,3 +320,63 @@ def _normalize_observation(
         return NormalizedObservation(step=None, capabilities=empty, warnings=[str(error)])
     except (ValidationError, ValueError, UnicodeError, RecursionError):
         return NormalizedObservation(step=None, capabilities=empty, warnings=["SOURCE_FIELD_INVALID"])
+
+
+def _structural_role(profile, values, metadata):
+    # 业务语义无论值是否有效都不能退回结构角色，防止漏埋字段被洗成完整结构。
+    if type(metadata) is not dict or any(
+        values.get(key, _MISSING) is not _MISSING for key in _STRUCTURAL_SEMANTIC_FIELDS
+    ):
+        return None
+    if profile.metadata_equals and all(
+        type(metadata.get(key, _MISSING)) is str and metadata[key] == expected
+        for key, expected in profile.metadata_equals.items()
+    ):
+        return None
+    return next(
+        (
+            role
+            for role in profile.structural_roles
+            if role.provider_type == values["provider_type"]
+            and role.raw_name == values["raw_name"]
+            and all(
+                type(metadata.get(key, _MISSING)) is str and metadata[key] == expected
+                for key, expected in role.metadata_equals.items()
+            )
+        ),
+        None,
+    )
+
+
+def _structural_observation(values, role, observation_id, parent, index, limits, empty):
+    warnings = []
+    start = _optional(values.get("started_at", _MISSING), Timestamp, "STEP_TIME_INVALID", warnings)
+    end = _optional(values.get("ended_at", _MISSING), Timestamp, "STEP_TIME_INVALID", warnings)
+    if start is not None and end is not None and end < start:
+        warnings.append("STEP_TIME_INVALID")
+    validate_bounded_json(role.safe_name, limits)
+    return NormalizedObservation(
+        structural=True,
+        step=TrajectoryStep(
+            step_id=observation_id,
+            observation_id=observation_id,
+            parent_step_id=parent,
+            index=index,
+            type=role.step_type,
+            raw_name=role.safe_name,
+            tool_identity=None,
+            phase="EVENT",
+            status="UNKNOWN",
+            started_at=start,
+            ended_at=end,
+            duration_ms=None,
+            arguments_redacted=None,
+            argument_visibility={},
+            result_summary=None,
+            error_code=None,
+            causal_predecessor_ids=[],
+            workflow_scope_id=None,
+        ),
+        capabilities=empty,
+        warnings=sorted(set(warnings)),
+    )

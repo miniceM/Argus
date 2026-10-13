@@ -84,7 +84,11 @@ Tool Mapping 使用同一冻结映射配置覆盖两个 Demo 框架的原始名�
 
 TrajectoryContract冻结source_profile_set（所有获准profile的ID、版本、字段映射、完成协议）及选择算法；实际selected_source_profile_id由不可变AgentVersion的声明选取，记录在Launch执行元数据与TrajectoryProvenance。Measurement/trajectory_contract_digest包含同一完整profile_set及选择算法，不把本次Agent选中的分支当成不同测量配置；否则两个框架会被误判不可比。选中分支仍需完整版本冻结、属于获准集合且与实测来源一致；来源未获准不得自动猜profile。AgentVersion新增可选trajectory_source_profile_id，使用nullable顶层数据库列与AgentVersionSpec/DTO承载，不塞入当前未参与spec_digest的metadata；非空时纳入spec_digest，空值保持历史digest算法和旧路径。配置变更创建新AgentVersion并同步契约快照。
 
+SourceProfile 可显式声明 `structural_roles`：按精确 provider type、原始名称与非敏感 metadata 等值条件匹配已实测的框架父节点。只允许 AGENT/LLM/CUSTOM，统一为 EVENT/UNKNOWN；仅保留受控身份、真实 parent、合法时间与固定安全展示名，全部工具/人工/顺序/时长能力为 NONE，不采集其 input/output、业务参数、workflow 或因果引用。物理 TOOL 类型的 SDK 包装 Span 也不能因此成为工具执行证据。匹配业务来源谓词或存在 phase/status/event/sequence/call/terminal 等语义标记的行不得回退为结构角色；业务字段缺失或非法仍需降级。角色配置按身份唯一、稳定排序并进入完整合同摘要；新增角色使用新来源/算法版本。未声明角色时省略该字段，保持历史合同 canonical bytes/digest。实际原始名称可含 ASCII 空格（如 `agent run`），属于精确来源匹配字符串，不能套用无空格 ID 约束；安全展示名仍使用受控 Identity。本机真实来源依据与边界见 [结构来源验收](../../validation/s4-1/structural-sources.md)。
+
 timing 描述所需 Step 时长证据覆盖；duration_ms 缺失为 null+timing PARTIAL/NONE，不推导为 0，也不因此降低无关工具身份能力。duration_ms 仅映射 profile 已验证的显式来源字段，不以跨服务时间差补造。ordering 仍须满足可信完成→请求因果和可靠时间校验。raw_name、workflow_scope_id、input/output/result 摘要同样受 allowlist/长度/内容检查；未获准来源名称用固定安全占位并记 warning，不能借名称泄漏自由文本。
+
+启用结构角色的 profile 必须提供 `phase`、`status`、`event_id`、`sequence`、`call_id`、`causal_event_ids`、`terminal_event_count`、`terminal_event_ids`、`terminal_final_sequence` 的冻结字段映射，缺少任一检测路径时拒绝合同，不能通过省略映射隐藏原始业务标记。未启用结构角色的旧 profile 保持既有字段要求。
 
 ## 4. Acquisition、完整性与异常图处理
 

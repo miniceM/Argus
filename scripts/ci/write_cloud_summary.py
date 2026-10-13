@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from scripts.ci.cloud_e2e_policy import REQUIRED_CI_CHECKS
+from scripts.ci.ci_constants import REQUIRED_CI_CHECKS
 
 
 def _display(value: Any, fallback: str = "unknown") -> str:

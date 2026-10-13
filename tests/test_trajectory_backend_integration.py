@@ -1,9 +1,13 @@
-"""本地 Langfuse 运行环境的真实 SDK/API 门禁；Agent 链路由后续阶段验收。"""
+"""真实 SDK/API/Reader 门禁；业务 Agent 链路见 test_trajectory_observation_integration.py。"""
 
+import asyncio
 import sys
 from pathlib import Path
 
 import pytest
+from app.trajectory.reader import LangfuseObservationReader
+from app.trajectory.schema import TrajectoryScope
+from trajectory_fixtures import scope_payload
 
 sys.path.insert(0, str(Path(__file__).parent / "fixtures"))
 from trajectory_agents.local_runtime import LocalLangfuse  # noqa: E402
@@ -18,7 +22,7 @@ def local_langfuse(tmp_path_factory):
 
 
 @pytest.mark.parametrize("repeat", range(2))
-def test_real_sdk_ingestion_parent_fields_and_cursor(local_langfuse, repeat):
+def test_real_sdk_ingestion_parent_fields_and_cursor(local_langfuse, repeat, monkeypatch):
     runtime = local_langfuse
     with runtime.sdk.start_as_current_observation(name="s4-backend-root", as_type="span"):
         identity = {"trace_id": runtime.sdk.get_current_trace_id(),
@@ -38,5 +42,39 @@ def test_real_sdk_ingestion_parent_fields_and_cursor(local_langfuse, repeat):
     assert all(row["type"] in {"SPAN", "TOOL"} for row in rows)
     assert all({"id", "traceId", "parentObservationId", "startTime", "endTime", "type", "name", "input", "output"} <= row.keys()
                for row in rows)
+    # 同一真实实例交叉验证生产 Reader；Mock 单测不能替代此 API/分页断言。
+    async def read_with_production_adapter():
+        scope = TrajectoryScope.model_validate(scope_payload(trace_id=identity["trace_id"],
+                                                             root_observation_id=identity["root_id"]))
+        observed, cursors = [], []
+        cursor = None
+        async with LangfuseObservationReader(server_url=runtime.base_url,
+                public_key=runtime.env["S4_PUBLIC_KEY"], secret_key=runtime.env["S4_SECRET_KEY"]) as reader:
+            for _ in range(20):
+                page = await reader.read_page(scope, cursor=cursor, page_size=2, timeout_seconds=5, max_bytes=1024 * 1024)
+                assert page.source_bytes > 0 and len(page.rows) <= 2
+                observed.extend(page.rows)
+                cursor = page.cursor
+                if cursor is None:
+                    break
+                assert cursor not in cursors
+                cursors.append(cursor)
+            else:
+                pytest.fail("Production Reader did not exhaust actual cursor pagination")
+        assert reader.is_closed and cursors
+        assert {row["id"] for row in observed} == set(by_id)
+        assert len(observed) == len(by_id)
+        assert all(row["traceId"] == scope.trace_id for row in observed)
+        assert all(row["parentObservationId"] == by_id[row["id"]]["parentObservationId"] for row in observed)
+        fields = {"id", "traceId", "parentObservationId", "startTime", "endTime", "type", "name", "input", "output"}
+        assert all(fields <= row.keys() for row in observed)
+        assert all(row[field] == by_id[row["id"]][field] for row in observed for field in fields)
+    with monkeypatch.context() as proxy_env:
+        # 用不可达代理验证实际传输不读取本机代理环境，而不是检查内部属性。
+        proxy_env.setenv("HTTP_PROXY", "http://127.0.0.1:1")
+        proxy_env.setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+        proxy_env.setenv("ALL_PROXY", "http://127.0.0.1:1")
+        proxy_env.setenv("NO_PROXY", "")
+        asyncio.run(read_with_production_adapter())
     runtime.record("backend_sdk", "pagination", identity, rows)
     assert runtime.reports[-1]["pagination"]["cursor_hops"] >= 1

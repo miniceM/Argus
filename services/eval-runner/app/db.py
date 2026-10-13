@@ -65,6 +65,12 @@ class MigrationRunner:
                 clean_content = re.sub(r"--[^\n]*", "", content)
                 statements = [s.strip() for s in clean_content.split(";") if s.strip()]
                 for statement in statements:
+                    # SQLite 测试保持 PostgreSQL UTF-8 字节上限语义；不依赖
+                    # 新版 SQLite 才提供的 octet_length，也不修改全局 JSON codec。
+                    if conn.dialect.name == "sqlite" and version == "017_trajectory_evidence.sql":
+                        statement = statement.replace(
+                            "octet_length(payload_json)", "length(CAST(payload_json AS BLOB))"
+                        )
                     # SQLite 测试建表使用 ORM 约束；此 PostgreSQL 列约束语法无法执行。
                     if conn.dialect.name == "sqlite" and re.fullmatch(
                         r"ALTER TABLE \w+ ALTER COLUMN \w+ SET NOT NULL", statement, re.IGNORECASE

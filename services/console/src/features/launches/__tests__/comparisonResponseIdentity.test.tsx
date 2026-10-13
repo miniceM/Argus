@@ -759,3 +759,91 @@ describe("U1: delayed cross-revision responses stay with their own key", () => {
     expect(screen.queryByText("111")).not.toBeInTheDocument();
   });
 });
+
+describe("U2/F2: formal comparison eligibility is shared by KPI and summary", () => {
+  const renderCompare = async (payload: Record<string, any>) => {
+    installApi(baseHandlers({ comparison: () => Promise.resolve({ data: payload }) }));
+    renderDetail(`/launches/${LAUNCH_ID}?snapshot_id=${S1}&tab=compare`);
+    await screen.findByTestId("capabilities-delta-summary");
+  };
+
+  it("withholds the formal count and verdict in KPI and summary when comparable=false", async () => {
+    const payload = comparisonPayload({ comparable: false, formalAvailable: true, regressionCount: 3 });
+    payload.formal.verdict = "REGRESSION";
+    await renderCompare(payload);
+
+    expect(screen.getByTestId("regression-count-value")).not.toHaveTextContent("3");
+    expect(screen.getByTestId("regression-count-value")).toHaveTextContent("不可比");
+    expect(screen.queryByText(/正式比较发现 3 个回归 Case/)).not.toBeInTheDocument();
+    expect(screen.getByTestId("formal-comparison-verdict")).toHaveTextContent("暂不可判定");
+    expect(screen.getByTestId("comparison-formal-verdict")).toHaveTextContent("无法给出正式结论");
+    expect(screen.getByTestId("comparison-comparability-banner")).toBeInTheDocument();
+    expect(screen.getByTestId("comparison-diagnostic-label")).toBeInTheDocument();
+  });
+
+  it("withholds the formal count and verdict when the comparison never returned comparability", async () => {
+    const payload = comparisonPayload({ formalAvailable: true, regressionCount: 3 });
+    delete (payload as any).comparability;
+    payload.formal.verdict = "REGRESSION";
+    await renderCompare(payload);
+
+    expect(screen.getByTestId("regression-count-value")).not.toHaveTextContent("3");
+    expect(screen.getByTestId("regression-count-note")).not.toHaveTextContent("3 项性能退化");
+    expect(screen.queryByText(/正式比较发现 3 个回归 Case/)).not.toBeInTheDocument();
+    expect(screen.getByTestId("formal-comparison-verdict")).toHaveTextContent("暂不可判定");
+    expect(screen.getByTestId("comparison-formal-verdict")).toHaveTextContent("无法给出正式结论");
+  });
+
+  it("does not turn a missing comparability field into a green no-regression zero", async () => {
+    const payload = comparisonPayload({ formalAvailable: true, regressionCount: 0 });
+    delete (payload as any).comparability;
+    payload.formal.verdict = "UNCHANGED";
+    await renderCompare(payload);
+
+    expect(screen.getByTestId("regression-count-value")).not.toHaveTextContent("0");
+    expect(screen.getByTestId("regression-count-value")).toHaveTextContent("不可用");
+    expect(screen.queryByText(/未发现回归/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/正式比较发现 0 个回归 Case/)).not.toBeInTheDocument();
+  });
+
+  it("withholds the formal count and verdict when formal evidence is unavailable", async () => {
+    const payload = comparisonPayload({
+      comparable: true,
+      formalAvailable: false,
+      regressionCount: 3,
+    });
+    (payload as any).formal.verdict = "REGRESSION";
+    (payload as any).formal.withheld_reasons = ["COVERAGE_INCOMPLETE"];
+    await renderCompare(payload);
+
+    expect(screen.getByTestId("regression-count-value")).not.toHaveTextContent("3");
+    expect(screen.getByTestId("formal-comparison-verdict")).toHaveTextContent("暂不可判定");
+    expect(screen.getByTestId("comparison-formal-verdict")).toHaveTextContent("无法给出正式结论");
+    expect(screen.getByTestId("formal-withheld-COVERAGE_INCOMPLETE")).toBeInTheDocument();
+    expect(screen.queryByText(/正式比较发现 3 个回归 Case/)).not.toBeInTheDocument();
+  });
+
+  it("keeps a real positive count and its verdict when both eligibility fields are true", async () => {
+    const payload = comparisonPayload({ comparable: true, formalAvailable: true, regressionCount: 3 });
+    payload.formal.verdict = "REGRESSION";
+    await renderCompare(payload);
+
+    expect(screen.getByTestId("regression-count-value")).toHaveTextContent("3");
+    expect(screen.getByTestId("regression-count-note")).toHaveTextContent("3 项性能退化");
+    expect(screen.getByText(/正式比较发现 3 个回归 Case/)).toBeInTheDocument();
+    expect(screen.getByTestId("formal-comparison-verdict")).toHaveTextContent("存在回归");
+    expect(screen.getByTestId("comparison-formal-verdict")).toHaveTextContent("Regression");
+    expect(screen.queryByTestId("comparison-diagnostic-label")).not.toBeInTheDocument();
+  });
+
+  it("keeps a real formal zero when both eligibility fields are true", async () => {
+    const payload = comparisonPayload({ comparable: true, formalAvailable: true, regressionCount: 0 });
+    payload.formal.verdict = "UNCHANGED";
+    await renderCompare(payload);
+
+    expect(screen.getByTestId("regression-count-value")).toHaveTextContent("0");
+    expect(screen.getByTestId("regression-count-note")).toHaveTextContent("正式比较未发现回归");
+    expect(screen.getByTestId("formal-comparison-verdict")).toHaveTextContent("无变化");
+    expect(screen.getByText(/正式比较显示相对基线无变化/)).toBeInTheDocument();
+  });
+});

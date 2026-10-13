@@ -6,7 +6,7 @@ import { Button } from "../../../components/ui/Primitives";
 import { ComparisonCaseDrawer } from "../ComparisonCaseDrawer";
 import { LangfuseSyncPanel } from "../langfuseSyncStatus";
 import { comparisonPagesQueryOptions } from "../launchComparisonQueries";
-import { readRegressionCount } from "../LaunchKpiOverview";
+import { isFormalComparisonUsable, readFormalVerdictPresentation } from "../comparisonPresentation";
 import { resolveMetricDirection, evaluateMetricChange, evaluateMetricRule } from "../metricComparison";
 
 type GeneratedRunSummary = import("../../../api/schema").components["schemas"]["RunSummaryResponse"];
@@ -261,9 +261,8 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
   // local table view type (the old queryFn used the same explicit projection).
   const comparison = comparisonQuery.data?.pages[0] as unknown as Comparison | undefined;
   const comparisonSummary = comparison?.summary as ComparisonSummary | undefined;
-  // Same unknown-safe read as the KPI card (issue 119 U2): the summary must not
-  // invent a zero regression count when the payload did not return one.
-  const regressionCountState = readRegressionCount(comparison?.classification_counts);
+  // The formal regression count is read through the same shared rules as the KPI
+  // card (issue 119 U2); see the formalVerdict presentation below.
   const cohort = comparisonSummary?.comparable_cohort;
   const versions = comparison?.versions;
   const metrics = summary?.summary;
@@ -507,22 +506,34 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
     : candidateQualityState === "fail"
     ? "text-fail"
     : "text-timeout";
-  const relativeVerdictLabel = !formal?.available
-    ? "暂不可判定"
-    : formal.verdict === "REGRESSION"
-    ? "存在回归"
-    : formal.verdict === "IMPROVEMENT"
-    ? "有所改善"
-    : formal.verdict === "UNCHANGED"
-    ? "无变化"
-    : "暂不可判定";
-  const relativeVerdictTone = !formal?.available || !formal.verdict
-    ? "text-timeout"
-    : formal.verdict === "REGRESSION"
-    ? "text-fail"
-    : formal.verdict === "IMPROVEMENT"
+  // Shared with the KPI card and the formal verdict block (issue 119 U2): the
+  // relative label, tone and explanation are only allowed when comparability AND
+  // the formal verdict are both explicitly available.
+  const formalVerdict = readFormalVerdictPresentation({
+    comparability: comparison?.comparability,
+    formal: comparison?.formal,
+    classificationCounts: comparison?.classification_counts,
+  });
+  const formalVerdictUsable = isFormalComparisonUsable({
+    comparability: comparison?.comparability,
+    formal: comparison?.formal,
+  });
+  const formalVerdictTextTone = formalVerdict.tone === "pass"
     ? "text-pass"
-    : "text-muted-foreground";
+    : formalVerdict.tone === "fail"
+    ? "text-fail"
+    : formalVerdict.tone === "muted"
+    ? "text-muted-foreground"
+    : "text-timeout";
+  const formalVerdictDotTone = formalVerdict.tone === "pass"
+    ? "bg-pass"
+    : formalVerdict.tone === "fail"
+    ? "bg-fail"
+    : formalVerdict.tone === "muted"
+    ? "bg-surface-muted"
+    : "bg-timeout";
+  const relativeVerdictLabel = formalVerdict.label;
+  const relativeVerdictTone = formalVerdictTextTone;
   const passRateTrend = cohort?.baseline.pass_rate == null || cohort.candidate.pass_rate == null
     ? "unknown"
     : cohort.candidate.pass_rate > cohort.baseline.pass_rate
@@ -618,29 +629,11 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
                   className={`font-semibold flex items-center gap-1.5 ${relativeVerdictTone}`}
                   data-testid="formal-comparison-verdict"
                 >
-                  <span className={`w-2 h-2 rounded-full ${
-                    !formal?.available || !formal.verdict
-                      ? "bg-timeout"
-                      : formal.verdict === "REGRESSION"
-                      ? "bg-fail"
-                      : formal.verdict === "IMPROVEMENT"
-                      ? "bg-pass"
-                      : "bg-surface-muted"
-                  }`} />
+                  <span className={`w-2 h-2 rounded-full ${formalVerdictDotTone}`} />
                   Baseline 相对变化：{relativeVerdictLabel}
                 </span>
                 <p className="text-muted-foreground leading-relaxed">
-                  {!formal?.available
-                    ? "由于比较证据不足或 Baseline 未绑定，暂无法给出相对变化结论。"
-                    : formal.verdict === "REGRESSION"
-                    ? regressionCountState.kind === "value"
-                      ? `正式比较发现 ${regressionCountState.value} 个回归 Case；此结论只描述相对变化。`
-                      : "正式比较判定存在回归，但回归计数未返回或不可用；此结论只描述相对变化。"
-                    : formal.verdict === "IMPROVEMENT"
-                    ? "正式比较显示相对基线有所改善；Candidate 是否达到门禁仍以其冻结质量结论为准。"
-                    : formal.verdict === "UNCHANGED"
-                    ? "正式比较显示相对基线无变化；未进一步退化不等于 Candidate 达到发布门禁。"
-                    : "正式比较 verdict 缺失或未知，暂不能说明相对变化。"}
+                  {formalVerdict.detail}
                 </p>
               </div>
             )}
@@ -849,16 +842,7 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
           className="rounded-lg border border-border bg-surface p-4"
         >
           <div className="text-micro font-medium text-muted-foreground">正式比较裁决</div>
-          {formal.available ? (
-            <div className="mt-1 flex flex-wrap items-baseline gap-2">
-              <span className="text-lg font-semibold text-foreground">
-                {verdictText(formal.verdict ?? "")}
-              </span>
-              <span className="text-micro text-muted-foreground">
-                全部 {formal.required_cases ?? 0} 个必要 Case 均在同一契约下判定
-              </span>
-            </div>
-          ) : (
+          {!formalVerdictUsable ? (
             <div className="mt-1 space-y-1">
               <div className="text-sm font-semibold text-foreground">无法给出正式结论</div>
               <ul className="flex flex-wrap gap-2">
@@ -872,12 +856,26 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
                   </li>
                 ))}
               </ul>
+              {formal.withheld_reasons == null || formal.withheld_reasons.length === 0 ? (
+                <p className="text-micro text-muted-foreground">
+                  比较前提不满足或比较资格未返回，正式裁决不据此给出。
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="mt-1 flex flex-wrap items-baseline gap-2">
+              <span className="text-lg font-semibold text-foreground">
+                {verdictText(formal.verdict ?? "")}
+              </span>
+              <span className="text-micro text-muted-foreground">
+                全部 {formal.required_cases ?? 0} 个必要 Case 均在同一契约下判定
+              </span>
             </div>
           )}
         </div>
       )}
 
-      {comparison && !formal?.available && (
+      {comparison && !formalVerdictUsable && (
         <p data-testid="comparison-diagnostic-label" className="text-micro text-muted-foreground">
           以下 Case 分类仅供诊断，不作为正式发布比较。
         </p>

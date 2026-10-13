@@ -1,6 +1,7 @@
 import React from "react";
 import clsx from "clsx";
 import { ArrowDown, ArrowUp, AlertCircle, CheckCircle2, Minus } from "lucide-react";
+import { isFormalComparisonUsable, readRegressionCount } from "./comparisonPresentation";
 
 type RunMetrics = {
   pass_rate?: number | null;
@@ -54,32 +55,11 @@ const formatMoney = (value: number | null | undefined, currency: string | null |
   }
 };
 
-
 /**
- * Reads the formal REGRESSION count with unknown-safe semantics (issue 119 U2).
- *
- * Only a real, non-negative integer is a count. A missing key, null, a numeric
- * string, a negative value, a fraction or a non-finite value is *unknown*: it
- * must never be rendered as a green "no regression" zero, because the backend
- * contract only types `classification_counts` as a dictionary.
+ * Formal-comparison presentation rules (eligibility, count legality, verdict
+ * wording) live in `comparisonPresentation.ts` so the KPI card, the comparison
+ * tab summary and the formal verdict block can never drift apart again.
  */
-export type RegressionCountState =
-  | { kind: "value"; value: number }
-  | { kind: "missing" }
-  | { kind: "invalid" };
-
-export function readRegressionCount(
-  classificationCounts: Record<string, unknown> | null | undefined,
-): RegressionCountState {
-  if (classificationCounts == null) return { kind: "missing" };
-  if (!("REGRESSION" in classificationCounts)) return { kind: "missing" };
-  const raw = classificationCounts.REGRESSION;
-  if (raw == null) return { kind: "missing" };
-  if (typeof raw !== "number") return { kind: "invalid" };
-  // Number.isInteger rejects NaN and the infinities as well.
-  if (!Number.isInteger(raw) || raw < 0) return { kind: "invalid" };
-  return { kind: "value", value: raw };
-}
 
 export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
   totalItems,
@@ -146,23 +126,32 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
   // missing or malformed count stays unknown instead of becoming a green zero.
   const comparabilityProvided = comparability != null;
   const isComparable = comparability?.comparable === true;
-  const isFormalAvailable = formal?.available === true;
+  // Shared with the comparison tab summary and the formal verdict block: a formal
+  // result needs comparability AND formal availability, both explicitly true.
+  const formalUsable = isFormalComparisonUsable({ comparability, formal });
   const regressionCount = readRegressionCount(classificationCounts);
   let regressionValueText = "—";
   let regressionSubText = "基线未绑定或不可比";
   let regressionStatusTone: "pass" | "timeout" | "neutral" = "neutral";
 
-  if (!isComparable && comparabilityProvided && comparability?.reason_codes?.length) {
+  if (!comparabilityProvided) {
+    // The comparison never declared its eligibility. That is unknown, not
+    // "not comparable": without the field neither a count nor a verdict may be
+    // presented, and a real count must not fall through to the numeric branch.
+    regressionValueText = "不可用";
+    regressionSubText = "比较资格未返回，暂不给出正式回归计数";
+    regressionStatusTone = "neutral";
+  } else if (!isComparable && comparability?.reason_codes?.length) {
     regressionValueText = "不可比";
     regressionSubText = "判定规则或测量版本不同";
     regressionStatusTone = "timeout";
-  } else if (!isComparable && comparabilityProvided) {
+  } else if (!isComparable) {
     // comparable=false without reasons (or verdict withheld): the comparison
     // premise itself is unmet, so no formal count may be presented.
     regressionValueText = "不可比";
     regressionSubText = "比较前提不满足，暂不给出正式回归计数";
     regressionStatusTone = "neutral";
-  } else if (!isFormalAvailable) {
+  } else if (!formalUsable) {
     if (formal?.withheld_reasons?.includes("BASELINE_NOT_BOUND")) {
       regressionValueText = "—";
       regressionSubText = "尚未绑定当前环境 Baseline";

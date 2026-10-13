@@ -52,7 +52,7 @@ def s40_runtime(tmp_path_factory):
 
 
 def frozen_manifest(endpoint, scenario="serial", *, db, profile, trajectory_source_profile_id=None,
-                    trajectory_contract=None):
+                    trajectory_contract=None, rule_selections=None):
     from app.registry import AgentRegistry
     identity = current_runner_identity().model_dump()
     registry = default_evaluator_registry
@@ -85,17 +85,24 @@ def frozen_manifest(endpoint, scenario="serial", *, db, profile, trajectory_sour
         from app.trajectory.manifest import bind_trajectory_manifest, freeze_trajectory_contract
         manifest["schema_version"] = "1.3"
         manifest["trajectory"] = bind_trajectory_manifest(freeze_trajectory_contract(trajectory_contract), registered)
+        if rule_selections:
+            from app.evaluator_binding import EvaluatorBinding
+            from app.quality_policy import default_quality_policy
+            for selected in rule_selections:
+                manifest["evaluators"].append(freeze_binding(registry.definition(selected["id"]),
+                    registry.version(selected["id"], "1.0.0"), runner_identity=identity, params=selected["params"]).to_payload())
+            manifest["quality_policy"] = default_quality_policy([EvaluatorBinding.from_payload(b) for b in manifest["evaluators"]]).to_payload()
         manifest["measurement_digest"] = manifest_measurement_digest(manifest)
         manifest["contract_digests"] = {"measurement": {"version": "1.3", "digest": manifest["measurement_digest"]}}
     return manifest
 
 
 def invoke_worker(s40_runtime, monkeypatch, runtime, endpoint, scenario="serial", *, trajectory_source_profile_id=None,
-                  trajectory_contract=None, recovery_stage=None):
+                  trajectory_contract=None, recovery_stage=None, rule_selections=None, expected_quality="pass", expected_eval_status="succeeded"):
     db, queue, _limiter, orchestrator, worker, _reconciler = s40_runtime
     manifest = frozen_manifest(endpoint, scenario, db=db, profile=runtime.agent_profiles[endpoint],
                                trajectory_source_profile_id=trajectory_source_profile_id,
-                               trajectory_contract=trajectory_contract)
+                               trajectory_contract=trajectory_contract, rule_selections=rule_selections)
     launch = orchestrator.create_launch("test-agent", manifest["agent"]["version"], "s40-local", "fixture-v1", "S40", manifest)
     orchestrator.start_launch(launch.id)
     monkeypatch.setattr("app.worker.get_langfuse_client_safe", lambda: runtime.sdk)
@@ -144,9 +151,9 @@ def invoke_worker(s40_runtime, monkeypatch, runtime, endpoint, scenario="serial"
                 ExecutionCheckpointRecord.item_execution_id == item.id))
             assert (checkpoint.created_at, checkpoint.output_digest, checkpoint.final_attempt_id) == original_response
         assert item.execution_status.lower() == "succeeded", item.execution_error
-        assert item.eval_status.lower() == "succeeded", item.eval_error
+        assert item.eval_status.lower() == expected_eval_status, item.eval_error
         assert item.scores == {"intent_match": 1.0}
-        assert item.quality_conclusion.lower() == "pass"
+        assert item.quality_conclusion.lower() == expected_quality
         assert item.trace_id and item.observation_id
         return {"launch_id": launch.id, "item_id": item.id, "dataset_item_id": item.dataset_item_id,
                 "generation": item.dispatch_generation, "attempt_id": attempts[0].id,

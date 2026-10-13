@@ -28,6 +28,15 @@ def freeze_trajectory_contract(contract):
         raise TrajectoryManifestError("CONTRACT_INVALID") from None
 
 
+def parse_launch_contract(value):
+    try:
+        contract = TrajectoryContract.model_validate(canonical_loads(value))
+        freeze_trajectory_contract(contract)
+        return contract
+    except (ValueError, TypeError):
+        raise TrajectoryManifestError("CONTRACT_INVALID") from None
+
+
 def _read_contract(payload):
     try:
         if type(payload) is not dict or type(payload.get("contract_json")) is not str:

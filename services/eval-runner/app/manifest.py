@@ -86,6 +86,7 @@ class LaunchService:
         allow_run_scope: bool = False,
         quality_policy_rules: list[dict[str, Any]] | None = None,
         trajectory_contract: TrajectoryContract | None = None,
+        capture_only: bool = False,
     ) -> ExperimentLaunchRecord:
         from .baselines import normalize_environment
 
@@ -145,6 +146,15 @@ class LaunchService:
             for evaluator_id, version in requested
         ]
         eval_specs.sort(key=lambda spec: spec["id"])
+        selection_params = {item["id"]: item.get("params") for item in (evaluator_selections or [])}
+        has_trajectory_rules = any(default_evaluator_registry.version(spec["id"], spec["version"]).input_contract.get("input_kind") == "trajectory"
+            for spec in eval_specs)
+        if frozen_trajectory is None and has_trajectory_rules:
+            from .evaluator_binding import EvaluatorBindingError
+            raise EvaluatorBindingError("TRAJECTORY_RULE_CONTRACT_REQUIRED", code="TRAJECTORY_RULE_CONTRACT_REQUIRED")
+        if frozen_trajectory is not None and not has_trajectory_rules and not capture_only:
+            from .evaluator_binding import EvaluatorBindingError
+            raise EvaluatorBindingError("TRAJECTORY_RULE_BINDING_REQUIRED", code="TRAJECTORY_RULE_BINDING_REQUIRED")
 
         # ---- Issue #81: freeze the *execution identity*, not only id/version ----
         # A Launch is only reproducible when the implementation artifact and the
@@ -155,6 +165,7 @@ class LaunchService:
                 default_evaluator_registry.version(spec["id"], spec["version"]),
                 runner_identity=runner_identity.model_dump(),
                 composed_of=default_evaluator_registry.definition(spec["id"]).composed_of,
+                params=selection_params.get(spec["id"]),
             ).to_payload()
             for spec in eval_specs
         ]
@@ -197,6 +208,9 @@ class LaunchService:
         }
         if frozen_trajectory is not None:
             payload_data["trajectory_contract_digest"] = frozen_trajectory["trajectory_contract_digest"]
+        if has_trajectory_rules:
+            payload_data["evaluator_selections"] = [
+                {"id": spec["id"], "version": spec["version"], "params": spec["params"]} for spec in eval_specs]
         payload_digest = compute_payload_digest(payload_data)
 
         # Upfront idempotency check: never call external services if key already exists

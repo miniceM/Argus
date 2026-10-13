@@ -148,7 +148,7 @@ def evaluate_trajectory_rule(context: EvaluationContext,
                              manifest_schema_version: str) -> TypedEvaluationResult: ...
 ```
 
-`TypedEvaluationResult` 复用现有 `evaluator_results.py` 的类型。旧版本走 `fn(output, expected_output)`；新 observed Evaluator 使用独立 identity/version，并在冻结 input_contract 声明 `input_kind=trajectory` 及所需能力。公共 executor 保持兼容的可选 `context` 参数，在 Adapter 内选择调用约定；新 Adapter 校验返回的 typed status/value/证据和冻结 provenance，保留 no_result/skipped，不再次按旧 numeric 路径转换。仅有 trajectory Binding 才启动 Acquisition；旧 Launch 不自动新增轨迹规则。
+`TypedEvaluationResult` 复用现有 `evaluator_results.py` 的类型。旧版本走 `fn(output, expected_output)`；新 observed Evaluator 使用独立 identity/version，并在冻结 input_contract 声明 `input_kind=trajectory` 及所需能力。公共 executor 保持兼容的可选 `context` 参数，在 Adapter 内选择调用约定；新 Adapter 校验返回的 typed status/value/证据和冻结 provenance，保留 no_result/skipped，不再次按旧 numeric 路径转换。新公共创建请求仅有 trajectory Binding 才启动 Acquisition；旧 Launch 不自动新增轨迹规则。Reader 准入前的内部受控采集校准允许显式 `capture_only=True`，此参数不暴露在公共 DTO；历史已冻结 1.3 合同不迁移，继续原有采集恢复协议。创建守卫及校准例外实测见[正式规则接入](../../validation/s4-2/frozen-rule-execution.md)。
 
 Executor outcome 扩展为旧 Evaluation 或 TypedEvaluationResult，不复制汇总器。Judge 网络调用在 Worker 异步准备阶段 await；同步 evaluate_frozen_item 接收 keyword-only prepared_results 并再次校验绑定、scope、criteria/input digest 与 ref，再走既有 typed 汇总。同步 executor 不调用网络或 asyncio.run。Recovery 拆 claim/checkpoint prepare→await Judge→合并/CAS finalize，网络期间不持有 DB 锁；旧纯同步路径保持兼容。详细接口与取消测试见 06。
 

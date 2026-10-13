@@ -16,7 +16,7 @@ from test_trajectory_causal_links import event
 A, B = "banking.customer.lookup", "banking.balance.read"
 
 
-def trajectory(scenario="serial"):
+def trajectory(scenario="serial", *, with_contract=False):
     rows, contract, scope = prepared()
     mapping = contract.tool_mapping.model_dump()
     mapping["entries"].append({"source_profile_id": "native-otel-v1", "source_profile_version": "fixture-1",
@@ -45,7 +45,8 @@ def trajectory(scenario="serial"):
     terminal["metadata"].update({"attributes.workflow.event_count": len(events) + 1,
         "attributes.workflow.event_ids": [f"{index:032x}" for index in range(1, len(events) + 2)],
         "attributes.workflow.final_sequence": len(events) + 1})
-    return assemble([root, *events, terminal], contract, scope)
+    value = assemble([root, *events, terminal], contract, scope)
+    return (value, contract) if with_contract else value
 
 
 def reseal(value, change):

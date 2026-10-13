@@ -180,6 +180,8 @@ def python_source_artifact(
     dependencies: tuple[str, ...] = (),
 ) -> ImplementationArtifact | None:
     """Derive a verifiable artifact identity from the implementation source."""
+    from .trajectory.bindings import implementation_dependencies
+    dependencies = tuple(dependencies) + implementation_dependencies(fn)
     try:
         source = textwrap.dedent(inspect.getsource(fn)).strip()
     except (OSError, TypeError):  # pragma: no cover - non-source callables
@@ -414,6 +416,7 @@ def freeze_binding(
     *,
     runner_identity: dict[str, Any],
     composed_of: tuple[str, ...] = (),
+    params: dict[str, Any] | None = None,
 ) -> EvaluatorBinding:
     """Freeze the execution identity of one resolved Evaluator version.
 
@@ -442,6 +445,14 @@ def freeze_binding(
             actual=None,
         )
 
+    from .trajectory.bindings import is_tool_rule
+    trajectory_rule = is_tool_rule(version)
+    frozen_params, frozen_input = {}, dict(version.input_contract)
+    if trajectory_rule:
+        from .trajectory.bindings import freeze_rule_config
+        frozen_params, frozen_input = freeze_rule_config(version, params)
+    elif params:
+        raise EvaluatorBindingError("EVALUATOR_PARAMS_UNSUPPORTED", code="EVALUATOR_PARAMS_UNSUPPORTED")
     reasons = evaluate_release_eligibility(version, execution_owner=definition.execution_owner)
     dependencies = tuple(composed_of)
     artifact = python_source_artifact(
@@ -464,6 +475,8 @@ def freeze_binding(
         "artifact": artifact.payload(),
         "runner": runner_identity,
     }
+    if trajectory_rule:
+        binding_seed.update(params=frozen_params, input_contract=frozen_input)
     binding = EvaluatorBinding(
         binding_id=f"bind_{canonical_digest(binding_seed).split(':', 1)[1][:16]}",
         evaluator_id=definition.id,
@@ -473,15 +486,15 @@ def freeze_binding(
         threshold=float(version.threshold),
         direction=version.direction,
         critical=bool(version.critical),
-        input_contract=dict(version.input_contract),
+        input_contract=frozen_input,
         output_contract=dict(version.output_contract),
-        params={},
+        params=frozen_params,
         definition_digest=normalize_digest(version.content_digest),
         implementation_ref=version.implementation_ref,
         executor_type=version.executor_type,
         artifact=artifact,
         category_values=version.category_values,
-        normalization_rule=normalization_rule_for(version),
+        normalization_rule=None if trajectory_rule else normalization_rule_for(version),
         runner=dict(runner_identity),
         composed_of=dependencies,
         contract_status=FROZEN_CONTRACT_STATUS,
@@ -575,18 +588,33 @@ class BuiltinPythonExecutor(EvaluatorExecutor):
             return "EVALUATOR_ARTIFACT_UNRESOLVABLE"
         if artifact.digest != binding.artifact.digest:
             return "EVALUATOR_ARTIFACT_DIGEST_MISMATCH"
+        from .trajectory.bindings import is_tool_rule
+        if is_tool_rule(implementation):
+            try:
+                expected = freeze_binding(self.registry.definition(binding.evaluator_id), implementation,
+                    runner_identity=binding.runner, composed_of=binding.composed_of, params=binding.params)
+            except EvaluatorBindingError:
+                return "TRAJECTORY_RULE_BINDING_MISMATCH"
+            if (binding.binding_id != expected.binding_id or binding.input_contract != expected.input_contract
+                or binding.params != expected.params or binding.normalization_rule is not None):
+                return "TRAJECTORY_RULE_BINDING_MISMATCH"
         if implementation.fn is None:
             return "EVALUATOR_ARTIFACT_UNRESOLVABLE"
         return None
 
     def execute(self, implementation: Any, *, output: Any, expected_output: Any,
-                context: EvaluationContext | None = None) -> Evaluation:
+                context: EvaluationContext | None = None, binding: EvaluatorBinding | None = None,
+                manifest_schema_version: str | None = None, trajectory_contract_digest: str | None = None) -> Evaluation:
         fn = getattr(implementation, "fn", implementation)
         if fn is None:
             raise EvaluatorBindingError(
                 "冻结的实现不可执行。",
                 code="EVALUATOR_ARTIFACT_UNRESOLVABLE",
             )
+        from .trajectory.bindings import is_tool_rule
+        if binding is not None and is_tool_rule(binding):
+            from .trajectory.bindings import execute_rule
+            return execute_rule(fn, context=context, binding=binding, schema=manifest_schema_version, contract_digest=trajectory_contract_digest)
         return fn(output=output, expected_output=expected_output)
 
 
@@ -920,6 +948,11 @@ def evaluate_frozen_item(
         try:
             # 旧 Output Executor 仍只收到原有两个参数；轨迹声明由后续规则版本冻结。
             inputs = {"context": context} if binding.input_contract.get("input_kind") == "trajectory" else {}
+            from .trajectory.bindings import is_tool_rule
+            tool_rule = is_tool_rule(binding) and isinstance(executor, BuiltinPythonExecutor)
+            if tool_rule:
+                inputs.update(binding=binding, manifest_schema_version=manifest_schema_version,
+                    trajectory_contract_digest=manifest.get("trajectory", {}).get("trajectory_contract_digest"))
             raw = executor.execute(
                 resolved.implementation, output=output, expected_output=expected_output, **inputs
             )
@@ -936,6 +969,10 @@ def evaluate_frozen_item(
             )
             continue
         duration_ms = round((time.perf_counter() - started) * 1000, 3)
+        if tool_rule:
+            from .trajectory.bindings import adapt_result
+            typed_results.append(adapt_result(raw, binding=binding, context=context, schema=manifest_schema_version, duration_ms=duration_ms))
+            continue
         typed_results.append(
             build_result(
                 binding,

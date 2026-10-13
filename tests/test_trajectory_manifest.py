@@ -34,6 +34,7 @@ def context(tmp_path):
 
 
 def create(context, *, version="native", contract=None, **options):
+    options.setdefault("capture_only", True)  # 合同冻结测试显式使用内部采集校准入口。
     return context[2].create_launch(agent_id="banking-agent", agent_version=version,
         dataset_name="banking-agent-regression", trajectory_contract=contract or context[3], **options)
 

@@ -72,6 +72,10 @@ def create_experiment_launch(
     _, _, launch_svc, orchestrator = services
     effective_key = idempotency_key or payload.idempotency_key
     try:
+        trajectory_options = {}
+        if payload.trajectory_contract_json is not None:
+            from .trajectory.manifest import parse_launch_contract
+            trajectory_options["trajectory_contract"] = parse_launch_contract(payload.trajectory_contract_json)
         launch = launch_svc.create_launch(
             agent_id=payload.agent_id,
             agent_version=payload.agent_version,
@@ -93,6 +97,7 @@ def create_experiment_launch(
                 if payload.quality_policy is not None
                 else None
             ),
+            **trajectory_options,
         )
         return _enrich_launch(launch, orchestrator)
     except QualityPolicyError as exc:

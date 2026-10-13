@@ -108,14 +108,14 @@ lsof -nP -iTCP:28080 -iTCP:28083 -sTCP:LISTEN
 - 分支建议：`codex/<简短描述>`（其他前缀也可以，但请保持短且语义清晰）。
 - Commit 使用 Conventional Commits：`feat` / `fix` / `test` / `refactor` / `docs` / `chore`。
 - PR 描述包含：问题、方案、测试证据（命令与结果）、兼容性影响、风险。
-- PR 必须通过 CI 的 6 项检查：Code Quality、Full Python Tests、Docker / Compose Validation、Console Quality & E2E、Langfuse Cloud E2E、S4 Local Langfuse Integration。
+- PR 常规 CI 必须通过 `Code Quality`、`Full Python Tests`、`Docker / Compose Validation`、`Console Quality & E2E`、`S4 Local Langfuse Integration`；`Cloud Integration Policy` 按风险分类，低风险要求五项当前身份检查全绿，高风险另需匹配的可信 Cloud receipt。PR 的 `Langfuse Cloud E2E` 为 `skipped_by_policy`，不得误报为已运行。活动 Ruleset 是否已要求这些 context 必须通过 GitHub 远端配置核验，详见 [`docs/ci/cloud-e2e-policy.md`](docs/ci/cloud-e2e-policy.md)。
 - 涉及观测采集的改动先执行 `make trajectory-prepare`、`make trajectory-test`；夹具自动创建与清理隔离服务，不使用 Cloud 凭据。普通单元测试通过不能代替真实采集通过。实测来源与复现说明见 [S4.0 验收记录](docs/validation/s4-0/README.md)。
 
 ## 安全与数据
 
 - 不要提交真实 Token、密码、Cookie、API Key 或数据库凭证；`.env.poc` 仅允许演示凭据。
 - 不要在日志、Trace 或测试 Fixture 中写入真实 PII。
-- 演示与 E2E 使用的 Langfuse Key 应通过 GitHub Environment / Repository Variables 配置，外部 fork PR 默认不获得密钥。
+- 演示与 E2E 使用的 Langfuse Key 应通过 GitHub Environment Secrets 配置；仅非敏感配置放入 Variables，外部 fork PR 默认不获得密钥。
 
 ## 许可
 

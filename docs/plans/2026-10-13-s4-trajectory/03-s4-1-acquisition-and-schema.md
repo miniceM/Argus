@@ -58,13 +58,15 @@ Langfuse API 的物理字段名仅存在 Normalizer source profile。最初的 p
 
 调用方只从完成中的 ExperimentItemExecutionRecord、Attempt 和冻结 Manifest 构造 scope/contract。不得另加 trace_id、attempt_id、profile、cursor 或 timeout 的旁路 API 参数；分页状态属于 acquisition 内部，reader 仅由依赖注入提供。
 
-内部 `AcquisitionRuntime` 通过调用上下文注入原始开始时间、事务工厂及共享限流器，公开采集签名保持上述约定；每调用读取一个有界分页轮次，协调器负责持久化 PENDING 与后续调度。静默只计算两次完整分页的观测时刻差，语义变化重置，不计归一化/组装耗时。READY 由真实制品仓储生成；读截止后保存另受冻结单请求 timeout 限制。实现与实测见 [有界采集验收](../../validation/s4-1/trajectory-acquisition.md)。正式 Worker/Manifest 与执行恢复仍须接通，不把入口交付当作完整 S4.1。
+内部 `AcquisitionRuntime` 通过调用上下文注入原始开始时间、事务工厂及共享限流器，公开采集签名保持上述约定；每调用读取一个有界分页轮次，协调器负责持久化 PENDING 与后续调度。静默只计算两次完整分页的观测时刻差，语义变化重置，不计归一化/组装耗时。READY 由真实制品仓储生成；读截止后保存另受冻结单请求 timeout 限制。实现与实测见 [有界采集验收](../../validation/s4-1/trajectory-acquisition.md)。正式 Worker/Manifest 已接通，执行恢复仍须实施，不把入口交付当作完整 S4.1。
 
-`TrajectoryCoordinator` 已统一消费 [checkpoint 事务边界](../../validation/s4-1/trajectory-checkpoint.md)：原时间/累计扣减恢复、quiet 重建、真实候选保留/失效、独立线程事务、取消及截止收尾。运行合同不共享调用方可变容器；正式 Worker/Manifest、执行/评测恢复和 qualified 工厂仍须启用，边界与实测见 [协调器验收](../../validation/s4-1/trajectory-coordinator.md)。
+`TrajectoryCoordinator` 已统一消费 [checkpoint 事务边界](../../validation/s4-1/trajectory-checkpoint.md)：原时间/累计扣减恢复、quiet 重建、真实候选保留/失效、独立线程事务、取消及截止收尾。运行合同不共享调用方可变容器；正式 Worker/Manifest 和 qualified 工厂已启用，执行/评测恢复仍须实施，边界与实测见 [协调器验收](../../validation/s4-1/trajectory-coordinator.md)。
 
 `QualifiedReaderFactory` 已提供依赖注入边界，批准记录只能由 Runner 可信配置提供，精确匹配完整 `trajectory_contract_digest`、Reader/codec 实现摘要和固定 `/api/openapi.yaml` 文档摘要。空配置默认拒绝；合同或实现不匹配在网络前拒绝，API 漂移不回退旧版本。探测只增量计算 SHA-256，受 1 MiB、冻结单请求 timeout 与并发限制，排队计入同一请求预算；所有退出关闭客户端，消费方异常保持原语义。API 探测不扣 Observation wire 额度，正式调用方仍须按原响应 Checkpoint 截止接入协调器。
 
-受控银行夹具按 native OTel/Pydantic AI 的 serial、blocked、parallel、late_all 各 10 次与 HTTP-only serial 10 次独立校准，共 90 次真实单 Attempt。采用完整合同：12s 原响应截止、0.3s quiet、64 steps、page_size=2/max_pages=20、1 MiB source、64 KiB artifact；保留 8s 迟到，不临时扩大失败样本预算。校准归档字段 presence/null、父闭包、请求/执行配对、因果、参数语义、实际容量和响应到 READY 延迟；每组成功后真实消费工厂一次。这个合同只覆盖受控夹具，不替换通用默认值，也不承诺生产 SLA；实际部署的 Agent/SDK/映射/容量/服务版本变化必须重新校准并批准新身份。正式 Worker 自动采集与恢复、可信配置装载器、生产负载容量校准仍须接通。实现与证据见 [Reader 来源校准验收](../../validation/s4-1/qualified-reader.md)。
+正式 `ExecutionWorker` 对显式 Manifest 1.3 已在成功 HTTP 响应的原 Checkpoint 之后、冻结评测之前自动调用 `WorkerTrajectoryCollector`；Agent HTTP 许可此前已释放，原执行租约继续续期。Collector 从持久化 Checkpoint 构造 scope 并复核真实 AgentVersion，Lazy Reader 只在协调器完成原期限/租约/CAS 预留后打开可信工厂，探测也计原截止；READY/UNAVAILABLE 写原采集账本。Runner 的 `ARGUS_TRAJECTORY_READER_APPROVALS` 为最多 16 KiB/16 条的精确三摘要 JSON，默认空批准，首次有效配置在 Worker 实例内冻结；旧 1.2 不读取新配置或采集源。租约/代数/取消 fence 失败阻止后续评测；没有可信 Root/Checkpoint 或存储不可用时仅给有限诊断、不伪造公共 Acquisition，不丢弃 Agent 成功响应。损坏合同产生有限诊断后仍保留业务成功，由共享冻结评测边界拒绝评分并返回失败/UNKNOWN。有效合同的当前 Output Binding 语义保留，正式 Binding 输入 Adapter、执行恢复和 eval-only 冻结证据恢复仍须继续接通，Snapshot 新资格仍 T4 原子启用。实测与部署说明见 [Worker 自动采集验收](../../validation/s4-1/worker-trajectory.md)。
+
+受控银行夹具按 native OTel/Pydantic AI 的 serial、blocked、parallel、late_all 各 10 次与 HTTP-only serial 10 次独立校准，共 90 次真实单 Attempt。采用完整合同：12s 原响应截止、0.3s quiet、64 steps、page_size=2/max_pages=20、1 MiB source、64 KiB artifact；保留 8s 迟到，不临时扩大失败样本预算。校准归档字段 presence/null、父闭包、请求/执行配对、因果、参数语义、实际容量和响应到 READY 延迟；每组成功后真实消费工厂一次。这个合同只覆盖受控夹具，不替换通用默认值，也不承诺生产 SLA；实际部署的 Agent/SDK/映射/容量/服务版本变化必须重新校准并批准新身份。正式 Worker 自动采集与可信配置装载器已接通；执行恢复和生产负载容量校准仍须实施。实现与证据见 [Reader 来源校准验收](../../validation/s4-1/qualified-reader.md)。
 
 Normalizer 先校验原始字段类型，再依据冻结 source profile 做一对一映射：Langfuse observation ID → observation_id；trace ID → scope.trace_id；parent observation ID → parent_step_id；开始/结束时间 → started_at/ended_at；provider type/name → type/raw_name；获准的 input/output → redacted arguments/result 和轨迹 input/output。最终别名以 S4.0 实测为准。别名同时存在且值冲突时不挑一个赢家，丢弃冲突记录并降低完整度。
 

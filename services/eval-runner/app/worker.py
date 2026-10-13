@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -24,6 +25,9 @@ from .metrics import runtime_metrics
 from .queue import QueueAdapter
 from .registry import AgentVersionSpec, map_request
 from .runner_identity import RunnerIdentity, current_runner_identity, validate_runner_identity
+from .trajectory.worker_acquisition import WorkerTrajectoryCollector, WorkerTrajectoryError
+
+logger = logging.getLogger(__name__)
 
 try:
     from opentelemetry.propagate import inject
@@ -42,6 +46,8 @@ class ExecutionWorker:
         limiter: DistributedAgentLimiter,
         worker_id: str | None = None,
         runner_identity: RunnerIdentity | None = None,
+        *,
+        trajectory_collector: WorkerTrajectoryCollector | None = None,
     ):
         self.db_mgr = db_mgr
         self.queue = queue
@@ -50,6 +56,7 @@ class ExecutionWorker:
         self.runner_identity = runner_identity or current_runner_identity()
         self.local_concurrency = asyncio.Semaphore(10)
         self.heartbeat_interval = 5.0
+        self.trajectory_collector = trajectory_collector or WorkerTrajectoryCollector(db_mgr.get_session)
 
     def poll_queue(self, count: int = 10, block_ms: int = 1000) -> list[tuple[str, str, int, str]]:
         """Synchronously reads/claims items from the queue adapter, meant to be run in asyncio.to_thread."""
@@ -852,6 +859,22 @@ class ExecutionWorker:
                             trace_url=trace_url,
                             observation_id=obs_id,
                         )
+
+                        if manifest.get("schema_version") == "1.3":
+                            try:
+                                await self.trajectory_collector.collect(manifest, item_id=item_id,
+                                    generation=generation, lease_token=token, cancelled=lease_lost)
+                            except WorkerTrajectoryError as error:
+                                if error.abandoned:
+                                    return False
+                                # 采集诊断不把已成功 Agent 响应变为执行失败；不打印原值。
+                                logger.warning("Trajectory collection diagnostic: %s", error.reason_code)
+                            except asyncio.CancelledError:
+                                if lease_lost.is_set():
+                                    return False
+                                raise
+                            if lease_lost.is_set():
+                                return False
 
                         # Successful execution -> evaluate quality (ASYNC offloaded via asyncio.to_thread)
                         def _do_evaluation():

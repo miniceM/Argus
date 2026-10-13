@@ -51,7 +51,8 @@ def s40_runtime(tmp_path_factory):
     db.engine.dispose()
 
 
-def frozen_manifest(endpoint, scenario="serial", *, db, profile, trajectory_source_profile_id=None):
+def frozen_manifest(endpoint, scenario="serial", *, db, profile, trajectory_source_profile_id=None,
+                    trajectory_contract=None):
     from app.registry import AgentRegistry
     identity = current_runner_identity().model_dump()
     registry = default_evaluator_registry
@@ -64,7 +65,7 @@ def frozen_manifest(endpoint, scenario="serial", *, db, profile, trajectory_sour
         request_mapping={"operation": "input.operation", "customer_id": "input.customer_id"},
         is_idempotent=True, timeout_seconds=30, max_retries=2, max_concurrency=1, rate_limit_per_minute=60,
         trajectory_source_profile_id=trajectory_source_profile_id)
-    return {
+    manifest = {
         "schema_version": "1.2", "runner": identity,
         "agent": {"agent_id": "test-agent", "version": version, "agent_version_id": registered.id,
                   "spec_digest": registered.spec_digest,
@@ -79,12 +80,22 @@ def frozen_manifest(endpoint, scenario="serial", *, db, profile, trajectory_sour
             "expected_output": {"expected_intent": "balance"}}]},
         "evaluators": [binding],
     }
+    if trajectory_contract is not None:
+        from app.evaluator_binding import manifest_measurement_digest
+        from app.trajectory.manifest import bind_trajectory_manifest, freeze_trajectory_contract
+        manifest["schema_version"] = "1.3"
+        manifest["trajectory"] = bind_trajectory_manifest(freeze_trajectory_contract(trajectory_contract), registered)
+        manifest["measurement_digest"] = manifest_measurement_digest(manifest)
+        manifest["contract_digests"] = {"measurement": {"version": "1.3", "digest": manifest["measurement_digest"]}}
+    return manifest
 
 
-def invoke_worker(s40_runtime, monkeypatch, runtime, endpoint, scenario="serial", *, trajectory_source_profile_id=None):
+def invoke_worker(s40_runtime, monkeypatch, runtime, endpoint, scenario="serial", *, trajectory_source_profile_id=None,
+                  trajectory_contract=None):
     db, queue, _limiter, orchestrator, worker, _reconciler = s40_runtime
     manifest = frozen_manifest(endpoint, scenario, db=db, profile=runtime.agent_profiles[endpoint],
-                               trajectory_source_profile_id=trajectory_source_profile_id)
+                               trajectory_source_profile_id=trajectory_source_profile_id,
+                               trajectory_contract=trajectory_contract)
     launch = orchestrator.create_launch("test-agent", manifest["agent"]["version"], "s40-local", "fixture-v1", "S40", manifest)
     orchestrator.start_launch(launch.id)
     monkeypatch.setattr("app.worker.get_langfuse_client_safe", lambda: runtime.sdk)
@@ -492,6 +503,65 @@ def test_reader_qualification_repeated_real_samples(local_langfuse, s40_runtime,
         normalization["qualified_factory_read"] = True
         local_langfuse.record(profile, "calibration-" + scenario + "-admission", identity, rows,
                               normalization=normalization)
+
+
+@pytest.mark.parametrize("profile,mode,approved", [("native_otel", "immediate", True),
+    ("pydantic_ai", "immediate", True), ("http_only", "immediate", True),
+    ("native_otel", "late_all", True), ("native_otel", "immediate", False)])
+def test_formal_worker_automatically_freezes_trajectory(local_langfuse, s40_runtime, monkeypatch, tmp_path,
+                                                       profile, mode, approved):
+    from datetime import UTC, timedelta
+
+    from app.db_models import ExecutionCheckpointRecord
+    from app.trajectory.checkpoint import load_trajectory_checkpoint
+    from app.trajectory.contract import TrajectoryContract
+    from app.trajectory.factory import QualifiedReaderFactory, ReaderApproval, reader_artifact_digest
+    from app.trajectory.manifest import load_trajectory_contract
+    from app.trajectory.schema import TrajectoryScope
+    from app.trajectory.worker_acquisition import WorkerTrajectoryCollector
+
+    # 复用175已经实测的受控批准，不在本消费测试根据Trace或返回值自动批准。
+    report = json.loads((Path(__file__).resolve().parents[1] / "docs/validation/s4-1/reader-calibration.json").read_text())
+    approval = report["groups"][profile + ":serial"]["approved_identity"]
+    contract = TrajectoryContract.model_validate(calibrated_banking_payload())
+    assert contract.digest == approval["trajectory_contract_digest"]
+    assert reader_artifact_digest() == approval["reader_artifact_digest"]
+    factory = QualifiedReaderFactory(server_url=local_langfuse.base_url,
+        public_key=local_langfuse.env["S4_PUBLIC_KEY"], secret_key=local_langfuse.env["S4_SECRET_KEY"],
+        approvals=(ReaderApproval(**approval),) if approved else ())
+    worker = s40_runtime[4]
+    monkeypatch.setattr(worker, "trajectory_collector", WorkerTrajectoryCollector(s40_runtime[0].get_session,
+        factory_provider=lambda: factory))
+    profile_id = {"native_otel": "native-otel-v1", "pydantic_ai": "pydantic-ai-v1", "http_only": "http-only-v1"}[profile]
+    with AgentProcess(local_langfuse, tmp_path, profile, export_mode=mode) as agent:
+        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint,
+            trajectory_source_profile_id=profile_id, trajectory_contract=contract)
+    with s40_runtime[0].get_session() as session:
+        cp = session.scalar(select(ExecutionCheckpointRecord).where(
+            ExecutionCheckpointRecord.item_execution_id == identity["item_id"]))
+        from app.db_models import ExperimentLaunchRecord
+        manifest = session.get(ExperimentLaunchRecord, identity["launch_id"]).manifest
+        scope = TrajectoryScope(launch_id=identity["launch_id"], item_execution_id=identity["item_id"],
+            dataset_item_id=identity["dataset_item_id"], attempt_id=identity["attempt_id"],
+            dispatch_generation=identity["generation"], trace_id=identity["trace_id"], root_observation_id=identity["root_id"])
+        saved = load_trajectory_checkpoint(session, scope, load_trajectory_contract(manifest))
+        created = cp.created_at.replace(tzinfo=UTC) if cp.created_at.tzinfo is None else cp.created_at
+        assert saved.acquisition.deadline_at == created + timedelta(seconds=12)
+        assert saved.source_bytes_used <= contract.limits.max_source_bytes and saved.round_token is None
+    acquired = saved.acquisition
+    if approved:
+        assert acquired.state == "READY"
+        assert acquired.completeness.status == ("ROOT_ONLY" if profile == "http_only" else "OBSERVED_COMPLETE")
+    else:
+        assert acquired.state == "UNAVAILABLE" and acquired.reason_code == "TRAJECTORY_SOURCE_UNQUALIFIED"
+        assert saved.source_bytes_used == 0 and acquired.evidence_ref is None
+    rows = local_langfuse.wait_observations(identity["trace_id"], minimum=2 if profile == "http_only" else 8)
+    assert_lineage(rows, identity)
+    local_langfuse.record(profile, "automatic-worker-" + mode + ("" if approved else "-unqualified"), identity, rows,
+        normalization={"automatic_worker": True, "profile_id": profile_id, "acquisition_state": acquired.state,
+            "completeness": acquired.completeness.status if acquired.completeness else None,
+            "reason_code": acquired.reason_code, "original_deadline_preserved": True,
+            "single_attempt_preserved": True, "agent_output_evaluation_preserved": True})
 
 
 def test_sync_entry_injects_remote_observation_parent(local_langfuse, s40_runtime, tmp_path):

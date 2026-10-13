@@ -108,7 +108,8 @@ lsof -nP -iTCP:28080 -iTCP:28083 -sTCP:LISTEN
 - 分支建议：`codex/<简短描述>`（其他前缀也可以，但请保持短且语义清晰）。
 - Commit 使用 Conventional Commits：`feat` / `fix` / `test` / `refactor` / `docs` / `chore`。
 - PR 描述包含：问题、方案、测试证据（命令与结果）、兼容性影响、风险。
-- PR 必须通过 CI 的 5 项检查：Code Quality、Full Python Tests、Docker / Compose Validation、Console Quality & E2E、Langfuse Cloud E2E。
+- PR 必须通过 CI 的 6 项检查：Code Quality、Full Python Tests、Docker / Compose Validation、Console Quality & E2E、Langfuse Cloud E2E、S4 Local Langfuse Integration。
+- 涉及观测采集的改动先执行 `make trajectory-prepare`、`make trajectory-test`；夹具自动创建与清理隔离服务，不使用 Cloud 凭据。普通单元测试通过不能代替真实采集通过。实测来源与复现说明见 [S4.0 验收记录](docs/validation/s4-0/README.md)。
 
 ## 安全与数据
 

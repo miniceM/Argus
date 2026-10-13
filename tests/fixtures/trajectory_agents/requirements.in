@@ -1,0 +1,4 @@
+# 独立业务 Agent 环境；禁止添加任何 Evaluation SDK 或 provider extra。
+pydantic-ai-slim==2.55.0
+opentelemetry-sdk==1.45.1
+opentelemetry-exporter-otlp-proto-http==1.45.1

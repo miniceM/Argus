@@ -59,7 +59,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           POLICY_PR_NUMBER: ${{ inputs.pr_number }}
           POLICY_DECISIONS_PATH: artifacts/policy/decisions.json
-        run: python scripts/ci/publish_cloud_policy.py evaluate
+        run: python -m scripts.ci.publish_cloud_policy evaluate
 
       - name: Upload trusted policy decisions
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -99,4 +99,4 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           POLICY_DECISIONS_PATH: artifacts/policy/decisions.json
-        run: python scripts/ci/publish_cloud_policy.py publish
+        run: python -m scripts.ci.publish_cloud_policy publish

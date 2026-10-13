@@ -59,7 +59,7 @@ def test_main_cloud_acceptance_aggregates_real_jobs_and_actual_cloud_steps() -> 
     assert "always()" in job["if"]
     assert all(name in job["needs"] for name in ("quality", "unit-tests", "docker-build", "console", "cloud-e2e-main"))
     assert job["permissions"] == {"actions": "read", "contents": "read"}
-    assert "verify_main_cloud_acceptance.py" in str(job["steps"])
+    assert "scripts.ci.verify_main_cloud_acceptance" in str(job["steps"])
     assert any(step.get("name") == "Upload main Cloud acceptance receipt" for step in job["steps"])
 
 
@@ -99,7 +99,7 @@ def test_cloud_summary_reports_coverage_without_conflating_policy_and_cloud() ->
     workflow = _workflow(".github/workflows/ci.yml")
     jobs = workflow["jobs"]
     combined = str(jobs["cloud-e2e-policy"]["steps"] + jobs["cloud-e2e-main"]["steps"])
-    assert "write_cloud_summary.py" in combined
+    assert "scripts.ci.write_cloud_summary" in combined
     summary_script = (ROOT / "scripts/ci/write_cloud_summary.py").read_text()
     for state in ("passed", "skipped_by_policy", "blocked_missing_secrets", "blocked_disabled", "not_run_upstream_failed"):
         assert state in summary_script or state in combined
@@ -177,8 +177,8 @@ def test_cloud_integration_policy_is_a_serialized_default_branch_controller() ->
         if scope != "statuses"
     )
     assert "statuses: write" not in str(evaluate)
-    assert "publish_cloud_policy.py evaluate" in str(evaluate["steps"])
-    assert "publish_cloud_policy.py publish" in str(publish["steps"])
+    assert "scripts.ci.publish_cloud_policy evaluate" in str(evaluate["steps"])
+    assert "scripts.ci.publish_cloud_policy publish" in str(publish["steps"])
     assert "github.workflow_sha" in str(evaluate["steps"])
     assert "github.workflow_sha" in str(publish["steps"])
     assert "cloud-integration-policy-decisions-" in str(evaluate["steps"] + publish["steps"])
@@ -188,3 +188,28 @@ def test_cloud_integration_policy_is_a_serialized_default_branch_controller() ->
         for step in job.get("steps", []):
             if "uses" in step:
                 assert _is_sha(_action(step)[1]), f"unpinned Action: {step['uses']}"
+
+
+def test_workflow_python_cli_scripts_use_module_invocation() -> None:
+    workflow_paths = (
+        ".github/workflows/ci.yml",
+        ".github/workflows/cloud-e2e-trusted.yml",
+        ".github/workflows/cloud-integration-policy.yml",
+        ".github/workflows/langfuse-i18n.yml",
+    )
+
+    def runs_in(value: object) -> list[str]:
+        if isinstance(value, dict):
+            found = [str(value["run"])] if isinstance(value.get("run"), str) else []
+            for child in value.values():
+                found.extend(runs_in(child))
+            return found
+        if isinstance(value, list):
+            return [run for child in value for run in runs_in(child)]
+        return []
+
+    for path in workflow_paths:
+        cli_runs = [run for run in runs_in(_workflow(path)) if "scripts.ci." in run or "scripts/ci/" in run]
+        assert cli_runs, f"expected Python CI CLI invocations in {path}"
+        assert all("python -m scripts.ci." in run for run in cli_runs), path
+        assert all("python scripts/ci/" not in run for run in cli_runs), path

@@ -479,7 +479,7 @@ jobs:
           POLICY_STATE: main acceptance verifies actual Cloud execution
           RISK_STATE: main push or authorized main dispatch
           CI_CHECKS_JSON: ${{ toJSON(needs) }}
-        run: python scripts/ci/write_cloud_summary.py
+        run: python -m scripts.ci.write_cloud_summary
 
   main-cloud-acceptance:
     name: Main Cloud Acceptance
@@ -508,7 +508,7 @@ jobs:
       - name: Verify exact main Cloud acceptance
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python scripts/ci/verify_main_cloud_acceptance.py
+        run: python -m scripts.ci.verify_main_cloud_acceptance
 
       - name: Upload main Cloud acceptance receipt
         if: success()

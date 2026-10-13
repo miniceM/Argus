@@ -32,7 +32,11 @@ V1_NAME="argus-ci-v1-${SUFFIX}"
 V2_NAME="argus-ci-v2-${SUFFIX}"
 
 echo "== Start Demo Agents and Eval Runner =="
-"${COMPOSE[@]}" up -d --build
+case "${ARGUS_CLOUD_BUILD_IMAGES:-true}" in
+  true) "${COMPOSE[@]}" up -d --build ;;
+  false) "${COMPOSE[@]}" up -d ;;
+  *) echo "ARGUS_CLOUD_BUILD_IMAGES must be true or false" >&2; exit 2 ;;
+esac
 
 "$ROOT/scripts/wait-http.sh" http://localhost:18080/health 180
 

@@ -99,6 +99,8 @@ def project_json(
         elif value is None:
             parsed = None
         else:
+            # 领域 codec 可以编码受控模型；外部来源必须先证明是精确 JSON 值。
+            validate_bounded_json(value, limits)
             parsed = canonical_loads(
                 canonical_dumps(value, max_bytes=limits.max_source_bytes), max_bytes=limits.max_source_bytes
             )

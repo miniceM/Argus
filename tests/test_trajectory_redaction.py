@@ -3,6 +3,7 @@ from decimal import Decimal
 import pytest
 from app.trajectory.contract import TrajectoryLimits
 from app.trajectory.redaction import project_json
+from pydantic import BaseModel
 
 
 def test_allowlisted_nested_scalar_projection_preserves_exact_numbers_and_visibility():
@@ -79,3 +80,17 @@ def test_large_existing_array_index_is_invalid_without_unbounded_projection_allo
     assert result.visibility == {"$.items[1000]": "INVALID"}
     assert result.value == {"items": []}
     assert not result.complete
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_sdk_model_is_rejected_before_any_serialization(nested):
+    class SdkPayload(BaseModel):
+        id: str = "synthetic-secret"
+
+        def model_dump(self, *args, **kwargs):
+            raise AssertionError("source SDK serialization must not execute")
+
+    value = {"id": SdkPayload()} if nested else SdkPayload()
+    result = project_json(value, ["$.id"], limits=TrajectoryLimits())
+    assert result.value == {} and result.visibility == {"$.id": "INVALID"}
+    assert result.warnings == ["ARGUMENTS_INVALID"] and not result.complete

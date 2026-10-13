@@ -1,12 +1,13 @@
 """冻结字段映射生成脱敏候选 Step；不证明闭包、因果或完整度。"""
 
 import re
+from datetime import UTC, datetime
 from typing import get_args
 
 from pydantic import Field, TypeAdapter, ValidationError
 
-from .codec import canonical_dumps, canonical_loads
-from .contract import TrajectoryContract
+from .codec import canonical_dumps, canonical_loads, validate_json_value
+from .contract import SourceProfile, TrajectoryContract
 from .redaction import project_json, validate_bounded_json
 from .schema import (
     Capability,
@@ -56,7 +57,18 @@ def _field(row, profile, name, max_bytes):
         return _MISSING
     if len(values) > 1:
         try:
-            encodings = {canonical_dumps(value, max_bytes=max_bytes) for value in values}
+            encodings = set()
+            for value in values:
+                if name in {"started_at", "ended_at"}:
+                    if type(value) is not datetime:
+                        validate_json_value(value)
+                    try:
+                        value = TypeAdapter(Timestamp).validate_python(value).astimezone(UTC)
+                    except (ValidationError, ValueError, OverflowError):
+                        return None  # 无有效时间不能挑一个 alias 当真；保留其它工具事实。
+                else:
+                    validate_json_value(value)
+                encodings.add(canonical_dumps(value, max_bytes=max_bytes))
         except (ValueError, UnicodeError, RecursionError):
             raise _InvalidField("SOURCE_FIELD_INVALID") from None
         if len(encodings) != 1:
@@ -98,7 +110,8 @@ def _optional(value, adapter, warning, warnings):
         warnings.append(warning)
         return None
     try:
-        return TypeAdapter(adapter).validate_python(value)
+        parsed = TypeAdapter(adapter).validate_python(value)
+        return parsed.astimezone(UTC) if adapter is Timestamp else parsed
     except (ValidationError, ValueError, OverflowError):
         warnings.append(warning)
         return None
@@ -107,10 +120,32 @@ def _optional(value, adapter, warning, warnings):
 def normalize_observation(
     row, contract: TrajectoryContract, scope: TrajectoryScope, *, index: int
 ) -> NormalizedObservation:
-    # 调用边界重新校验可变配置；声明选择仍从已绑定合同读取，不能来自 Trace。
-    checked = TrajectoryContract.model_validate(contract.model_dump())
-    profile_id = contract.source_profile.profile_id
-    profile = next(profile for profile in checked.source_profile_set if profile.profile_id == profile_id)
+    return ObservationNormalizer(contract).normalize(row, scope, index=index)
+
+
+class ObservationNormalizer:
+    """一个采集批次持有一份独立配置快照；每行仍校验身份与容量。
+
+    创建时重新校验完整合同与已绑定来源，不接受 Trace 自报 profile。
+    不保留原始行或结果，不证明采集闭包，也不跨合同复用。
+    """
+
+    __slots__ = ("_contract", "_profile")
+
+    def __init__(self, contract: TrajectoryContract):
+        self._contract = TrajectoryContract.model_validate(contract.model_dump())
+        profile_id = contract.source_profile.profile_id
+        self._profile = next(
+            profile for profile in self._contract.source_profile_set if profile.profile_id == profile_id
+        )
+
+    def normalize(self, row, scope: TrajectoryScope, *, index: int) -> NormalizedObservation:
+        return _normalize_observation(row, self._contract, self._profile, scope, index=index)
+
+
+def _normalize_observation(
+    row, checked: TrajectoryContract, profile: SourceProfile, scope: TrajectoryScope, *, index: int
+) -> NormalizedObservation:
     limits = checked.limits
     scope = TrajectoryScope.model_validate(scope.model_dump())
     warnings = []
@@ -210,7 +245,7 @@ def normalize_observation(
             )
         except (ValueError, UnicodeError, RecursionError):
             arguments = project_json(None, argument_paths, limits=limits, source_visibility="INVALID")
-        if not arguments.complete:
+        if not root and not arguments.complete:
             capabilities["tool_arguments"] = "NONE" if arguments.value is None else "PARTIAL"
         warnings.extend(arguments.warnings)
         output = project_json(

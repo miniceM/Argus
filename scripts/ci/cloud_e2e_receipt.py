@@ -333,8 +333,7 @@ def get_current_ci_run(client: GitHubClient, pr: Mapping[str, Any]) -> dict[str,
         run
         for run in runs
         if run.get("event") == "pull_request"
-        and str(run.get("path", "")).lstrip("/") == CI_WORKFLOW_PATH + "@refs/pull/"
-        + str(pr.get("number")) + "/merge"
+        and str(run.get("path", "")).lstrip("/") == CI_WORKFLOW_PATH
         and _find_pr_in_run(
             run,
             pr_number=int(pr["number"]),

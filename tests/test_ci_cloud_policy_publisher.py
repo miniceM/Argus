@@ -83,7 +83,7 @@ def _ci_run(**overrides: Any) -> dict[str, Any]:
         "id": CI_RUN_ID,
         "run_attempt": 1,
         "event": "pull_request",
-        "path": ".github/workflows/ci.yml@refs/pull/118/merge",
+        "path": ".github/workflows/ci.yml",
         "pull_requests": [
             {
                 "number": PR_NUMBER,
@@ -291,6 +291,17 @@ def test_high_risk_policy_passes_only_with_current_ci_and_recomputed_trusted_rec
     assert decision["cloud_state"] == "passed"
     assert decision["head_sha"] == HEAD
     assert decision["base_sha"] == BASE
+
+
+def test_current_ci_run_accepts_workflow_path_returned_by_actions_api() -> None:
+    client = _PolicyClient()
+    client.ci_runs[0] = _ci_run(path=".github/workflows/ci.yml")
+    client.file_changes = [{"filename": "docs/guide.md", "status": "modified"}]
+
+    decision = evaluate_pull_request_policy(client, PR_NUMBER)
+
+    assert decision["status"] == "success"
+    assert decision["policy_state"] == "passed"
 
 
 def test_low_risk_policy_passes_without_cloud_and_keeps_cloud_skipped() -> None:

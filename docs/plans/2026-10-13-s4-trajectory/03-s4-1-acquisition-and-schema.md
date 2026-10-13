@@ -116,6 +116,8 @@ Step.duration_ms 表达 Step 执行语义；若来源提供且 profile 验证该
 
 现有execution_checkpoints按item_execution_id + dispatch_generation唯一，保存Agent输出及其冻结Manifest provenance。迁移增加可空JSON字段trajectory_acquisition_json，值只序列化01的TrajectoryAcquisition，不保存Observations或第二份完整Trace。T1统一拥有AgentVersion profile列、artifact表及checkpoint扩展的Schema迁移，T2复用它接入持久化；本次基线最高016，候选文件migrations/017_trajectory_evidence.sql。真正实施时必须重新查看最新main和并行迁移，按序号追加；不得改已发布迁移。
 
+`017` 已交付后追加 `018` 的私有 `trajectory_runtime_json`，保存原 checkpoint.created_at、来源/合同摘要、累计/预留 wire 预算、轮次 CAS 及安全候选制品指针。公开 PENDING 仍无 EvidenceRef；私有指针解决进程中断后原截止到达时保留已验证候选，不保存第二份 Trace。读前预留剩余额度、发布后退未用量，崩溃/取消不退未知在途额度。来源校验、历史 READY 仅读取诊断、锁后时间/租约验证和实施边界见 [采集 Checkpoint 验收](../../validation/s4-1/trajectory-checkpoint.md)；正式 Worker/Manifest 与恢复调度仍须接入。
+
 执行顺序保持不重调 Agent：成功收到业务响应后，先写现有 execution checkpoint；随后完成有界 Acquisition；READY 时写 evidence artifact，再以当前 generation/lease/CAS 更新 checkpoint acquisition ref；最后才交由后续阶段的冻结 Evaluator 消费。UNAVAILABLE 表达采集不可用；READY 可携带 ROOT_ONLY 或 PARTIAL completeness。它们只表达证据状态，不回滚 Agent 成功响应，也不在 #128 判断规则或质量。S4.1 不改变旧 Manifest 的行为。
 
 本期提供 trajectory contract 的 Manifest 1.3 序列化与 checkpoint/artifact；Manifest 1.2 及其它已注册历史版本按原逻辑执行。Snapshot 引用的 serializer/validator 可在本期实现，但不提前写 evidence_contract_version=trajectory-1.0。T4 同时接入 required_evidence_status、新聚合合同与该 discriminator 后，才生成新资格快照，避免出现缺字段的半契约 Snapshot。

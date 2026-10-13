@@ -156,6 +156,116 @@ def test_http_only_preserves_answer_evaluation(local_langfuse, s40_runtime, monk
         local_langfuse.record("http_only", "serial", identity, observations, normalization=normalization)
 
 
+@pytest.mark.parametrize("profile", ["native_otel", "pydantic_ai", "http_only"])
+def test_checkpoint_acquisition_under_the_original_worker_lease(local_langfuse, s40_runtime, monkeypatch, tmp_path, profile):
+    from concurrent.futures import ThreadPoolExecutor
+    from decimal import Decimal
+    from threading import Event
+
+    from app.db_models import ExecutionCheckpointRecord
+    from app.registry import AgentRegistry
+    from app.trajectory.acquisition import AcquisitionRuntime, acquire_trajectory
+    from app.trajectory.assembler import assemble_trajectory
+    from app.trajectory.checkpoint import (
+        TrajectoryCheckpointError,
+        begin_trajectory_round,
+        load_trajectory_checkpoint,
+        publish_trajectory_round,
+    )
+    from app.trajectory.codec import canonical_dumps
+    from app.trajectory.contract import TrajectoryContract
+    from app.trajectory.reader import LangfuseObservationReader
+    from app.trajectory.schema import TrajectoryScope
+    from trajectory_contract_fixtures import observed_banking_contract_payload
+
+    db, _, _, _, worker, _ = s40_runtime
+    persisted, resume_evaluation = Event(), Event()
+    saved = worker._persist_execution_checkpoint
+    checkpoint_arguments = {}
+    def pause_after_response(**arguments):
+        saved(**arguments)
+        checkpoint_arguments.update(arguments)
+        persisted.set()
+        assert resume_evaluation.wait(timeout=20), "test did not release the saved-response seam"
+    monkeypatch.setattr(worker, "_persist_execution_checkpoint", pause_after_response)
+    profile_id = {"native_otel": "native-otel-v1", "pydantic_ai": "pydantic-ai-v1", "http_only": "http-only-v1"}[profile]
+    with AgentProcess(local_langfuse, tmp_path, profile) as agent, ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(invoke_worker, s40_runtime, monkeypatch, local_langfuse, agent.endpoint,
+                             trajectory_source_profile_id=profile_id)
+        try:
+            assert persisted.wait(timeout=20)
+            local_langfuse.sdk.flush()
+            with db.get_session() as session:
+                cp = session.scalar(select(ExecutionCheckpointRecord).where(
+                    ExecutionCheckpointRecord.item_execution_id == checkpoint_arguments["item_id"]))
+                item = session.get(ExperimentItemExecutionRecord, cp.item_execution_id)
+                assert item.execution_status == "running" and item.active_attempt_id == cp.final_attempt_id
+                scope = TrajectoryScope(launch_id=cp.launch_id, item_execution_id=cp.item_execution_id,
+                    dataset_item_id=cp.dataset_item_id, attempt_id=cp.final_attempt_id, dispatch_generation=cp.dispatch_generation,
+                    trace_id=cp.trace_id, root_observation_id=cp.observation_id)
+                lease_token = item.lease_token
+            version = AgentRegistry(db).get_version("test-agent", checkpoint_arguments["manifest"]["agent"]["version"])
+            payload = observed_banking_contract_payload()
+            payload["limits"] = {"page_size": 2, "deadline_seconds": Decimal(3), "quiet_window_seconds": Decimal("0.05")}
+            contract = TrajectoryContract.model_validate(payload).bind_source_version(version)
+            async def consume():
+                runtime = None
+                deadline_race = False
+                async with LangfuseObservationReader(server_url=local_langfuse.base_url,
+                        public_key=local_langfuse.env["S4_PUBLIC_KEY"], secret_key=local_langfuse.env["S4_SECRET_KEY"]) as reader:
+                    while True:
+                        with db.get_session() as session:
+                            claim = begin_trajectory_round(session, scope, contract, lease_token=lease_token)
+                        if claim.round_token is None:
+                            return claim.acquisition
+                        if runtime is None:
+                            runtime = AcquisitionRuntime(scope, contract, session_factory=db.get_session, started_at=claim.started_at)
+                        assert runtime._wire_bytes == claim.source_bytes_used
+                        with runtime.activate():
+                            result = await acquire_trajectory(scope, contract, client=reader)
+                        candidate = assemble_trajectory(scope, runtime._latest, contract) if (
+                            result.state == "PENDING" and runtime._latest is not None) else None
+                        if profile == "http_only" and result.state == "PENDING" and candidate is not None:
+                            # 确定性覆盖：读取后、发布前原截止到达；不延长 deadline。
+                            await asyncio.sleep(runtime.remaining() + 0.01)
+                        try:
+                            with db.get_session() as session:
+                                frozen = publish_trajectory_round(session, claim, contract, lease_token=lease_token, result=result,
+                                    source_bytes_used=runtime._wire_bytes, candidate=candidate)
+                        except TrajectoryCheckpointError as error:
+                            if error.reason_code != "TRAJECTORY_CHECKPOINT_DEADLINE_EXPIRED" or result.state != "PENDING":
+                                raise
+                            before = runtime._wire_bytes
+                            with runtime.activate():
+                                result = await acquire_trajectory(scope, contract, client=reader)
+                            assert result.state != "PENDING" and runtime._wire_bytes == before
+                            with db.get_session() as session:
+                                frozen = publish_trajectory_round(session, claim, contract, lease_token=lease_token, result=result,
+                                    source_bytes_used=runtime._wire_bytes, candidate=None)
+                            deadline_race = True
+                        if frozen.acquisition.state != "PENDING":
+                            if profile == "http_only":
+                                assert deadline_race
+                            return frozen.acquisition
+                        await asyncio.sleep(0.05)
+            acquired = asyncio.run(consume())
+            assert acquired.state == "READY", acquired.reason_code
+            assert acquired.completeness.status == ("ROOT_ONLY" if profile == "http_only" else "OBSERVED_COMPLETE")
+        finally:
+            resume_evaluation.set()
+        identity = future.result(timeout=20)  # 原 Worker 继续评测；既有成功与单 Attempt 断言仍执行。
+    with db.get_session() as session:
+        recovered = load_trajectory_checkpoint(session, scope, contract)
+        assert canonical_dumps(recovered.acquisition) == canonical_dumps(acquired)
+        assert recovered.candidate is not None
+        assert recovered.source_bytes_used <= contract.limits.max_source_bytes
+    rows = local_langfuse.wait_observations(identity["trace_id"], minimum=2 if profile == "http_only" else 8)
+    assert_lineage(rows, identity)
+    local_langfuse.record(profile, "checkpoint-acquisition", identity, rows, normalization={
+        "profile_id": profile_id, "acquisition_state": acquired.state, "completeness": acquired.completeness.status,
+        "artifact_roundtrip": True, "checkpoint_restored": True, "original_worker_lease": True})
+
+
 def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id, *, scenario="serial"):
     from decimal import Decimal
 

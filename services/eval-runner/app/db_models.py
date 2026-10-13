@@ -332,6 +332,8 @@ class ExecutionCheckpointRecord(Base):
     binding_provenance: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
     manifest_digest: Mapped[str] = mapped_column(String(128), nullable=False)
     trajectory_acquisition_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # 私有恢复账本只保存预算/轮次身份及安全制品指针，不保存 Observation。
+    trajectory_runtime_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     final_attempt_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     observation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

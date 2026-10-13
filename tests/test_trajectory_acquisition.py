@@ -256,10 +256,36 @@ async def test_cancel_and_timeout_release_shared_acquisition_slots(db):
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+    # 新采集任务仍能取得共享槽；旧任务的未知在途额度不复用。
+    runtime, _, _, _ = setup(db, request_timeout_seconds=Decimal("0.05"), max_inflight_acquisitions=1)
+    runtime.limiter = limiter
     assert (await collect(runtime, contract, Reader([[page(rows)]]))).state == "PENDING"
     result = await collect(runtime, contract, Slow())
     assert result.state == "PENDING" and result.reason_code == "TRAJECTORY_SOURCE_TIMEOUT"
+    runtime, _, _, _ = setup(db, request_timeout_seconds=Decimal("0.05"), max_inflight_acquisitions=1)
+    runtime.limiter = limiter
     assert (await collect(runtime, contract, Reader([[page(rows)]]))).state == "PENDING"
+
+
+@run_async
+async def test_external_cancel_consumes_unknown_inflight_allowance_before_runtime_reuse(db):
+    runtime, _, contract, rows = setup(db)
+    entered = asyncio.Event()
+
+    class Slow:
+        async def read_page(self, *args, **options):
+            entered.set()
+            await asyncio.Event().wait()
+
+    task = asyncio.create_task(collect(runtime, contract, Slow()))
+    await asyncio.wait_for(entered.wait(), 1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert runtime._wire_bytes == contract.limits.max_source_bytes
+    reader = Reader([[page(rows)]])
+    await collect(runtime, contract, reader)
+    assert reader.calls == []
 
 
 @run_async
@@ -496,6 +522,21 @@ async def test_real_deadline_keeps_already_read_pages_when_next_page_times_out(d
     assert final.state == "READY" and final.completeness.status == "PARTIAL"
     assert len(frozen(db, final, contract).steps) == 3
     assert phases == ["first-page", "second-page-cancelled"]
+
+
+@run_async
+async def test_outer_request_timeout_consumes_unknown_inflight_wire_allowance(db):
+    runtime, _, contract, rows = setup(db, request_timeout_seconds=Decimal("0.01"))
+    class UnreportedStream:
+        async def read_page(self, *args, **options):
+            # 外层取消发生在 Reader 尚未返回页面/已收字节计数时。
+            await asyncio.Event().wait()
+    pending = await collect(runtime, contract, UnreportedStream())
+    assert pending.state == "PENDING" and pending.reason_code == "TRAJECTORY_SOURCE_TIMEOUT"
+    assert runtime._wire_bytes == contract.limits.max_source_bytes
+    reader = Reader([[page(rows)]])
+    await collect(runtime, contract, reader)
+    assert reader.calls == [], "unknown received bytes cannot be refunded for another request"
 
 
 @run_async

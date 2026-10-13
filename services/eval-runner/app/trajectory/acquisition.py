@@ -176,7 +176,13 @@ async def _round(runtime, client):
             async with asyncio.timeout(timeout):
                 page = await client.read_page(scope, cursor=cursor, page_size=limits.page_size,
                                              timeout_seconds=timeout, max_bytes=allowance)
+        except asyncio.CancelledError:
+            # 已开始读取但未报告字节；取消仍扣未知额度并原样传播。
+            runtime._wire_bytes += allowance
+            raise
         except TimeoutError:
+            # 外层取消先于 Reader 的计数报告时，未知在途字节不能退回额度。
+            runtime._wire_bytes += allowance
             if runtime.remaining() <= 0:
                 if not rows and runtime._latest is not None:
                     return runtime._latest, False, runtime.clock.monotonic(), None

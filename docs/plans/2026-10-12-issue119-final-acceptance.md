@@ -185,8 +185,9 @@ QueryClient 级请求锁 store：新增 `launchActionLocks.ts`（模块私有 `W
 | mock UI（Vitest / jsdom） | F1 锁与反馈隔离（含 StrictMode 重挂载反馈回归）、F2 资格矩阵与两个 consumer、F3 焦点与键盘路径 | **已验证** |
 | mock 浏览器（Playwright + 路由 fixture） | F3 真实 Chrome 焦点与键盘 Escape / Tab；六视口几何与菜单可达性 | **已验证** |
 | 隔离真实本地 API（Playwright 自带） | 130 项 E2E 中的真实 API / test-mode SQLite 场景 | **已验证（本地隔离环境）** |
-| 真实 Worker→Agent→Langfuse 生产链路 | — | **未执行 / NOT RUN**，本任务也未声称 |
-| 远端 CI 与 Review（head `91e9527`） | — | **未查询**：分支 `codex/fix-pr134-review-gaps` 未推送，未获推送/评论/merge 授权 |
+| 真实 Runner→Demo Agent→真实 Langfuse cloud（远端 CI `Langfuse Cloud E2E` Job） | `scripts/ci-e2e-cloud.sh`：compose 起 Runner + Demo Agent，bootstrap Dataset，跑 v1/v2 Experiment，以 CI 自有云项目凭据验证 Traces / Scores | **已验证（远端，非生产部署）**：自交付代码 head `10b015a` 起历次 CI 5/5 均含本 Job（runs `38341654775` / `38342450008` / `38343976061` / `38345401768`，分别对应分支上的 `10b015a` / `67323ba` / `8961c68` / `4cbed4d`） |
+| 生产环境 Worker / 生产 Langfuse 实例链路 | — | **未执行 / NOT RUN**：远端 CI 使用 CI 自有云项目，不构成生产部署或生产负载证明，本任务也未声称；与上一层不能互相替代 |
+| 远端 CI 与 Review（head `4cbed4d`） | PR #135 的 5 个 Job；Review 评论 / inline thread / reviews | **已验证 5/5**（run `38345401768`，2026-10-13 复检）；PR #135 OPEN / MERGEABLE / CLEAN，无待处理 Review 评论或 inline thread；merge 未授权、未执行 |
 
 ## R134-01 – R134-10 验收矩阵
 
@@ -205,7 +206,7 @@ QueryClient 级请求锁 store：新增 `launchActionLocks.ts`（模块私有 `W
 
 ## 交付与提交清单
 
-分支 `codex/fix-pr134-review-gaps`（based on PR #134 head `c1458c9`），本地 8 个 Conventional Commit：
+分支 `codex/fix-pr134-review-gaps`（based on PR #134 head `c1458c9`），本地 9 个 Conventional Commit：
 
 | Commit | 类别 | 内容 |
 |---|---|---|
@@ -216,14 +217,15 @@ QueryClient 级请求锁 store：新增 `launchActionLocks.ts`（模块私有 `W
 | `10b015a` | fix | F1 后续修正：StrictMode 重挂载后仍可写运行动作反馈 |
 | `67323ba` | docs | 记录 StrictMode 修正与本交付清单（最终 HEAD；CI run `38342450008` 于该 SHA 5/5 通过） |
 | `8961c68` | docs | 修正验收记录的最终 HEAD CI 证据（docs-only；CI run `38343976061` 于该 SHA 5/5 通过） |
+| `4cbed4d` | docs | 对齐提交清单自身（docs-only；CI run `38345401768` 于该 SHA 5/5 通过） |
 | （本条修订） | docs | 对齐提交清单自身（docs-only；其 CI 复跑以实跑 5/5 为证，见上） |
 
 交付：**PR #135**（https://github.com/miniceM/Argus/pull/135），base 为 PR #134 的分支 `codex/fix-issue119-main-acceptance`（`c1458c9`），因此 diff 只含三项审查缺口的修复；合并后 PR #134 自动更新为含修复的 head。
 
 ## 未提交/未授权事项与剩余风险
 
-1. **交付形态与远端 CI**：分支 `codex/fix-pr134-review-gaps` 已推送，并开为 **PR #135**（base = PR #134 的 `codex/fix-issue119-main-acceptance`，即 `c1458c9`），状态 OPEN / MERGEABLE。代码 head `10b015a`（run `38341654775`）与最终 HEAD `67323ba`（run `38342450008`）均 **5/5 Job 通过**（Code Quality、Full Python Tests、Docker/Compose、Console Quality & E2E、Langfuse Cloud E2E）。截至 2026-10-13 核对，PR #135 尚无 Review 评论或 inline thread 需要回复；亦未 resolve / merge（需另行授权）。本节最后若干提交均为 docs-only，不改变代码行为；其推送后的复跑 CI 以各 SHA 实跑 5/5 为证，验收以代码 head `10b015a` 的两轮 5/5（`38341654775`、继任 docs head 的 `38342450008` / `38343976061`）为准。更早的 5 Job 绿色记录属于 `c1458c9`，不能代表本 HEAD。
-2. **真实全链路未验证**：本次证据止于本地 mock UI、mock 浏览器与隔离真实本地 API；未执行真实 Worker→Agent→Langfuse 生产链路，远端 CI 也不构成该链路的证明。
+1. **交付形态与远端 CI**：分支 `codex/fix-pr134-review-gaps` 已推送，并开为 **PR #135**（base = PR #134 的 `codex/fix-issue119-main-acceptance`，即 `c1458c9`），状态 OPEN / MERGEABLE。代码 head `10b015a`（run `38341654775`）与分支全部推送 head（最近为 `4cbed4d`，run `38345401768`）均 **5/5 Job 通过**（Code Quality、Full Python Tests、Docker/Compose、Console Quality & E2E、Langfuse Cloud E2E）。截至 2026-10-13 核对，PR #135 尚无 Review 评论或 inline thread 需要回复；亦未 resolve / merge（需另行授权）。本节最后若干提交均为 docs-only，不改变代码行为；其推送后的复跑 CI 以各 SHA 实跑 5/5 为证，验收以代码 head `10b015a` 的两轮 5/5（`38341654775`、继任 docs head 的 `38342450008` / `38343976061`）为准。更早的 5 Job 绿色记录属于 `c1458c9`，不能代表本 HEAD。
+2. **证据分层与真实链路边界**：本地证据为 mock UI（Vitest）、mock 浏览器（Playwright 路由 fixture）与隔离真实本地 API（Playwright 自带 test-mode 栈）；远端 CI 的 `Langfuse Cloud E2E` Job 以 CI 自有云项目凭据真实执行了 Runner→Demo Agent→Langfuse cloud 链路（交付头 `10b015a` 起历次 CI 均通过），但 CI 云项目 ≠ 生产环境，生产链路未执行，两层证据不能互相替代。
 3. **`ComparisonReport.tsx` 残留**：该组件的正式裁决块仍只 gate `formal.available`。它当前**不在** `src/app/router.tsx` 的任何路由中（仅被其自身测试引用），且不含回归计数句子，因此不在本方案声明的修改范围内。若后续接入路由，应按 `comparisonPresentation.ts` 的同一 gate 收口。
 4. **前端锁的边界**：跨浏览器 reload、跨 Tab、跨设备、跨 QueryClient 不共享前端锁（方案 §6.1 明确不承诺）；相关边界由后端幂等保障。
 5. **锁的快照依赖**：F1/F2/F3 均未引入超时任务管理；请求长期 pending 时 UI 保持 pending。

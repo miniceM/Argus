@@ -902,10 +902,16 @@ class ExecutionWorker:
                         # Successful execution -> evaluate quality (ASYNC offloaded via asyncio.to_thread)
                         def _do_evaluation():
                             # Issue #81: shared frozen evaluation boundary; no per-id lookup.
+                            from .trajectory.inputs import context_for_item
+                            context = None
+                            if manifest.get("schema_version") == "1.3":
+                                with self.db_mgr.get_session() as session:
+                                    context = context_for_item(session, item_id=item_id, generation=generation, manifest=manifest)
                             result = evaluate_frozen_item(
                                 manifest,
                                 output=inv_res.body,
                                 expected_output=expected_output,
+                                context=context,
                             )
                             return (
                                 result.scores,

@@ -139,8 +139,13 @@ async def resume_successful_response(worker, *, item_id, generation, lease_token
                 raise
             if lost.is_set():
                 return False
-            result = await asyncio.to_thread(evaluate_frozen_item, manifest, output=response["agent_output"],
-                                            expected_output=response["expected_output"])
+            def evaluate_response():
+                from .inputs import context_for_item
+                with worker.db_mgr.get_session() as session:
+                    context = context_for_item(session, item_id=item_id, generation=generation, manifest=manifest)
+                return evaluate_frozen_item(manifest, output=response["agent_output"],
+                    expected_output=response["expected_output"], context=context)
+            result = await asyncio.to_thread(evaluate_response)
         if lost.is_set():
             return False
         dataset = manifest.get("dataset", {})

@@ -233,6 +233,12 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
                 },
             })
     result_items = build_result_items(launch, items, attempts, typed_by_item)
+    if (launch.manifest or {}).get("schema_version") == "1.3":
+        from .trajectory.inputs import freeze_trajectory_input
+        by_dataset = {item.dataset_item_id: item for item in items}
+        for result_item in result_items:
+            result_item["trajectory_input"] = freeze_trajectory_input(session,
+                item=by_dataset[result_item["dataset_item_id"]], manifest=launch.manifest)
     evidence_state, evidence_reasons = evaluate_snapshot_evidence(result_items)
     source_digest = _canonical_digest(result_items)
     existing = session.scalars(select(RunResultSnapshotRecord).where(

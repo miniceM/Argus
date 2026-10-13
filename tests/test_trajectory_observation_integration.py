@@ -564,6 +564,13 @@ def test_formal_worker_automatically_freezes_trajectory(local_langfuse, s40_runt
     monkeypatch.setattr(worker, "trajectory_collector", WorkerTrajectoryCollector(s40_runtime[0].get_session,
         factory_provider=lambda: factory))
     profile_id = {"native_otel": "native-otel-v1", "pydantic_ai": "pydantic-ai-v1", "http_only": "http-only-v1"}[profile]
+    from app.evaluator_binding import evaluate_frozen_item
+    captured = []
+    def evaluate(*args, **kwargs):
+        captured.append(kwargs.get("context"))
+        return evaluate_frozen_item(*args, **kwargs)
+    for module in ("app.worker", "app.trajectory.execution_recovery", "app.evaluation_recovery"):
+        monkeypatch.setattr(module + ".evaluate_frozen_item", evaluate)
     with AgentProcess(local_langfuse, tmp_path, profile, export_mode=mode) as agent:
         identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint,
             trajectory_source_profile_id=profile_id, trajectory_contract=contract, recovery_stage=recovery_stage)
@@ -586,6 +593,44 @@ def test_formal_worker_automatically_freezes_trajectory(local_langfuse, s40_runt
     else:
         assert acquired.state == "UNAVAILABLE" and acquired.reason_code == "TRAJECTORY_SOURCE_UNQUALIFIED"
         assert saved.source_bytes_used == 0 and acquired.evidence_ref is None
+    assert len(captured) == 1 and captured[0].output == {"intent": "balance", "balance": "12.50"}
+    assert captured[0].trajectory_evidence_ref == acquired.evidence_ref
+    assert (captured[0].trajectory.scope == scope) if approved else captured[0].trajectory is None
+    # 消费与 eval-only 都只读本地冻结输入，禁止再次打开来源或调用业务 Agent。
+    from copy import deepcopy
+
+    from app.db_models import EvaluationResultRecord, RunResultSnapshotRecord
+    from app.evaluation_recovery import recover_evaluation
+    from app.result_snapshots import create_result_snapshot
+    from app.trajectory.inputs import load_snapshot_input
+    monkeypatch.setattr(worker.trajectory_collector, "_get_factory", lambda: pytest.fail("evaluation reopened Reader"))
+    async def forbid_invoke(*args, **kwargs):
+        pytest.fail("evaluation retry invoked business Agent")
+    monkeypatch.setattr("app.worker.RemoteAgentExecutor.invoke_once", forbid_invoke)
+    with s40_runtime[0].get_session() as session:
+        launch = session.get(ExperimentLaunchRecord, identity["launch_id"])
+        launch.status = "COMPLETED"
+        snapshot = create_result_snapshot(session, launch)
+        original_items = deepcopy(snapshot.items)
+        assert original_items[0]["trajectory_input"]["acquisition"] == acquired.model_dump(mode="json")
+        item = session.get(ExperimentItemExecutionRecord, identity["item_id"])
+        item.evaluation_status, item.evaluation_generation = "evaluating", 1
+        item.eval_status, item.quality_conclusion = "failed", "unknown"
+        for result in session.scalars(select(EvaluationResultRecord).where(
+            EvaluationResultRecord.item_execution_id == item.id)):
+            result.status = "failed"
+    outcome = recover_evaluation(s40_runtime[0], item_id=identity["item_id"], evaluation_generation=1,
+        worker_id="real-frozen-input")
+    assert outcome["finalized"] and outcome["quality_conclusion"] == "pass"
+    assert len(captured) == 2 and captured[1].trajectory_evidence_ref == acquired.evidence_ref
+    with s40_runtime[0].get_session() as session:
+        cp = session.scalar(select(ExecutionCheckpointRecord).where(ExecutionCheckpointRecord.item_execution_id == identity["item_id"]))
+        session.delete(cp)
+    with s40_runtime[0].get_session() as session:
+        loaded = load_snapshot_input(session, snapshot_id=snapshot.id, dataset_item_id=scope.dataset_item_id)
+        assert loaded.trajectory_evidence_ref == acquired.evidence_ref
+        assert (loaded.trajectory.scope == scope) if approved else loaded.trajectory is None
+        assert session.get(RunResultSnapshotRecord, snapshot.id).items == original_items
     rows = local_langfuse.wait_observations(identity["trace_id"], minimum=2 if profile == "http_only" else 8)
     assert_lineage(rows, identity)
     local_langfuse.record(profile, "automatic-worker-" + mode + ("" if approved else "-unqualified")

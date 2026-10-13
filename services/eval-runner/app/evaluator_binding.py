@@ -24,7 +24,10 @@ import textwrap
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .trajectory.inputs import EvaluationContext
 
 from .evaluators import (
     Evaluation,
@@ -518,7 +521,8 @@ class EvaluatorExecutor(ABC):
         """Return a stable error code when the frozen identity cannot be honored."""
 
     @abstractmethod
-    def execute(self, implementation: Any, *, output: Any, expected_output: Any) -> Evaluation:
+    def execute(self, implementation: Any, *, output: Any, expected_output: Any,
+                context: EvaluationContext | None = None) -> Evaluation:
         """Run the resolved implementation for one item."""
 
 
@@ -575,7 +579,8 @@ class BuiltinPythonExecutor(EvaluatorExecutor):
             return "EVALUATOR_ARTIFACT_UNRESOLVABLE"
         return None
 
-    def execute(self, implementation: Any, *, output: Any, expected_output: Any) -> Evaluation:
+    def execute(self, implementation: Any, *, output: Any, expected_output: Any,
+                context: EvaluationContext | None = None) -> Evaluation:
         fn = getattr(implementation, "fn", implementation)
         if fn is None:
             raise EvaluatorBindingError(
@@ -834,6 +839,7 @@ def evaluate_frozen_item(
     executors: dict[str, EvaluatorExecutor] | None = None,
     quality_policy: dict[str, Any] | None = None,
     only_binding_ids: set[str] | None = None,
+    context: EvaluationContext | None = None,
 ) -> FrozenItemEvaluation:
     """The single evaluation entry point for Worker, run and resume paths.
 
@@ -912,8 +918,10 @@ def evaluate_frozen_item(
         executor = executor_for(binding, executors)
         started = time.perf_counter()
         try:
+            # 旧 Output Executor 仍只收到原有两个参数；轨迹声明由后续规则版本冻结。
+            inputs = {"context": context} if binding.input_contract.get("input_kind") == "trajectory" else {}
             raw = executor.execute(
-                resolved.implementation, output=output, expected_output=expected_output
+                resolved.implementation, output=output, expected_output=expected_output, **inputs
             )
         except Exception as exc:  # noqa: BLE001 - one Binding must not kill the rest
             duration_ms = round((time.perf_counter() - started) * 1000, 3)

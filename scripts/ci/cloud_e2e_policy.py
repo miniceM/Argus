@@ -313,8 +313,8 @@ def validate_trusted_receipt(receipt: Any, expected: Mapping[str, Any]) -> bool:
         return False
     if receipt.get("schema_version") != 1 or receipt.get("repository") != REPOSITORY:
         return False
-    for name in ("pr_number", "run_id", "run_attempt", "cloud_job_id"):
-        if not isinstance(receipt.get(name), int) or receipt[name] <= 0:
+    for name in ("pr_number", "run_id", "run_attempt", "prepare_job_id", "cloud_job_id", "ci_run_id", "ci_run_attempt"):
+        if isinstance(receipt.get(name), bool) or not isinstance(receipt.get(name), int) or receipt[name] <= 0:
             return False
     for name in ("head_sha", "base_sha", "tested_sha", "workflow_revision"):
         if not isinstance(receipt.get(name), str) or not SHA_RE.fullmatch(receipt[name]):
@@ -328,18 +328,29 @@ def validate_trusted_receipt(receipt: Any, expected: Mapping[str, Any]) -> bool:
         "workflow_revision",
         "run_id",
         "run_attempt",
+        "ci_run_id",
+        "ci_run_attempt",
     )
     if any(receipt.get(key) != expected.get(key) for key in identity_fields):
         return False
     if receipt.get("workflow_path") != CANDIDATE_WORKFLOW:
+        return False
+    if receipt.get("workflow_ref") != f"{REPOSITORY}/{CANDIDATE_WORKFLOW}@{MAIN_REF}":
+        return False
+    if not isinstance(receipt.get("dispatch_actor"), str) or not receipt["dispatch_actor"].strip():
+        return False
+    if receipt.get("risk") != "high":
         return False
     if receipt.get("environment") != CANDIDATE_ENVIRONMENT or receipt.get("cloud_state") != "passed":
         return False
     approval = receipt.get("approval")
     if not isinstance(approval, dict) or approval.get("state") != "approved":
         return False
-    if approval.get("environment") != CANDIDATE_ENVIRONMENT or not approval.get("login"):
+    if approval.get("environment") != CANDIDATE_ENVIRONMENT or not isinstance(approval.get("login"), str) or not approval["login"].strip():
         return False
+    for key in ("user_id", "environment_id"):
+        if isinstance(approval.get(key), bool) or not isinstance(approval.get(key), int) or approval[key] <= 0:
+            return False
     if receipt.get("required_suites") != list(REQUIRED_SUITES):
         return False
     if receipt.get("suite_results") != {suite: "passed" for suite in REQUIRED_SUITES}:
@@ -348,6 +359,17 @@ def validate_trusted_receipt(receipt: Any, expected: Mapping[str, Any]) -> bool:
         "v1": {"passed": 2, "total": 6},
         "v2": {"passed": 6, "total": 6},
     }:
+        return False
+    evidence = receipt.get("evidence_summary")
+    if not isinstance(evidence, dict):
+        return False
+    if (
+        evidence.get("bootstrap_items_upserted") != 6
+        or evidence.get("v1_items") != 6
+        or evidence.get("v2_items") != 6
+        or evidence.get("async_link_verified") is not True
+        or evidence.get("remote_run_readback") not in {"CONFIRMED", "NOT_EXPOSED"}
+    ):
         return False
     return True
 

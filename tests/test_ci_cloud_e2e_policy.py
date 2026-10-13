@@ -54,15 +54,28 @@ def _receipt() -> dict:
         "tested_sha": SHA_TESTED,
         "workflow_path": ".github/workflows/cloud-e2e-trusted.yml",
         "workflow_revision": SHA_WORKFLOW,
+        "workflow_ref": "miniceM/Argus/.github/workflows/cloud-e2e-trusted.yml@refs/heads/main",
+        "dispatch_actor": "maintainer",
+        "risk": "high",
         "run_id": 9001,
         "run_attempt": 2,
+        "prepare_job_id": 8000,
         "cloud_job_id": 8001,
+        "ci_run_id": 8999,
+        "ci_run_attempt": 1,
         "environment": "langfuse-e2e-candidate",
         "cloud_state": "passed",
-        "approval": {"state": "approved", "environment": "langfuse-e2e-candidate", "login": "maintainer"},
+        "approval": {"state": "approved", "environment": "langfuse-e2e-candidate", "environment_id": 31, "login": "maintainer", "user_id": 17},
         "required_suites": ["managed-cloud", "async-link"],
         "suite_results": {"managed-cloud": "passed", "async-link": "passed"},
         "baseline": {"v1": {"passed": 2, "total": 6}, "v2": {"passed": 6, "total": 6}},
+        "evidence_summary": {
+            "bootstrap_items_upserted": 6,
+            "v1_items": 6,
+            "v2_items": 6,
+            "async_link_verified": True,
+            "remote_run_readback": "CONFIRMED",
+        },
     }
 
 
@@ -233,7 +246,7 @@ def test_required_check_and_receipt_decisions_are_fail_closed() -> None:
         key: receipt[key]
         for key in (
             "repository", "pr_number", "head_sha", "base_sha", "tested_sha",
-            "workflow_revision", "run_id", "run_attempt"
+            "workflow_revision", "run_id", "run_attempt", "ci_run_id", "ci_run_attempt"
         )
     }
     accepted = evaluate_integration_policy(
@@ -253,7 +266,19 @@ def test_receipt_is_bound_to_exact_pr_base_head_and_run() -> None:
         "workflow_revision": SHA_WORKFLOW,
         "run_id": 9001,
         "run_attempt": 2,
+        "ci_run_id": 8999,
+        "ci_run_attempt": 1,
     }
     assert validate_trusted_receipt(receipt, expected)
-    for key, value in (("head_sha", "5" * 40), ("base_sha", "6" * 40), ("workflow_revision", "not-a-sha"), ("run_attempt", 1)):
+    for key, value in (
+        ("head_sha", "5" * 40),
+        ("base_sha", "6" * 40),
+        ("workflow_revision", "not-a-sha"),
+        ("run_attempt", 1),
+        ("prepare_job_id", True),
+        ("workflow_ref", "external/workflow"),
+        ("dispatch_actor", ""),
+        ("evidence_summary", {"async_link_verified": False}),
+        ("approval", {"state": "approved", "environment": "langfuse-e2e-candidate", "login": "maintainer", "user_id": 17}),
+    ):
         assert not validate_trusted_receipt({**receipt, key: value}, expected)

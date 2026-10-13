@@ -91,3 +91,52 @@ def test_cloud_summary_reports_coverage_without_conflating_policy_and_cloud() ->
     for state in ("passed", "skipped_by_policy", "blocked_missing_secrets", "blocked_disabled", "not_run_upstream_failed"):
         assert state in summary_script or state in combined
     assert "Main Cloud Acceptance" in str(jobs["main-cloud-acceptance"]["name"])
+
+
+def test_trusted_candidate_workflow_is_main_dispatched_approved_and_least_privilege() -> None:
+    workflow = _workflow(".github/workflows/cloud-e2e-trusted.yml")
+    trigger = workflow.get("on", workflow.get(True))
+    assert set(trigger) == {"workflow_dispatch"}
+    inputs = trigger["workflow_dispatch"]["inputs"]
+    assert set(inputs) == {"pr_number", "expected_head_sha", "expected_base_sha"}
+    assert all(value.get("required") is True for value in inputs.values())
+
+    jobs = workflow["jobs"]
+    prepare = jobs["prepare"]
+    candidate = jobs["candidate-cloud"]
+    receipt = jobs["receipt"]
+    assert prepare["permissions"] == {"actions": "read", "contents": "read", "pull-requests": "read"}
+    assert candidate["environment"] == "langfuse-e2e-candidate"
+    assert candidate["permissions"] == {"actions": "read", "contents": "read", "pull-requests": "read"}
+    assert receipt["permissions"] == {"actions": "read", "contents": "read", "pull-requests": "read"}
+    assert "always()" in receipt["if"]
+
+    candidate_steps = candidate["steps"]
+    revalidate = next(i for i, step in enumerate(candidate_steps) if step.get("name") == "Revalidate candidate and write test credentials")
+    run_e2e = next(i for i, step in enumerate(candidate_steps) if step.get("name") == "Run cloud end-to-end tests")
+    assert revalidate < run_e2e
+    secret_steps = [step for step in candidate_steps if any("${{ secrets." in str(value) for value in step.get("env", {}).values())]
+    assert [step["name"] for step in secret_steps] == ["Revalidate candidate and write test credentials"]
+    assert "${{ secrets." not in str(candidate_steps[run_e2e].get("env", {}))
+    assert "statuses: write" not in str(workflow)
+    for job in jobs.values():
+        for step in job.get("steps", []):
+            if "uses" in step:
+                assert _is_sha(_action(step)[1]), f"unpinned Action: {step['uses']}"
+
+
+def test_trusted_candidate_builds_without_secrets_then_runs_existing_cloud_suite() -> None:
+    workflow = _workflow(".github/workflows/cloud-e2e-trusted.yml")
+    steps = workflow["jobs"]["candidate-cloud"]["steps"]
+    names = [step.get("name") for step in steps]
+    install = names.index("Install candidate test dependencies without Cloud credentials")
+    build = names.index("Build candidate images without Cloud credentials")
+    verify = names.index("Revalidate candidate and write test credentials")
+    run_e2e = names.index("Run cloud end-to-end tests")
+    assert install < build < verify < run_e2e
+    assert "scripts/ci-e2e-cloud.sh" in str(steps[run_e2e])
+    assert steps[run_e2e]["env"]["ARGUS_CLOUD_BUILD_IMAGES"] == "false"
+
+    script = (ROOT / "scripts/ci-e2e-cloud.sh").read_text()
+    assert "ARGUS_CLOUD_BUILD_IMAGES" in script
+    assert 'false) "${COMPOSE[@]}" up -d ;;' in script

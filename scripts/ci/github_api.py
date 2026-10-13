@@ -178,8 +178,28 @@ class GitHubClient:
             raise GitHubApiError("pull request response is not an object")
         return response
 
-    def list_workflow_runs(self, workflow_path: str, *, params: Mapping[str, str] | None = None) -> list[dict[str, Any]]:
-        encoded = quote(workflow_path, safe="")
+    def get_workflow_id(self, workflow_path: str) -> int:
+        workflows = self.paginate(f"{self.repo_path}/actions/workflows", array_key="workflows")
+        matches = [workflow for workflow in workflows if isinstance(workflow, dict) and workflow.get("path") == workflow_path]
+        if (
+            len(matches) != 1
+            or isinstance(matches[0].get("id"), bool)
+            or not isinstance(matches[0].get("id"), int)
+            or matches[0]["id"] <= 0
+        ):
+            raise GitHubApiError(f"expected exactly one registered workflow at {workflow_path}")
+        if matches[0].get("state") != "active":
+            raise GitHubApiError(f"workflow is not active: {workflow_path}")
+        return matches[0]["id"]
+
+    def list_workflow_runs(self, workflow_id: int | str, *, params: Mapping[str, str] | None = None) -> list[dict[str, Any]]:
+        if (
+            isinstance(workflow_id, bool)
+            or not str(workflow_id).strip()
+            or (isinstance(workflow_id, int) and workflow_id <= 0)
+        ):
+            raise ValueError("workflow identifier is required and numeric IDs must be positive")
+        encoded = quote(str(workflow_id), safe="")
         runs = self.paginate(
             f"{self.repo_path}/actions/workflows/{encoded}/runs",
             array_key="workflow_runs",

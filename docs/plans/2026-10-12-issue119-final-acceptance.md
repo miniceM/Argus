@@ -114,3 +114,93 @@
 ### 远端 CI 结果（PR #134，head `ec3548f`）
 
 推送分支 `codex/fix-issue119-main-acceptance` 后，PR #134 的 5 个 Job 全部通过：Code Quality（26s）、Console Quality & E2E（4m15s，含全量 Playwright）、Docker / Compose Validation（1m19s）、Full Python Tests（1m37s）、Langfuse Cloud E2E（2m40s）。此为推送后同 SHA CI 证据；Review 与合并状态不在本地声明之列。
+
+---
+
+# 补充记录：PR #134 三项 P2 审查缺口修复（2026-10-13）
+
+> 状态快照：2026-10-13（Asia/Shanghai）。本文是追加记录，不修改上方 2026-10-12 的历史验收快照。
+> 实施方案：`docs/plans/2026-10-13-pr134-review-fixes-luna-guide.md`（在 aee8 工作树撰写）。
+> 实施工作树：`/Users/hosea/.codex/worktrees/409c/Argus`，分支 `codex/fix-pr134-review-gaps`，based on PR #134 head `c1458c9`。
+> 最终本地 HEAD：`91e9527f1cda22fc44121123786458705a1b07c4`。审查 PR #134 当时 head 仍为 `c1458c9`、base `origin/main` = `4b04373`，未发生变化。
+> 本节所有 PASS 均为本地同 HEAD 验证；不能替代推送后精确 HEAD 的 GitHub CI / Review，也不是真实生产 Worker→Agent→Langfuse 全链路结论。
+
+## 完成内容
+
+### 1. F1 统一请求锁生命周期 — `845a1b5` `fix(console): preserve launch action locks across remounts`
+
+QueryClient 级请求锁 store：新增 `launchActionLocks.ts`（模块私有 `WeakMap<QueryClient, Store>`），`begin` 原子获取 `(target,action)` 键锁、`settle` 仅在 owner token 匹配时释放、`useSyncExternalStore` 订阅 primitive 版本快照。`useLaunchActionScope.ts` 改为从当前 provider 取 client，`LaunchActionContext` 新增 `lockOwner` 与 per-mount `viewSessionOwner`，`canWriteFeedback` 增加 mounted + session-owner 校验。锁清理由 mutation 定义级 `onSettled` 完成，不依赖可能随 observer 卸载失效的调用级回调。
+
+- RED：2 项 locks 测试失败（同 client 重挂载锁丢失、反馈隔离缺失）；`/launches` 往返实测观察到第 2 次 POST。
+- GREEN：目标测试 23/23；当时全量 Vitest 857 passed（53 files）；typecheck、lint:tokens、build 通过。
+
+### 2. F2 正式比较资格共享判定 — `eab2581` `fix(console): gate formal comparison verdicts and counts on shared eligibility`
+
+根因：`comparability.comparable` 与 `formal.available` 是两个独立资格字段，两个 consumer 各查一部分：
+
+- `comparable=false` + `formal.available=true` + `REGRESSION=3` 时，KPI 已正确扣住数值，摘要却显示“正式比较发现 3 个回归 Case”；
+- `comparability` 整个缺失时，KPI 分支链直接落到数值分支，把正式计数（乃至“无回归”零）显示出来。
+
+新增纯函数模块 `comparisonPresentation.ts`，移入 `RegressionCountState` / `readRegressionCount`，并新增严格资格判定 `formalUsable = comparability?.comparable === true AND formal?.available === true`（禁 `Boolean()` 与 `?? true`），以及统一的 verdict 标签 / tone / 说明。KPI、摘要 dot 与说明文案、`comparison-formal-verdict` 裁决块、`comparison-diagnostic-label` 均改为同一 gate；`comparability` 缺失时按 unknown 处理而非“不可比”。真实 0、合法正整数、withheld 解释、合法空数组、普通查询与分页查询的缓存形状均不变；未改动任何服务端比较、评分或 Baseline 资格规则。
+
+- RED（只 stash 两个源文件后同命令复跑）：**5 failed** —— KPI 2 项（comparability absent / null）+ Tab 3 项（false comparable 的 KPI 与摘要、comparability 未返回、缺失资格不得变成绿色零）。
+- GREEN：目标测试 37/37；全量 Vitest 883 passed（54 files）；typecheck、lint:tokens、build 通过。
+
+### 3. F3 空菜单键盘可关闭 — `91e9527` `fix(console): restore keyboard dismissal for empty action menus`
+
+根因：菜单只含 note / 全 pending / 无任何条目时，不存在可聚焦的 `role=menuitem`，旧 open effect 未聚焦任何元素，菜单子树收不到 keydown，Escape 无法关闭浮层；trigger 本身也没有 Escape 路径。
+
+- 菜单容器加 `tabIndex=-1` 作为程序聚焦兜底；打开时聚焦首个 enabled item，否则聚焦容器。
+- Escape 在容器/trigger 路径均可处理；`open=false` 时不消费 Escape，避免误关页面或 Modal 的 Escape。
+- 内容变化按内容身份修复失效焦点（被移除或转为 pending 的条目），普通 rerender 不抢用户已导航的焦点。
+- note 仍不是 menuitem，pending 项仍 disabled；placement、断点、`allowed_actions`、标签、force replay 确认、Modal 焦点移交全部不变，未引入新 UI 库或新 Token。
+
+- RED（只 stash 组件后同命令复跑）：**6 项单测失败**（焦点兜底 ×3、trigger 路径 Escape、焦点修复 ×2）；**6 个真实浏览器 E2E 场景失败**（360/390/768px × note-only / all-pending，均报 focus 未落到菜单容器）。
+- GREEN：菜单测试 28/28；全量 Vitest 893 passed（54 files）；`e2e/responsive.spec.ts` 43/43（重新 build 当前源码后）；typecheck、lint:tokens、build 通过。
+
+## 本地验证记录（同一 HEAD `91e9527`）
+
+| 验证 | 命令 / 结果 | 边界 |
+|---|---|---|
+| Console 单测 | `pnpm --dir services/console test`：**54 files / 893 tests passed** | 相对 `c1458c9` 的 52/847 净增 46 项断言，无删除或放宽。 |
+| typecheck | `pnpm --dir services/console typecheck`：**PASS** | — |
+| Token lint | `pnpm --dir services/console lint:tokens`：**PASS** | 未新增裸十六进制色值或 Tailwind 任意颜色类。 |
+| build | `pnpm --dir services/console build`：**PASS** | test:e2e 之前已重新 build 当前源码。 |
+| `make console-test` | **PASS**（等价 Console 单测） | — |
+| 全量 Playwright | `ARGUS_E2E_API_PORT=31580 ARGUS_E2E_CONSOLE_PORT=31583 make console-e2e`：**130 passed** | 隔离端口（已先 `lsof` 确认空闲）；Playwright 自带隔离 API + test-mode SQLite。含 mock 路由 fixture 场景与真实本地 API 场景，但**不是**生产 Worker→Agent→Langfuse 全链路证明。 |
+| `make validate` | `PATH="$PWD/.venv/bin:$PATH" make validate`：**PASS（8/8）**；Python **759 passed, 4 skipped** | 4 个 skip 均为 `TEST_POSTGRES_URL` 未配置的真实 PostgreSQL 用例，属本机环境限制；其余含 OpenAPI 导出、schema 同步、typecheck、Token lint、build、Compose 校验全部通过。 |
+| 契约与 diff 卫生 | `git diff --check`、`git status --short`：**clean** | `docs/openapi.json` 与 `services/console/src/api/schema.d.ts` 无 drift，本任务没有 API / schema / DB / 评分 / Worker 状态机变更。 |
+
+## 证据分层
+
+| 层 | 覆盖 | 结论 |
+|---|---|---|
+| mock UI（Vitest / jsdom） | F1 锁与反馈隔离、F2 资格矩阵与两个 consumer、F3 焦点与键盘路径 | **已验证** |
+| mock 浏览器（Playwright + 路由 fixture） | F3 真实 Chrome 焦点与键盘 Escape / Tab；六视口几何与菜单可达性 | **已验证** |
+| 隔离真实本地 API（Playwright 自带） | 130 项 E2E 中的真实 API / test-mode SQLite 场景 | **已验证（本地隔离环境）** |
+| 真实 Worker→Agent→Langfuse 生产链路 | — | **未执行 / NOT RUN**，本任务也未声称 |
+| 远端 CI 与 Review（head `91e9527`） | — | **未查询**：分支 `codex/fix-pr134-review-gaps` 未推送，未获推送/评论/merge 授权 |
+
+## R134-01 – R134-10 验收矩阵
+
+| AC | 可观察通过条件 | 本地结果 |
+|---|---|---|
+| R134-01 | 同目标/action pending 经详情→列表→详情仍仅 1 POST；settle 前按钮 disabled | **PASS** | `launchActionIsolation.test.tsx` 的 `/launches` 往返场景（F1，`845a1b5`）：deferred POST 未 settle 时再次点击，总 POST 仍为 1，返回页面按钮 disabled。 |
+| R134-02 | 五动作共享同一锁规则；不同 Launch/QueryClient 隔离；旧 settle 不释放新锁 | **PASS** | `launchActionLocks.test.tsx` 7 项：五动作参数化、同 client 重挂载共享锁、不同 Launch/action 不串锁、不同 QueryClient 隔离、owner-only release、卸载后仍可释放、重挂载不收旧反馈。 |
+| R134-03 | 重挂载后旧 notice/error/modal 回调不污染新页面；原目标刷新、S1 保持、S2 discovery 不变 | **PASS** | F1 测试覆盖旧实例不写新页面 notice/error、不关闭新 modal；原有 S1 固定、S2 发现与恢复轮询回归未删除且通过。 |
+| R134-04 | false/missing comparability 或 unavailable formal 时，KPI 与摘要都 withheld 正式数值/verdict/tone | **PASS** | F2 RED→GREEN 的 5 项负向断言 + `comparisonPresentation.test.ts` 的资格矩阵（`=== true`，拒 `1`/`"true"`，null/undefined 一律 withheld）。 |
+| R134-05 | 两资格 true 时真实 0/正整数正常；非法/缺计数不补 0；质量结论与发布准入仍分离 | **PASS** | 真实 0 → "正式比较未发现回归"；真实 3 → "3 项性能退化" 与“正式比较发现 3 个回归 Case”；`"0"`/`null`/`-1`/`0.5`/NaN/Infinity → "不可用"；冻结质量门禁与 Baseline 相对变化文案分离未变。 |
+| R134-06 | note-only/empty/all-pending 菜单键盘 Escape 关闭并恢复焦点，动态 items 有兜底且普通 rerender 不抢焦点 | **PASS** | F3：真实 Chrome 于 360/390/768px × note-only / all-pending 验证 Escape 关闭、焦点回到 trigger；单测覆盖条目被移除 / 转 pending 时的焦点兜底与重建 items 不移焦点。 |
+| R134-07 | 正常菜单导航、Tab/Shift+Tab、确认请求数/force、Modal handoff、六视口几何全部保留 | **PASS** | `launchActionMenu.test.tsx` 原 18 项菜单契约测试保留通过；`e2e/responsive.spec.ts` 43/43（含 360/390/768 可达性与 1024/1280/1440 桌面 32px±1px 同行几何）；确认前 0 POST / 确认 1 POST 与 force replay 用例通过；真实浏览器 Tab 关闭且焦点到菜单外控件。 |
+| R134-08 | U1–U5 已有回归断言保留，目标测试与全量 Console 测试通过 | **PASS** | `comparisonResponseIdentity`、`launchActionIsolation`、`launchActionLocks`、`comparisonPresentation`、`launchActionMenu` 均无删除断言；全量 54 files / 893 tests 通过。 |
+| R134-09 | typecheck、lint:tokens、build、全量 Playwright、make validate 通过或真实阻塞逐项说明 | **PASS** | 见“本地验证记录”；唯一环境限制为 4 个 TEST_POSTGRES_URL skip，已逐项说明。 |
+| R134-10 | 无 API/schema/数据库/评分/Worker 语义漂移；只有任务相关 diff；每单元本地原子 commit 与实际证据可追溯 | **PASS** | `git diff c1458c9..HEAD` 仅 13 个文件（Console 源码 + 测试 + 一个 E2E spec），共 +1248/-127；三个 fix 各自原子提交；OpenAPI/schema 无 drift。 |
+
+## 未提交/未授权事项与剩余风险
+
+1. **远端 CI / Review 未验证**：`codex/fix-pr134-review-gaps` 尚未推送；推送、评论、解决 Review、merge 均需另行授权。远端 5 Job CI 的历史绿色记录属于 `c1458c9`，不能代表本 HEAD。
+2. **真实全链路未验证**：本次证据止于本地 mock UI、mock 浏览器与隔离真实本地 API；未执行真实 Worker→Agent→Langfuse 生产链路，也未执行远端 CI。
+3. **`ComparisonReport.tsx` 残留**：该组件的正式裁决块仍只 gate `formal.available`。它当前**不在** `src/app/router.tsx` 的任何路由中（仅被其自身测试引用），且不含回归计数句子，因此不在本方案声明的修改范围内。若后续接入路由，应按 `comparisonPresentation.ts` 的同一 gate 收口。
+4. **前端锁的边界**：跨浏览器 reload、跨 Tab、跨设备、跨 QueryClient 不共享前端锁（方案 §6.1 明确不承诺）；相关边界由后端幂等保障。
+5. **锁的快照依赖**：F1/F2/F3 均未引入超时任务管理；请求长期 pending 时 UI 保持 pending。
+6. **4 个 PostgreSQL 用例 skip**：`TEST_POSTGRES_URL` 未配置，属本机环境限制，不是回归。

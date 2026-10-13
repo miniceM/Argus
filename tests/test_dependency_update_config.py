@@ -67,3 +67,85 @@ def test_non_pip_update_sources_are_preserved() -> None:
 
     actions = actual[("github-actions", "/")]
     assert actions["groups"] == {"github-actions": {"patterns": ["*"]}}
+
+
+def test_shared_python_jobs_check_installed_dependencies() -> None:
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text())
+    jobs = workflow["jobs"]
+    install_command = "python -m pip install -r requirements-dev.txt"
+    missing_checks: list[str] = []
+
+    for job_id in ("quality", "unit-tests", "console"):
+        steps = jobs[job_id]["steps"]
+        install_steps = [
+            (index, step)
+            for index, step in enumerate(steps)
+            if install_command in step.get("run", "").splitlines()
+        ]
+        assert len(install_steps) == 1, f"{job_id} must install the aggregate requirements once"
+        install_index, install_step = install_steps[0]
+        run_lines = [line.strip() for line in install_step["run"].splitlines()]
+        install_indexes = [
+            index
+            for index, line in enumerate(run_lines)
+            if line.startswith("python -m pip install ")
+        ]
+        check_indexes = [
+            index for index, line in enumerate(run_lines) if line == "python -m pip check"
+        ]
+
+        if len(check_indexes) != 1:
+            missing_checks.append(job_id)
+            continue
+        assert install_indexes and check_indexes[0] > max(install_indexes)
+        assert install_step.get("continue-on-error") is not True
+        assert install_index < next(
+            index
+            for index, step in enumerate(steps)
+            if index > install_index
+            and any(
+                command in step.get("run", "")
+                for command in (
+                    "python -m pytest",
+                    "python scripts/export_openapi.py",
+                    "pnpm --dir services/console api:generate",
+                )
+            )
+        )
+
+    assert not missing_checks, f"jobs missing installed-dependency checks: {missing_checks}"
+
+
+def test_console_install_uses_single_aggregate_requirements() -> None:
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text())
+    steps = workflow["jobs"]["console"]["steps"]
+    install_command = "python -m pip install -r requirements-dev.txt"
+    install_steps = [
+        step
+        for step in steps
+        if install_command in step.get("run", "").splitlines()
+    ]
+
+    assert len(install_steps) == 1
+    requirement_installs = [
+        line.strip()
+        for line in install_steps[0]["run"].splitlines()
+        if line.strip().startswith("python -m pip install -r ")
+    ]
+    assert requirement_installs == [install_command]
+
+
+def test_console_pip_cache_covers_aggregate_inputs() -> None:
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text())
+    setup_python = next(
+        step
+        for step in workflow["jobs"]["console"]["steps"]
+        if step.get("uses", "").split("@", 1)[0] == "actions/setup-python"
+    )
+    cache_paths = setup_python["with"]["cache-dependency-path"].splitlines()
+
+    assert {path.strip() for path in cache_paths if path.strip()} == {
+        "requirements-dev.txt",
+        "services/eval-runner/requirements.txt",
+        "services/demo-agent/requirements.txt",
+    }

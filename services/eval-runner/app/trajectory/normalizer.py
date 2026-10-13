@@ -4,14 +4,15 @@ import re
 from datetime import UTC, datetime
 from typing import get_args
 
-from pydantic import Field, TypeAdapter, ValidationError
+from pydantic import Field, TypeAdapter, ValidationError, model_validator
 
-from .codec import canonical_dumps, canonical_loads, validate_json_value
+from .codec import canonical_digest, canonical_dumps, canonical_loads, validate_json_value
 from .contract import _STRUCTURAL_SEMANTIC_FIELDS, SourceProfile, TrajectoryContract
 from .redaction import project_json, validate_bounded_json
 from .schema import (
     Capability,
     CapabilityCoverage,
+    Digest,
     Duration,
     Identity,
     ReasonCode,
@@ -37,6 +38,47 @@ class NormalizedObservation(_ContractModel):
     terminal_event_count: int | None = Field(default=None, ge=0, le=1000)
     terminal_event_ids: list[Identity] | None = Field(default=None, max_length=1000)
     terminal_final_sequence: int | None = Field(default=None, ge=1, le=1000)
+
+
+class NormalizedRecord(_ContractModel):
+    """仅保留字段映射确认的身份；拒绝行也不丢失父链归属线索。"""
+
+    observation_id: Identity | None
+    trace_id: Identity | None
+    parent_step_id: Identity | None
+    parent_known: bool
+    observation: NormalizedObservation
+
+    @model_validator(mode="after")
+    def consistent_identity(self):
+        step = self.observation.step
+        if step is not None and (
+            step.observation_id != self.observation_id
+            or not self.parent_known
+            or step.parent_step_id != self.parent_step_id
+        ):
+            raise ValueError("TRAJECTORY_NORMALIZED_IDENTITY_MISMATCH")
+        return self
+
+
+class NormalizedObservations(_ContractModel):
+    scope: TrajectoryScope
+    trajectory_contract_digest: Digest
+    source_profile_id: Identity
+    source_profile_version: Identity
+    records: list[NormalizedRecord] = Field(max_length=10000)
+    source_bytes: int = Field(ge=0, le=8 * 1024 * 1024)
+    source_bytes_complete: bool
+    truncated: bool
+    warnings: list[ReasonCode] = Field(max_length=1000)
+
+    @model_validator(mode="after")
+    def retained_steps_match_scope(self):
+        if any(
+            record.observation.step is not None and record.trace_id != self.scope.trace_id for record in self.records
+        ):
+            raise ValueError("TRAJECTORY_NORMALIZED_SCOPE_MISMATCH")
+        return self
 
 
 class _InvalidField(ValueError):
@@ -142,6 +184,80 @@ class ObservationNormalizer:
 
     def normalize(self, row, scope: TrajectoryScope, *, index: int) -> NormalizedObservation:
         return _normalize_observation(row, self._contract, self._profile, scope, index=index)
+
+
+def normalize_observations(
+    rows: list[dict[str, object]] | tuple[dict[str, object], ...],
+    contract: TrajectoryContract,
+    *,
+    scope: TrajectoryScope,
+) -> NormalizedObservations:
+    """归一化一个有界 JSON-wire 批次；不做闭包、去重或完整度判断。
+
+    source_bytes 计当前成功编码行的 canonical UTF-8 大小；不是 HTTP wire
+    大小。无法编码或未读完时显式标为不完整，传输总量仍由 Reader/Acquisition
+    单独核算。index 固定为 0，后续 Assembler 在去重和限界后分配展示序号。
+    """
+    if type(rows) not in (list, tuple):
+        raise ValueError("SOURCE_COLLECTION_INVALID")
+    scope = TrajectoryScope.model_validate(scope.model_dump())
+    normalizer = ObservationNormalizer(contract)
+    limits, profile = normalizer._contract.limits, normalizer._profile
+    records, warnings = [], []
+    source_bytes, truncated, bytes_complete = 0, False, True
+    empty = {key: "NONE" for key in get_args(Capability)}
+    for index, row in enumerate(rows):
+        if index >= limits.page_size * limits.max_pages:
+            warnings.append("SOURCE_ROW_LIMIT")
+            truncated, bytes_complete = True, False
+            break
+        lineage = _normalized_lineage(row, profile, limits.max_source_bytes)
+        try:
+            if type(row) is not dict:
+                raise ValueError("SOURCE_FIELD_INVALID")
+            # 整行遵守 wire codec 的硬限额；合同字段预算由单行归一化按字段降级。
+            validate_json_value(row)
+            encoded = canonical_dumps(row, max_bytes=limits.max_source_bytes - source_bytes)
+        except (ValueError, UnicodeError, RecursionError) as error:
+            bytes_complete = False
+            if str(error) == "TRAJECTORY_JSON_BYTE_LIMIT":
+                warnings.append("SOURCE_BYTE_LIMIT")
+                truncated = True
+                break
+            observation = NormalizedObservation(step=None, capabilities=empty, warnings=["SOURCE_FIELD_INVALID"])
+        else:
+            source_bytes += len(encoded.encode("utf-8"))
+            observation = normalizer.normalize(row, scope, index=0)
+        records.append(NormalizedRecord(**lineage, observation=observation))
+    return NormalizedObservations(
+        scope=scope,
+        trajectory_contract_digest=canonical_digest(normalizer._contract),
+        source_profile_id=profile.profile_id,
+        source_profile_version=profile.version,
+        records=records,
+        source_bytes=source_bytes,
+        source_bytes_complete=bytes_complete,
+        truncated=truncated,
+        warnings=warnings,
+    )
+
+
+def _normalized_lineage(row, profile, max_bytes):
+    lineage = {"observation_id": None, "trace_id": None, "parent_step_id": None, "parent_known": False}
+    if type(row) is not dict:
+        return lineage
+    for field in ("observation_id", "trace_id", "parent_step_id"):
+        try:
+            value = _field(row, profile, field, max_bytes)
+            if field == "parent_step_id" and value is None:
+                lineage["parent_known"] = True
+            else:
+                lineage[field] = _id(value)
+                if field == "parent_step_id":
+                    lineage["parent_known"] = True
+        except _InvalidField:
+            pass  # 不从冲突 alias、缺字段或非法值中挑选身份。
+    return lineage
 
 
 def _normalize_observation(

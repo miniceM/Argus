@@ -52,7 +52,7 @@ Langfuse API 的物理字段名仅存在 Normalizer source profile。最初的 p
 生产调用严格采用 01 中签名：
 
     async def acquire_trajectory(scope, contract, *, client: ObservationReader) -> TrajectoryAcquisition
-    def normalize_observations(rows, contract) -> NormalizedObservations
+    def normalize_observations(rows, contract, *, scope) -> NormalizedObservations
     def assemble_trajectory(scope, observations, contract) -> StandardTrajectory
 
 调用方只从完成中的 ExperimentItemExecutionRecord、Attempt 和冻结 Manifest 构造 scope/contract。不得另加 trace_id、attempt_id、profile、cursor 或 timeout 的旁路 API 参数；分页状态属于 acquisition 内部，reader 仅由依赖注入提供。

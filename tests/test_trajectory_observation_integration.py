@@ -159,7 +159,7 @@ def test_http_only_preserves_answer_evaluation(local_langfuse, s40_runtime, monk
 def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id):
     from app.registry import AgentRegistry
     from app.trajectory.contract import TrajectoryContract
-    from app.trajectory.normalizer import ObservationNormalizer
+    from app.trajectory.normalizer import normalize_observations
     from app.trajectory.reader import LangfuseObservationReader
     from app.trajectory.schema import TrajectoryScope
     from trajectory_contract_fixtures import observed_banking_contract_payload
@@ -191,8 +191,10 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id)
     expected = {scope.root_observation_id}
     for _ in rows:
         expected.update(row["id"] for row in rows if row["parentObservationId"] in expected)
-    normalizer = ObservationNormalizer(contract)
-    normalized = [normalizer.normalize(row, scope, index=index) for index, row in enumerate(rows)]
+    batch = normalize_observations(rows, contract, scope=scope)
+    assert batch.scope == scope and batch.trajectory_contract_digest == contract.digest
+    assert batch.source_profile_id == profile_id and batch.source_bytes_complete and not batch.truncated
+    normalized = [record.observation for record in batch.records]
     scoped = [result for result in normalized if result.step and result.step.step_id in expected]
     assert {result.step.step_id for result in scoped} == expected, "a real framework parent bridge was discarded"
     structural = [result for result in scoped if result.structural]
@@ -213,6 +215,7 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id)
             "trajectory_contract_digest": contract.digest, "scoped_steps": len(scoped),
             "structural_steps": len(structural), "business_tool_steps": len(tools),
             "cursor_hops": cursor_hops, "source_bytes": source_bytes,
+            "normalized_source_bytes": batch.source_bytes,
             "parent_closed": True, "structural_tool_capabilities": "NONE"}
 
 

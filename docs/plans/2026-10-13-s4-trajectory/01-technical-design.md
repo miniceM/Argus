@@ -97,13 +97,18 @@ timing 描述所需 Step 时长证据覆盖；duration_ms 缺失为 null+timing 
 ```python
 async def acquire_trajectory(scope: TrajectoryScope, contract: TrajectoryContract,
                              *, client: ObservationReader) -> TrajectoryAcquisition: ...
-def normalize_observations(rows: Sequence[Mapping[str, object]],
-                           contract: TrajectoryContract) -> NormalizedObservations: ...
+def normalize_observations(rows: list[dict[str, object]] | tuple[dict[str, object], ...],
+                           contract: TrajectoryContract, *,
+                           scope: TrajectoryScope) -> NormalizedObservations: ...
 def assemble_trajectory(scope: TrajectoryScope, observations: NormalizedObservations,
                         contract: TrajectoryContract) -> StandardTrajectory: ...
 ```
 
 TrajectoryContract 冻结 schema/assembler/source_profile/mapping/redaction、所需能力、完整性协议、规则范围及所有结果相关限额。ObservationReader 消费 S4.0 确认的 Langfuse v2 API，优先复用 SDK；若 SDK 会在预算检查前完整解码响应，采用最小异步 HTTP Reader，在流读取时计字节、按已发布 schema 校验，避免大响应先占满内存。fields/cursor 的实际名称以锁定实例/SDK实测为准，不复制 Langfuse 领域模型。
+
+批量 Normalizer 显式接收调用方已冻结的同一 scope：真实单行入口需要该对象验证 Trace 和识别 Root，不能从 Trace 自报信息补造。当前 wire 批次只接受有界 list/tuple JSON 行；SDK 对象、无限迭代器及任意 Sequence 子类不进入该边界。输出 `NormalizedObservations` 绑定完整 scope、合同摘要、选中 profile ID/版本，并保留拒绝行经字段映射确认的安全 ID/Trace/parent 线索，供 Assembler 隔离兄弟树和归属诊断；不保存原始行。
+
+批次 `source_bytes` 计成功编码行的 canonical UTF-8 字节，不等于 HTTP wire 字节；无法编码或未读完时 `source_bytes_complete=false`，不能把计数下界当作完整来源。整行受 wire codec 硬限额约束；合同中更低的字段/投影预算仍由单行归一化按字段降级，不能因可选 duration 或未使用 metadata 超过这些预算而丢弃独立确认的工具身份。批次按冻结 `page_size * max_pages` 与累计 canonical 字节限界，Reader/Acquisition 仍独立核算实际传输总量。临时 Step index 固定为 0，重复记录保留到 Assembler；`max_steps` 在其去重、scope 闭包与展示排序后应用，不能因到达顺序提前消耗名额。该批次不证明闭包、quiet window 或 OBSERVED_COMPLETE。实现与实测见 [批量输入验收](../../validation/s4-1/normalized-batches.md)。
 
 | 限额 | 起始默认值 | 固定语义 |
 |---|---|---|

@@ -156,11 +156,11 @@ def test_http_only_preserves_answer_evaluation(local_langfuse, s40_runtime, monk
         local_langfuse.record("http_only", "serial", identity, observations, normalization=normalization)
 
 
-def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id):
+def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id, *, scenario="serial"):
     from app.registry import AgentRegistry
+    from app.trajectory.causal import validate_causal_links
     from app.trajectory.codec import canonical_dumps
     from app.trajectory.contract import TrajectoryContract
-    from app.trajectory.graph import assemble_root_graph
     from app.trajectory.normalizer import normalize_observations
     from app.trajectory.reader import LangfuseObservationReader
     from app.trajectory.schema import TrajectoryScope
@@ -197,11 +197,12 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id)
     assert batch.scope == scope and batch.trajectory_contract_digest == contract.digest
     assert batch.source_profile_id == profile_id and batch.source_bytes_complete and not batch.truncated
     normalized = [record.observation for record in batch.records]
-    root_graph = assemble_root_graph(scope, batch, contract)
+    causal = validate_causal_links(scope, batch, contract)
+    root_graph = causal.root_graph
     assert root_graph.depth_by_id[scope.root_observation_id] == 0 and not root_graph.truncated
     assert {record.observation_id for record in root_graph.records} == expected
-    assert canonical_dumps(root_graph) == canonical_dumps(
-        assemble_root_graph(scope, normalize_observations(list(reversed(rows)), contract, scope=scope), contract)
+    assert canonical_dumps(causal) == canonical_dumps(
+        validate_causal_links(scope, normalize_observations(list(reversed(rows)), contract, scope=scope), contract)
     ), "real parent closure must be independent of API arrival order"
     scoped = [result for result in normalized if result.step and result.step.step_id in expected]
     assert {result.step.step_id for result in scoped} == expected, "a real framework parent bridge was discarded"
@@ -214,17 +215,30 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id)
     if profile_id == "http-only-v1":
         assert len(scoped) == 1 and not tools and not structural
         assert all(value == "NONE" for value in scoped[0].capabilities.values())
+        assert causal.request_by_execution_id == {} and not any(causal.predecessors_by_id.values())
     else:
         assert cursor_hops and structural
-        assert len(tools) == 4 and {result.step.phase for result in tools} == {"REQUESTED", "EXECUTED"}
+        assert len(tools) == 4 and {result.step.phase for result in tools} == (
+            {"REQUESTED", "EXECUTED", "BLOCKED"} if scenario == "blocked" else {"REQUESTED", "EXECUTED"})
         assert all(result.step.tool_identity is not None for result in tools)
         assert all(result.step.duration_ms is not None for result in tools if result.step.phase == "EXECUTED")
+        assert len(causal.request_by_execution_id) == 2 and causal.warnings_by_id == {}
+        assert sum(len(refs) for refs in causal.predecessors_by_id.values()) == (2 if scenario == "parallel" else 3)
+        if scenario in {"missing", "redacted", "uncollected"}:
+            request = next(result for result in tools if result.step.phase == "REQUESTED"
+                           and result.step.tool_identity == "banking.balance.read")
+            expected_visibility = {"missing": {"$.customer_id": "MISSING"},
+                                   "redacted": {"$.customer_id": "REDACTED"}, "uncollected": {}}[scenario]
+            assert request.step.argument_visibility == expected_visibility
+            assert "synthetic-secret" not in canonical_dumps(causal)
     return {"profile_id": profile_id, "source_profile_version": contract.source_profile.version,
             "trajectory_contract_digest": contract.digest, "scoped_steps": len(scoped),
             "structural_steps": len(structural), "business_tool_steps": len(tools),
             "cursor_hops": cursor_hops, "source_bytes": source_bytes,
             "normalized_source_bytes": batch.source_bytes,
             "graph_nodes": len(root_graph.records), "graph_max_depth": max(root_graph.depth_by_id.values()),
+            "causal_edges": sum(len(refs) for refs in causal.predecessors_by_id.values()),
+            "call_pairs": len(causal.request_by_execution_id),
             "parent_closed": True, "structural_tool_capabilities": "NONE"}
 
 
@@ -270,7 +284,9 @@ def test_sync_entry_injects_remote_observation_parent(local_langfuse, s40_runtim
 def test_business_event_statuses(local_langfuse, s40_runtime, monkeypatch, tmp_path, profile,
                                  scenario, expected_status):
     with AgentProcess(local_langfuse, tmp_path, profile) as agent:
-        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint, scenario)
+        profile_id = "pydantic-ai-v1" if profile == "pydantic_ai" else "native-otel-v1"
+        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint, scenario,
+                                 trajectory_source_profile_id=profile_id)
         rows = local_langfuse.wait_observations(identity["trace_id"], minimum=8)
         assert_lineage(rows, identity)
         phase = "BLOCKED" if scenario == "blocked" else "EXECUTED"
@@ -286,7 +302,8 @@ def test_business_event_statuses(local_langfuse, s40_runtime, monkeypatch, tmp_p
             assert execution["metadata"]["attributes.business.tool_executed"] is False
         if profile == "pydantic_ai":
             assert any(row["type"] == "GENERATION" for row in rows), "must execute the real framework"
-        local_langfuse.record(profile, scenario, identity, rows)
+        normalization = assert_real_normalized_structure(local_langfuse, s40_runtime, identity, profile_id, scenario=scenario)
+        local_langfuse.record(profile, scenario, identity, rows, normalization=normalization)
 
 
 @pytest.mark.parametrize("profile", ["native_otel", "pydantic_ai"])
@@ -294,7 +311,9 @@ def test_business_event_statuses(local_langfuse, s40_runtime, monkeypatch, tmp_p
                                                  ("uncollected", "UNCOLLECTED")])
 def test_arguments_visibility(local_langfuse, s40_runtime, monkeypatch, tmp_path, profile, scenario, visibility):
     with AgentProcess(local_langfuse, tmp_path, profile) as agent:
-        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint, scenario)
+        profile_id = "pydantic-ai-v1" if profile == "pydantic_ai" else "native-otel-v1"
+        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint, scenario,
+                                 trajectory_source_profile_id=profile_id)
         rows = local_langfuse.wait_observations(identity["trace_id"], minimum=8)
         request = next(row for row in rows if row.get("metadata", {}).get("attributes.workflow.arguments_visibility") == visibility)
         if visibility == "MISSING":
@@ -308,13 +327,16 @@ def test_arguments_visibility(local_langfuse, s40_runtime, monkeypatch, tmp_path
         assert isinstance(execution["metadata"]["attributes.workflow.duration_ms"], (int, float))
         assert execution["metadata"]["attributes.workflow.duration_ms"] >= 0
         assert_lineage(rows, identity)
-        local_langfuse.record(profile, scenario, identity, rows)
+        normalization = assert_real_normalized_structure(local_langfuse, s40_runtime, identity, profile_id, scenario=scenario)
+        local_langfuse.record(profile, scenario, identity, rows, normalization=normalization)
 
 
 @pytest.mark.parametrize("profile", ["native_otel", "pydantic_ai"])
 def test_parallel_has_no_sibling_dependency(local_langfuse, s40_runtime, monkeypatch, tmp_path, profile):
     with AgentProcess(local_langfuse, tmp_path, profile) as agent:
-        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint, "parallel")
+        profile_id = "pydantic-ai-v1" if profile == "pydantic_ai" else "native-otel-v1"
+        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint, "parallel",
+                                 trajectory_source_profile_id=profile_id)
         rows = local_langfuse.wait_observations(identity["trace_id"], minimum=8)
         requests = [row for row in rows if row.get("metadata", {}).get("attributes.workflow.phase") == "REQUESTED"]
         assert len(requests) == 2
@@ -325,7 +347,8 @@ def test_parallel_has_no_sibling_dependency(local_langfuse, s40_runtime, monkeyp
         else:
             assert len({row["parentObservationId"] for row in requests}) == 1
         assert_lineage(rows, identity)
-        local_langfuse.record(profile, "parallel", identity, rows)
+        normalization = assert_real_normalized_structure(local_langfuse, s40_runtime, identity, profile_id, scenario="parallel")
+        local_langfuse.record(profile, "parallel", identity, rows, normalization=normalization)
 
 
 @pytest.mark.parametrize("mode", ["late_all", "terminal_first"])

@@ -89,6 +89,8 @@ def project_json(
         raise ValueError("TRAJECTORY_CONTRACT_PATH_SEGMENT_LIMIT")
     if type(source_visibility) is str and source_visibility == "REDACTED" and not hidden:
         return JsonProjection(value={}, visibility={path: "REDACTED" for path in paths}, complete=False)
+    if type(source_visibility) is str and source_visibility == "UNCOLLECTED":
+        return JsonProjection(value=None, visibility={}, complete=False, warnings=["ARGUMENTS_NOT_COLLECTED"])
     if type(source_visibility) is not str or source_visibility not in {"AVAILABLE", "REDACTED", "MISSING"}:
         return JsonProjection(
             value={}, visibility={path: "INVALID" for path in paths}, complete=False, warnings=["ARGUMENTS_INVALID"]
@@ -105,6 +107,15 @@ def project_json(
                 canonical_dumps(value, max_bytes=limits.max_source_bytes), max_bytes=limits.max_source_bytes
             )
         if parsed is None and value is None:
+            if source_visibility == "REDACTED":
+                visibility = {
+                    path: "REDACTED" for path, tokens in compiled.items()
+                    if any(tokens[: len(prefix)] == prefix for prefix in hidden)
+                }
+                return JsonProjection(
+                    value={} if visibility else None, visibility=visibility, complete=False,
+                    warnings=[] if visibility and len(visibility) == len(paths) else ["ARGUMENTS_NOT_COLLECTED"],
+                )
             return JsonProjection(value=None, visibility={}, complete=False, warnings=["ARGUMENTS_NOT_COLLECTED"])
         if type(parsed) not in (dict, list):
             raise ValueError("TRAJECTORY_ARGUMENTS_SHAPE_INVALID")

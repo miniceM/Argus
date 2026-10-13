@@ -96,6 +96,8 @@ Assembler 先确认 scope.root_observation_id 对应的唯一 root，随后只�
 
 Assembler 校验因果边时要求 predecessor 与当前 Step 都在同一个冻结 scope/Attempt 内，且 predecessor ID 唯一存在、没有自环或环路。因果边与已验证工作流序列冲突时，不选一方作为真值；剔除冲突关系、记录 warning，并降低 ordering coverage。display index 与因果图是两个并存的数据面，任何下游测量不得把 index 当作 predecessor 列表。
 
+内部 `trajectory/causal.py` 的 `validate_causal_links` 消费同一 scope/批次/合同并调用 Root 图阶段，校验显式 event 引用、同 workflow 的事件/序号唯一性、原始回环和时间关系，返回已验证 observation 前驱及唯一 request/action 配对。它不生成隐式全序，不传递参数、不作完整度结论；最终 `assemble_trajectory` 消费这些映射。terminal 虽不作工具顺序节点，仍参与事件命名空间冲突检查。实现、参数来源状态修复和实测见 [显式因果验收](../../validation/s4-1/causal-links.md)。
+
 上限采用 01 的起始提议：1000 steps、100 条/页且最多 20 页、最多 8 MiB 源数据、最多 2 MiB artifact、每请求 5 秒、采集总期限 60 秒、静默观察 2 秒、同时最多 4 个 acquisition。它们不是已承诺 SLA：S4.0 的真实延迟/体积矩阵与 S4.1 的本地负载测试必须校准，所有结果相关限额纳入冻结 TrajectoryContract/digest；调参应生成新 contract 身份。
 
 canonical digest 使用 UTF-8、键排序、紧凑 JSON、UTC 微秒、拒绝 NaN/Infinity、按稳定规则排序 Step 与 warnings，再计算 SHA-256。摘要主体按 01 中 StandardTrajectory 的冻结 scope、脱敏输入/输出、completeness、steps 组成；计算时排除 provenance 内自身的 trajectory_digest，避免循环。source profile、schema、assembler、mapping 与 redaction 的配置身份由 trajectory_contract_digest 固定。

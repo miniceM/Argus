@@ -48,6 +48,25 @@ def test_hidden_ancestor_overrides_available_nested_value():
     assert result.value == {} and result.visibility == {"$.customer.id": "REDACTED"}
 
 
+@pytest.mark.parametrize("paths,expected,warnings", [
+    (["$.customer.id"], {"$.customer.id": "REDACTED"}, []),
+    (["$.customer.id", "$.other"], {"$.customer.id": "REDACTED"}, ["ARGUMENTS_NOT_COLLECTED"]),
+    (["$.other"], {}, ["ARGUMENTS_NOT_COLLECTED"]),
+])
+def test_explicit_hidden_paths_survive_absent_payload_without_inventing_other_fields(paths, expected, warnings):
+    result = project_json(None, paths, limits=TrajectoryLimits(), hidden_paths=["$.customer"],
+                          source_visibility="REDACTED")
+    assert result.visibility == expected and result.warnings == warnings and not result.complete
+    assert result.value == ({} if expected else None)
+
+
+@pytest.mark.parametrize("value", [None, {"customer_id": "synthetic-secret"}])
+def test_explicit_uncollected_marker_is_not_invalid_or_available_parameter_evidence(value):
+    result = project_json(value, ["$.customer_id"], limits=TrajectoryLimits(), source_visibility="UNCOLLECTED")
+    assert result.value is None and result.visibility == {} and not result.complete
+    assert result.warnings == ["ARGUMENTS_NOT_COLLECTED"]
+
+
 @pytest.mark.parametrize(
     "limits,value",
     [

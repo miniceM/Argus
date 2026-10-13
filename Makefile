@@ -1,10 +1,19 @@
 SHELL := /bin/bash
 COMPOSE := docker compose --env-file .env.poc
 ARGUS_BUILD_ID ?= $(shell git rev-parse HEAD)
+S4_PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 
-.PHONY: validate validate-i18n build-langfuse-i18n validate-langfuse-integration up down logs bootstrap demo ps clean
+.PHONY: validate validate-i18n build-langfuse-i18n validate-langfuse-integration up down logs bootstrap demo ps clean trajectory-prepare trajectory-test
 validate:
 	./scripts/validate.sh
+
+# 固定制品只在准备阶段下载；测试不连接 Cloud 或远端 Docker。
+trajectory-prepare:
+	$(S4_PYTHON) -c 'import sys; assert sys.version_info[:2] == (3, 12), "S4 requires Python 3.12"'
+	$(S4_PYTHON) tests/fixtures/trajectory_agents/prepare.py
+
+trajectory-test:
+	$(S4_PYTHON) -m pytest -q tests/test_trajectory_backend_integration.py -m trajectory_local
 
 validate-i18n:
 	./deploy/langfuse/scripts/validate-i18n.sh

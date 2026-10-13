@@ -124,7 +124,7 @@ jobs:
         env:
           TEST_POSTGRES_URL: postgresql+psycopg://argus:argus_password@localhost:5432/argus_test
         run: |
-          python -m pytest tests -q \
+          python -m pytest tests -q -m "not trajectory_local" \
             --junitxml=artifacts/junit.xml \
             --cov=services/demo-agent \
             --cov=services/eval-runner/app \
@@ -141,6 +141,39 @@ jobs:
           name: python-test-reports
           path: artifacts/
           if-no-files-found: ignore
+          retention-days: 14
+
+  trajectory-local:
+    name: S4 Local Langfuse Integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+      - name: Install Runner test dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Prepare digest-pinned local services
+        run: make trajectory-prepare
+      - name: Verify real local ingestion and paginated API
+        run: |
+          python -m pytest -q tests/test_trajectory_backend_integration.py -m trajectory_local \
+            --basetemp=artifacts/s4-local --junitxml=artifacts/s4-junit.xml --tb=short
+      - name: Upload field and lineage evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: s4-local-observation-evidence
+          path: |
+            artifacts/s4-junit.xml
+            artifacts/s4-local/**/field-matrix.json
+          if-no-files-found: error
           retention-days: 14
 
   docker-build:

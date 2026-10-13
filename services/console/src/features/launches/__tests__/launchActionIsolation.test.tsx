@@ -196,6 +196,7 @@ const renderDetail = (initialUrl: string, navigationTargets: string[] = []) =>
       <MemoryRouter initialEntries={[initialUrl]}>
         <Navigation targets={navigationTargets} />
         <Routes>
+          <Route path="/launches" element={<div>Review launch list</div>} />
           <Route path="/launches/:launchId" element={<LaunchDetail />} />
         </Routes>
       </MemoryRouter>
@@ -449,5 +450,67 @@ describe("U3: launch action feedback isolation", () => {
 
     await expectPostCount(1);
     expect(postCalls[0].body).toEqual({ force: false });
+  });
+});
+
+describe("PR134 F1: action locks survive leaving and remounting the detail page", () => {
+  it("keeps the pending target-action lock across a real detail -> list -> detail roundtrip", async () => {
+    installApi({ [LAUNCH_A]: ["retry_evaluation"] });
+    renderDetail(`/launches/${LAUNCH_A}?snapshot_id=${S1}`, [`launch:${LAUNCH_A}`]);
+    fireEvent.click(await screen.findByTestId("retry-evaluation-button"));
+    await expectPostCount(1);
+    expect(postCalls[0].path).toContain("/retry-evaluation");
+    expect(postCalls[0].launchId).toBe(LAUNCH_A);
+
+    // Leave the detail page entirely (unmounts it) and come back to the same
+    // Launch on the same QueryClient while the request is still in flight.
+    fireEvent.click(screen.getByRole("link", { name: "返回评测列表" }));
+    await screen.findByText("Review launch list");
+    fireEvent.click(screen.getByTestId(`go-${LAUNCH_A}`));
+    const button = await screen.findByTestId("retry-evaluation-button");
+    fireEvent.click(button);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(postCalls, "leaving the page must not release a still-running request").toHaveLength(1);
+    expect(button, "the remounted page observes the original pending state").toBeDisabled();
+  });
+
+  it("does not deliver the old page's late success into the remounted page", async () => {
+    installApi({ [LAUNCH_A]: ["retry_evaluation"] });
+    renderDetail(`/launches/${LAUNCH_A}?snapshot_id=${S1}`, [`launch:${LAUNCH_A}`]);
+    fireEvent.click(await screen.findByTestId("retry-evaluation-button"));
+    await expectPostCount(1);
+
+    fireEvent.click(screen.getByRole("link", { name: "返回评测列表" }));
+    await screen.findByText("Review launch list");
+    fireEvent.click(screen.getByTestId(`go-${LAUNCH_A}`));
+    await screen.findByTestId("retry-evaluation-button");
+
+    await settleFirstPost("success");
+
+    expect(postCalls).toHaveLength(1);
+    expect(screen.queryByTestId("retry-evaluation-notice"), "the old feedback must not reach the new page").not.toBeInTheDocument();
+    expect(screen.queryByText("stale-action-failure")).not.toBeInTheDocument();
+  });
+
+  it("still lets the remounted page act once the original request settled", async () => {
+    installApi({ [LAUNCH_A]: ["retry_evaluation"] });
+    renderDetail(`/launches/${LAUNCH_A}?snapshot_id=${S1}`, [`launch:${LAUNCH_A}`]);
+    fireEvent.click(await screen.findByTestId("retry-evaluation-button"));
+    await expectPostCount(1);
+
+    fireEvent.click(screen.getByRole("link", { name: "返回评测列表" }));
+    await screen.findByText("Review launch list");
+    fireEvent.click(screen.getByTestId(`go-${LAUNCH_A}`));
+    const button = await screen.findByTestId("retry-evaluation-button");
+    await settleFirstPost("success");
+    expect(button).toBeEnabled();
+
+    fireEvent.click(button);
+    await expectPostCount(2);
+    expect(postCalls[1].launchId).toBe(LAUNCH_A);
+    await settleFirstPost("success");
   });
 });

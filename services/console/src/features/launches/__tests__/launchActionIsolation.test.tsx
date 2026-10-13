@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { StrictMode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Routes, Route, useNavigate, useSearchParams } from "react-router-dom";
 import { LaunchDetail } from "../LaunchDetail";
@@ -493,6 +494,54 @@ describe("PR134 F1: action locks survive leaving and remounting the detail page"
     expect(postCalls).toHaveLength(1);
     expect(screen.queryByTestId("retry-evaluation-notice"), "the old feedback must not reach the new page").not.toBeInTheDocument();
     expect(screen.queryByText("stale-action-failure")).not.toBeInTheDocument();
+  });
+
+  // main.tsx renders the whole app inside React.StrictMode. Its development-only
+  // mount -> unmount -> mount cycle re-runs effects, so a "mounted" flag that is
+  // only ever set to false would permanently revoke the live page's right to
+  // write run-action feedback: notices, errors and modal closes would silently
+  // disappear from every development build.
+  const renderDetailStrict = (initialUrl: string) =>
+    render(
+      <StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={[initialUrl]}>
+            <Routes>
+              <Route path="/launches/:launchId" element={<LaunchDetail />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </StrictMode>,
+    );
+
+  it("keeps writing action feedback after a StrictMode remount", async () => {
+    installApi({ [LAUNCH_A]: ["retry_evaluation"] });
+    renderDetailStrict(`/launches/${LAUNCH_A}?snapshot_id=${S1}`);
+
+    fireEvent.click(await screen.findByTestId("retry-evaluation-button"));
+    await expectPostCount(1);
+    await settleFirstPost("success");
+
+    expect(postCalls).toHaveLength(1);
+    expect(
+      screen.getByTestId("retry-evaluation-notice"),
+      "a development StrictMode remount must not revoke the live page's feedback",
+    ).toBeInTheDocument();
+  });
+
+  it("keeps reporting action errors after a StrictMode remount", async () => {
+    installApi({ [LAUNCH_A]: ["retry_evaluation"] });
+    renderDetailStrict(`/launches/${LAUNCH_A}?snapshot_id=${S1}`);
+
+    fireEvent.click(await screen.findByTestId("retry-evaluation-button"));
+    await expectPostCount(1);
+    await settleFirstPost("failure");
+
+    expect(postCalls).toHaveLength(1);
+    expect(
+      screen.getByText("stale-action-failure"),
+      "a development StrictMode remount must not swallow action errors",
+    ).toBeInTheDocument();
   });
 
   it("still lets the remounted page act once the original request settled", async () => {

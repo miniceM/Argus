@@ -87,8 +87,15 @@ export function useLaunchActionScope(view: LaunchActionView): LaunchActionScope 
   // from a new page.
   const sessionOwner = useRef<object>({});
   const mounted = useRef(true);
-  useEffect(() => () => {
-    mounted.current = false;
+  // The setup must re-arm the flag: main.tsx mounts the app inside
+  // React.StrictMode, whose mount -> unmount -> mount cycle re-runs this effect.
+  // Re-arming on setup is what keeps a remounted page both able to write its own
+  // feedback and unable to inherit the previous page's.
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
   }, []);
 
   const latestView = useRef(view);

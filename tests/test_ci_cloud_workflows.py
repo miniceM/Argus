@@ -63,6 +63,16 @@ def test_main_cloud_acceptance_aggregates_real_jobs_and_actual_cloud_steps() -> 
     assert any(step.get("name") == "Upload main Cloud acceptance receipt" for step in job["steps"])
 
 
+def test_main_cloud_e2e_passes_validated_secrets_to_runner_step() -> None:
+    workflow = _workflow(".github/workflows/ci.yml")
+    job = workflow["jobs"]["cloud-e2e-main"]
+    assert "github.ref == 'refs/heads/main'" in job["if"]
+    run_step = next(step for step in job["steps"] if step.get("name") == "Run cloud end-to-end tests")
+    assert run_step["env"]["LANGFUSE_BASE_URL"] == "${{ secrets.LANGFUSE_BASE_URL }}"
+    assert run_step["env"]["LANGFUSE_PUBLIC_KEY"] == "${{ secrets.LANGFUSE_PUBLIC_KEY }}"
+    assert run_step["env"]["LANGFUSE_SECRET_KEY"] == "${{ secrets.LANGFUSE_SECRET_KEY }}"
+
+
 def test_regular_ci_checks_keep_names_and_workflow_actions_are_sha_pinned() -> None:
     workflow = _workflow(".github/workflows/ci.yml")
     jobs = workflow["jobs"]

@@ -59,24 +59,10 @@ updates:
     labels:
       - "dependencies"
 
+  # 根 requirements-dev.txt 通过 -r 纳入两个服务，避免重复扫描同一 manifest。
+  # 新 Python 项目需核对引用覆盖，根目录不代表扫描所有子项目。
   - package-ecosystem: "pip"
     directory: "/"
-    schedule:
-      interval: "weekly"
-    commit-message:
-      prefix: "build"
-    labels:
-      - "dependencies"
-  - package-ecosystem: "pip"
-    directory: "/services/eval-runner"
-    schedule:
-      interval: "weekly"
-    commit-message:
-      prefix: "build"
-    labels:
-      - "dependencies"
-  - package-ecosystem: "pip"
-    directory: "/services/demo-agent"
     schedule:
       interval: "weekly"
     commit-message:

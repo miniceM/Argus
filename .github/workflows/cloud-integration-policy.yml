@@ -1,0 +1,102 @@
+name: Cloud Integration Policy
+
+run-name: "Cloud Integration Policy (${{ github.event_name }})"
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+      - Trusted Cloud Candidate
+    types:
+      - completed
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Open same-repository PR number targeting main
+        required: true
+        type: string
+
+permissions: {}
+
+# Serialize every policy refresh. Each evaluator reads live PR/main/run state,
+# so an older queued event cannot publish a decision for a stale identity.
+concurrency:
+  group: argus-cloud-integration-policy
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    name: Evaluate current PR policy
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install trusted policy parser
+        run: python -m pip install PyYAML==6.0.3
+
+      - name: Evaluate exact current PR identities
+        env:
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          POLICY_PR_NUMBER: ${{ inputs.pr_number }}
+          POLICY_DECISIONS_PATH: artifacts/policy/decisions.json
+        run: python scripts/ci/publish_cloud_policy.py evaluate
+
+      - name: Upload trusted policy decisions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cloud-integration-policy-decisions-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/policy/decisions.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish current-head policy status
+    needs: evaluate
+    if: needs.evaluate.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The only write scope is commit statuses. Read scopes are limited to the
+    # live PR/main identity recheck performed immediately before each write.
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: cloud-integration-policy-decisions-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/policy
+
+      - name: Publish only revalidated current-head decisions
+        env:
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          POLICY_DECISIONS_PATH: artifacts/policy/decisions.json
+        run: python scripts/ci/publish_cloud_policy.py publish

@@ -140,3 +140,38 @@ def test_trusted_candidate_builds_without_secrets_then_runs_existing_cloud_suite
     script = (ROOT / "scripts/ci-e2e-cloud.sh").read_text()
     assert "ARGUS_CLOUD_BUILD_IMAGES" in script
     assert 'false) "${COMPOSE[@]}" up -d ;;' in script
+
+
+def test_cloud_integration_policy_is_a_serialized_default_branch_controller() -> None:
+    workflow = _workflow(".github/workflows/cloud-integration-policy.yml")
+    trigger = workflow.get("on", workflow.get(True))
+    assert set(trigger) == {"workflow_run", "push", "workflow_dispatch"}
+    assert trigger["workflow_run"]["workflows"] == ["CI", "Trusted Cloud Candidate"]
+    assert trigger["workflow_run"]["types"] == ["completed"]
+    assert "branches" not in trigger["workflow_run"]
+    assert trigger["push"]["branches"] == ["main"]
+    assert trigger["workflow_dispatch"]["inputs"]["pr_number"]["required"] is True
+    assert workflow["concurrency"]["cancel-in-progress"] is False
+
+    jobs = workflow["jobs"]
+    evaluate = jobs["evaluate"]
+    publish = jobs["publish"]
+    assert evaluate["permissions"] == {"actions": "read", "contents": "read", "pull-requests": "read"}
+    assert publish["permissions"]["statuses"] == "write"
+    assert all(
+        value != "write"
+        for scope, value in publish["permissions"].items()
+        if scope != "statuses"
+    )
+    assert "statuses: write" not in str(evaluate)
+    assert "publish_cloud_policy.py evaluate" in str(evaluate["steps"])
+    assert "publish_cloud_policy.py publish" in str(publish["steps"])
+    assert "github.workflow_sha" in str(evaluate["steps"])
+    assert "github.workflow_sha" in str(publish["steps"])
+    assert "cloud-integration-policy-decisions-" in str(evaluate["steps"] + publish["steps"])
+    assert "actions/download-artifact@" in str(publish["steps"])
+    assert "actions/upload-artifact@" in str(evaluate["steps"])
+    for job in jobs.values():
+        for step in job.get("steps", []):
+            if "uses" in step:
+                assert _is_sha(_action(step)[1]), f"unpinned Action: {step['uses']}"

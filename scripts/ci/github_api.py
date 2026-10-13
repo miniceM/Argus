@@ -209,6 +209,26 @@ class GitHubClient:
             raise GitHubApiError("workflow runs response contains malformed entries")
         return runs
 
+    def list_open_pull_requests(self, *, base: str = "main") -> list[dict[str, Any]]:
+        """Return every open PR targeting ``base`` using bounded API pagination."""
+        if not isinstance(base, str) or not base.strip() or any(char in base for char in "\r\n"):
+            raise ValueError("pull request base branch is required")
+        pulls = self.paginate(
+            f"{self.repo_path}/pulls",
+            params={"state": "open", "base": base, "sort": "updated", "direction": "desc"},
+        )
+        if not all(isinstance(item, dict) for item in pulls):
+            raise GitHubApiError("open pull requests response contains malformed entries")
+        result: list[dict[str, Any]] = []
+        for pull in pulls:
+            pull_base = pull.get("base") if isinstance(pull.get("base"), dict) else {}
+            number = pull.get("number")
+            if not isinstance(number, int) or isinstance(number, bool) or number <= 0:
+                raise GitHubApiError("open pull request has an invalid number")
+            if pull.get("state") == "open" and pull_base.get("ref") == base:
+                result.append(pull)
+        return result
+
     def list_pull_request_files(self, number: int) -> list[dict[str, Any]]:
         files = self.paginate(f"{self.repo_path}/pulls/{number}/files")
         if len(files) >= 3000:

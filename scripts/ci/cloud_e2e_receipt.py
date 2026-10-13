@@ -315,7 +315,8 @@ def _require_required_ci_jobs(client: GitHubClient, run: Mapping[str, Any]) -> N
             raise CandidateReceiptError(f"regular CI job is not successful for current identity: {name}")
 
 
-def find_current_ci_run(client: GitHubClient, pr: Mapping[str, Any]) -> dict[str, Any]:
+def get_current_ci_run(client: GitHubClient, pr: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Return the newest CI run matching the exact current PR head and base."""
     head_sha, base_sha, _ = _pr_identity(pr)
     if not _valid_sha(head_sha) or not _valid_sha(base_sha):
         raise CandidateReceiptError("PR head/base SHA is malformed")
@@ -332,7 +333,8 @@ def find_current_ci_run(client: GitHubClient, pr: Mapping[str, Any]) -> dict[str
         run
         for run in runs
         if run.get("event") == "pull_request"
-        and str(run.get("path", "")).lstrip("/").startswith(CI_WORKFLOW_PATH + "@")
+        and str(run.get("path", "")).lstrip("/") == CI_WORKFLOW_PATH + "@refs/pull/"
+        + str(pr.get("number")) + "/merge"
         and _find_pr_in_run(
             run,
             pr_number=int(pr["number"]),
@@ -341,16 +343,58 @@ def find_current_ci_run(client: GitHubClient, pr: Mapping[str, Any]) -> dict[str
         )
     ]
     if not matches:
-        raise CandidateReceiptError("no regular CI run matches the exact current PR head and base")
+        return None
     matches.sort(
         key=lambda run: (
+            str(run.get("updated_at") or run.get("run_started_at") or run.get("created_at", "")),
+            str(run.get("run_started_at", "")),
             str(run.get("created_at", "")),
-            str(run.get("updated_at", "")),
             int(run.get("run_attempt", 0) or 0),
             int(run.get("id", 0) or 0),
         )
     )
-    latest = matches[-1]
+    return matches[-1]
+
+
+def current_ci_check_states(client: GitHubClient, run: Mapping[str, Any] | None) -> dict[str, str]:
+    """Map the latest exact-identity workflow attempt to fail-closed check states."""
+    if run is None or run.get("status") != "completed":
+        return {name: "pending" for name in REQUIRED_CI_CHECKS}
+    if run.get("conclusion") != "success":
+        return {name: "failure" for name in REQUIRED_CI_CHECKS}
+    run_id = run.get("id")
+    attempt = run.get("run_attempt")
+    if (
+        isinstance(run_id, bool)
+        or not isinstance(run_id, int)
+        or run_id <= 0
+        or isinstance(attempt, bool)
+        or not isinstance(attempt, int)
+        or attempt <= 0
+    ):
+        raise CandidateReceiptError("current regular CI run has invalid identity")
+    jobs = client.list_jobs(run_id, attempt)
+    states: dict[str, str] = {}
+    for name in REQUIRED_CI_CHECKS:
+        matches = [job for job in jobs if job.get("name") == name]
+        if len(matches) != 1:
+            states[name] = "failure"
+            continue
+        job = matches[0]
+        if job.get("status") != "completed":
+            states[name] = "pending"
+        elif job.get("conclusion") == "success":
+            states[name] = "success"
+        else:
+            states[name] = "failure"
+    return states
+
+
+def find_current_ci_run(client: GitHubClient, pr: Mapping[str, Any]) -> dict[str, Any]:
+    """Require the newest exact-identity regular CI run and all required jobs green."""
+    latest = get_current_ci_run(client, pr)
+    if latest is None:
+        raise CandidateReceiptError("no regular CI run matches the exact current PR head and base")
     _require_required_ci_jobs(client, latest)
     return latest
 

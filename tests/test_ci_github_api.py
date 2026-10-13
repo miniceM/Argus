@@ -67,3 +67,35 @@ def test_list_workflow_runs_rejects_invalid_identifiers() -> None:
         _client().list_workflow_runs(0)
     with pytest.raises(ValueError, match="identifier"):
         _client().list_workflow_runs(True)
+
+
+def test_list_open_pull_requests_paginates_and_filters_base_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client()
+    calls: list[tuple[str, dict[str, str] | None]] = []
+
+    def paginate(path: str, *, params: dict[str, str] | None = None, **_kwargs: Any) -> list[dict[str, Any]]:
+        calls.append((path, params))
+        return [
+            {"number": 12, "state": "open", "base": {"ref": "main"}},
+            {"number": 13, "state": "closed", "base": {"ref": "main"}},
+            {"number": 14, "state": "open", "base": {"ref": "release"}},
+        ]
+
+    monkeypatch.setattr(client, "paginate", paginate)
+
+    assert client.list_open_pull_requests(base="main") == [
+        {"number": 12, "state": "open", "base": {"ref": "main"}}
+    ]
+    assert calls == [(
+        "repos/miniceM/Argus/pulls",
+        {"state": "open", "base": "main", "sort": "updated", "direction": "desc"},
+    )]
+
+
+def test_list_open_pull_requests_fails_closed_on_malformed_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client()
+    monkeypatch.setattr(client, "paginate", lambda *_args, **_kwargs: [{"number": True, "state": "open"}])
+    with pytest.raises(GitHubApiError, match="invalid number"):
+        client.list_open_pull_requests()
+    with pytest.raises(ValueError, match="base branch"):
+        client.list_open_pull_requests(base="\n")

@@ -157,12 +157,14 @@ def test_http_only_preserves_answer_evaluation(local_langfuse, s40_runtime, monk
 
 
 def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id, *, scenario="serial"):
+    from decimal import Decimal
+
     from app.registry import AgentRegistry
     from app.trajectory.assembler import assemble_trajectory, trajectory_digest
     from app.trajectory.causal import validate_causal_links
     from app.trajectory.codec import canonical_dumps
     from app.trajectory.contract import TrajectoryContract
-    from app.trajectory.evidence import inventory_complete, load_trajectory_evidence, persist_trajectory_evidence
+    from app.trajectory.evidence import inventory_complete, load_trajectory_evidence
     from app.trajectory.normalizer import normalize_observations
     from app.trajectory.reader import LangfuseObservationReader
     from app.trajectory.schema import TrajectoryScope
@@ -170,7 +172,10 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id,
 
     version = AgentRegistry(s40_runtime[0]).get_version("test-agent", identity["agent_version"])
     assert version.id == identity["agent_version_id"] and version.trajectory_source_profile_id == profile_id
-    contract = TrajectoryContract.model_validate(observed_banking_contract_payload()).bind_source_version(version)
+    payload = observed_banking_contract_payload()
+    # 此处验证真实采集消费链，短观察窗不冒充生产延迟 SLA；校准另行归档。
+    payload["limits"] = {"page_size": 2, "deadline_seconds": Decimal(3), "quiet_window_seconds": Decimal("0.05")}
+    contract = TrajectoryContract.model_validate(payload).bind_source_version(version)
     scope = TrajectoryScope(launch_id=identity["launch_id"], item_execution_id=identity["item_id"],
         dataset_item_id=identity["dataset_item_id"], attempt_id=identity["attempt_id"],
         dispatch_generation=identity["generation"], trace_id=identity["trace_id"], root_observation_id=identity["root_id"])
@@ -249,12 +254,18 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id,
             assert "synthetic-secret" not in canonical_dumps(causal)
         assert "synthetic-secret" not in canonical_dumps(trajectory)
         assert inventory_complete(trajectory, contract)
+    acquired, acquisition_bytes, _first = asyncio.run(acquire_real_trajectory(runtime, s40_runtime[0], scope, contract))
+    assert acquired.state == "READY" and acquired.evidence_ref is not None, acquired.reason_code
+    assert acquired.completeness.status == ("ROOT_ONLY" if profile_id == "http-only-v1" else "OBSERVED_COMPLETE")
+    assert 0 < acquisition_bytes <= contract.limits.max_source_bytes
     with s40_runtime[0].get_session() as session:
-        evidence_ref = persist_trajectory_evidence(session, trajectory, contract)
+        restored = load_trajectory_evidence(session, acquired.evidence_ref, scope=scope, contract=contract)
+    assert canonical_dumps(restored.steps) == canonical_dumps(trajectory.steps)
+    assert restored.completeness == acquired.completeness
     with s40_runtime[0].get_session() as session:
-        restored = load_trajectory_evidence(session, evidence_ref, scope=scope, contract=contract)
-    assert canonical_dumps(restored) == canonical_dumps(trajectory)
-    assert restored.completeness == trajectory.completeness
+        assert canonical_dumps(load_trajectory_evidence(session, acquired.evidence_ref, scope=scope, contract=contract)) == canonical_dumps(restored)
+    single_read_completeness = trajectory.completeness.status
+    trajectory = restored
     return {"profile_id": profile_id, "source_profile_version": contract.source_profile.version,
             "trajectory_contract_digest": contract.digest, "scoped_steps": len(scoped),
             "structural_steps": len(structural), "business_tool_steps": len(tools),
@@ -266,7 +277,30 @@ def assert_real_normalized_structure(runtime, s40_runtime, identity, profile_id,
             "assembled_steps": len(trajectory.steps), "completeness": trajectory.completeness.status,
             "trajectory_digest": trajectory.provenance.trajectory_digest,
             "artifact_roundtrip": True,
+            "acquisition_state": acquired.state, "acquisition_source_bytes": acquisition_bytes,
+            "single_read_completeness": single_read_completeness,
             "parent_closed": True, "structural_tool_capabilities": "NONE"}
+
+
+async def acquire_real_trajectory(runtime, db, scope, contract):
+    from datetime import UTC, datetime
+
+    from app.trajectory.acquisition import AcquisitionRuntime, acquire_trajectory
+    from app.trajectory.reader import LangfuseObservationReader
+
+    acquisition_runtime = AcquisitionRuntime(scope, contract, session_factory=db.get_session, started_at=datetime.now(UTC))
+    first = None
+    async with LangfuseObservationReader(server_url=runtime.base_url, public_key=runtime.env["S4_PUBLIC_KEY"],
+            secret_key=runtime.env["S4_SECRET_KEY"]) as reader:
+        with acquisition_runtime.activate():
+            while True:
+                result = await acquire_trajectory(scope, contract, client=reader)
+                if first is None:
+                    first = result
+                assert result.deadline_at == first.deadline_at
+                if result.state != "PENDING":
+                    return result, acquisition_runtime._wire_bytes, first
+                await asyncio.sleep(0.05)
 
 
 def test_sync_entry_injects_remote_observation_parent(local_langfuse, s40_runtime, tmp_path):
@@ -381,7 +415,8 @@ def test_parallel_has_no_sibling_dependency(local_langfuse, s40_runtime, monkeyp
 @pytest.mark.parametrize("mode", ["late_all", "terminal_first"])
 def test_late_visibility_and_terminal_inventory(local_langfuse, s40_runtime, monkeypatch, tmp_path, mode):
     with AgentProcess(local_langfuse, tmp_path, "native_otel", export_mode=mode) as agent:
-        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint)
+        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint,
+                                 trajectory_source_profile_id="native-otel-v1")
         initial = local_langfuse.wait_observations(identity["trace_id"], minimum=2 if mode == "late_all" else 4,
                                                  require_inventory=False)
         if mode == "late_all":
@@ -391,6 +426,26 @@ def test_late_visibility_and_terminal_inventory(local_langfuse, s40_runtime, mon
             expected = set(terminal["metadata"]["attributes.workflow.event_ids"])
             observed = {row["metadata"].get("attributes.workflow.event_id") for row in initial}
             assert expected - observed, "terminal alone must not imply all earlier events arrived"
+        from decimal import Decimal
+
+        from app.registry import AgentRegistry
+        from app.trajectory.contract import TrajectoryContract
+        from app.trajectory.evidence import inventory_complete, load_trajectory_evidence
+        from app.trajectory.schema import TrajectoryScope
+        from trajectory_contract_fixtures import observed_banking_contract_payload
+        version = AgentRegistry(s40_runtime[0]).get_version("test-agent", identity["agent_version"])
+        payload = observed_banking_contract_payload()
+        payload["limits"] = {"page_size": 2, "deadline_seconds": Decimal(10), "quiet_window_seconds": Decimal("0.05")}
+        contract = TrajectoryContract.model_validate(payload).bind_source_version(version)
+        scope = TrajectoryScope(launch_id=identity["launch_id"], item_execution_id=identity["item_id"],
+            dataset_item_id=identity["dataset_item_id"], attempt_id=identity["attempt_id"],
+            dispatch_generation=identity["generation"], trace_id=identity["trace_id"], root_observation_id=identity["root_id"])
+        acquired, wire_bytes, first = asyncio.run(acquire_real_trajectory(local_langfuse, s40_runtime[0], scope, contract))
+        assert first.state == "PENDING" and first.evidence_ref is None
+        assert acquired.state == "READY" and acquired.completeness.status == "OBSERVED_COMPLETE"
+        with s40_runtime[0].get_session() as session:
+            frozen = load_trajectory_evidence(session, acquired.evidence_ref, scope=scope, contract=contract)
+        assert inventory_complete(frozen, contract) and frozen.completeness == acquired.completeness
         rows = local_langfuse.wait_observations(identity["trace_id"], minimum=8)
         terminal = next(row for row in rows if row["name"] == "workflow.terminal")
         expected = set(terminal["metadata"]["attributes.workflow.event_ids"])
@@ -398,7 +453,11 @@ def test_late_visibility_and_terminal_inventory(local_langfuse, s40_runtime, mon
         assert expected <= observed
         assert terminal["metadata"]["attributes.workflow.final_sequence"] == len(expected)
         assert_lineage(rows, identity)
-        local_langfuse.record("native_otel", mode, identity, rows)
+        local_langfuse.record("native_otel", mode, identity, rows, normalization={
+            "profile_id": "native-otel-v1", "acquisition_state": acquired.state,
+            "completeness": acquired.completeness.status, "artifact_roundtrip": True,
+            "acquisition_source_bytes": wire_bytes, "original_deadline_preserved": True,
+            "initial_acquisition_state": first.state})
 
 
 def test_retry_separates_real_attempt_traces(local_langfuse, s40_runtime, monkeypatch, tmp_path):

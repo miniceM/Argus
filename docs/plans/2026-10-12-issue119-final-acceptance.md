@@ -122,7 +122,7 @@
 > 状态快照：2026-10-13（Asia/Shanghai）。本文是追加记录，不修改上方 2026-10-12 的历史验收快照。
 > 实施方案：`docs/plans/2026-10-13-pr134-review-fixes-luna-guide.md`（在 aee8 工作树撰写）。
 > 实施工作树：`/Users/hosea/.codex/worktrees/409c/Argus`，分支 `codex/fix-pr134-review-gaps`，based on PR #134 head `c1458c9`。
-> 最终本地 HEAD：`91e9527f1cda22fc44121123786458705a1b07c4`。审查 PR #134 当时 head 仍为 `c1458c9`、base `origin/main` = `4b04373`，未发生变化。
+> 最终代码 HEAD：`10b015a0f9704201ba0eeb3a99ac7a30f7bb2a1b`（含 F1 的 StrictMode 反馈修正，见“完成内容”第 1 节“后续修正”）；本验收记录的 docs 提交紧随其后。审查 PR #134 head 仍为 `c1458c9`、base `origin/main` = `4b04373`，未发生变化。
 > 本节所有 PASS 均为本地同 HEAD 验证；不能替代推送后精确 HEAD 的 GitHub CI / Review，也不是真实生产 Worker→Agent→Langfuse 全链路结论。
 
 ## 完成内容
@@ -130,6 +130,11 @@
 ### 1. F1 统一请求锁生命周期 — `845a1b5` `fix(console): preserve launch action locks across remounts`
 
 QueryClient 级请求锁 store：新增 `launchActionLocks.ts`（模块私有 `WeakMap<QueryClient, Store>`），`begin` 原子获取 `(target,action)` 键锁、`settle` 仅在 owner token 匹配时释放、`useSyncExternalStore` 订阅 primitive 版本快照。`useLaunchActionScope.ts` 改为从当前 provider 取 client，`LaunchActionContext` 新增 `lockOwner` 与 per-mount `viewSessionOwner`，`canWriteFeedback` 增加 mounted + session-owner 校验。锁清理由 mutation 定义级 `onSettled` 完成，不依赖可能随 observer 卸载失效的调用级回调。
+
+**后续修正 — `10b015a` `fix(console): keep launch action feedback after a StrictMode remount`**：`main.tsx` 在 `React.StrictMode` 中挂载整个应用，开发模式下 React 会额外执行一次 mount → unmount → mount；原 `mounted` 标记只在 cleanup 中置 false，导致该模拟卸载永久剥夺**当前活动页面**写反馈的权限，run/cancel/resume/retry_failed/retry_evaluation 的 notice、error 与 Modal 关闭在开发构建中全部静默消失（生产构建只挂载一次，故 E2E 未暴露）。改为在 setup 中重新置 true 即修复，真实 unmount 的隔离语义不变。
+
+- RED：2 项新增用例失败 —— StrictMode 下渲染详情页后，成功 notice 与错误文案均不出现。
+- GREEN：`launchActionIsolation` + `launchActionLocks` 25/25；全量 Vitest 895 passed（54 files）；typecheck、lint:tokens、build、全量 Playwright 130、`make validate` 8/8 通过。
 
 - RED：2 项 locks 测试失败（同 client 重挂载锁丢失、反馈隔离缺失）；`/launches` 往返实测观察到第 2 次 POST。
 - GREEN：目标测试 23/23；当时全量 Vitest 857 passed（53 files）；typecheck、lint:tokens、build 通过。
@@ -158,11 +163,13 @@ QueryClient 级请求锁 store：新增 `launchActionLocks.ts`（模块私有 `W
 - RED（只 stash 组件后同命令复跑）：**6 项单测失败**（焦点兜底 ×3、trigger 路径 Escape、焦点修复 ×2）；**6 个真实浏览器 E2E 场景失败**（360/390/768px × note-only / all-pending，均报 focus 未落到菜单容器）。
 - GREEN：菜单测试 28/28；全量 Vitest 893 passed（54 files）；`e2e/responsive.spec.ts` 43/43（重新 build 当前源码后）；typecheck、lint:tokens、build 通过。
 
-## 本地验证记录（同一 HEAD `91e9527`）
+## 本地验证记录（同一 HEAD `10b015a`）
+
+> 上列各修复单元 GREEN 中的全量 Vitest 数字是**该单元提交时**的快照；本节的门禁结果均为最终 HEAD `10b015a` 同 HEAD 复跑。
 
 | 验证 | 命令 / 结果 | 边界 |
 |---|---|---|
-| Console 单测 | `pnpm --dir services/console test`：**54 files / 893 tests passed** | 相对 `c1458c9` 的 52/847 净增 46 项断言，无删除或放宽。 |
+| Console 单测 | `pnpm --dir services/console test`：**54 files / 895 tests passed** | 相对 `c1458c9` 的 52/847 净增 48 项断言，无删除或放宽。 |
 | typecheck | `pnpm --dir services/console typecheck`：**PASS** | — |
 | Token lint | `pnpm --dir services/console lint:tokens`：**PASS** | 未新增裸十六进制色值或 Tailwind 任意颜色类。 |
 | build | `pnpm --dir services/console build`：**PASS** | test:e2e 之前已重新 build 当前源码。 |
@@ -175,7 +182,7 @@ QueryClient 级请求锁 store：新增 `launchActionLocks.ts`（模块私有 `W
 
 | 层 | 覆盖 | 结论 |
 |---|---|---|
-| mock UI（Vitest / jsdom） | F1 锁与反馈隔离、F2 资格矩阵与两个 consumer、F3 焦点与键盘路径 | **已验证** |
+| mock UI（Vitest / jsdom） | F1 锁与反馈隔离（含 StrictMode 重挂载反馈回归）、F2 资格矩阵与两个 consumer、F3 焦点与键盘路径 | **已验证** |
 | mock 浏览器（Playwright + 路由 fixture） | F3 真实 Chrome 焦点与键盘 Escape / Tab；六视口几何与菜单可达性 | **已验证** |
 | 隔离真实本地 API（Playwright 自带） | 130 项 E2E 中的真实 API / test-mode SQLite 场景 | **已验证（本地隔离环境）** |
 | 真实 Worker→Agent→Langfuse 生产链路 | — | **未执行 / NOT RUN**，本任务也未声称 |
@@ -192,14 +199,28 @@ QueryClient 级请求锁 store：新增 `launchActionLocks.ts`（模块私有 `W
 | R134-05 | 两资格 true 时真实 0/正整数正常；非法/缺计数不补 0；质量结论与发布准入仍分离 | **PASS** | 真实 0 → "正式比较未发现回归"；真实 3 → "3 项性能退化" 与“正式比较发现 3 个回归 Case”；`"0"`/`null`/`-1`/`0.5`/NaN/Infinity → "不可用"；冻结质量门禁与 Baseline 相对变化文案分离未变。 |
 | R134-06 | note-only/empty/all-pending 菜单键盘 Escape 关闭并恢复焦点，动态 items 有兜底且普通 rerender 不抢焦点 | **PASS** | F3：真实 Chrome 于 360/390/768px × note-only / all-pending 验证 Escape 关闭、焦点回到 trigger；单测覆盖条目被移除 / 转 pending 时的焦点兜底与重建 items 不移焦点。 |
 | R134-07 | 正常菜单导航、Tab/Shift+Tab、确认请求数/force、Modal handoff、六视口几何全部保留 | **PASS** | `launchActionMenu.test.tsx` 原 18 项菜单契约测试保留通过；`e2e/responsive.spec.ts` 43/43（含 360/390/768 可达性与 1024/1280/1440 桌面 32px±1px 同行几何）；确认前 0 POST / 确认 1 POST 与 force replay 用例通过；真实浏览器 Tab 关闭且焦点到菜单外控件。 |
-| R134-08 | U1–U5 已有回归断言保留，目标测试与全量 Console 测试通过 | **PASS** | `comparisonResponseIdentity`、`launchActionIsolation`、`launchActionLocks`、`comparisonPresentation`、`launchActionMenu` 均无删除断言；全量 54 files / 893 tests 通过。 |
+| R134-08 | U1–U5 已有回归断言保留，目标测试与全量 Console 测试通过 | **PASS** | `comparisonResponseIdentity`、`launchActionIsolation`、`launchActionLocks`、`comparisonPresentation`、`launchActionMenu` 均无删除断言；全量 54 files / 895 tests 通过（含 StrictMode 反馈回归 2 项）。 |
 | R134-09 | typecheck、lint:tokens、build、全量 Playwright、make validate 通过或真实阻塞逐项说明 | **PASS** | 见“本地验证记录”；唯一环境限制为 4 个 TEST_POSTGRES_URL skip，已逐项说明。 |
 | R134-10 | 无 API/schema/数据库/评分/Worker 语义漂移；只有任务相关 diff；每单元本地原子 commit 与实际证据可追溯 | **PASS** | `git diff c1458c9..HEAD` 仅 13 个文件（Console 源码 + 测试 + 一个 E2E spec），共 +1248/-127；三个 fix 各自原子提交；OpenAPI/schema 无 drift。 |
 
+## 交付与提交清单
+
+分支 `codex/fix-pr134-review-gaps`（based on PR #134 head `c1458c9`），本地 5 个 Conventional Commit：
+
+| Commit | 类别 | 内容 |
+|---|---|---|
+| `845a1b5` | fix | F1：QueryClient 作用域请求锁 store，锁跨重挂载存活且仅 owner 释放 |
+| `eab2581` | fix | F2：正式比较资格/计数共享判定（`comparisonPresentation.ts`） |
+| `91e9527` | fix | F3：空菜单键盘关闭与焦点兜底 |
+| `6e85a1d` | docs | 本 PR #134 审查缺口验收记录（dated supplement） |
+| `10b015a` | fix | F1 后续修正：StrictMode 重挂载后仍可写运行动作反馈 |
+
+交付：**PR #135**（https://github.com/miniceM/Argus/pull/135），base 为 PR #134 的分支 `codex/fix-issue119-main-acceptance`（`c1458c9`），因此 diff 只含三项审查缺口的修复；合并后 PR #134 自动更新为含修复的 head。
+
 ## 未提交/未授权事项与剩余风险
 
-1. **远端 CI / Review 未验证**：`codex/fix-pr134-review-gaps` 尚未推送；推送、评论、解决 Review、merge 均需另行授权。远端 5 Job CI 的历史绿色记录属于 `c1458c9`，不能代表本 HEAD。
-2. **真实全链路未验证**：本次证据止于本地 mock UI、mock 浏览器与隔离真实本地 API；未执行真实 Worker→Agent→Langfuse 生产链路，也未执行远端 CI。
+1. **交付形态与远端 CI**：分支 `codex/fix-pr134-review-gaps` 已推送，并开为 **PR #135**（base = PR #134 的 `codex/fix-issue119-main-acceptance`，即 `c1458c9`），状态 OPEN / MERGEABLE。PR #135 head `10b015a` 的 workflow run `38341654775` **5/5 Job 通过**（Code Quality、Full Python Tests、Docker/Compose、Console Quality & E2E、Langfuse Cloud E2E）。远端 **Review 意见未处理**，也未回复 / resolve / merge（需另行授权）。更早的 5 Job 绿色记录属于 `c1458c9`，不能代表本 HEAD。
+2. **真实全链路未验证**：本次证据止于本地 mock UI、mock 浏览器与隔离真实本地 API；未执行真实 Worker→Agent→Langfuse 生产链路，远端 CI 也不构成该链路的证明。
 3. **`ComparisonReport.tsx` 残留**：该组件的正式裁决块仍只 gate `formal.available`。它当前**不在** `src/app/router.tsx` 的任何路由中（仅被其自身测试引用），且不含回归计数句子，因此不在本方案声明的修改范围内。若后续接入路由，应按 `comparisonPresentation.ts` 的同一 gate 收口。
 4. **前端锁的边界**：跨浏览器 reload、跨 Tab、跨设备、跨 QueryClient 不共享前端锁（方案 §6.1 明确不承诺）；相关边界由后端幂等保障。
 5. **锁的快照依赖**：F1/F2/F3 均未引入超时任务管理；请求长期 pending 时 UI 保持 pending。

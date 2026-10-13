@@ -37,7 +37,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -731,10 +731,11 @@ def test_recovery_backfills_each_projection_exactly_once(setup_runtime):
         task = session.get(LangfuseSyncTaskRecord, seeded["task_id"])
         task.status = "PENDING"
         task.attempts = 0
-        task.next_retry_at = datetime.now(UTC)
+        # SQLite 数据库时钟精度较低；此场景测试已到期重投，不依赖当前毫秒边界。
+        task.next_retry_at = datetime.now(UTC) - timedelta(seconds=1)
         session.commit()
     lf2 = _mock_lf()
-    LangfuseOutboxSyncer(db_mgr, lf2, syncer_id="s2").process_batch(batch_size=1)
+    assert LangfuseOutboxSyncer(db_mgr, lf2, syncer_id="s2").process_batch(batch_size=1) == 1
     assert [call.kwargs.get("id") for call in lf2.api.scores.create.call_args_list] == ids
 
 

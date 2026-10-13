@@ -199,6 +199,12 @@ async def _execute_single_item(
                 input={"agent": f"{spec.agent_id}:{spec.version}", "request": mapped_payload},
                 metadata={"endpoint": spec.endpoint, "execution_mode": "SYNC_HTTP"},
             ) as call_observation:
+                # 进入 HTTP Observation 后重新注入，业务 Agent 的直接父节点必须是本次调用。
+                # S4.0 真实 Langfuse 回归已验证：提前注入会把 Agent 错接到外层 Observation。
+                try:
+                    inject(headers)
+                except Exception:
+                    pass
                 try:
                     current_trace_id = lf.get_current_trace_id()
                     trace_id = current_trace_id if isinstance(current_trace_id, str) else None

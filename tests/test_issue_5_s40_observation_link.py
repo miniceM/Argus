@@ -1,6 +1,6 @@
-"""S4.0 观测链路验证：traceparent 透传 + Observation 字段可用性矩阵.
+"""S4.0 单元验证：traceparent 透传语义与模拟字段审计。
 
-本文件是 Issue #5 S4.0 的实测载体，只验证"能观测到什么"，
+本文件复用 PR #133 的单元原语，不能证明真实 Observation 归属，只验证：
 不做 Assembler、不冻 schema、不加规则：
 
 1. Runner 发出的 W3C traceparent 能被两种 Agent 实现原样收到，
@@ -222,7 +222,7 @@ def test_s40_runner_executor_propagates_traceparent_end_to_end():
     走 RemoteAgentExecutor.invoke 的真实代码路径（含 header 透传、
     x-demo-traceparent-received 回执解析），只把网络层换成
     MockTransport。这是 S4.0「同 Trace 链路可复现」的端到端证据，
-    也是 S4.1 Assembler 敢消费 trace_id 的前提。
+    不替代真实 API 的 Trace/Root/Item/Attempt 关联验收。
     """
     from app.executor import RemoteAgentExecutor
     from app.observation_link import parse_traceparent, same_trace

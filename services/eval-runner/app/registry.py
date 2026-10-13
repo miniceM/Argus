@@ -57,6 +57,7 @@ def compute_spec_digest(spec_dict: dict[str, Any]) -> str:
         "response_schema",
         "timeout_seconds",
         "trace_propagation",
+        "trajectory_source_profile_id",
     ]
     normalized: dict[str, Any] = {}
     for k in sorted(keys_to_include):
@@ -112,6 +113,7 @@ class AgentVersionSpec:
     id: str = ""
     usage_cost_mapping: dict[str, Any] | None = None
     credential_id: str | None = None
+    trajectory_source_profile_id: str | None = None
 
 
 class AgentRegistry:
@@ -406,6 +408,7 @@ class AgentRegistry:
         metadata: dict[str, Any] | None = None,
         trace_propagation: str = "W3C",
         usage_cost_mapping: dict[str, Any] | None = None,
+        trajectory_source_profile_id: str | None = None,
     ) -> AgentVersionRecord:
         raw_spec = {
             "endpoint": endpoint,
@@ -426,6 +429,7 @@ class AgentRegistry:
             "environment": environment,
             "trace_propagation": trace_propagation,
             "metadata": metadata,
+            "trajectory_source_profile_id": trajectory_source_profile_id,
         }
         normalized = normalize_and_validate_spec(raw_spec)
 
@@ -471,6 +475,7 @@ class AgentRegistry:
                 trace_propagation=normalized["trace_propagation"],
                 is_idempotent=normalized["is_idempotent"],
                 environment=normalized["environment"],
+                trajectory_source_profile_id=normalized["trajectory_source_profile_id"],
                 metadata_=metadata,
                 is_active=True,
             )
@@ -530,6 +535,7 @@ class AgentRegistry:
             is_idempotent=ver.is_idempotent,
             spec_digest=ver.spec_digest,
             artifact_ref=ver.artifact_ref,
+            trajectory_source_profile_id=ver.trajectory_source_profile_id,
             id=ver.id,
         )
 
@@ -551,6 +557,8 @@ class AgentRegistry:
                         "request_mapping": v.request_mapping,
                         "usage_cost_mapping": v.usage_cost_mapping,
                     }
+                    if v.trajectory_source_profile_id is not None:
+                        ver_dict[v.version]["trajectory_source_profile_id"] = v.trajectory_source_profile_id
             result[ag.id] = {
                 "name": ag.name,
                 "description": ag.description,
@@ -625,6 +633,7 @@ class AgentRegistry:
                         trace_propagation="W3C",
                         is_idempotent=normalized["is_idempotent"],
                         environment=normalized["environment"],
+                        trajectory_source_profile_id=normalized["trajectory_source_profile_id"],
                         metadata_=ver_info.get("metadata"),
                         is_active=True,
                     )

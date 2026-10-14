@@ -133,6 +133,21 @@ class CalibrationPolicy(_ContractModel):
         return self
 
 
+class JudgeProviderOptions(_ContractModel):
+    """有限 Provider 参数；不能通过任意 extras 改写已冻结 transport。"""
+
+    profile: Literal["openai-compatible-v1", "omlx-0.7-v1"]
+    seed: Annotated[int, Field(ge=0, le=4294967295)]
+    enable_thinking: bool | None
+
+    @model_validator(mode="after")
+    def approved_options(self):
+        if (self.profile == "omlx-0.7-v1" and self.enable_thinking is None
+            or self.profile == "openai-compatible-v1" and self.enable_thinking is not None):
+            raise ValueError("JUDGE_PROVIDER_PROFILE_INVALID")
+        return self
+
+
 class FrozenJudgeDefinition(_ContractModel):
     """声明身份与冻结预算；Provider 必须另外证明实际模型/能力，Schema 不构成准入。"""
 
@@ -150,6 +165,7 @@ class FrozenJudgeDefinition(_ContractModel):
     implementation_ref: Identity
     implementation_artifact_digest: Digest
     dependency_lock_digest: Digest
+    provider_options: JudgeProviderOptions | None = None
     temperature: Annotated[Decimal, Field(ge=0, le=2, allow_inf_nan=False)]
     top_p: Annotated[Decimal, Field(gt=0, le=1, allow_inf_nan=False)]
     max_output_tokens: Annotated[int, Field(ge=1, le=16384)]
@@ -184,6 +200,9 @@ class FrozenJudgeDefinition(_ContractModel):
 
     @model_validator(mode="after")
     def verified_texts_and_risk(self):
+        if (self.provider_options is not None and self.provider_options.profile == "omlx-0.7-v1"
+            and self.provider_api_version != "0.7.0"):
+            raise ValueError("JUDGE_PROVIDER_PROFILE_INVALID")
         for text, digest in ((self.prompt_text, self.prompt_digest), (self.rubric_text, self.rubric_digest)):
             if len(text.encode("utf-8")) > 4096 or "sha256:" + sha256(text.encode("utf-8")).hexdigest() != digest:
                 raise ValueError("JUDGE_INSTRUCTION_DIGEST_INVALID")

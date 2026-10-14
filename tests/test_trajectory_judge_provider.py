@@ -110,6 +110,46 @@ def test_single_structured_request_checks_model_and_returns_only_safe_result(pre
     assert calls[0].url.path == "/v1/chat/completions"
 
 
+@pytest.mark.parametrize("profile,thinking", [("openai-compatible-v1", None), ("omlx-0.7-v1", False), ("omlx-0.7-v1", True)])
+def test_adapter_sends_exact_frozen_seed_and_template_options(prepare_request, profile, thinking):
+    from app.trajectory.judge import JudgeProviderOptions
+    from app.trajectory.judge_provider import JudgeProviderIdentity
+
+    frozen = definition(provider_api_version="0.7.0" if profile == "omlx-0.7-v1" else "v1",
+        provider_options=JudgeProviderOptions(profile=profile, seed=73, enable_thinking=thinking))
+    prepared = prepare_request(frozen)
+    calls = []
+    def handle(request):
+        calls.append(json.loads(request.content))
+        return http_response(response(prepared))
+    async def run():
+        identity_value = JudgeProviderIdentity(**{key: getattr(frozen, key) for key in JudgeProviderIdentity.model_fields})
+        async with provider(handle, identity=identity_value) as client:
+            return await client.evaluate(prepared, frozen)
+    outcome = asyncio.run(run())
+    assert outcome.result.status == "succeeded" and len(calls) == 1
+    assert calls[0]["seed"] == 73
+    if thinking is None:
+        assert "enable_thinking" not in calls[0] and "chat_template_kwargs" not in calls[0]
+    else:
+        assert calls[0]["enable_thinking"] is thinking
+        assert calls[0]["chat_template_kwargs"] == {"enable_thinking": thinking}
+
+
+def test_adapter_rejects_structured_output_downgrade_without_leaking_warning(prepared):
+    def handle(request):
+        result = http_response(response(prepared))
+        result.headers["Warning"] = '199 omlx "strict schema not enforced; synthetic-secret"'
+        return result
+    async def run():
+        async with provider(handle) as client:
+            return await client.evaluate(prepared, definition())
+    outcome = asyncio.run(run())
+    assert outcome.result.status == "failed" and outcome.result.value is None
+    assert outcome.result.reason_code == "JUDGE_PROVIDER_CAPABILITY_UNAVAILABLE"
+    assert "synthetic-secret" not in repr(outcome)
+
+
 @pytest.mark.parametrize("damage,reason", [("model", "JUDGE_MODEL_IDENTITY_MISMATCH"),
     ("finish", "JUDGE_PROVIDER_RESPONSE_INVALID"), ("refusal", "JUDGE_PROVIDER_RESPONSE_INVALID"),
     ("extra_choice", "JUDGE_PROVIDER_RESPONSE_INVALID"), ("usage_bool", "JUDGE_PROVIDER_USAGE_INVALID"),

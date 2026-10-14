@@ -162,20 +162,16 @@ class OpenAICompatibleJudgeProvider:
             expected = JudgeProviderIdentity.model_validate({key: getattr(definition, key) for key in JudgeProviderIdentity.model_fields})
             if self._identity != expected:
                 _failure("JUDGE_PROVIDER_IDENTITY_MISMATCH")
-            validate_prepared_judge_request(request, definition)
             timeout = float(definition.request_timeout_seconds)
-            payload = {"model": definition.resolved_model_id, "temperature": definition.temperature,
-                "top_p": definition.top_p, "max_tokens": definition.max_output_tokens, "stream": False,
-                "response_format": {"type": "json_schema", "json_schema": {"name": "judge_output", "strict": True,
-                    "schema": judge_output_schema(definition.output_policy)}}}
-            # 保留冻结 Decimal 的精确 JSON 数值；messages 是已验证的完整 transport 文档。
-            encoded = (canonical_dumps(payload)[:-1] + ',"messages":' + request.messages_json + "}").encode("utf-8")
+            encoded = encode_judge_request(request, definition)
             async with asyncio.timeout(timeout):
                 async with self._semaphore:
                     async with self._client.stream("POST", "chat/completions", content=encoded,
                         headers={"content-type": "application/json"}, timeout=httpx.Timeout(timeout)) as response:
                         if response.status_code != 200:
                             _failure("JUDGE_PROVIDER_HTTP_ERROR")
+                        if response.headers.get("warning"):
+                            _failure("JUDGE_PROVIDER_CAPABILITY_UNAVAILABLE")
                         if (response.headers.get("content-encoding", "identity").lower() not in {"", "identity"}
                             or response.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json"):
                             _failure("JUDGE_PROVIDER_RESPONSE_INVALID")
@@ -210,3 +206,21 @@ class OpenAICompatibleJudgeProvider:
             result = ParsedJudgeResult("failed", None, "JUDGE_PREPARED_REQUEST_INVALID")
         return JudgeProviderOutcome(result, usage, _safe_digest(request, "input_digest"), _safe_digest(request, "definition_digest"),
             max(0, (time.monotonic_ns() - started) // 1000000))
+
+
+def encode_judge_request(request, definition):
+    """验证准备入口并构造实际 HTTP 使用的精确 body，不插入额外输入或隐式模板选项。"""
+    definition = FrozenJudgeDefinition.model_validate(definition.model_dump())
+    validate_prepared_judge_request(request, definition)
+    payload = {"model": definition.resolved_model_id, "temperature": definition.temperature,
+        "top_p": definition.top_p, "max_tokens": definition.max_output_tokens, "stream": False,
+        "response_format": {"type": "json_schema", "json_schema": {"name": "judge_output", "strict": True,
+            "schema": judge_output_schema(definition.output_policy)}}}
+    options = definition.provider_options
+    if options is not None:
+        payload["seed"] = options.seed
+        if options.profile == "omlx-0.7-v1":
+            payload["enable_thinking"] = options.enable_thinking
+            payload["chat_template_kwargs"] = {"enable_thinking": options.enable_thinking}
+    # Decimal 原样编码；messages 已经经过来源 seal 和结构校验。
+    return (canonical_dumps(payload)[:-1] + ',"messages":' + request.messages_json + "}").encode("utf-8")

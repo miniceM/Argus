@@ -38,6 +38,34 @@ def definition(**changes):
     return FrozenJudgeDefinition(**data)
 
 
+@pytest.mark.parametrize("changes", [
+    {"seed": True}, {"seed": "0"}, {"seed": -1}, {"seed": 4294967296},
+    {"profile": "automatic"}, {"enable_thinking": "false"},
+    {"profile": "openai-compatible-v1", "enable_thinking": False},
+    {"enable_thinking": None}, {"extra": "ignored"},
+])
+def test_provider_options_reject_implicit_or_unapproved_configuration(changes):
+    from app.trajectory.judge import JudgeProviderOptions
+    value = {"profile": "omlx-0.7-v1", "seed": 0, "enable_thinking": False} | changes
+    with pytest.raises(ValueError):
+        JudgeProviderOptions.model_validate(value)
+
+
+@pytest.mark.parametrize("changes", [{"seed": 1}, {"enable_thinking": True}])
+def test_provider_options_change_frozen_measurement_identity(changes):
+    from app.trajectory.judge import JudgeProviderOptions
+    original = {"profile": "omlx-0.7-v1", "seed": 0, "enable_thinking": False}
+    first = definition(provider_api_version="0.7.0", provider_options=JudgeProviderOptions(**original))
+    second = definition(provider_api_version="0.7.0", provider_options=JudgeProviderOptions(**(original | changes)))
+    assert first.definition_digest != second.definition_digest
+
+
+def test_omlx_provider_profile_requires_matching_api_version():
+    from app.trajectory.judge import JudgeProviderOptions
+    with pytest.raises(ValueError, match="JUDGE_PROVIDER_PROFILE_INVALID"):
+        definition(provider_options=JudgeProviderOptions(profile="omlx-0.7-v1", seed=0, enable_thinking=False))
+
+
 @pytest.mark.parametrize("field,value", [("provider_id", "different"), ("provider_api_version", "v2"),
     ("resolved_model_id", "fixture-model-20261015"), ("resolved_model_artifact_digest", "sha256:" + "b" * 64),
     ("dependency_lock_digest", "sha256:" + "b" * 64), ("implementation_artifact_digest", "sha256:" + "b" * 64),

@@ -251,21 +251,20 @@ def _validate_console_dev_dependency_change(
         raise ValueError("snapshot changes outside changed development dependency closure")
 
 
-
 # Medium is intentionally narrower than general runtime code: scoped tests
 # and Console presentation receive the five regular CI checks, without
 # exposing PR code to Cloud secrets. Unknown paths remain high risk.
-MEDIUM_DENIED_TEST_PREFIXES = (
-    "tests/test_ci_",
-    "tests/test_cloud_",
-    "tests/test_langfuse_",
-    "tests/test_trajectory_",
-    "tests/test_release_",
-    "tests/test_policy_",
-    "tests/test_auth_",
-    "tests/test_credential_",
-    "tests/test_security_",
-    "tests/test_expected_pass_rate",
+MEDIUM_DENIED_TEST_STEMS = (
+    "ci",
+    "cloud",
+    "langfuse",
+    "trajectory",
+    "release",
+    "policy",
+    "auth",
+    "credential",
+    "security",
+    "expected_pass_rate",
 )
 MEDIUM_DENIED_CONSOLE_TERMS = (
     "auth", "cloud", "credential", "gate", "integration", "langfuse",
@@ -293,10 +292,14 @@ def _medium_scope(path: str) -> bool:
         path.startswith("tests/test_")
         and path.count("/") == 1
         and path.endswith(".py")
-        and not path.startswith(MEDIUM_DENIED_TEST_PREFIXES)
         and re.fullmatch(r"tests/test_[a-zA-Z0-9_]+\.py", path)
     ):
-        return True
+        test_stem = path[len("tests/test_"):-3].lower()
+        if not any(
+            test_stem == stem or test_stem.startswith(f"{stem}_")
+            for stem in MEDIUM_DENIED_TEST_STEMS
+        ):
+            return True
 
     # Only existing UI components/pages, not API clients, policy/auth views,
     # build scripts, configuration, shared backend or dependencies.

@@ -36,7 +36,7 @@ from scripts.ci.cloud_e2e_receipt import (
 from scripts.ci.github_api import GitHubApiError, GitHubClient
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-CANDIDATE_RUN_PATH = f"{CANDIDATE_WORKFLOW}@{MAIN_REF}"
+CANDIDATE_RUN_PATH = CANDIDATE_WORKFLOW
 MANIFEST_PREFIX = "candidate-manifest"
 EVIDENCE_PREFIX = "candidate-cloud-evidence"
 RECEIPT_PREFIX = "trusted-cloud-receipt"

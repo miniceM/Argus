@@ -14,7 +14,6 @@ from scripts.ci.cloud_e2e_policy import REPOSITORY, REQUIRED_CI_CHECKS
 from scripts.ci.cloud_e2e_receipt import CandidateReceiptError, _artifact_bytes, read_json_archive
 from scripts.ci.github_api import GitHubApiError, GitHubClient
 
-CI_WORKFLOW_PATH_SUFFIX = ".github/workflows/ci.yml@refs/heads/main"
 CLOUD_SECRET_STEP = "Validate Langfuse Cloud secrets"
 CLOUD_E2E_STEP = "Run cloud end-to-end tests"
 CLOUD_JOB_NAME = "Main Langfuse Cloud E2E"
@@ -81,7 +80,7 @@ def verify_main_cloud_acceptance(
         raise MainCloudAcceptanceError("main Cloud acceptance only applies to main push/dispatch")
 
     run = client.get_run(run_id)
-    if run.get("path", "").lstrip("/") != CI_WORKFLOW_PATH_SUFFIX:
+    if run.get("path", "").lstrip("/") != CI_WORKFLOW_PATH:
         raise MainCloudAcceptanceError("workflow run did not originate from the trusted main CI workflow")
     if run.get("event") != event_name or run.get("head_branch") != "main" or run.get("head_sha") != commit_sha:
         raise MainCloudAcceptanceError("workflow event, branch, or commit identity does not match this run")
@@ -239,7 +238,7 @@ def wait_for_current_main_cloud_acceptance(
                 and run.get("event") == event_name
                 and run.get("head_branch") == "main"
                 and run.get("head_sha") == commit_sha
-                and str(run.get("path", "")).lstrip("/") == CI_WORKFLOW_PATH_SUFFIX
+                and str(run.get("path", "")).lstrip("/") == CI_WORKFLOW_PATH
             )
 
         if candidates:

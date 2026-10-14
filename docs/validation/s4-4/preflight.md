@@ -50,3 +50,16 @@ T8 已实施严格输出验证与校准统计，见[初始契约证据](contract
 - 这些目录名不能单独充当不可变 Resolved Model 身份。后续真实验证必须固定模型制品版本/摘要、Provider API 版本、采样与 Prompt，验证响应身份并拒绝 alias/fallback；实际模型调用与 holdout 校准仍待实施。
 - 本机端点、鉴权方式与资源约束只用于隔离验证，不作为 CI 或生产的隐式默认配置。
 - 服务自身 OpenAPI 的 `ChatCompletionRequest` 声明 `model/messages/temperature/top_p/max_tokens/seed/response_format/chat_template_kwargs/stream` 等字段，默认非流式；`model` 仅声明字符串，未提供不可变制品身份保证。Schema 声明不等于结构化输出实测，Provider 仍必须验证实际响应与冻结身份。
+
+## 后续实施与真实能力预检
+
+本页前述表格保留初始预检状态；恢复空集合问题已由
+[恢复回归](recovery-empty-targets.md) 修复，冻结 Registry/version 与准备结果桥接见
+[执行器记录](executor-progress.md)，默认策略与模式保护见[策略记录](quality-policy-progress.md)。
+
+2026-10-14 在 `bfbe723` 基线上完成
+[固定模型结构化输出与 tokenizer 探针](provider-capability-qwen38/README.md)：
+两个合成格式请求各执行两次，HTTP、Schema/Step 解析、固定 model 和本地/服务输入计数相符；
+13 个模型文件完整哈希、两次归档调用的 request/response 原始字节均已复核。
+这不是人标业务 holdout，也没有取得正式 token 上界、Provider deployment 或 release 准入；
+不将四次请求计作四个独立校准 Case。后续正式 Worker/recovery 接线仍须落实。

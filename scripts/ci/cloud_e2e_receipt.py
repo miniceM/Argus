@@ -586,7 +586,9 @@ def build_candidate_receipt(
         and workflow_run.get("head_branch") == "main"
         and workflow_run.get("head_sha") == manifest.get("workflow_revision")
         and (workflow_run.get("actor") or {}).get("login") == manifest.get("requested_by")
-        and run_path == f"{CANDIDATE_WORKFLOW}@{MAIN_REF}"
+        # The Actions API's workflow-run `path` contains only the workflow file
+        # path, not the branch-qualified workflow_ref used by the manifest.
+        and run_path == CANDIDATE_WORKFLOW
         and workflow_run.get("status") in {"in_progress", "completed"}
     )
     if not trusted_identity:

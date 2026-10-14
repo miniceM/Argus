@@ -109,7 +109,9 @@ def _workflow_run(**overrides: Any) -> dict[str, Any]:
         "event": "workflow_dispatch",
         "head_branch": "main",
         "head_sha": WORKFLOW,
-        "path": f"{CANDIDATE_WORKFLOW}@refs/heads/main",
+        # Actions API's workflow-run `path` is the workflow file path only;
+        # trusted-main identity is separately bound by event, branch, and SHA.
+        "path": CANDIDATE_WORKFLOW,
         "status": "in_progress",
         "actor": {"login": "maintainer"},
         "triggering_actor": {"login": "maintainer"},

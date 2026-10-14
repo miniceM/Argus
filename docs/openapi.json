@@ -6083,7 +6083,7 @@
           "engine_version": {
             "type": "string",
             "title": "Engine Version",
-            "default": "release-gate-v3"
+            "default": "release-gate-v4"
           },
           "candidate_snapshot_id": {
             "type": "string",

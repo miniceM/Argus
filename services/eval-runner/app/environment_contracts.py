@@ -19,7 +19,11 @@ def normalize_environment(value: str) -> str:
     return normalized
 
 
-def environment_reason(manifest: Mapping[str, Any]) -> str | None:
+def environment_reason(manifest: Mapping[str, Any] | None) -> str | None:
+    if manifest is None:
+        return MISSING
+    if not isinstance(manifest, Mapping):
+        return INVALID
     comparison = manifest.get("comparison")
     if comparison is None:
         return MISSING
@@ -65,3 +69,10 @@ def require_snapshot_environment(snapshot: Any, expected: str) -> None:
     if reasons:
         raise EnvironmentContractError(reasons[0], expected_environment=expected,
                                        manifest=snapshot.manifest, snapshot_id=snapshot.id)
+
+
+def comparison_environment_reasons(baseline: Mapping[str, Any] | None, candidate: Mapping[str, Any] | None) -> list[str]:
+    reasons = list(dict.fromkeys(reason for reason in (environment_reason(baseline), environment_reason(candidate)) if reason))
+    if not reasons and frozen_environment(baseline) != frozen_environment(candidate):
+        reasons.append(MISMATCH)
+    return reasons

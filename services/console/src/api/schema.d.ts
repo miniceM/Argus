@@ -2180,7 +2180,7 @@ export interface components {
             releasable: boolean;
             /**
              * Engine Version
-             * @default release-gate-v3
+             * @default release-gate-v4
              */
             engine_version: string;
             /** Candidate Snapshot Id */

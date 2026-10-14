@@ -317,6 +317,7 @@ class LaunchService:
             agent_id=agent_id,
             agent_version=agent_version,
             agent_version_id=ver_rec.id,
+            environment=normalized_environment,
             manifest=manifest,
             langfuse_sync_status="PENDING",
             created_by=created_by,

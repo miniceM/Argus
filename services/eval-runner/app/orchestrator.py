@@ -52,7 +52,15 @@ class LaunchOrchestrator:
         launch_id = str(uuid.uuid4())
         agent_version_id = manifest.get("agent", {}).get("agent_version_id") or f"{agent_id}-{agent_version}"
 
+        from .environment_contracts import normalize_environment
+
         manifest = dict(manifest)
+        comparison = dict(manifest.get("comparison") or {})
+        if "environment" not in comparison and any(key in manifest for key in ("manifest_digest", "source_result_digest")):
+            raise ValueError("Historical evidence without a frozen environment cannot create a formal Launch")
+        environment = normalize_environment(comparison.get("environment", (manifest.get("agent") or {}).get("environment") or "production"))
+        comparison["environment"] = environment
+        manifest["comparison"] = comparison
         manifest.setdefault("runner", self.runner_identity.model_dump())
         items_seed = manifest.get("dataset", {}).get("items", [])
 
@@ -68,6 +76,7 @@ class LaunchOrchestrator:
                 agent_id=agent_id,
                 agent_version=agent_version,
                 agent_version_id=agent_version_id,
+                environment=environment,
                 manifest=manifest,
                 created_by=created_by,
                 created_at=datetime.now(UTC),

@@ -96,14 +96,8 @@ def _finite(value: Any) -> float | None:
 
 def frozen_environment(snapshot) -> str | None:
     """缺失或未规范化的历史环境不能推定为 production。"""
-    comparison = snapshot.manifest.get("comparison") or {}
-    value = comparison.get("environment")
-    if not isinstance(value, str):
-        return None
-    try:
-        return value if normalize_environment(value) == value else None
-    except ValueError:
-        return None
+    from .environment_contracts import frozen_environment as read_environment
+    return read_environment(snapshot.manifest)
 
 
 def _summary(snapshot) -> dict[str, Any]:

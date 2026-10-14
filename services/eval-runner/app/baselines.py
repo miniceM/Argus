@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from datetime import datetime
 
 from sqlalchemy import select
@@ -8,17 +7,11 @@ from sqlalchemy.exc import IntegrityError
 
 from .db import DatabaseManager
 from .db_models import BaselineBindingRecord, ExperimentLaunchRecord, RunResultSnapshotRecord
+from .environment_contracts import normalize_environment
 
 
 class BaselineConflictError(ValueError):
     pass
-
-
-def normalize_environment(value: str) -> str:
-    normalized = value.strip().lower()
-    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}", normalized):
-        raise ValueError("environment must be 1-64 lowercase letters, digits, dots, underscores, or hyphens")
-    return normalized
 
 
 def validate_baseline_snapshot(

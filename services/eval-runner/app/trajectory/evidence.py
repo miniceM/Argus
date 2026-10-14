@@ -283,6 +283,13 @@ def _validate(trajectory, contract, profile):
     return owned, payload
 
 
+def validate_trajectory_payload(trajectory: StandardTrajectory, contract: TrajectoryContract) -> StandardTrajectory:
+    """重验已装载制品的合同/脱敏/摘要；DB 所属关系仍由 load_trajectory_evidence 验证。"""
+    checked, profile = _contract(contract)
+    owned, _ = _validate(trajectory, checked, profile)
+    return owned
+
+
 def _db_scope(session, scope, profile, *, writing):
     item, attempt, launch, version = ExperimentItemExecutionRecord, ExecutionAttemptRecord, ExperimentLaunchRecord, AgentVersionRecord
     query = select(item.launch_id, item.dataset_item_id, item.dispatch_generation,

@@ -46,6 +46,8 @@ Judge 对同一 Item/Attempt 复用冻结 `TrajectoryEvidenceRef`；同一制品
 | 执行制品 | `implementation_ref`、`implementation_artifact.digest`、依赖锁摘要 | 运行时必须验证制品；制品不匹配时拒绝执行 |
 | 解码预算 | `temperature`、`top_p`、`max_output_tokens`、`request_timeout_seconds`、`max_attempts` | 数值有限且在 Provider 支持范围；首版 `max_attempts=1` |
 | 输入预算 | `max_steps`、`max_input_bytes`、`max_evidence_refs` | 超限产出 UNKNOWN 与原因码，不截断成可通过结论 |
+| 证据资格 | `required_capabilities` | 按冻结 rubric 声明所需能力，各项必须 COMPLETE；release 另须 OBSERVED_COMPLETE。语义浪费动作判断不强制依赖 timing |
+| criteria 投影 | `criteria_policy.version/paths/string_policies/content_policy_version` | 有限 allowlist 路径与 `pii-v1`；拒绝根路径、敏感键及无法证明安全的内容，安全投影摘要参加调用身份 |
 | Launch预算 | max_total_calls、max_total_input_tokens、max_total_output_tokens | 固定Case×required Binding最坏预算先校验；不足时拒绝启动或UNKNOWN，不缩小覆盖分母 |
 | 触发 | `mode`、`eligible_when`、`trigger_confidence_threshold`、`output_policy.min_confidence`、`sample_rate`、`sampling_seed` | 确定性触发阈值与 Judge 输出置信阈值分开冻结；表达式受限且确定，配置参加 digest |
 | 覆盖 | `required_case_policy`、`required_case_ids_digest` | diagnostic 可采样；release 对必需 Case 全量覆盖 |
@@ -60,6 +62,7 @@ Provider 无法报告 Resolved Model 或不支持冻结的 JSON Schema/预算时
 ## 4. 请求、输出与异常语义
 
 Judge 接收固定 EvaluationContext，但只读取 trajectory 内的脱敏 input/output、获准的 expected criteria 和 evidence ref；不得把为旧规则保留的原始 context.output/input_payload/expected_output 直接出站。expected criteria 在请求构造前通过同一 allowlist、内容与长度检查，安全摘要参加调用身份。Step 的因果/scope 字段只作为冻结上下文。
+实际准备入口须先验证 Manifest、Checkpoint 原 Dataset 输入和 Artifact 归属，再在短事务内预裁定经过验证的 `expected_output`。外部预裁定 criteria 必须与该安全投影的 scope、policy 和摘要一致；同 Case 替换条件也须拒绝。纯请求构造函数不得读取任意业务 Context 字段，不能用调用者自报的摘要代替来源校验。
 Adapter 的入口与规则输入保持同构，并显式接收 Runner 已验证的 Binding 与 Manifest schema：
 
 ```python

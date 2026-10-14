@@ -10,10 +10,30 @@ from typing import Annotated, Literal
 from pydantic import Field, field_validator, model_validator
 
 from .codec import canonical_digest, canonical_loads
-from .schema import Identity, _ContractModel
+from .contract import RedactionPolicy
+from .schema import Capability, Identity, _ContractModel
 
 Probability = Annotated[Decimal, Field(ge=0, le=1, allow_inf_nan=False)]
 Digest = Annotated[str, Field(pattern=r"^sha256:[a-f0-9]{64}$")]
+
+
+class JudgeCriteriaPolicy(_ContractModel):
+    version: Identity
+    paths: Annotated[list[str], Field(max_length=64)]
+    string_policies: dict[str, Literal["identifier", "currency"]] = Field(max_length=64)
+    content_policy_version: Literal["pii-v1"]
+
+    @model_validator(mode="after")
+    def approved_projection(self):
+        if len(set(self.paths)) != len(self.paths):
+            raise ValueError("JUDGE_CRITERIA_POLICY_INVALID")
+        RedactionPolicy(version=self.version, input_paths=[], output_paths=self.paths, argument_paths=[], result_paths=[],
+            content_policy_version=self.content_policy_version, string_policies=self.string_policies)
+        return self
+
+    @property
+    def digest(self):
+        return canonical_digest(JudgeCriteriaPolicy.model_validate(self.model_dump()))
 
 
 class JudgeOutputPolicy(_ContractModel):
@@ -152,6 +172,8 @@ class FrozenJudgeDefinition(_ContractModel):
     calibration_set_digest: Digest
     calibration_policy: CalibrationPolicy
     output_policy: JudgeOutputPolicy
+    criteria_policy: JudgeCriteriaPolicy
+    required_capabilities: Annotated[list[Capability], Field(max_length=6)]
 
     @field_validator("max_attempts", mode="before")
     @classmethod
@@ -170,6 +192,9 @@ class FrozenJudgeDefinition(_ContractModel):
             raise ValueError("JUDGE_MODEL_IDENTITY_UNRESOLVED")
         if self.risk_id not in self.calibration_policy.risk_ids:
             raise ValueError("JUDGE_CALIBRATION_RISK_MISMATCH")
+        # 能力按冻结 rubric/输入合同声明；例如浪费动作不必是耗时判断。
+        if len(set(self.required_capabilities)) != len(self.required_capabilities):
+            raise ValueError("JUDGE_CAPABILITY_CONTRACT_INVALID")
         return self
 
     @property

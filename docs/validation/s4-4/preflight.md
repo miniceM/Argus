@@ -37,6 +37,8 @@ T7 确定性增量已在本地提交并合入 `main@49aaaa0`，`make validate` 2
 
 T8 已实施严格输出验证与校准统计，见[初始契约证据](contract-progress.md)，并新增[冻结定义与确定性触发](definition-progress.md)。实际 Provider / 固定模型准入、独立校准制品、异步 Worker 与预算以及 T9 的最终发布证据仍需落实；本预检不代替这些验收。
 
+安全请求切片见[固定证据与安全请求](input-progress.md)：已增加实际 Checkpoint/Artifact 准备入口、来自经过验证的冻结 Dataset 的 criteria 来源匹配、最小脱敏数据区、冻结能力要求和整份消息预算；尚未接 Provider、Worker 或恢复执行器。
+
 ## 本地 Provider 只读探针
 
 2026-10-14 已按本机环境与 oMLX 手册，使用官方配置链在请求内取得凭据，仅探测回环服务的模型目录和状态，未打印凭据、修改配置或发送推理请求。

@@ -347,7 +347,7 @@ class LaunchService:
                     selected_launch = session.get(ExperimentLaunchRecord, selected_snapshot.launch_id)
                     if not selected_launch:
                         raise ValueError("Requested baseline Launch was not found")
-                    validate_baseline_snapshot(selected_snapshot, selected_launch, agent_id)
+                    validate_baseline_snapshot(selected_snapshot, selected_launch, agent_id, normalized_environment)
                     comparison.update(
                         baseline_snapshot_id=selected_snapshot.id,
                         baseline_binding_revision=None,
@@ -362,6 +362,13 @@ class LaunchService:
                         binding_stmt = binding_stmt.with_for_update()
                     binding = session.scalars(binding_stmt).first()
                     if binding and binding.result_snapshot_id:
+                        selected_snapshot = session.get(RunResultSnapshotRecord, binding.result_snapshot_id)
+                        if not selected_snapshot:
+                            raise ValueError("Current baseline result snapshot not found")
+                        selected_launch = session.get(ExperimentLaunchRecord, selected_snapshot.launch_id)
+                        if not selected_launch:
+                            raise ValueError("Current baseline Launch not found")
+                        validate_baseline_snapshot(selected_snapshot, selected_launch, agent_id, normalized_environment)
                         comparison.update(
                             baseline_snapshot_id=binding.result_snapshot_id,
                             baseline_binding_revision=binding.revision,

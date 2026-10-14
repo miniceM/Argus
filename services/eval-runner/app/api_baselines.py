@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Header, HTTPException, Query, status
 
 from .baselines import BaselineConflictError, get_baseline, set_baseline
+from .environment_contracts import EnvironmentContractError, environment_match_reasons, frozen_environment
 from .models import BaselineCreateRequest, BaselineResponse
 
 router = APIRouter(prefix="/api/v1/agents/{agent_id}/baselines", tags=["Baselines"])
@@ -23,7 +24,11 @@ def _response(db_manager, binding, snapshot) -> BaselineResponse:
         launch = session.get(ExperimentLaunchRecord, snapshot.launch_id)
         if not launch:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Baseline Launch not found")
+        reasons = environment_match_reasons(snapshot.manifest, binding.environment)
         return BaselineResponse(
+            environment_validation_status="INVALID" if reasons else "VALID",
+            snapshot_environment=frozen_environment(snapshot.manifest),
+            environment_reason_codes=reasons,
             agent_id=binding.agent_id,
             environment=binding.environment,
             result_snapshot_id=snapshot.id,
@@ -80,6 +85,8 @@ def put_agent_baseline(
         return _response(db_manager, binding, snapshot)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except EnvironmentContractError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.to_payload()) from exc
     except BaselineConflictError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:

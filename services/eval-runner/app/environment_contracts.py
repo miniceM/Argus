@@ -38,3 +38,30 @@ def frozen_environment(manifest: Mapping[str, Any]) -> str | None:
     if environment_reason(manifest):
         return None
     return manifest["comparison"]["environment"]
+
+
+class EnvironmentContractError(ValueError):
+    def __init__(self, code: str, *, expected_environment: str, manifest: Mapping[str, Any], snapshot_id: str | None = None):
+        self.code = code
+        self.expected_environment = expected_environment
+        self.snapshot_environment = frozen_environment(manifest)
+        self.snapshot_id = snapshot_id
+        super().__init__(f"Frozen snapshot environment is unavailable or does not match {expected_environment} ({code})")
+
+    def to_payload(self) -> dict[str, Any]:
+        return {"code": self.code, "message": str(self), "expected_environment": self.expected_environment,
+                "snapshot_environment": self.snapshot_environment, "snapshot_id": self.snapshot_id}
+
+
+def environment_match_reasons(manifest: Mapping[str, Any], expected: str) -> list[str]:
+    reason = environment_reason(manifest)
+    if reason:
+        return [reason]
+    return [] if frozen_environment(manifest) == expected else [MISMATCH]
+
+
+def require_snapshot_environment(snapshot: Any, expected: str) -> None:
+    reasons = environment_match_reasons(snapshot.manifest, expected)
+    if reasons:
+        raise EnvironmentContractError(reasons[0], expected_environment=expected,
+                                       manifest=snapshot.manifest, snapshot_id=snapshot.id)

@@ -3125,6 +3125,32 @@
       },
       "BaselineResponse": {
         "properties": {
+          "environment_validation_status": {
+            "type": "string",
+            "enum": [
+              "VALID",
+              "INVALID"
+            ],
+            "title": "Environment Validation Status"
+          },
+          "snapshot_environment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Environment"
+          },
+          "environment_reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Environment Reason Codes"
+          },
           "agent_id": {
             "type": "string",
             "title": "Agent Id"
@@ -3198,6 +3224,9 @@
         },
         "type": "object",
         "required": [
+          "environment_validation_status",
+          "snapshot_environment",
+          "environment_reason_codes",
           "agent_id",
           "environment",
           "result_snapshot_id",

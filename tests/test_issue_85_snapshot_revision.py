@@ -527,7 +527,7 @@ def test_baseline_stays_valid_when_the_original_launch_starts_recovering(setup_r
     # The Launch's activity does not retroactively revoke eligibility.
     with db_mgr.get_session() as session:
         validate_baseline_snapshot(
-            snapshot, session.get(ExperimentLaunchRecord, launch_id), "test-agent"
+            snapshot, session.get(ExperimentLaunchRecord, launch_id), "test-agent", "production"
         )
 
 

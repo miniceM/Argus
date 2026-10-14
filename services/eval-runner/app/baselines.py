@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from .db import DatabaseManager
 from .db_models import BaselineBindingRecord, ExperimentLaunchRecord, RunResultSnapshotRecord
-from .environment_contracts import normalize_environment
+from .environment_contracts import normalize_environment, require_snapshot_environment
 
 
 class BaselineConflictError(ValueError):
@@ -18,6 +18,7 @@ def validate_baseline_snapshot(
     snapshot: RunResultSnapshotRecord,
     launch: ExperimentLaunchRecord,
     agent_id: str,
+    environment: str,
 ) -> None:
     """Decide Baseline eligibility from the snapshot's own frozen evidence.
 
@@ -55,6 +56,8 @@ def validate_baseline_snapshot(
             f"Baseline cannot contain UNKNOWN (insufficient evidence) cases: {unknown_count} case(s) are UNKNOWN"
         )
 
+    require_snapshot_environment(snapshot, environment)
+
 
 def set_baseline(
     db_manager: DatabaseManager,
@@ -82,7 +85,7 @@ def set_baseline(
             launch = session.get(ExperimentLaunchRecord, snapshot.launch_id)
             if not launch:
                 raise KeyError(f"Launch for result snapshot '{result_snapshot_id}' not found")
-            validate_baseline_snapshot(snapshot, launch, agent_id)
+            validate_baseline_snapshot(snapshot, launch, agent_id, environment)
 
             statement = select(BaselineBindingRecord).where(
                 BaselineBindingRecord.agent_id == agent_id,

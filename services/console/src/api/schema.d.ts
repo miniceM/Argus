@@ -1020,6 +1020,15 @@ export interface components {
         };
         /** BaselineResponse */
         BaselineResponse: {
+            /**
+             * Environment Validation Status
+             * @enum {string}
+             */
+            environment_validation_status: "VALID" | "INVALID";
+            /** Snapshot Environment */
+            snapshot_environment: string | null;
+            /** Environment Reason Codes */
+            environment_reason_codes: string[];
             /** Agent Id */
             agent_id: string;
             /** Environment */

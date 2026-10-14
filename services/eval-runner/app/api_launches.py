@@ -17,6 +17,7 @@ from .db_models import (
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
 )
+from .environment_contracts import EnvironmentContractError
 from .evaluation_result_store import persist_typed_results, result_to_payload
 from .evaluator_binding import evaluate_frozen_item
 from .evaluators import EvaluatorSelectionError
@@ -95,6 +96,8 @@ def create_experiment_launch(
             ),
         )
         return _enrich_launch(launch, orchestrator)
+    except EnvironmentContractError as exc:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=exc.to_payload()) from exc
     except QualityPolicyError as exc:
         # Issue #83: an undecidable policy is rejected at creation, with the same
         # stable-code shape the evaluator gate already uses.

@@ -487,6 +487,9 @@ class BaselineCreateRequest(BaseModel):
 
 
 class BaselineResponse(BaseModel):
+    environment_validation_status: Literal["VALID", "INVALID"]
+    snapshot_environment: str | None
+    environment_reason_codes: list[str]
     agent_id: str
     environment: str
     result_snapshot_id: str

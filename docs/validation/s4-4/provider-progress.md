@@ -35,8 +35,12 @@ make validate
 
 共享 wire codec 修复改变 `reader_artifact_digest`。扩大回归的 13 模块运行记录为 **557 passed / 17 failed**：17 项均因旧 Reader 校准批准身份与当前制品摘要不符被拒绝，不能计作通过；这正是 fail-closed 准入行为。需固定源码重跑 9 组各 10 个真实样本，生成新校准证据后再更新批准记录并跑完整真实门禁，不能手工替换批准哈希。该运行晚于六模块测试，包含两项极端指数 GREEN；独立 codec 原因码另有 1 passed。
 
-固定 `e01bbf3` 的[真实 Reader 再校准](reader-requalification.md)现已完成：9 组、90 个独立样本，9 passed / 0 skipped，452.50 秒；新批准记录由实测生成，完整逐样本元数据已归档。完整 86 项真实门禁仍待验证。
+固定 `e01bbf3` 的[真实 Reader 再校准](reader-requalification.md)现已完成：9 组、90 个独立样本，9 passed / 0 skipped，452.50 秒；新批准记录由实测生成，完整逐样本元数据已归档。后续固定 `78f1a7c` 的完整 86 项真实门禁已通过，见下文补验记录。
 
 ## 未完成的门禁
 
 尚需真实 Provider/API/固定模型制品与 Schema 能力准入、可靠 token 上界、跨 Worker 持久预算、注册执行器、Worker/recovery 接入、迟到 CAS、critical 联合来源及真实独立 holdout。现有传输测试不能替代这些验收；继续在 PR #181 完成 T8/T9 和 89 项完整标准。
+
+## 完整真实集成补验
+
+Reader 再校准后的固定 `78f1a7c` 完整实测已结束：86 passed / 0 skipped / 0 failed，954.935 秒；四个双 Snapshot 场景保留 40 个实际远端 Score ID。[完整实测回执与范围](full-real-78f1a7c.md)。这补齐该版本的真实集成证据，不表示 Judge 正式执行链路已完成，也不替代后续主线同步版本的验证。

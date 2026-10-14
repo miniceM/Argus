@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from scripts.ci.ci_constants import (
+    AUTOMATION_ACTOR,
     CANDIDATE_WORKFLOW,
     MAIN_REF,
     POLICY_CONTEXT,
@@ -140,6 +141,7 @@ def _read_artifact_json(client: Any, run_id: int, name: str, filename: str) -> d
 def _candidate_run_matches_control_plane(run: Mapping[str, Any]) -> bool:
     return (
         run.get("event") == "workflow_dispatch"
+        and (run.get("actor") or {}).get("login") == AUTOMATION_ACTOR
         and run.get("head_branch") == "main"
         and str(run.get("path", "")).lstrip("/") == CANDIDATE_RUN_PATH
     )
@@ -170,7 +172,7 @@ def find_trusted_candidate_validation(
     """Recompute the latest matching trusted Cloud result from GitHub API evidence.
 
     The receipt artifact is only a consistency check. Admission is based on the
-    manifest, live run/attempt, Environment approval, actual jobs/steps, Cloud
+    manifest, live run/attempt, automated CI identity, actual jobs/steps, Cloud
     evidence, current PR identity, and the receipt recomputed by this trusted code.
     """
     pr_number = pr.get("number")
@@ -217,7 +219,7 @@ def find_trusted_candidate_validation(
         candidates.append((raw_run, manifest, None))
 
     if not candidates:
-        return _candidate_result("pending", "awaiting an approved trusted Cloud validation")
+        return _candidate_result("pending", "awaiting automatic trusted Cloud validation")
     candidates.sort(key=lambda item: _run_sort_key(item[0]))
     listed_run, manifest, manifest_error = candidates[-1]
     run_id = listed_run.get("id")
@@ -249,7 +251,7 @@ def find_trusted_candidate_validation(
     if manifest.get("run_id") != run_id or manifest.get("run_attempt") != attempt:
         return _candidate_result("failure", "invalid_trusted_receipt", cloud_state="failed", target_url=target_url)
     if run.get("status") != "completed":
-        return _candidate_result("pending", "trusted Cloud validation is awaiting approval or completion", target_url=target_url)
+        return _candidate_result("pending", "automatic trusted Cloud validation is running", target_url=target_url)
     if run.get("conclusion") != "success":
         return _candidate_result(
             "failure",
@@ -270,7 +272,6 @@ def find_trusted_candidate_validation(
                 cloud_state="failed",
                 target_url=target_url,
             )
-        approvals = client.list_run_approvals(run_id)
         jobs = client.list_jobs(run_id, attempt)
         # This rechecks current PR/base/merge parents and the exact regular-CI
         # attempt captured by the candidate manifest before accepting the result.
@@ -280,13 +281,12 @@ def find_trusted_candidate_validation(
             manifest,
             workflow_run=run,
             current_pr=current_pr,
-            approvals=approvals,
             jobs=jobs,
             cloud_evidence_zip=evidence_zip,
         )
     except CandidateReceiptError as exc:
         message = str(exc)
-        if any(token in message for token in ("changed after approval", "no longer matches current main", "current regular CI run changed")):
+        if any(token in message for token in ("changed after CI", "no longer matches current main", "current regular CI run changed")):
             return _candidate_result("pending", "candidate identity or regular CI changed during validation", target_url=target_url)
         return _candidate_result("failure", "invalid_trusted_receipt", cloud_state="failed", target_url=target_url)
 

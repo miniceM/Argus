@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from scripts.ci.ci_constants import CANDIDATE_ENVIRONMENT, CANDIDATE_WORKFLOW, POLICY_CONTEXT, REQUIRED_CI_CHECKS
+from scripts.ci.ci_constants import CANDIDATE_WORKFLOW, POLICY_CONTEXT, REQUIRED_CI_CHECKS
 from scripts.ci.cloud_e2e_receipt import build_candidate_receipt
 from scripts.ci.github_api import GitHubApiError
 from scripts.ci.publish_cloud_policy import (
@@ -114,8 +114,8 @@ def _candidate_run(**overrides: Any) -> dict[str, Any]:
         "conclusion": "success",
         "created_at": "2026-10-13T01:00:00Z",
         "updated_at": "2026-10-13T01:30:00Z",
-        "actor": {"login": "maintainer"},
-        "triggering_actor": {"login": "maintainer"},
+        "actor": {"login": "github-actions[bot]"},
+        "triggering_actor": {"login": "github-actions[bot]"},
         "html_url": "https://github.com/miniceM/Argus/actions/runs/6001",
         **overrides,
     }
@@ -136,20 +136,12 @@ def _manifest(run_id: int = CANDIDATE_RUN_ID, attempt: int = 1) -> dict[str, Any
         "workflow_ref": f"{REPOSITORY}/{CANDIDATE_WORKFLOW}@refs/heads/main",
         "run_id": run_id,
         "run_attempt": attempt,
-        "requested_by": "maintainer",
+        "requested_by": "github-actions[bot]",
         "ci_run_id": CI_RUN_ID,
         "ci_run_attempt": 1,
         "ci_run_url": "https://github.com/miniceM/Argus/actions/runs/5001",
         "created_at": "2026-10-13T00:00:00Z",
     }
-
-
-def _approval() -> list[dict[str, Any]]:
-    return [{
-        "state": "approved",
-        "user": {"id": 17, "login": "reviewer"},
-        "environments": [{"id": 31, "name": CANDIDATE_ENVIRONMENT}],
-    }]
 
 
 def _jobs(*, cloud_conclusion: str = "success") -> list[dict[str, Any]]:
@@ -182,7 +174,6 @@ def _receipt(manifest: dict[str, Any] | None = None, *, cloud_conclusion: str = 
         manifest,
         workflow_run=_candidate_run(id=manifest["run_id"], run_attempt=manifest["run_attempt"]),
         current_pr=_pr(),
-        approvals=_approval(),
         jobs=_jobs(cloud_conclusion=cloud_conclusion),
         cloud_evidence_zip=_evidence(),
     )
@@ -203,7 +194,6 @@ class _PolicyClient:
         }
         manifest = _manifest()
         self.manifests = {CANDIDATE_RUN_ID: manifest}
-        self.approvals = {CANDIDATE_RUN_ID: _approval()}
         self.evidence = {CANDIDATE_RUN_ID: _evidence()}
         self.receipts = {CANDIDATE_RUN_ID: _receipt(manifest)}
         self.file_changes = [{"filename": "services/eval-runner/app/main.py", "status": "modified"}]
@@ -266,9 +256,6 @@ class _PolicyClient:
         data = self.downloads[artifact_id]
         assert len(data) <= max_bytes
         return data
-
-    def list_run_approvals(self, run_id: int) -> list[dict[str, Any]]:
-        return self.approvals[run_id]
 
     @property
     def repo_path(self) -> str:
@@ -344,7 +331,6 @@ def test_latest_matching_failed_or_cancelled_candidate_revokes_older_success(con
         html_url=f"https://github.com/miniceM/Argus/actions/runs/{failed_id}",
     ))
     client.manifests[failed_id] = manifest
-    client.approvals[failed_id] = _approval()
     client.evidence[failed_id] = _evidence()
     client.receipts[failed_id] = _receipt(manifest, cloud_conclusion="failure")
     client.jobs_by_run[(failed_id, 1)] = _jobs(cloud_conclusion="failure")

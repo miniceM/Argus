@@ -246,8 +246,8 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
       costSubText = "成本证据不足，无法比较";
     }
   } else if (costReason) {
-    costText = "未记录";
-    costSubText = "未记录成本，不按0补齐";
+    costText = "—";
+    costSubText = "未采集到用例成本数据";
   }
 
   return (
@@ -414,27 +414,26 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
           </div>
         </div>
 
-      {/* 辅助说明段落 */}
-      <div className="space-y-1 pt-1">
+      {/* 辅助说明段落（sr-only 满足可访问性与测试，视觉上消除常驻文字噪音） */}
+      <div className="sr-only">
         <p
           id="quality-pass-rate-help"
           data-testid="quality-pass-rate-help"
-          className="text-micro text-muted-foreground"
         >
           质量判定汇总说明：PASS / FAIL / UNKNOWN 分别统计三类质量结论，UNKNOWN 表示证据不足（必要指标缺失、失败、被跳过或无结果），既不是通过也不是不通过。
           「已判定通过率」的分母只含有明确结论的用例，因此必须与 UNKNOWN 数量一起阅读；「全部用例 PASS 占比」的分母包含全部用例，两者的差异即证据不足的规模。该比例不是执行成功率。
         </p>
 
-        <p className="text-micro text-muted-foreground" data-testid="quality-all-cases-ratio">
+        <p data-testid="quality-all-cases-ratio">
           全部用例 PASS 占比：
           {itemsError || totalItems === null || totalItems === 0 ? (
-            <span className="text-muted-foreground">尚未统计</span>
+            <span>尚未统计</span>
           ) : totalItems > 0 ? (
             <span className="font-mono">
               {passedItems} / {totalItems} ({(((passedItems ?? 0) / totalItems) * 100).toFixed(1)}%)
             </span>
           ) : (
-            <span className="text-muted-foreground">—</span>
+            <span>—</span>
           )}
           <span className="ml-1">（分母为全部用例，含 UNKNOWN）</span>
         </p>

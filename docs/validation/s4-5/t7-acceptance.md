@@ -7,7 +7,7 @@
 ## 证据与复现
 
 - [实施与 RED/GREEN 记录](gate-progress.md)、[稳定进度回执](gate-progress-receipt.json)。
-- [真实 Snapshot / Score 回执](real-projection-receipt.json)：86 项真实集成通过，四场景 × 两 revision，40 个不同的远端 Score ID；同 generation、生产 Outbox 同步与历史原文不变均由测试断言。该次执行的 [99 个源文件指纹](real-source-manifest.json) 早于比较专项修复，不作为最终发布 HEAD 的替代证据。
+- [最终真实 Snapshot / Score 回执](final-real-projection-receipt.json)：比较修复并合入 `main@49aaaa0` 后，`23807ee` 的 86 项真实集成通过（960.23s），四场景 × 两 revision，40 个不同的远端 Score ID；同 generation、生产 Outbox 同步与历史原文不变均由测试断言。[源码指纹](final-real-source-manifest.json) 固定该次运行；较早的 [真实回执](real-projection-receipt.json) / [99 个指纹](real-source-manifest.json) 保留为历史证据。
 - [Console 冻结观测截图](frozen-gate-observations.png)：Snapshot 键盘切换、null/0、Axe 与小屏验证见 Playwright 回归。
 
 在安装项目依赖、准备隔离 PostgreSQL 并设置 `TEST_POSTGRES_URL` 后运行：
@@ -45,7 +45,7 @@ make trajectory-test
 | S45-15 | 本地已验证 | canonical `(item_id,snapshot_id,binding_id)` Score key；同输入不重复入队，同 generation 多 revision 并存。旧任务唯一性、FK、租约回收和真实双 revision Score 保留见 Outbox 测试及真实回执 |
 | S45-16 | 本地已验证 | `test_projection_outage_retries_same_score_and_preserves_frozen_quality`、missing Artifact、retarget/type 篡改回归；投影故障不改 Snapshot/Gate，远端确认后才 SYNCED |
 | S45-17 | 本地已验证 | legacy Score key、未标记历史 Snapshot 投影路径、旧 Gate 响应、summary 缺字段及已有幂等 Launch/Gate 原样返回；无历史回填 |
-| S45-18 | 本地已验证 | 修复后 `make validate` 2322 项通过，`tests/test_expected_pass_rate.py` 保持原断言，Demo v1 2/6、v2 6/6 |
+| S45-18 | 本地已验证 | 最终主线同步后 `make validate` 2331 项通过，`tests/test_expected_pass_rate.py` 保持原断言，Demo v1 2/6、v2 6/6 |
 | S45-19 | 本地已验证 | 修复后 `make validate` 的 export / api:generate 无 drift，OpenAPI 与 Console 类型同步 |
 | S45-20 | 待发布验收 | 比较修复后 `make validate` 及合并主线兼容复验、最终 HEAD 的适用 CI 均须通过；远端旧 T6 真实集成超时取消不算通过，Cloud 按策略跳过不算真实验收 |
 
@@ -53,4 +53,8 @@ make trajectory-test
 
 不完整 Snapshot 的逐 Case 结果仍可诊断，但不标正式依据；两侧同时缺失 Case 不得缩小 required 分母。Baseline 容器损坏无法安全诊断时返回稳定 409，容器合法而 Artifact 失效时保留 withheld 与 DIAGNOSTIC_ONLY；均不回写历史。
 
-剩余：同步主线并验证、提交与发布 CI、T8 Judge 准入及阶段 B 复验、T9 全部 89 项整体验收。比较专项不改变冻结质量结果，真实投影旧回执继续按其原源码指纹解释。
+最新主线同步已包含维护者合入的 Cloud CI 修复；该后续合并只改 Cloud CI 脚本、工作流与测试，不改最终真实回执的运行源码。其本地门禁结果另行归档，不把旧 CI 结果作新发布 HEAD 的证明。
+
+Cloud 范围 import 排序作最小格式修正后，完整 `make validate` 为 2331 passed / 0 skipped / 86 real deselected，Console 864；101 个真实运行源指纹复核一致。E2E 129 与真实集成 86 的适用范围见上方固定运行证据。
+
+剩余：提交与发布 CI、T8 Judge 准入及阶段 B 复验、T9 全部 89 项整体验收。比较专项不改变冻结质量结果，真实投影回执按其各自源码指纹解释。

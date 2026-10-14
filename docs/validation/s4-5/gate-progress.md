@@ -70,3 +70,13 @@ Console 新增单测 RED 为 2 failed / 1 passed，GREEN 为 3 passed；全量 V
 ```bash
 python -m pytest -q tests/test_trajectory_comparison.py tests/test_trajectory_required_evidence.py tests/test_issue_86_comparability.py tests/test_api_results_s3.py tests/test_trajectory_release_gate.py tests/test_issue_7_release_gates.py --disable-warnings
 ```
+
+## 合入主线后的复验
+
+T7 增量分别保存为 Snapshot 投影、门禁/比较、CI 有界预算与验收文档四个单一目的提交，并合入 `main@49aaaa0` 的 Console 修复。主线门禁页、缺指标展示和审计环境字段均保留。
+
+固定 `23807ee7d4f2dcb2c2e2b9ccca25257063b87078` 的 `make validate`：Python **2326 passed / 0 skipped / 86 real deselected，186.59s**；Console **864 passed**；Token lint、typecheck、build、契约同步、Compose 通过。完整 Playwright **129 passed，1.3m**。完整真实集成 **86 passed / 0 skipped / 0 failures / 0 errors，960.23s**；[最终投影回执](final-real-projection-receipt.json) 记录四场景两 revision 的 **40 个实际 Score ID**，源指纹见 [最终真实源码清单](final-real-source-manifest.json)。
+
+首次推送因维护者新增远端提交被拒，核验为维护者将 `main@5d643c7` 的 Cloud CI 修复合入本 PR 分支。已在真实进程终态后合并 `cb447f9`，保留双方提交；该新增范围只涉及 Cloud 工作流、脚本与回归测试。新增范围的本地门禁及最终发布 CI 单独核验，未强推、未停止或重启已运行的真实测试。
+
+新增 Cloud 范围初次门禁在 Ruff 因 `tests/test_ci_cloud_workflows.py` 的 import 排序失败；仅调整排序后完整复验为 **2331 passed / 0 skipped / 86 real deselected，170.10s**，Console **864 passed**，其余本地质量步骤与 Compose 均通过。101 个最终真实运行源码 SHA-256 再核验无变化，因此保留 `23807ee` 的真实证据，不重复执行未改变的真实路径。最终发布 HEAD 仍需远端 CI 验证。

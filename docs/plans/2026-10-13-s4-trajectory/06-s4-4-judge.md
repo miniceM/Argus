@@ -1,6 +1,6 @@
 # S4.4 Trajectory Judge 实施方案
 
-状态：**提议，待方案 PR 评审；本文是实施设计，不表示 Judge 已交付。**
+状态：**PR #136 已批准方案；T8 将在 PR #181 实施。T7 已接入确定性门禁，Judge 代码、真实校准与准入尚未交付。**
 核验基线：2026-10-13，`main@4b043739c63357ecc10131e1ba54bc1bc53d862a`。
 关联：[Issue #5](https://github.com/miniceM/Argus/issues/5)、[#131](https://github.com/miniceM/Argus/issues/131)。
 共同契约：[01 技术设计](01-technical-design.md)；阶段顺序见[完整实施计划](08-implementation-plan.md)，验收追踪见[验收矩阵](09-acceptance-matrix.md)。
@@ -12,11 +12,11 @@ Judge 只补足确定性规则无法判断的语义问题，并把每次调用�
 能由工具身份、状态、顺序、参数等确定性事实判定的条件应由规则处理。
 
 当前已有冻结 Evaluator Binding：包含 `params`、`definition_digest`、实现制品摘要、执行器类型和 `binding_digest`。
-当前 `BuiltinPythonExecutor` 是唯一注册执行器；执行入口接收 `output/expected_output`，没有轨迹上下文。[实现](../../../services/eval-runner/app/evaluator_binding.py)
+2026-10-14 当前 `BuiltinPythonExecutor` 仍是唯一注册执行器；执行入口已有 keyword-only `context`，轨迹规则在受控 builtin 路径消费冻结制品，但尚无 Judge 异步准备与执行器。[实现](../../../services/eval-runner/app/evaluator_binding.py)
 当前 typed result 支持 numeric、boolean、categorical、text；值缺失会成为 `no_result`，不会补零。
 当前 QualityPolicy 已有 required/optional、critical、三态结论和 `unknown_not_releasable`。[策略实现](../../../services/eval-runner/app/quality_policy.py)
 当前 evaluator 绑定可冻结实现制品，但没有 LLM Provider、Resolved Model 或 Judge 输出验证器。
-当前 optional 评测异常会留在 `eval_status`，S4.2/T4 先接入 required 证据与 Snapshot 资格，S4.5 在此基础上接通门禁。
+当前 optional 评测异常保留在 `eval_status`；T4 已独立计算 required 证据与 Snapshot 资格，T7 已在此基础上接通确定性门禁和 Snapshot 投影，Judge 阶段 B 仍待本期补验。当前接入点与 RED 顺序见 [T8 集成预检](../../validation/s4-4/preflight.md)。
 
 Issue #131 当前只要求模型、Prompt、参数摘要冻结，校准报告和低置信分流，并在全量通过时不调用 Judge。
 实施前应把本文 S44 验收项补入 Issue，明确诊断采样与正式发布覆盖不是同一口径。

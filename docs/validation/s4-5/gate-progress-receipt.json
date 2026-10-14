@@ -3,7 +3,6 @@
   "status": "IN_PROGRESS",
   "verified_at": "2026-10-14",
   "base_commit": "d53d541a5d11b9fde4cfa383166f0ac7fd491e28",
-  "published": false,
   "sources": {
     ".github/workflows/ci.yml": "7fc5e25bf46ad1e798e93016135fe48eb89434f120ff098ab81a1de97d057d36",
     "docs/openapi.json": "e95987ed5ab37b0bcd974b13aef8898666ca702e3b64b08278b9814ad98fc79a",
@@ -11,7 +10,7 @@
     "services/console/e2e/trajectory-diagnosis.spec.ts": "0669e60b561ef1a0d5f65970f2192e307a49f14af903938de65f51c3c7c8de51",
     "services/console/src/api/schema.d.ts": "136e1852849b0f956fdd37b1e342bffb3841bd0dd628164d50ee901cfeb9fb8d",
     "services/console/src/features/launches/__tests__/GateComparisonTab.trajectory.test.tsx": "8d83936b0034638d2acdf78a5f17cbaf02c9fca4a3e7ab26f7c39cf08132999a",
-    "services/console/src/features/launches/tabs/GateComparisonTab.tsx": "fadd185a8532866ad0bd48dd24aa5ee0566d36dc667b18838655550a931bbc97",
+    "services/console/src/features/launches/tabs/GateComparisonTab.tsx": "4999c6d066f851ae98ee6660ebce016dea9cabfff02f57bb67f06c46dfa23c02",
     "services/eval-runner/app/__init__.py": "53c44c06a29fb782737e421d358dc97c2f9ef0f2346ae7ccef60f61112b13ca2",
     "services/eval-runner/app/aggregation.py": "4405a5d843428fedf6252362f4731f2e68fbda19c26dd17d57d10b52d0414c7f",
     "services/eval-runner/app/api_baselines.py": "53ca00f2823f4db9540c7f640335a3321d6fa4ba079b6e23ba4089526c42801c",
@@ -45,7 +44,7 @@
     "services/eval-runner/app/limiter.py": "a81050aa6846452950bf86438e48dc2acdc9cf291b3030868cc88daef653560f",
     "services/eval-runner/app/link_lease.py": "fd2cc2656fa71f863e34bbe14382d3ba1ec0ce64ecb58202e6df4c3ccfd0d885",
     "services/eval-runner/app/main.py": "ea0b3ea9b220138fd36c0feb17a1b7a99f673900beabfd0ee119e4f3823637bb",
-    "services/eval-runner/app/manifest.py": "9e12d8b2623595e7c3c5b8aae53f6b463c040a3da25c898284c51f6877cef71f",
+    "services/eval-runner/app/manifest.py": "363598a239e7de9df03d3f6b98f08f15663acbfc17442c628d44e4a3a653b9b7",
     "services/eval-runner/app/metrics.py": "3114c15058217b4937f6d66bf25856d6342969d7063a79f356d1c83c6dcc988e",
     "services/eval-runner/app/models.py": "124a623e11159e7cc534ced2194dbf3aab0cce720325596a53abd9b3778199a8",
     "services/eval-runner/app/observation_link.py": "06efb904e3a49edeef100703966f00426bcadc74d704a7ba0ecc2555bbe2b71c",
@@ -56,7 +55,7 @@
     "services/eval-runner/app/registry.py": "db309a8753af46dcfed7ebd8374ec3f44b75ddfc15a078ae680020458519370a",
     "services/eval-runner/app/release_gates.py": "9a37722b99be898cbba92ece99c75c4c62d17722294e8b5a6847d8fea95097f9",
     "services/eval-runner/app/required_evidence.py": "af22f68ae2d784f9e592f31041adfb1ade704d9cfbc997d167e7bbc7a69cab05",
-    "services/eval-runner/app/result_outputs.py": "2017e073a0aef422465334ff7d1a9cf845a36b93281c5384e99ab50f6fbc1d36",
+    "services/eval-runner/app/result_outputs.py": "86d232611177ffe6499fb69cc741b0bb1dcaa34fa5d1cae1b6dd2469ccdab6a9",
     "services/eval-runner/app/result_snapshots.py": "05b9ee3b24684913474f06ab5212ded4a46c4dfc9797f885e0efcaf7cd2b5f60",
     "services/eval-runner/app/runner_identity.py": "5dd07353ffdde7fdcbc1b574c58c6e179fc8145dc8c9aa13126cefa42de607a5",
     "services/eval-runner/app/secret_providers.py": "89d3d2f5a91d9ce4fe8f131d5c135878ceb246cd19344c2061448355277fbba9",
@@ -105,7 +104,15 @@
     "tests/test_trajectory_snapshot_outbox.py": "990e8d1953e70137b161ee31143d562a6ecf3b8b566320151b43f61c69769dba",
     "tests/test_trajectory_storage_schema.py": "7284b2cc8c75a0f636b047292349685727c8ad81b687d090f5967cce62ff0017",
     "tests/test_trajectory_comparison.py": "d5018595f930b2cc2d40e24eaef587dda717d2e097bd1adae2ce04036f1a07fa",
-    "tests/test_trajectory_required_evidence.py": "1070303b3624ee5336e46428be744f6d130dd7ad4fa7cb0955b17528aa2f9294"
+    "tests/test_trajectory_required_evidence.py": "1070303b3624ee5336e46428be744f6d130dd7ad4fa7cb0955b17528aa2f9294",
+    ".github/workflows/cloud-e2e-trusted.yml": "c926205e45bbed17ac11841b7b20784563e9657d5f7bcbb7826bd9950d061da0",
+    "scripts/ci-e2e-cloud.sh": "28cbd35f560b1252051ca3efb704624d08b5c30e543c31fed0a868e79c8ea975",
+    "scripts/ci/cloud_e2e_receipt.py": "c9066f864871ce7c4a97acbc56f1f6820a621c5fdc80defafdb180fa7c4f3c59",
+    "scripts/ci/cloud_error_summary.py": "1a689500a2023fb5d3468cde84d916596e0f0aeb189b5f275384260a57fdb824",
+    "scripts/ci/load-cloud-env.sh": "936bd820594cea3217e2feeb42a53e12914c5bb680e57e62f12e810724db617d",
+    "tests/test_ci_cloud_e2e_receipt.py": "939388891da23c6a7c39c5c73494fc4b120867ba838a480720cc47726a25a0d0",
+    "tests/test_ci_cloud_workflows.py": "b1f603e560ae7672c2c61d0cee67f97d185f6fa9b472d92ca03befeaccd646c3",
+    "tests/test_cloud_error_summary.py": "b1204b23af497ad3d1f15ac887fcc524ac4774a79bde69f29731f29444ba2bfb"
   },
   "domain_red": {
     "failed": 8
@@ -120,7 +127,6 @@
     "seconds": 3.19
   },
   "remaining": [
-    "sync latest main and revalidate compatibility",
     "publication and applicable final HEAD CI",
     "T8 Judge admission and S45-08 phase B",
     "T9 full 79+10 acceptance"
@@ -144,11 +150,11 @@
     "seconds": 9.46
   },
   "local_validate": {
-    "passed": 2322,
+    "passed": 2331,
     "skipped": 0,
     "real_deselected": 86,
-    "seconds": 171.4,
-    "console_passed": 861,
+    "seconds": 170.1,
+    "console_passed": 864,
     "token_lint": "PASS",
     "typecheck": "PASS",
     "build": "PASS",
@@ -158,7 +164,7 @@
   "console_e2e": {
     "passed": 129,
     "skipped": 0,
-    "duration": "1.2m",
+    "duration": "1.3m",
     "screenshot_sha256": "765bddd7b8e47107f41dfe0688e15bc1846c256ba09489275a8683326834b0c8"
   },
   "real_outbox_affected": {
@@ -168,15 +174,16 @@
     "note": "before adding explicit two-revision real Score receipt; full gate rerun in progress"
   },
   "real_full": {
-    "status": "PASS",
     "passed": 86,
     "skipped": 0,
     "failures": 0,
     "errors": 0,
-    "seconds": 949.948,
-    "receipt": "real-projection-receipt.json",
-    "source_manifest": "real-source-manifest.json",
-    "scope": "before comparison qualification correction; not final HEAD acceptance"
+    "seconds": 960.229,
+    "tested_commit": "23807ee7d4f2dcb2c2e2b9ccca25257063b87078",
+    "source_manifest": "final-real-source-manifest.json",
+    "status": "PASS",
+    "receipt": "final-real-projection-receipt.json",
+    "actual_unique_score_ids": 40
   },
   "independent_review": {
     "outbox_findings": "closed",
@@ -210,5 +217,18 @@
       "seconds": 44.5
     },
     "source_frozen": true
+  },
+  "runtime_tested_commit": "23807ee7d4f2dcb2c2e2b9ccca25257063b87078",
+  "main_sync": {
+    "main": "5d643c7",
+    "maintainer_remote_merge": "cb447f9",
+    "local_merge": "f7011fb74bb28bbb0ed562f232b55e4e47815c2c",
+    "runtime_sources_unchanged": true,
+    "integration_format_fix": "sort imports in tests/test_ci_cloud_workflows.py"
+  },
+  "publication": {
+    "pr": 181,
+    "status_at_recording": "PENDING_PUSH",
+    "live_status_source": "https://github.com/miniceM/Argus/pull/181"
   }
 }

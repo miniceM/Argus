@@ -1,4 +1,4 @@
-"""Trusted preparation and receipt validation for manually approved Cloud candidates.
+"""Trusted preparation and receipt validation for automatically executed Cloud candidates.
 
 Candidate source and Cloud output are always treated as untrusted data. This module is
 checked out from the workflow's trusted main revision in preparation/post-processing
@@ -493,7 +493,7 @@ def verify_candidate_unchanged(client: GitHubClient, manifest: Mapping[str, Any]
         or base_sha != manifest["base_sha"]
         or pr.get("merge_commit_sha") != manifest["tested_sha"]
     ):
-        raise CandidateReceiptError("candidate PR head, base, repository, or merge SHA changed after approval")
+        raise CandidateReceiptError("candidate PR head, base, repository, or merge SHA changed after CI")
     current_main = client.get_ref("heads/main").get("object", {}).get("sha")
     if current_main != manifest["base_sha"]:
         raise CandidateReceiptError("candidate base no longer matches current main")

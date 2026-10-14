@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -171,12 +173,44 @@ def test_trusted_candidate_builds_without_secrets_then_runs_existing_cloud_suite
     verify = names.index("Revalidate candidate and write test credentials")
     run_e2e = names.index("Run cloud end-to-end tests")
     assert install < build < verify < run_e2e
+    assert steps[build]["env"]["ARGUS_BUILD_ID"] == "${{ needs.prepare.outputs.tested_sha }}"
     assert "scripts/ci-e2e-cloud.sh" in str(steps[run_e2e])
     assert steps[run_e2e]["env"]["ARGUS_CLOUD_BUILD_IMAGES"] == "false"
 
     script = (ROOT / "scripts/ci-e2e-cloud.sh").read_text()
+    assert 'source "$ROOT/scripts/ci/load-cloud-env.sh"' in script
+    assert 'load_cloud_environment_file "$COMPOSE_ENV_FILE"' in script
+    assert "scripts.ci.cloud_error_summary" in script
     assert "ARGUS_CLOUD_BUILD_IMAGES" in script
     assert 'false) "${COMPOSE[@]}" up -d ;;' in script
+
+
+def test_candidate_cloud_env_loader_treats_values_as_data(tmp_path: Path) -> None:
+    loader = ROOT / "scripts/ci/load-cloud-env.sh"
+    env_file = tmp_path / ".env.cloud"
+    marker = tmp_path / "must-not-be-created"
+    secret_value = f"$(touch {marker})"
+    env_file.write_text(
+        "LANGFUSE_BASE_URL=https://langfuse.example\n"
+        "LANGFUSE_PUBLIC_KEY=pk=with-equals\n"
+        f"LANGFUSE_SECRET_KEY={secret_value}\n",
+        encoding="utf-8",
+    )
+    command = (
+        'source "$1"; load_cloud_environment_file "$2"; '
+        'printf "%s\n" "$LANGFUSE_BASE_URL" "$LANGFUSE_PUBLIC_KEY" "$LANGFUSE_SECRET_KEY"'
+    )
+
+    result = subprocess.run(
+        ["bash", "--noprofile", "--norc", "-c", command, "cloud-env-test", str(loader), str(env_file)],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={"PATH": os.environ["PATH"], "LANGFUSE_BASE_URL": "https://preset.example"},
+    )
+
+    assert result.stdout.splitlines() == ["https://preset.example", "pk=with-equals", secret_value]
+    assert not marker.exists()
 
 
 def test_cloud_integration_policy_is_a_serialized_default_branch_controller() -> None:

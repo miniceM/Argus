@@ -109,6 +109,8 @@ jobs:
 
       - name: Build candidate images without Cloud credentials
         working-directory: candidate
+        env:
+          ARGUS_BUILD_ID: ${{ needs.prepare.outputs.tested_sha }}
         run: docker compose --env-file .env.cloud.example -f docker-compose.cloud.yml build
 
       - name: Revalidate candidate and write test credentials

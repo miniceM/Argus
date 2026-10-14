@@ -108,7 +108,7 @@ def _candidate_run(**overrides: Any) -> dict[str, Any]:
         "event": "workflow_dispatch",
         "head_branch": "main",
         "head_sha": BASE,
-        "path": f"{CANDIDATE_WORKFLOW}@refs/heads/main",
+        "path": CANDIDATE_WORKFLOW,
         "display_title": f"Trusted Cloud Candidate PR #{PR_NUMBER}",
         "status": "completed",
         "conclusion": "success",

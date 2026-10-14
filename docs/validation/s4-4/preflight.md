@@ -35,7 +35,7 @@ T7 确定性增量已在本地提交并合入 `main@49aaaa0`，`make validate` 2
 
 主线新增测试的 import 排序作最小修正后，最终 `make validate` 为 2331 passed / 0 skipped / 86 real deselected；真实运行的 101 个源码指纹不变。
 
-T8 代码尚未开始。真实 Provider / 固定模型、独立校准制品以及 T9 的最终发布证据仍需落实；本预检不代替这些验收。
+T8 已开始实施严格输出验证与校准统计，见[初始契约证据](contract-progress.md)。真实 Provider / 固定模型、独立校准制品、异步 Worker 与预算以及 T9 的最终发布证据仍需落实；本预检不代替这些验收。
 
 ## 本地 Provider 只读探针
 

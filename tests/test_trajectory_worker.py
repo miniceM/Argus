@@ -3,6 +3,7 @@ import hashlib
 import json
 from datetime import timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -17,7 +18,7 @@ from app.trajectory.codec import canonical_dumps
 from app.trajectory.factory import QualifiedReaderFactory, ReaderApproval, reader_artifact_digest
 from app.trajectory.manifest import bind_trajectory_manifest, freeze_trajectory_contract
 from app.trajectory.worker_acquisition import WorkerTrajectoryCollector, WorkerTrajectoryError, parse_reader_approvals
-from test_trajectory_acquisition import run_async
+from test_trajectory_acquisition import Clock, run_async
 from test_trajectory_assembler import configured, prepared
 from test_trajectory_checkpoint import view
 from test_trajectory_coordinator import context as coordinator_context
@@ -72,13 +73,27 @@ async def test_legacy_manifest_does_not_read_new_configuration_or_database():
 
 
 @run_async
-async def test_worker_collector_qualifies_after_reservation_and_preserves_original_deadline(context):
+@pytest.mark.parametrize("preparation_delay", [0, 2.1])
+async def test_worker_collector_qualifies_after_reservation_and_preserves_original_deadline(context, preparation_delay):
+    await asyncio.sleep(preparation_delay)
     requests = []
     collector = WorkerTrajectoryCollector(context[0].get_session, factory_provider=lambda: factory_for(context, requests))
     with context[0].get_session() as session:
         manifest = session.get(ExperimentLaunchRecord, context[1].launch_id).manifest
-    result = await collector.collect(manifest, item_id=context[1].item_execution_id,
-        generation=context[1].dispatch_generation, lease_token="lease-1")
+    # 该测试验证假 Reader 的准入/提交顺序；fixture 准备和 CI 调度不应推进采集时钟。
+    # 原 checkpoint、2秒 deadline 和正式超时测试均保持不变。
+    from app.trajectory.coordinator import TrajectoryCoordinator
+    clock = Clock()
+    clock.base = context[3]
+
+    async def sleep(seconds):
+        clock.advance(seconds)
+        await asyncio.sleep(0)
+
+    with patch("app.trajectory.worker_acquisition.TrajectoryCoordinator",
+        side_effect=lambda sessions: TrajectoryCoordinator(sessions, clock=clock, sleep=sleep)):
+        result = await collector.collect(manifest, item_id=context[1].item_execution_id,
+            generation=context[1].dispatch_generation, lease_token="lease-1")
     assert result.state == "READY" and result.completeness.status == "OBSERVED_COMPLETE"
     assert result.deadline_at == context[3] + timedelta(seconds=2)
     assert view(context).acquisition == result and requests[0].url.path == "/api/openapi.yaml"

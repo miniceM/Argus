@@ -93,7 +93,12 @@ export const LaunchesList: React.FC = () => {
       if (manifestEnv) {
         pairs.set(`${l.agent_id}::${manifestEnv}`, { agentId: l.agent_id, environment: manifestEnv });
       }
+      const agentEnv = ((l.manifest as any)?.agent?.environment as string);
+      if (agentEnv) {
+        pairs.set(`${l.agent_id}::${agentEnv}`, { agentId: l.agent_id, environment: agentEnv });
+      }
       pairs.set(`${l.agent_id}::production`, { agentId: l.agent_id, environment: "production" });
+      pairs.set(`${l.agent_id}::staging`, { agentId: l.agent_id, environment: "staging" });
       pairs.set(`${l.agent_id}::test`, { agentId: l.agent_id, environment: "test" });
     }
     return Array.from(pairs.values());
@@ -102,6 +107,7 @@ export const LaunchesList: React.FC = () => {
   const baselineQueries = useQueries({
     queries: agentEnvPairs.map(({ agentId, environment }) => ({
       queryKey: queryKeys.baselines.detail(agentId, environment),
+      retry: false,
       queryFn: async (): Promise<{ agentId: string; environment: string; launchId: string } | null> => {
         try {
           const res = await api.GET("/api/v1/agents/{agent_id}/baselines", {
@@ -215,7 +221,7 @@ export const LaunchesList: React.FC = () => {
         </SelectInput>
 
         {/* Baseline Filter */}
-        <label className="flex items-center gap-1.5 text-xs text-foreground cursor-pointer select-none px-2 py-1 rounded hover:bg-surface-muted transition-colors">
+        <label className="flex items-center gap-1.5 min-h-6 text-xs text-foreground cursor-pointer select-none px-2 py-1 rounded hover:bg-surface-muted transition-colors">
           <input
             type="checkbox"
             checked={filterOnlyBaseline}
@@ -275,7 +281,7 @@ export const LaunchesList: React.FC = () => {
 
       {!isLoading && !error && displayedLaunches.length > 0 && (
         <Panel className="ui-table-shell">
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="ui-table min-w-table-lg table-fixed text-sm text-foreground-secondary">
               <colgroup>
                 <col className="w-col-xs" />
@@ -428,7 +434,7 @@ export const LaunchesList: React.FC = () => {
 
                       {/* Actions */}
                       <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="relative flex items-center justify-end gap-2">
                           <Link
                             to={`/launches/${launch.id}`}
                             aria-label={`查看 Launch ${launch.id} 详情`}

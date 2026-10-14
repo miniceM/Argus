@@ -142,11 +142,11 @@ Remote Agent Runner ── W3C Trace Context ──► 业务 Agent
 | S1.5 | 官方 Langfuse + 独立 i18n Patch Layer | ✅ 已完成 |
 | S2 | 异步 Orchestrator、Queue / Worker、可靠执行状态机 | ✅ 已完成 |
 | S3 | 版本化评测、Baseline Comparison、Run-level Score | ✅ 已完成 |
-| S4 | Standard Agent Trajectory、Trace Assembler、深度轨迹评测 | 🚧 规划中 |
+| S4 | Standard Agent Trajectory、Trace Assembler、深度轨迹评测 | 🚧 实施中：冻结轨迹、确定性规则、用例诊断与门禁；Judge 治理及整体验收待完成 |
 | S5 | Vault、RBAC、SSO、Audit、数据脱敏 | 🚧 规划中 |
 | S6 | ReleasePolicy、Release Gate、CLI、CI/CD 集成 | 🚧 规则/API、CLI 与 CI 示例已实现，授权治理继续推进 |
 
-当前版本仍不是完整的 v1.0 企业平台；尚未覆盖 LLM-as-a-Judge 版本治理、Agent Trajectory、Worker 独立扩缩容、SSO / RBAC、发布 Override 授权等能力。路线图见 [Roadmap Issue #1](https://github.com/miniceM/Argus/issues/1)。
+当前版本仍不是完整的 v1.0 企业平台；LLM-as-a-Judge 治理、完整轨迹评测验收、Worker 独立扩缩容、SSO / RBAC、发布 Override 授权等能力仍在推进。轨迹能力与依赖见 [S4 方案导航](docs/plans/2026-10-13-s4-trajectory/README.md)，路线图见 [Roadmap Issue #1](https://github.com/miniceM/Argus/issues/1)。
 
 ---
 

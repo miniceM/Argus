@@ -48,7 +48,7 @@ Unknown、API 限流/超时、分页错误、解析错误、未支持文件格�
 4. 立刻验证修复后的 main CI、真实 Main Cloud Acceptance 与 Policy publisher；在最新 main 上重新对受影响的高风险 PR 派发 Trusted Cloud Candidate，检验三段 Job（prepare / candidate-cloud / receipt）全部成功，以及当前 SHA 的 Policy Status 更新。
 5. 恢复常规严格门禁并复查 Ruleset、Environment 审批和专用测试凭证配置。main 或 PR head/base 变动后旧 receipt 不再有效。
 
-历史实例：[PR #188](https://github.com/miniceM/Argus/pull/188) 修复 Actions API workflow path 误判。2026-10-14 经五项常规 CI 全绿后，采用受控恢复合并（main `b7933f8ae6abf7124992ce7b8863136659ce31b4`）；此前候选 run `38531335635` 的 Cloud job SUCCESS、receipt job FAILURE。此记录只说明控制器源码恢复，不能代替后续 Main Cloud / Environment / Ruleset 的真实远端验收。
+历史实例：[PR #188](https://github.com/miniceM/Argus/pull/188) 修复 Actions API workflow path 误判。2026-10-14 经五项常规 CI 全绿后，通过 GitHub 标准合并 API 合入 main（`b7933f8ae6abf7124992ce7b8863136659ce31b4`），未调用 Ruleset bypass API；此前候选 run `38531335635` 的 Cloud job SUCCESS、receipt job FAILURE。尚未取得独立双人审核、远端 Ruleset/Environment 与最新 main Cloud 验收的完整证据，**不得将此次合并描述为经过全部审批的正式破窗流程**。
 
 ## 管理员配置清单
 

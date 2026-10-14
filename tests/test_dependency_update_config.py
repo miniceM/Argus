@@ -17,7 +17,10 @@ def test_default_branch_pip_update_has_single_root_entry() -> None:
     update = pip_updates[0]
     assert update["directory"] == "/"
     assert "target-branch" not in update
-    assert update["schedule"] == {"interval": "weekly"}
+    assert update["schedule"] == {
+        "interval": "cron",
+        "cronjob": "0 0 1 */2 *",
+    }
     assert update["commit-message"] == {"prefix": "build"}
     assert update["labels"] == ["dependencies"]
 
@@ -61,7 +64,10 @@ def test_non_pip_update_sources_are_preserved() -> None:
     assert set(actual) == set(expected)
     for key, (prefix, labels) in expected.items():
         update = actual[key]
-        assert update["schedule"] == {"interval": "weekly"}
+        assert update["schedule"] == {
+            "interval": "cron",
+            "cronjob": "0 0 1 */2 *",
+        }
         assert update["commit-message"] == {"prefix": prefix}
         assert update["labels"] == labels
 

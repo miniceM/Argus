@@ -221,6 +221,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ inputs.pr_number }}
+          CANDIDATE_RUN_ID: ${{ github.run_id }}
+          CANDIDATE_RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           python - <<'PY'
           import os
@@ -242,7 +244,14 @@ jobs:
           client.request_json(
               f"{client.repo_path}/actions/workflows/cloud-integration-policy.yml/dispatches",
               method="POST",
-              body={"ref": "main", "inputs": {"pr_number": pr_number}},
+              body={
+                  "ref": "main",
+                  "inputs": {
+                      "pr_number": pr_number,
+                      "candidate_run_id": os.environ["CANDIDATE_RUN_ID"],
+                      "candidate_run_attempt": os.environ["CANDIDATE_RUN_ATTEMPT"],
+                  },
+              },
           )
           print(f"Dispatched automatic Cloud policy reconciliation for PR #{pr_number}")
           PY

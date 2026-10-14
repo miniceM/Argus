@@ -5,9 +5,11 @@ import stat
 import sys
 import zipfile
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 from scripts.ci import cloud_e2e_receipt as receipt_cli
 from scripts.ci.ci_constants import (
@@ -159,7 +161,7 @@ def _jobs(**overrides: Any) -> list[dict[str, Any]]:
         "conclusion": "success",
         "html_url": "https://github.com/miniceM/Argus/actions/runs/9001/job/7001",
         "steps": [
-            {"name": "Validate candidate Langfuse Cloud secrets", "status": "completed", "conclusion": "success"},
+            {"name": "Revalidate candidate and write test credentials", "status": "completed", "conclusion": "success"},
             {"name": "Run cloud end-to-end tests", "status": "completed", "conclusion": "success"},
         ],
     }
@@ -185,6 +187,28 @@ def _build(**overrides: Any) -> dict[str, Any]:
     }
     args.update(overrides)
     return build_candidate_receipt(**args)
+
+
+
+def test_receipt_required_steps_match_trusted_workflow_contract() -> None:
+    """Protect the exact step names used to verify live Actions API jobs."""
+    workflow_path = Path(__file__).resolve().parents[1] / CANDIDATE_WORKFLOW
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    jobs = workflow["jobs"]
+    prepare_steps = {step["name"] for step in jobs["prepare"]["steps"] if "name" in step}
+    cloud_steps = {step["name"] for step in jobs["candidate-cloud"]["steps"] if "name" in step}
+    assert receipt_cli.CANDIDATE_PREPARE_STEP in prepare_steps
+    assert receipt_cli.CANDIDATE_SECRET_STEP in cloud_steps
+    assert receipt_cli.CANDIDATE_E2E_STEP in cloud_steps
+
+
+def test_real_candidate_cloud_step_names_generate_passed_receipt() -> None:
+    receipt = _build()
+    assert receipt["cloud_state"] == "passed"
+    assert receipt["suite_results"] == {
+        "managed-cloud": "passed",
+        "async-link": "passed",
+    }
 
 
 def test_approved_exact_candidate_with_real_cloud_evidence_builds_valid_receipt() -> None:

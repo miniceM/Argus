@@ -1,6 +1,6 @@
 # S4.4 Trajectory Judge 实施方案
 
-状态：**PR #136 已批准方案；T8 正在 PR #181 实施。已实现严格输出解析与校准统计，异步执行、真实校准与准入尚未交付。**
+状态：**PR #136 已批准方案；T8 正在 PR #181 实施。输出、统计、定义、安全准备、异步传输与预算账本已实现；正式 Worker/recovery、真实校准与准入尚未交付。**
 核验基线：2026-10-13，`main@4b043739c63357ecc10131e1ba54bc1bc53d862a`。
 关联：[Issue #5](https://github.com/miniceM/Argus/issues/5)、[#131](https://github.com/miniceM/Argus/issues/131)。
 共同契约：[01 技术设计](01-technical-design.md)；阶段顺序见[完整实施计划](08-implementation-plan.md)，验收追踪见[验收矩阵](09-acceptance-matrix.md)。
@@ -131,6 +131,8 @@ Diagnostic `sample_rate` 使用 `SHA256(sampling_seed || dataset_item_id || judg
 仅允许同一进程、同一冻结 scope/Artifact 内复用 (artifact_id, binding_digest, expected_criteria_digest) 的已验证结果；禁止跨 Case/Binding 复用或引用别的 Item Step。运行 usage 是诊断，不改输入 digest；实际输出随 Result revision 保存，不承诺模型逐次输出相同。
 一次调用失败后不自动重试；若未来开放 retry，必须计入冻结 `max_attempts`、费用和幂等策略并形成新版本。
 Worker 取消与恢复复用现有 generation/lease/CAS；旧 generation 响应不能覆盖新结果。
+
+预算账本切片见[预算实施记录](../../validation/s4-4/budget-progress.md)。用量结算不表示质量结果已落库，没有持久成功结果时也不得重发。未发送的取消占位可在新 key 需要容量时淘汰，但已发送记录保留、旧 receipt 不能复活；key 总数仍不超过冻结 `max_total_calls`。
 
 ## 6. Critical Judge 准入与校准
 

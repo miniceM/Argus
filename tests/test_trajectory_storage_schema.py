@@ -297,7 +297,8 @@ def assert_upgrade_preserves_history(engine, tmp_path):
             )
         )
     runner = MigrationRunner(engine, ROOT / "migrations")
-    assert runner.apply_all() == [MIGRATION, "018_trajectory_acquisition_runtime.sql", "019_trajectory_snapshot_outbox.sql"]
+    assert runner.apply_all() == [MIGRATION, "018_trajectory_acquisition_runtime.sql", "019_trajectory_snapshot_outbox.sql",
+        "020_trajectory_judge_budget.sql"]
     assert runner.apply_all() == []
     runner.check_schema_compatibility()
     with engine.connect() as conn:
@@ -316,6 +317,7 @@ def assert_upgrade_preserves_history(engine, tmp_path):
         assert checkpoint.manifest_digest == "historical-manifest"
         assert checkpoint.final_attempt_id == "old-a" and checkpoint.dispatch_generation == 1
         assert session.get(ExperimentLaunchRecord, "old-l").manifest == {"schema_version": "1.2"}
+        assert session.get(ExperimentLaunchRecord, "old-l").judge_budget_state_json is None
 
 
 def test_017_upgrade_preserves_history_and_is_idempotent(tmp_path):

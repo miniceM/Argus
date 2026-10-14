@@ -125,6 +125,8 @@ class ExperimentLaunchRecord(Base):
         String(64), ForeignKey("agent_versions.id", ondelete="RESTRICT"), nullable=False
     )
     manifest: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    # 可变 Judge 调用账本；不改不可变 Manifest，旧 Launch 保持 NULL。
+    judge_budget_state_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     langfuse_experiment_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     langfuse_experiment_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     langfuse_sync_status: Mapped[str] = mapped_column(String(32), default="PENDING", nullable=False)

@@ -1,0 +1,22 @@
+{
+  "tested_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+  "command": "make console-e2e",
+  "exit_code": 0,
+  "passed": 129,
+  "log_sha256": "896b750eb9bb71645f020945bdb79a4120d87bf89b5e71e527ac4500a6e2709c",
+  "screenshots": [
+    {
+      "file": "trajectory-diagnosis-键盘规则与-Step-双向定位、精确参数和因果分组可访问-chromium-trajectory-mobile.png",
+      "sha256": "f490bab961407e4621c1424366d4b6d8987a8b4e522dd876fad0eaf18c303067"
+    },
+    {
+      "file": "trajectory-diagnosis-键盘规则与-Step-双向定位、精确参数和因果分组可访问-chromium-trajectory-desktop.png",
+      "sha256": "b43f28e24251a1b8903a95d461708e278031ff2fce0bf7c8993618f9f56822cf"
+    },
+    {
+      "file": "trajectory-diagnosis-冻结门禁观测区分未知、真实零和可选轨迹缺失，并随-Snapshot-隔离-chromium-frozen-gate-observations.png",
+      "sha256": "25bbea06e3b8e1ca08d8d74512ea6c5f1ff7fa5eac605cfa6f816d1860fe4c8f"
+    }
+  ],
+  "limitations": "Browser tests include controlled API responses; do not independently prove real Agent or Langfuse ingestion."
+}

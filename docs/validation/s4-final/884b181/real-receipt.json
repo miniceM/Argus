@@ -1,0 +1,174 @@
+{
+  "verified_at": "2026-10-14",
+  "tested_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+  "command": "S4_PYTHON=.venv/bin/python make trajectory-test",
+  "pytest_options": "--basetemp=<fresh directory> --junitxml=<output.xml> --tb=short -x",
+  "exit_code": 0,
+  "passed": 86,
+  "skipped": 0,
+  "failures": 0,
+  "errors": 0,
+  "seconds": 961.09,
+  "junit": {
+    "artifact": "real-junit.xml.gz",
+    "raw_bytes": 13491,
+    "raw_sha256": "860582d555c93436f277d0d8e7189abe42f83d9125a7dccdb2cab48e4e94bb4a",
+    "gzip_sha256": "73f0a47915ae07edabb172731d0155321f7ad156aa60e0b5231ca36b319b8b47"
+  },
+  "source_manifest": "source-manifest.json",
+  "metadata": [
+    {
+      "artifact": "s400-field-matrix.json.gz",
+      "raw_bytes": 16276,
+      "raw_sha256": "35b3925fe7027cacd0d8296019d79c5fb3b141766bdf34b2337c1d9e44db9941",
+      "gzip_sha256": "f1a4c01b0cf56cdfe1d1debe9b52d959db799a9f562415d083e59596b3b7afdd",
+      "module": "s400",
+      "records": 2,
+      "server": "4.38.0",
+      "runner_sdk": "4.16.0"
+    },
+    {
+      "artifact": "s401-field-matrix.json.gz",
+      "raw_bytes": 5051164,
+      "raw_sha256": "68a4fccc9d1c30b05ab42c870a0353194209cdf1c3f7f6407b0e36502e478cfd",
+      "gzip_sha256": "8342e6eddd6269a7388b4af30b3ce69d94b98ca00a734de2b57237f8165b7ac0",
+      "module": "s401",
+      "records": 220,
+      "server": "4.38.0",
+      "runner_sdk": "4.16.0"
+    },
+    {
+      "artifact": "s402-field-matrix.json.gz",
+      "raw_bytes": 338764,
+      "raw_sha256": "948554d0dd4e2099f27cd8b0cedfd07a4e1bc7218b066d4097704784c3f946a6",
+      "gzip_sha256": "032a242eb6e9098eea289b553e6115a4d4b09027274b04cc9e3424571b8971fe",
+      "module": "s402",
+      "records": 17,
+      "server": "4.38.0",
+      "runner_sdk": "4.16.0"
+    }
+  ],
+  "metadata_records": 239,
+  "two_revision_projection_scenarios": 4,
+  "actual_unique_score_ids": 40,
+  "projections": [
+    {
+      "scenario": "native-otel-v1-approved-snapshot-projection",
+      "receipt": {
+        "snapshot_ids": [
+          "358f4eba-aa2b-4481-ad9d-87e15ac8dc1e",
+          "abccef3c-f821-49bf-9387-fda4c32c060c"
+        ],
+        "score_snapshot_ids": {
+          "score:trajectory-v1:6762ee60bfe3e2deb78a94ce930dddeb3bb30a4db77bd54190cf28aad276ab6a": "abccef3c-f821-49bf-9387-fda4c32c060c",
+          "score:trajectory-v1:1518a0df7eaacd9954ee005a44c1a1102e5384d8666c917de98720e4d8fc6255": "abccef3c-f821-49bf-9387-fda4c32c060c",
+          "score:trajectory-v1:9d0244c31216533974a3dc468ceb1226befb7a804fd3f3365411c8ee31d2d478": "abccef3c-f821-49bf-9387-fda4c32c060c",
+          "score:trajectory-v1:a91d1bfd9c886d93c8e61ddf52b07fddb53e5bc06ed062750dd8740c8a255523": "abccef3c-f821-49bf-9387-fda4c32c060c",
+          "score:trajectory-v1:bba20814d0befef4e04127a7e773b2999242afeb3f4edc35955059cd47673765": "abccef3c-f821-49bf-9387-fda4c32c060c",
+          "score:trajectory-v1:c4e30599cae43e84630dcddac3dce4c6659bfb0602f9031f27941c17b9aea1ed": "358f4eba-aa2b-4481-ad9d-87e15ac8dc1e",
+          "score:trajectory-v1:8dca54e456faf4d21728f23b600aad9b69464277e3b02c16d8fec86ea3ef1d01": "358f4eba-aa2b-4481-ad9d-87e15ac8dc1e",
+          "score:trajectory-v1:1cea795a5db95045aea191d644e10cd42729f5a6af75047767e4023d429e6b54": "358f4eba-aa2b-4481-ad9d-87e15ac8dc1e",
+          "score:trajectory-v1:6c2091a511b61a96faa9740b6fa73ffd41c1896648f0b6b033a59be76a703153": "358f4eba-aa2b-4481-ad9d-87e15ac8dc1e",
+          "score:trajectory-v1:ce199a3e3f119c01dcd57725fb75aa9b01e81316517371233b3f0b054d1215dd": "358f4eba-aa2b-4481-ad9d-87e15ac8dc1e"
+        },
+        "same_dispatch_generation": true,
+        "production_outbox_synced": true,
+        "snapshot_unchanged": true
+      },
+      "raw_sha256": "e7fd6ea23345440971e58a96f951d6300fd862f2bf998d3879673d7f3cc7dda5"
+    },
+    {
+      "scenario": "native-otel-v1-serial-snapshot-projection",
+      "receipt": {
+        "snapshot_ids": [
+          "5390cdd3-e0b3-4059-a054-3c344240ae9f",
+          "f5bfb79d-f2eb-4a25-8ef9-c26bffbbb3a8"
+        ],
+        "score_snapshot_ids": {
+          "score:trajectory-v1:bd07cd3da6990b0c191c8d0b8f668225a76547d01a0e48ec6b9d8051bd0ae35f": "f5bfb79d-f2eb-4a25-8ef9-c26bffbbb3a8",
+          "score:trajectory-v1:821528c848f36f0beeec1f19ad47622dfad579992420c2c16c46b3d6a46cd525": "f5bfb79d-f2eb-4a25-8ef9-c26bffbbb3a8",
+          "score:trajectory-v1:5cb78155197decc2bc43198819c61cb737d3370d36dd127ce04c12d8f615d8b4": "f5bfb79d-f2eb-4a25-8ef9-c26bffbbb3a8",
+          "score:trajectory-v1:1e34a18b333d4e432ab99d038e8b274e7b965ee82752e31f7a02b309fcafce05": "f5bfb79d-f2eb-4a25-8ef9-c26bffbbb3a8",
+          "score:trajectory-v1:d195cf05f5d8040fa73a225c3d46177fd74768cad6133f955293732c9de3073a": "f5bfb79d-f2eb-4a25-8ef9-c26bffbbb3a8",
+          "score:trajectory-v1:c2b61dc92441ffb769aae69d659a36c9e4f4badbd27c72ec5a7d1629fb245b0c": "5390cdd3-e0b3-4059-a054-3c344240ae9f",
+          "score:trajectory-v1:4bb08f530ba8b2ac2b420410d43e323e8d670633117a2bfb3ee4f0382a01e85f": "5390cdd3-e0b3-4059-a054-3c344240ae9f",
+          "score:trajectory-v1:615115c738f23ed8b4686ce4e913c62f64b6532118ed4add62e1913566fc63c3": "5390cdd3-e0b3-4059-a054-3c344240ae9f",
+          "score:trajectory-v1:badee7e880a4251191e79d5e14dc6b6120b85b080d720a4c06dc443c83057047": "5390cdd3-e0b3-4059-a054-3c344240ae9f",
+          "score:trajectory-v1:59b0783fbf673c831c4dcd803fa5d053686fbf1b15206ce11bcbdf1636a9222e": "5390cdd3-e0b3-4059-a054-3c344240ae9f"
+        },
+        "same_dispatch_generation": true,
+        "production_outbox_synced": true,
+        "snapshot_unchanged": true
+      },
+      "raw_sha256": "272a7bf8eeaf443f113cb6ec233ee09fc3d83333e585be30022c461056b2ad34"
+    },
+    {
+      "scenario": "pydantic-ai-v1-approved-snapshot-projection",
+      "receipt": {
+        "snapshot_ids": [
+          "66ae0d91-e97a-45aa-a374-1ee47198f6f2",
+          "e9ef521d-3b9b-487e-8ff1-06eae342957e"
+        ],
+        "score_snapshot_ids": {
+          "score:trajectory-v1:f82945499742d8e38e2f662db68abfdb77ca1269f5c654507704f91438592ebe": "e9ef521d-3b9b-487e-8ff1-06eae342957e",
+          "score:trajectory-v1:7c76833e0d9e23685ab798c2fe6ab2396922e32757c98c7f08d54ae8929f690e": "e9ef521d-3b9b-487e-8ff1-06eae342957e",
+          "score:trajectory-v1:ca30a6f337b764e501426957f96e85e260ac31d3847f36b91d5745426f8fd6bd": "e9ef521d-3b9b-487e-8ff1-06eae342957e",
+          "score:trajectory-v1:49d0de616f3c6f17eaf4759643812a7d274773f05ee63babe01b0ab4b338a52d": "e9ef521d-3b9b-487e-8ff1-06eae342957e",
+          "score:trajectory-v1:079b948eb7c40accba2e4e7f12c69dfe743ed95a28b8161cc10f66529c502e38": "e9ef521d-3b9b-487e-8ff1-06eae342957e",
+          "score:trajectory-v1:55ec13360156a85e03c7f1f081cbc9e1237f5710b5f26602f1ac5b52c559e062": "66ae0d91-e97a-45aa-a374-1ee47198f6f2",
+          "score:trajectory-v1:2d3acbc517b93706b02088fcdda25695224556da7083d96804ea703d1a449660": "66ae0d91-e97a-45aa-a374-1ee47198f6f2",
+          "score:trajectory-v1:851073389275c255b1119ca3ac5f8519a97ba0ae9b440682ee17547f3dde928b": "66ae0d91-e97a-45aa-a374-1ee47198f6f2",
+          "score:trajectory-v1:ffd3283e4711346dc04078b157ef185f80d6ed5460ff9e09ac988d5b8bce448f": "66ae0d91-e97a-45aa-a374-1ee47198f6f2",
+          "score:trajectory-v1:3845221b783279e10ca95d767a7d551f97b9e0ecdfc401ad36fb1ba3f1b66a64": "66ae0d91-e97a-45aa-a374-1ee47198f6f2"
+        },
+        "same_dispatch_generation": true,
+        "production_outbox_synced": true,
+        "snapshot_unchanged": true
+      },
+      "raw_sha256": "f5c0e0017170d8a248bb8b0021445b9f42314d9b5d9f510ff3212f84bf0e095a"
+    },
+    {
+      "scenario": "pydantic-ai-v1-serial-snapshot-projection",
+      "receipt": {
+        "snapshot_ids": [
+          "2e8f6f52-95e3-43eb-be5a-eb2526df2dd9",
+          "36332cfb-538e-4bd8-b47c-c01a4b3d512c"
+        ],
+        "score_snapshot_ids": {
+          "score:trajectory-v1:2bc1a7876ec49c2a3fd454daf79f48a399875f27379f8d160f9c54bf2e0d5225": "2e8f6f52-95e3-43eb-be5a-eb2526df2dd9",
+          "score:trajectory-v1:1c2523def0648cd34433302fcc7d9601044a164c32a383471a8c4274150af73e": "2e8f6f52-95e3-43eb-be5a-eb2526df2dd9",
+          "score:trajectory-v1:57d9e831ca89b9f496395c4adf4893f5f247d0c87b9ba477e85b2f1567738243": "2e8f6f52-95e3-43eb-be5a-eb2526df2dd9",
+          "score:trajectory-v1:313296c00502cb9e5d523a0cc31ae534712df8bdfacb3faa2bcabb60ce730f80": "2e8f6f52-95e3-43eb-be5a-eb2526df2dd9",
+          "score:trajectory-v1:a8e058d1b24421bd71a6d0ee3fe6e47624dc30c8e3a7c6b5bb0f9557845393ef": "2e8f6f52-95e3-43eb-be5a-eb2526df2dd9",
+          "score:trajectory-v1:8f6c4f75ba8a408176beadb99a07f798f595f852c7efdd0fd4522606448e1115": "36332cfb-538e-4bd8-b47c-c01a4b3d512c",
+          "score:trajectory-v1:7653c49afc29f637aa9399beac61aeb0b4816e526afe96cd5bfcd606f376f0b8": "36332cfb-538e-4bd8-b47c-c01a4b3d512c",
+          "score:trajectory-v1:917cdfd6f2fcf5605994998706563d7d4d48c83733a554f3dd6fe8aa851ba0cb": "36332cfb-538e-4bd8-b47c-c01a4b3d512c",
+          "score:trajectory-v1:6e822f7b48e9151e444ebddcd1757fd3f8d101daed37f70857ac9e985a9c49d1": "36332cfb-538e-4bd8-b47c-c01a4b3d512c",
+          "score:trajectory-v1:ccf90c8960648e6703f1f08c574a68de9b0618655d819709b87a52876435c52b": "36332cfb-538e-4bd8-b47c-c01a4b3d512c"
+        },
+        "same_dispatch_generation": true,
+        "production_outbox_synced": true,
+        "snapshot_unchanged": true
+      },
+      "raw_sha256": "17ecdd1883a0797081a9fd5beb2a4ee3c912b06a6cf7e134e1fd2f276eb7236e"
+    }
+  ],
+  "sensitive_data_scan": {
+    "files": 99,
+    "child_logs": 90,
+    "patterns": [
+      "authorization_value",
+      "langfuse_public_credential",
+      "langfuse_secret",
+      "synthetic_sensitive_sentinel",
+      "uri_password"
+    ],
+    "findings": 0,
+    "limitation": "Bounded pattern scan plus reviewed metadata minimization; not a universal secret detector."
+  },
+  "limitations": [
+    "Metadata records include calibration/poll/repeat records, not independent Dataset Case count.",
+    "This is isolated local integration, not Cloud acceptance or Judge human-labelled calibration.",
+    "Agent socket guards and loopback fixtures constrain external access; pytest host was not system-wide disconnected."
+  ]
+}

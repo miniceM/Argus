@@ -47,6 +47,8 @@ Issue #131 保持开放；母 Issue #5 和 #132 的原始 Judge 依赖未因此�
 人工校准、正式 Profile 和 Worker/recovery 未完成，不能宣布 #131 或完整 S4 已完成。
 原始 79+10 矩阵保留，相关项标记交接/待验，不删除标准或计为 skip PASS。
 
-当前代理继续 #127–#130、#132 确定性部分及最终版本的真实链路、Console、契约、
-投影/恢复与证据核验；不等待 GitHub Actions 才推进。
+用户随后进一步明确：所有后续需要数据进行测试的任务交管理员，
+不再由当前代理启动，包括真实链路、Console、投影/恢复和最终数据验收。
+当前代理继续静态检查、文档、PR 和 Issue 交接，不等待 GitHub Actions。
+各期责任与剩余验证见[管理员验收交接](../s4-final/administrator-validation-handoff.md)。
 本 PR 和文档提供可评审交接材料。

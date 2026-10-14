@@ -1,0 +1,104 @@
+{
+  "headRefOid": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-14T12:08:28Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/miniceM/Argus/actions/runs/38561434658/job/115843549363",
+      "name": "Code Quality",
+      "startedAt": "2026-10-14T12:08:04Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-14T12:12:24Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/miniceM/Argus/actions/runs/38561434668/job/115843200248",
+      "name": "Patch, resources and bilingual UI",
+      "startedAt": "2026-10-14T12:07:12Z",
+      "status": "COMPLETED",
+      "workflowName": "Langfuse i18n"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "0001-01-01T00:00:00Z",
+      "conclusion": "",
+      "detailsUrl": "https://github.com/miniceM/Argus/actions/runs/38561434658/job/115843549632",
+      "name": "Full Python Tests",
+      "startedAt": "2026-10-14T12:08:04Z",
+      "status": "IN_PROGRESS",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-14T12:07:10Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/miniceM/Argus/actions/runs/38561434668/job/115843202516",
+      "name": "Verify Main Cloud Acceptance for Release",
+      "startedAt": "2026-10-14T12:07:10Z",
+      "status": "COMPLETED",
+      "workflowName": "Langfuse i18n"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-14T12:27:25Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/miniceM/Argus/actions/runs/38561434658/job/115843549075",
+      "name": "S4 Local Langfuse Integration",
+      "startedAt": "2026-10-14T12:08:04Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-14T12:24:37Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/miniceM/Argus/actions/runs/38561434668/job/115845371509",
+      "name": "Build patched Langfuse image",
+      "startedAt": "2026-10-14T12:12:27Z",
+      "status": "COMPLETED",
+      "workflowName": "Langfuse i18n"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-14T12:24:37Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/miniceM/Argus/actions/runs/38561434668/job/115850485885",
+      "name": "Remote self-hosted acceptance",
+      "startedAt": "2026-10-14T12:24:38Z",
+      "status": "COMPLETED",
+      "workflowName": "Langfuse i18n"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-14T12:09:17Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/miniceM/Argus/actions/runs/38561434658/job/115843549435",
+      "name": "Docker / Compose Validation",
+      "startedAt": "2026-10-14T12:08:04Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-14T12:11:29Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/miniceM/Argus/actions/runs/38561434658/job/115843549695",
+      "name": "Console Quality & E2E",
+      "startedAt": "2026-10-14T12:08:04Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "StatusContext",
+      "context": "Cloud Integration Policy",
+      "startedAt": "2026-10-14T12:20:23Z",
+      "state": "PENDING",
+      "targetUrl": "https://github.com/miniceM/Argus/actions/runs/38561434658"
+    }
+  ],
+  "verified_at": "2026-10-14T12:33:02.928194+00:00",
+  "limitations": "Current snapshot only; running/pending/skipped are not PASS. Work proceeds without waiting for GitHub Actions."
+}

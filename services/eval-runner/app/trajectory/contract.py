@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Annotated, Literal, get_args
 from pydantic import Field, PrivateAttr, field_validator, model_validator
 
 from .codec import canonical_digest, canonical_dumps
+from .human import HumanAuthorityPolicy
 from .paths import compile_jsonpath
 from .schema import (
     Capability,
@@ -47,6 +48,7 @@ SourceField = Literal[
     "terminal_event_count",
     "terminal_event_ids",
     "terminal_final_sequence",
+    "human_receipt",
 ]
 SourcePath = Annotated[list[Identity], Field(min_length=1, max_length=32)]
 SourceAliases = Annotated[list[SourcePath], Field(min_length=1, max_length=4)]
@@ -159,6 +161,7 @@ class SourceProfile(_ContractModel):
     capabilities: dict[Capability, CapabilityCoverage]
     completion_protocol: Literal["workflow-inventory-v1", "root-only-v1"]
     human_authority_id: Identity | None
+    human_authority: HumanAuthorityPolicy | None = Field(default=None, exclude_if=lambda value: value is None)
     # 空值不进入旧合同序列化；有声明时全部规则进入测量摘要。
     structural_roles: list[StructuralRole] = Field(
         default_factory=list, max_length=64, exclude_if=lambda roles: not roles
@@ -209,6 +212,11 @@ class SourceProfile(_ContractModel):
             raise ValueError("TRAJECTORY_HUMAN_REQUIRES_VERIFIED_AUTHORITY_EVENT")
         if self.capabilities["human_events"] != "NONE" and self.human_authority_id is None:
             raise ValueError("TRAJECTORY_HUMAN_AUTHORITY_REQUIRED")
+        if self.capabilities["human_events"] != "NONE" and self.human_authority is None:
+            raise ValueError("TRAJECTORY_HUMAN_POLICY_REQUIRED")
+        if self.human_authority is not None and (self.human_authority.authority_id != self.human_authority_id
+            or "human_receipt" not in self.fields or not {"workflow_scope_id", "event_id", "sequence"} <= self.fields.keys()):
+            raise ValueError("TRAJECTORY_HUMAN_POLICY_REQUIRED")
         if self.completion_protocol == "root-only-v1" and any(
             self.capabilities[key] != "NONE" for key in get_args(Capability) if key != "timing"
         ):
@@ -250,6 +258,25 @@ class RedactionPolicy(_ContractModel):
     output_paths: list[str] = Field(max_length=1000)
     argument_paths: list[str] = Field(max_length=1000)
     result_paths: list[str] = Field(max_length=1000)
+    content_policy_version: Literal["pii-v1"] | None = Field(default=None, exclude_if=lambda value: value is None)
+    string_policies: dict[str, Literal["identifier", "currency"]] | None = Field(
+        default=None, max_length=1000, exclude_if=lambda value: value is None)
+
+    @model_validator(mode="after")
+    def governed_safe_paths(self):
+        from .privacy import sensitive_key
+        if self.content_policy_version is not None and any(
+            type(token) is str and sensitive_key(token)
+            for field in ("input_paths", "output_paths", "argument_paths", "result_paths")
+            for path in getattr(self, field) for token in compile_jsonpath(path)
+        ):
+            raise ValueError("TRAJECTORY_REDACTION_SECRET_PATH_FORBIDDEN")
+        allowed = set(self.input_paths + self.output_paths + self.argument_paths + self.result_paths)
+        if self.string_policies is not None and (
+            self.content_policy_version is None or not set(self.string_policies) <= allowed
+        ):
+            raise ValueError("TRAJECTORY_REDACTION_STRING_POLICY_UNAPPROVED")
+        return self
 
     @field_validator("input_paths", "output_paths", "argument_paths", "result_paths")
     @classmethod

@@ -39,7 +39,7 @@ def validate_bounded_json(value, limits, depth=0):
             validate_bounded_json(child, limits, depth + 1)
 
 
-def _resolve(value, tokens):
+def _resolve(value, tokens, *, scalar_arrays=False):
     for token in tokens:
         if type(token) is str:
             if type(value) is not dict:
@@ -52,6 +52,9 @@ def _resolve(value, tokens):
             if token >= len(value):
                 return "MISSING", None
         value = value[token]
+    if (type(value) is list and scalar_arrays and len(value) <= 1000
+        and all(type(item) in (str, bool, int, Decimal, type(None)) for item in value)):
+        return "AVAILABLE", value
     if type(value) in (dict, list):
         return "INVALID", None  # 不允许一个获准容器把未获准子字段整体带入证据。
     return "AVAILABLE", value
@@ -76,11 +79,14 @@ def _insert(target, tokens, value):
 
 
 def project_json(
-    value, paths, *, limits: TrajectoryLimits, hidden_paths=(), source_visibility="AVAILABLE"
+    value, paths, *, limits: TrajectoryLimits, hidden_paths=(), source_visibility="AVAILABLE", content_policy_version=None,
+    string_policies=None,
 ) -> JsonProjection:
     limits = TrajectoryLimits.model_validate(limits.model_dump())
     policy = RedactionPolicy(
-        version="projection-v1", input_paths=[], output_paths=[], argument_paths=paths, result_paths=[]
+        version="projection-v1", input_paths=[], output_paths=[], argument_paths=paths, result_paths=[],
+        content_policy_version=content_policy_version,
+        string_policies={path: kind for path, kind in string_policies.items() if path in paths} if string_policies is not None else None,
     )
     paths = policy.argument_paths
     compiled = {path: compile_jsonpath(path) for path in paths}
@@ -130,8 +136,13 @@ def project_json(
         if any(tokens[: len(prefix)] == prefix for prefix in hidden):
             visibility[path] = "REDACTED"
             continue
-        visibility[path], selected = _resolve(parsed, tokens)
+        visibility[path], selected = _resolve(parsed, tokens, scalar_arrays=content_policy_version is not None)
         if visibility[path] == "AVAILABLE":
+            if content_policy_version is not None:
+                from .privacy import sensitive_value, strings_allowed
+                if sensitive_value(selected) or not strings_allowed(selected, (policy.string_policies or {}).get(path)):
+                    visibility[path] = "REDACTED"
+                    continue
             try:
                 _insert(projected, tokens, selected)
             except ValueError:

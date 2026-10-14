@@ -46,6 +46,9 @@ _WARNINGS = frozenset({
     "SOURCE_BATCH_DEADLINE", "SOURCE_BATCH_BYTE_LIMIT", "SOURCE_BATCH_CURSOR_CYCLE",
     "SOURCE_BATCH_PAGE_LIMIT", "SOURCE_BATCH_PAGING_INCOMPLETE",
     "SOURCE_BATCH_TEMPORARY_ERROR",
+    "HUMAN_AUTHORITY_UNAVAILABLE", "HUMAN_AUTHORITY_POLICY_INVALID", "HUMAN_RECEIPT_INVALID",
+    "HUMAN_RECEIPT_AUTHORITY_MISMATCH", "HUMAN_RECEIPT_SCOPE_MISMATCH", "HUMAN_RECEIPT_SIGNATURE_INVALID",
+    "HUMAN_INVENTORY_MISMATCH", "HUMAN_INVENTORY_UNAVAILABLE",
 })
 
 
@@ -114,12 +117,37 @@ def _structural(step, profile):
             and step.result_summary is None and step.error_code is None and not step.causal_predecessor_ids)
 
 
+def _signed_human(step, scope, profile):
+    from .human import HumanReceiptError, human_evidence, verify_human_receipt
+
+    value = step.result_summary
+    if step.type != "HUMAN" and not (type(value) is dict and "human_receipt" in value):
+        return False
+    if (profile.human_authority is None or profile.capabilities["human_events"] == "NONE"
+        or step.step_id == scope.root_observation_id or step.causal_predecessor_ids):
+        _fail("REDACTION_INVALID")
+    try:
+        _, _, invalid = human_evidence([step], scope, profile.human_authority)
+        if invalid:
+            _fail("REDACTION_INVALID")
+        receipt = verify_human_receipt(profile.human_authority, value["human_receipt"], trace_id=scope.trace_id,
+            workflow_scope_id=step.workflow_scope_id, observation_id=step.step_id,
+            root_observation_id=scope.root_observation_id)
+        if step.raw_name != ("human.escalation" if receipt.body.kind == "ESCALATION" else "human.inventory"):
+            _fail("REDACTION_INVALID")
+    except (HumanReceiptError, KeyError, TypeError):
+        _fail("REDACTION_INVALID")
+    return True
+
+
 def _inventory_complete(trajectory, profile):
     steps = {step.step_id: step for step in trajectory.steps}
     workflows, terminals = defaultdict(set), defaultdict(list)
     for step in trajectory.steps:
         if step.step_id == trajectory.scope.root_observation_id:
             continue
+        if _signed_human(step, trajectory.scope, profile) and step.type == "CUSTOM":
+            continue  # 已验签的关闭清单是结构证据，不是业务事件。
         if step.workflow_scope_id is None:
             if _structural(step, profile):
                 continue
@@ -146,8 +174,9 @@ def _inventory_complete(trajectory, profile):
     return True
 
 
-def _approved(value, paths, limits):
-    projected = project_json(value, paths, limits=limits)
+def _approved(value, paths, limits, policy):
+    projected = project_json(value, paths, limits=limits, content_policy_version=policy.content_policy_version,
+        string_policies=policy.string_policies)
     if canonical_dumps(projected.value) != canonical_dumps(value):
         _fail("REDACTION_INVALID")
     return projected
@@ -173,8 +202,8 @@ def _validate(trajectory, contract, profile):
         # 当前来源合同尚未定义 error_code 映射；启用前禁止非空值。
         if not set(owned.completeness.warnings) <= _WARNINGS or any(step.error_code is not None for step in owned.steps):
             _fail("REASON_INVALID")
-        _approved(owned.input_redacted, policy.input_paths, limits)
-        _approved(owned.output_redacted, policy.output_paths, limits)
+        _approved(owned.input_redacted, policy.input_paths, limits, policy)
+        _approved(owned.output_redacted, policy.output_paths, limits, policy)
         steps = {step.step_id: step for step in owned.steps}
         root = steps[owned.scope.root_observation_id]
         names = set(profile.safe_names.values()) | {role.safe_name for role in profile.structural_roles} | {"unapproved-name"}
@@ -191,18 +220,19 @@ def _validate(trajectory, contract, profile):
             _fail("INVALID")
         parent_edges, causal_edges = {}, {}
         for step in owned.steps:
-            if (step.raw_name not in names or step.tool_identity is not None and step.tool_identity not in tools
+            signed_human = _signed_human(step, owned.scope, profile)
+            if (step.raw_name not in names and not signed_human or step.tool_identity is not None and step.tool_identity not in tools
                 or step.workflow_scope_id is not None and not _opaque(step.workflow_scope_id)):
                 _fail("REDACTION_INVALID")
             paths = policy.input_paths if step.step_id == root.step_id else policy.argument_paths
-            projected = _approved(step.arguments_redacted, paths, limits)
+            projected = _approved(step.arguments_redacted, paths, limits, policy)
             for path, visibility in step.argument_visibility.items():
                 if path not in paths or (visibility in {"AVAILABLE", "MISSING"} and projected.visibility.get(path) != visibility
                                         or visibility in {"REDACTED", "INVALID"} and projected.visibility.get(path) == "AVAILABLE"):
                     _fail("REDACTION_INVALID")
             inventory = _inventory(step, steps, limits.max_steps)
-            if inventory is None:
-                _approved(step.result_summary, policy.output_paths if step.step_id == root.step_id else policy.result_paths, limits)
+            if inventory is None and not signed_human:
+                _approved(step.result_summary, policy.output_paths if step.step_id == root.step_id else policy.result_paths, limits, policy)
             references = set(step.causal_predecessor_ids)
             if not references <= steps.keys() or step.step_id == root.step_id and references:
                 _fail("REFERENCE_INVALID")
@@ -227,6 +257,14 @@ def _validate(trajectory, contract, profile):
         completeness = owned.completeness
         if any(_RANK[value] > _RANK[profile.capabilities[key]] for key, value in completeness.capabilities.items()):
             _fail("COMPLETENESS_INVALID")
+        if completeness.capabilities["human_events"] == "COMPLETE":
+            from .human import closed_human_workflows
+            _, closed, invalid = closed_human_workflows(owned.steps, owned.scope, profile.human_authority)
+            workflows = {step.workflow_scope_id for step in owned.steps if step.step_id != root.step_id
+                and not _structural(step, profile)
+                and not (_signed_human(step, owned.scope, profile) and step.type == "CUSTOM")}
+            if invalid or not workflows or None in workflows or not workflows <= closed:
+                _fail("COMPLETENESS_INVALID")
         if completeness.status == "OBSERVED_COMPLETE" and (
             profile.completion_protocol != "workflow-inventory-v1" or not _inventory_complete(owned, profile)
             or any(completeness.capabilities[key] != "COMPLETE" for key in contract.required_capabilities)

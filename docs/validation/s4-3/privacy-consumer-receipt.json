@@ -1,0 +1,130 @@
+{
+  "calibration_counts": {
+    "native_otel:governed-calibration-approved": 10,
+    "native_otel:governed-calibration-escalate": 10,
+    "native_otel:governed-calibration-serial": 10,
+    "pydantic_ai:governed-calibration-approved": 10,
+    "pydantic_ai:governed-calibration-escalate": 10,
+    "pydantic_ai:governed-calibration-serial": 10
+  },
+  "captured_at": "2026-10-14T03:53:24.075795+00:00",
+  "limitations": [
+    "Does not replace final full gate or prove root cause of earlier failure",
+    "Outbox lease/retry lifecycle remains T7"
+  ],
+  "privacy_cases": [
+    {
+      "identity": {
+        "agent_spec_digest": "6a63bb2528c616d072de0cdb9f552bad6903e038510f58227fa3b87f1c7eedc3",
+        "agent_version": "native_otel-084036160ea2",
+        "agent_version_id": "61abef67-ff66-4d2d-950e-9ea673db8f87",
+        "attempt_id": "3254daa6-ef02-4435-a2b3-f9a146e97f33",
+        "dataset_item_id": "synthetic-case",
+        "generation": 1,
+        "item_id": "ac6671b2-6328-4122-b60c-697f411f4cc2",
+        "launch_id": "1d37c822-faed-41fa-84be-e824ee0246d1",
+        "root_id": "b7c50b7e5d45d070",
+        "trace_id": "df4cf69bbfba15c050f74c85f2067ea4"
+      },
+      "normalization": {
+        "actual_score_ids": [
+          "score:ac6671b2-6328-4122-b60c-697f411f4cc2:gen1:intent_match",
+          "score:ac6671b2-6328-4122-b60c-697f411f4cc2:gen1:trajectory.require_tool"
+        ],
+        "argus_log_records_minimized": true,
+        "artifact_snapshot_api_outbox_score_minimized": true,
+        "raw_sentinels_observed": true,
+        "required_no_result_unknown": true,
+        "trajectory_contract_digest": "sha256:a04122f0d635f133df4750970c259dc8b54f843cfcf02c94d1e1ec05f389c31c"
+      },
+      "profile": "native_otel",
+      "scenario": "governed-privacy"
+    },
+    {
+      "identity": {
+        "agent_spec_digest": "6a63bb2528c616d072de0cdb9f552bad6903e038510f58227fa3b87f1c7eedc3",
+        "agent_version": "native_otel-c4857e1ee850",
+        "agent_version_id": "db3b9294-b6c2-4326-9fa9-f50309a61a3c",
+        "attempt_id": "802d2291-4975-4901-be78-95f10a5b392c",
+        "dataset_item_id": "synthetic-case",
+        "generation": 1,
+        "item_id": "9ac9eec5-caa7-44aa-a597-c02742e984ee",
+        "launch_id": "259b8f7b-9c46-4136-ba5b-fabc360d6c1c",
+        "root_id": "b508493c6347a393",
+        "trace_id": "af9ce655a080cbe47a51882d1cfa20f1"
+      },
+      "normalization": {
+        "actual_score_ids": [
+          "score:9ac9eec5-caa7-44aa-a597-c02742e984ee:gen1:intent_match",
+          "score:9ac9eec5-caa7-44aa-a597-c02742e984ee:gen1:trajectory.require_tool"
+        ],
+        "argus_log_records_minimized": true,
+        "artifact_snapshot_api_outbox_score_minimized": true,
+        "raw_sentinels_observed": true,
+        "required_no_result_unknown": true,
+        "trajectory_contract_digest": "sha256:a04122f0d635f133df4750970c259dc8b54f843cfcf02c94d1e1ec05f389c31c"
+      },
+      "profile": "native_otel",
+      "scenario": "governed-privacy-ssn"
+    },
+    {
+      "identity": {
+        "agent_spec_digest": "c5ed98c802e522371ca384e55f10034a672da1c6e5d5202873aa7f0d5be89b21",
+        "agent_version": "pydantic_ai-9ab1c87834f9",
+        "agent_version_id": "a5004f8d-4ed5-465e-9f6d-b904e3ca5d83",
+        "attempt_id": "6f7513eb-3acb-4fb6-bcc1-3ece642c32b7",
+        "dataset_item_id": "synthetic-case",
+        "generation": 1,
+        "item_id": "f78bd41e-17ae-47af-9fcd-4cd212dd3e6e",
+        "launch_id": "77ee313d-d870-4c69-adbc-a15d972e56f3",
+        "root_id": "172d6d9fdb815628",
+        "trace_id": "a4300adb90b723fa83f3859367befef2"
+      },
+      "normalization": {
+        "actual_score_ids": [
+          "score:f78bd41e-17ae-47af-9fcd-4cd212dd3e6e:gen1:intent_match",
+          "score:f78bd41e-17ae-47af-9fcd-4cd212dd3e6e:gen1:trajectory.require_tool"
+        ],
+        "argus_log_records_minimized": true,
+        "artifact_snapshot_api_outbox_score_minimized": true,
+        "raw_sentinels_observed": true,
+        "required_no_result_unknown": true,
+        "trajectory_contract_digest": "sha256:0b21eecd4ae243bf681669d8b648e4d6a21ab1a50c25bfab81ea8a974d3f9fb5"
+      },
+      "profile": "pydantic_ai",
+      "scenario": "governed-privacy"
+    },
+    {
+      "identity": {
+        "agent_spec_digest": "c5ed98c802e522371ca384e55f10034a672da1c6e5d5202873aa7f0d5be89b21",
+        "agent_version": "pydantic_ai-582d2bc7a5fd",
+        "agent_version_id": "0f38d901-7da9-4377-aa16-d9ddcdb70b17",
+        "attempt_id": "bf076b25-3cdd-48fa-ae33-7a92dca8465e",
+        "dataset_item_id": "synthetic-case",
+        "generation": 1,
+        "item_id": "20f41cd6-75c7-4987-87ff-bec21c99b56e",
+        "launch_id": "33a44e10-b3d6-4d65-857f-52a0895414ac",
+        "root_id": "861fedeae2a239eb",
+        "trace_id": "5f40c003ed5256a7c68958d150b82b36"
+      },
+      "normalization": {
+        "actual_score_ids": [
+          "score:20f41cd6-75c7-4987-87ff-bec21c99b56e:gen1:intent_match",
+          "score:20f41cd6-75c7-4987-87ff-bec21c99b56e:gen1:trajectory.require_tool"
+        ],
+        "argus_log_records_minimized": true,
+        "artifact_snapshot_api_outbox_score_minimized": true,
+        "raw_sentinels_observed": true,
+        "required_no_result_unknown": true,
+        "trajectory_contract_digest": "sha256:0b21eecd4ae243bf681669d8b648e4d6a21ab1a50c25bfab81ea8a974d3f9fb5"
+      },
+      "profile": "pydantic_ai",
+      "scenario": "governed-privacy-ssn"
+    }
+  ],
+  "result": "3 passed, 81 deselected, 178.81s; includes separate recovered Pydantic AI consumer in second runtime",
+  "runner_sdk": "4.16.0",
+  "scope": "governed real consumers after SSN/acronym remediation; before new Launch admission repair",
+  "server": "4.38.0",
+  "source_field_matrix_sha256": "c9ae92b537b7f89b46122176363aecc1521a2ced1a97f53aa52730801b3f28ec"
+}

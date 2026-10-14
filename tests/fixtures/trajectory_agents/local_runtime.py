@@ -297,6 +297,7 @@ class AgentProcess:
         self.export_mode, self.approval = export_mode, approval
         self.approval_process = self.approval_log = None
         self.process = self.log = None
+        self.human_authority = None
 
     def __enter__(self):
         python = FIXTURES / ".venv" / "bin" / "python"
@@ -328,7 +329,9 @@ class AgentProcess:
                     if self.approval_process.poll() is not None or time.monotonic() >= deadline:
                         raise RuntimeError("S4 approval system readiness failed")
                     time.sleep(0.05)
-                env["S4_APPROVAL_URL"] = json.loads(approval_ready.read_text())["endpoint"]
+                ready = json.loads(approval_ready.read_text())
+                self.human_authority = ready["human_authority"]
+                env["S4_APPROVAL_URL"] = ready["endpoint"]
                 require_loopback(env["S4_APPROVAL_URL"])
             self.log = (self.directory / (self.profile + ".log")).open("w")
             self.process = subprocess.Popen([str(python), str(FIXTURES / self.profile / "agent.py")],

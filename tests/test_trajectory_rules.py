@@ -21,7 +21,9 @@ def trajectory(scenario="serial", *, with_contract=False):
     mapping = contract.tool_mapping.model_dump()
     mapping["entries"].append({"source_profile_id": "native-otel-v1", "source_profile_version": "fixture-1",
         "raw_name": "ledger_read", "tool_identity": B})
-    contract = configured(contract, tool_mapping=mapping)
+    contract = configured(contract, tool_mapping=mapping,
+        redaction_policy=contract.redaction_policy.model_dump() | {"content_policy_version": "pii-v1",
+            "string_policies": {"$.customer_id": "identifier", "$.intent": "identifier"}})
     root, template = rows[0], rows[1]
     schedule = [(A, "REQUESTED", "req-a", ()), (A, "EXECUTED", "exec-a", (1,)),
                 (B, "REQUESTED", "req-b", (2,)), (B, "EXECUTED", "exec-b", (3,))]

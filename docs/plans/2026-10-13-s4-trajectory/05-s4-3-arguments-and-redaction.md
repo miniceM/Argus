@@ -1,6 +1,8 @@
 # S4.3：轨迹参数规则、重复调用与脱敏
 
-状态：**提议，待方案 PR 评审；本文是待实施方案，不表示功能已交付。**
+状态：**T6 本地实施与阶段门禁通过，PR #181 发布 CI 待核验。参数治理、可信因果子序列、重复调用和签名 HUMAN 已完成整期真实来源、正式消费者、安全出口验证及独立审阅修复复核；不代表完整 S4 验收。**
+
+最新证据：[T6 逐项验收记录](../../validation/s4-3/t6-acceptance.md)、[最终稳定回执](../../validation/s4-3/final-stable-receipt.json)。两种来源共 60 份治理校准及四类扩展规则的正式 Worker/Snapshot/API/重评通过；完整真实门禁 86 passed / 0 skipped，隔离 PostgreSQL 下 `make validate` 为 2186 passed / 0 skipped，Console 单测 858 passed、E2E 128 passed。下文保留各次历史结果，最新回执以稳定源码 SHA-256 为准；发布 CI 尚待核验。
 
 关联：[父 Issue #5](https://github.com/miniceM/Argus/issues/5)、[Issue #130](https://github.com/miniceM/Argus/issues/130)。共同契约见 [01-technical-design.md](01-technical-design.md) §3、§5–§8。
 
@@ -232,3 +234,46 @@ Manifest/Identity 接入拟改：`services/eval-runner/app/manifest.py`、`compa
 发现策略缺陷后，冻结新的 redaction/evaluator version 并创建新 revision；已有制品只含通过旧策略获准的数据。若审计发现历史制品泄露，暂停新轨迹 Launch 并按仓库安全流程评估受影响制品，不能静默覆盖证据。
 
 保留风险：通用 PII 检测不能证明任意自由文本安全；因此字段 allowlist 是主要边界，内容检测只是纵深措施，不把它描述成完整 PII 识别器。
+
+## 12. T6 实施记录（2026-10-14，阶段未验收）
+
+已实施的参数规则使用 `expected_json` 字符串冻结精确 JSON literal，再由 canonical codec 解析为 JSON scalar 或 `one_of` 同类型数组。该字段保留十进制精度，避免 Manifest 普通 JSON 编码先经过 float；运行时仍按 JSON 类型比较，不将字符串与数值互转。新增算法身份为 `tool-arguments-1.0`，既有四规则继续使用 `tool-rules-1.0`。
+
+所有新建轨迹 Launch（包括 capture-only）必须固定 `pii-v1` 内容治理策略，不能因只执行非参数规则而跳过。相同幂等请求读取既有记录及历史冻结合同加载不回写原策略；新建入口在外部 Dataset 解析和持久化前拒绝缺策略配置。参数 Binding 还必须通过冻结 Redaction contract：`content_policy_version="pii-v1"`、获准 argument path，以及需要时的静态 `string_policies`。当前字符串语义仅支持 `identifier` 和三个大写字母的 `currency` 格式，不宣称后者验证了完整币种目录；未声明语义的字符串不能作为安全参数来源。卡号、受支持身份号、格式化 SSN、凭据模式及敏感字段族命中时隐藏整值；敏感字段（包括 `social_security_number` 及 camelCase 变体）不得进入获准路径。字符串内容分类 `identifier` 允许 `[A-Za-z0-9_][A-Za-z0-9_.:-]{0,255}`，与第 3 节的 JSONPath 成员键语法是不同合同；内容检查仍优先于字符串格式，不能用安全别名绕过脱敏。旧合同省略新增字段，维持原有序列化与 digest；新参数规则不得绕过治理合同。
+
+`required_step_sequence` 使用最多 32 个冻结 descriptor（`type`、`tool_identity`、`phase`），算法身份为 `step-sequence-1.0`。它复用有界拓扑 bitset 因果索引，允许因果链中存在其他事件；可信严格链上的同一 Step 不可满足两次 occurrence。存在完整可信子序列即可通过，完整覆盖且候选不可能满足时为 false；并行、归属不明、缺时钟或不完整覆盖保留 `no_result`。证据仅含有限 reason、Step IDs 和冻结引用。
+
+验证范围：参数治理与子序列、旧四规则、冻结执行/Manifest、Normalizer、typed results 和 legacy projection 的定向回归为 **434 passed / 1 PostgreSQL skipped**，Ruff 通过。子序列核心先确认有效 RED **15 failed / 6 passed**，实现后相应测试通过。新增冻结执行测试只使用合成来源，明确断言它不能形成 required `COMPLETE` 资格，不作为真实 Reader 准入证据。
+
+`max_same_tool_repeats` 固定 `tool-repeats-1.0`，以同一工具、phase、workflow 和 1–32 个获准 `identity_paths` 的规范值识别逻辑调用。`max_repeats` 表示连续调用总数，包含首个调用；值为 0 时禁止观察到任何具有可见身份的该调用。路径在冻结时排序、去重校验和静态编译，敏感路径及未批准 allowlist 被拒绝。身份规范值只在本次有界测量内比较，不持久化原值或参数 hash。
+
+重复规则复核冻结终止清单，验证每个中间事件的连续序号和可信直接因果边，再在选定 phase 的逻辑调用上统计最长连续段。请求与执行不双计，已知不同工具或不同身份打断连续段；仅有序号不能证明连续，缺口、并行、缺时钟或隐藏身份保持 UNKNOWN。清单局部完整且已经证明超限时，其他缺失或不可见调用不能抹去 false；不完整清单不能产生全量合规结论。证据只保存 `observed_repeat_count`、命中 Step IDs、有限 reason 与冻结引用。
+
+重复核心有效 RED 为 **20 failed / 6 passed**；随后完整度/叶值类型边界实际 RED **2 failed / 26 passed**，FAIL 优先边界实际 RED **1 failed / 28 passed**，均修复后通过。包含重复核心的最新定向回归为 **463 passed / 1 PostgreSQL skipped**，新增冻结 dispatcher 测试依旧不计作正式来源资格。
+
+上述记录不勾选 §10 整期验收。仍需完成 HUMAN 签名正例来源矩阵与 Reader 校准，验证同一冻结制品在 Snapshot/API/日志/Outbox 的数据最小化，补齐隔离 PostgreSQL、真实来源集成，再按实施计划完成整期独立审阅和验收。
+
+### HUMAN authority 验证细化
+
+T0 的 [真实来源矩阵](../../validation/s4-0/README.md) 已记录原生 OTel 与 Pydantic AI 的 `approved` 正例，各有一个由隔离审批进程产生的 HUMAN 事件；零事件场景有审批系统关闭 scope 的证明。这些记录只证明夹具来源可以审核，不证明实际人员审批。`workflow.source`、`service.name` 和工具名仍是可由 Agent 构造的属性，单独匹配它们不能完成可信 authority 准入。
+
+为兑现 §5 的可信来源要求，新增 `human-authority-1.0` 签名回执协议：冻结 authority ID、算法 `Ed25519` 与 32-byte 公钥；64-byte 签名与公钥都使用严格 canonical Base64。authority 私钥不进入 Agent、Manifest、日志或回执。使用仓库已有 `cryptography>=46,<47` 的 [官方 Ed25519 API](https://cryptography.io/en/latest/hazmat/primitives/asymmetric/ed25519/)，不新增依赖或实现密码算法；2026-10-14 本地 `cryptography 46.0.7` 的 sign/verify 已实测可用。
+
+签名消息为固定域 `Argus/HumanAuthority/1.0` 后跟 NUL，再拼接 canonical JSON body。body 仅允许协议版本、authority ID、kind、Trace ID、workflow scope、Observation ID、Runner Root ID，以及事件 ID/结果码或关闭后的事件 ID 清单。`ESCALATION` 包含一个事件 ID 与 `APPROVED/DECLINED`，`INVENTORY` 包含最多 1000 个唯一事件 ID 和严格 `scope_closed=true`；两个 kind 的字段不可混用。不携带员工身份、账号、备注、对话或任意 metadata。Trace/workflow/event ID 必须为非零 32 位十六进制，当前实测 Observation/Root ID 为非零 16 位十六进制；协议只支持该已核验格式。
+
+消费方必须按冻结公钥验签，并与当前 Trace、workflow、Observation 和 Runner Root 核对。回执不能提供替换公钥；替换 key、改结果码/事件 ID、跨 Root/Trace/workflow 重放、额外敏感字段与超容量输入都返回有限错误码，不输出上游原文。签名只证明获准 authority 发布了该事实；生产准入还必须审核 authority 自身的人员授权与事件语义，不能把自动化合成审批夹具当成真实人员介入证据。
+
+当前工作树已接入 SourceProfile 冻结公钥、Normalizer 验签、Assembler 完整度、`require_human_escalation` 和含 HUMAN 的 sequence。现有 `type_map` 禁止直接映为 HUMAN 的约束保持有效；HUMAN 只能通过获准签名回执产生。冻结 Evaluator 执行从所选来源 profile 读取公钥，不回退当前配置。已证明的事件即使缺 inventory 仍可证明存在；完整的零事件结论必须同时满足基础采集完整度与同 Root/workflow 的唯一签名关闭清单一致性。损坏、缺失或冲突清单保持 UNKNOWN。
+
+独立审批 fixture 已实现该签名协议，私钥仅保存在审批进程内存，readiness 只公开公钥。业务 Agent 不导入签名器或评测 SDK。fixture 的独立依赖锁追加 `cryptography==46.0.7` 及其依赖，原有 30 个包版本保留；Runner 继续使用已有密码依赖。签发端全零事件 ID 的回归测试经历 **1 failed / 4 passed → 5 passed**；签发端、回执和 HUMAN 消费链路定向回归共 **61 passed**。这些证据不替代真实 Langfuse 来源验证、Reader 准入或整期验收。
+
+真实采集消费验证进一步复现了制品存储缺口：原 validator 未识别签名回执，拒绝合法来源为 `TRAJECTORY_EVIDENCE_REDACTION_INVALID`。正、零事件的存储回归初始 **2 failed**。存储层现按冻结公钥重验协议字段、签名与 scope，不将任意 metadata 加入业务投影；签名关闭清单从业务事件库存中排除，`human_events=COMPLETE` 还需重验各 workflow 的关闭清单覆盖。签名、额外字段、名称、因果边与 scope 篡改均拒绝。签发、HUMAN 与制品回归为 **71 passed / 1 PostgreSQL skipped**。
+
+本地完整门禁（2026-10-14）为 **2015 Python passed / 127 PostgreSQL skipped / 84 real deselected**，`make validate` 通过；这不能证明 PostgreSQL 或真实来源整期验收。审批 HTTP 父节点须按精确 SPAN 名称与已核验 business instrumentation 来源冻结为结构节点，不能按自由名称或时间推断；真实诊断链路使用分页 Reader、Acquisition quiet 证明及不可变制品，正式 Reader 准入仍需独立校准。
+
+签名真实消费定向验证（2026-10-14）为 **4 passed / 0 skipped / 61 deselected**：原生 OTel 与 Pydantic AI 的已签事件为 true，原生 OTel 的 `serial` 和工具 `escalate` 场景经已签空关闭清单为 false；后者不能冒充 HUMAN。验证真实 Langfuse 回执的 Trace/workflow/Observation/Root 绑定、跨 Root 重放拒绝，以及分页 Acquisition → 保存 → 重新加载 → 冻结规则执行。具体命令及工作树内容摘要见 [签名来源消费记录](../../validation/s4-3/human-signed-source.md)。该记录不代表正式 Reader 校准、真实人员审批或整期验收。
+
+回执基础的初始 RED 为 **35 failed**（验证模块尚不存在）；完成后首轮 35 项通过。Root 绑定扩展的 RED 为协议/API 尚不支持新增 Root 字段，不能将它描述为已经复现了实际运行态重放。关闭标记的严格类型边界另有有效 RED **1 failed / 36 passed**：将合法已签回执的 `true` 改为整数 `1` 后，原模型发生隐式转换而仍接受；已修复为只允许严格 boolean true。最新回执与既有 T6 定向回归为 **500 passed / 1 PostgreSQL skipped**，其中回执 37 项。所有签名密钥只在测试内存生成，没有写入私钥文件；这些测试不作为 Reader 准入或 HUMAN 真实验收。
+
+
+整期独立审阅发现并修复的敏感字段与格式化 SSN 边界，见 [修复记录](../../validation/s4-3/privacy-review-remediation.md)。记录中的定向回归不替代整期真实消费者及最终门禁验收。

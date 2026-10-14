@@ -16,7 +16,12 @@ from app.manifest import LaunchService
 from app.registry import AgentRegistry
 from app.trajectory.codec import canonical_dumps
 from app.trajectory.contract import TrajectoryContract
-from app.trajectory.manifest import TrajectoryManifestError, freeze_trajectory_contract, load_trajectory_contract
+from app.trajectory.manifest import (
+    TrajectoryManifestError,
+    bind_trajectory_manifest,
+    freeze_trajectory_contract,
+    load_trajectory_contract,
+)
 from sqlalchemy.orm import sessionmaker
 from test_launch_manifest_freeze import setup_db
 from test_trajectory_evidence import postgres_engine as evidence_postgres_engine
@@ -29,7 +34,10 @@ def context(tmp_path):
     for name, profile in (("native", "native-otel-v1"), ("pydantic", "pydantic-ai-v1")):
         registry.create_version(agent_id="banking-agent", version=name, endpoint="http://demo-agent:8080/invoke",
             trajectory_source_profile_id=profile)
-    contract = TrajectoryContract.model_validate(contract_payload())
+    payload = contract_payload()
+    payload["redaction_policy"].update(content_policy_version="pii-v1",
+        string_policies={"$.customer_id": "identifier", "$.intent": "identifier"})
+    contract = TrajectoryContract.model_validate(payload)
     return db, registry, LaunchService(db, registry), contract
 
 
@@ -258,6 +266,8 @@ def test_postgres_manifest_jsonb_preserves_full_contract_decimal_precision(postg
     registry.create_version(agent_id="banking-agent", version="native", endpoint="http://demo-agent:8080/invoke",
         trajectory_source_profile_id="native-otel-v1")
     payload = contract_payload()
+    payload["redaction_policy"].update(content_policy_version="pii-v1",
+        string_policies={"$.customer_id": "identifier", "$.intent": "identifier"})
     payload["limits"]["quiet_window_seconds"] = Decimal("0.12345678901234567890123456789")
     contract = TrajectoryContract.model_validate(payload)
     context = manager, registry, LaunchService(manager, registry), contract
@@ -268,3 +278,31 @@ def test_postgres_manifest_jsonb_preserves_full_contract_decimal_precision(postg
     assert restored.limits.quiet_window_seconds == payload["limits"]["quiet_window_seconds"]
     assert restored.digest == contract.digest
     assert manifest["measurement_digest"] == manifest_measurement_digest(manifest)
+
+
+def test_new_launch_rejects_ungoverned_trajectory_contract_before_persistence(context):
+    payload = context[3].model_dump()
+    payload["redaction_policy"].pop("content_policy_version", None)
+    payload["redaction_policy"].pop("string_policies", None)
+    ungoverned = TrajectoryContract.model_validate(payload)
+    with context[0].get_session() as session:
+        before = session.query(ExperimentLaunchRecord).count()
+    with pytest.raises(TrajectoryManifestError, match="CONTENT_POLICY_REQUIRED"):
+        create(context, contract=ungoverned)
+    with context[0].get_session() as session:
+        assert session.query(ExperimentLaunchRecord).count() == before
+
+
+def test_existing_manifest_13_without_content_policy_remains_frozen_and_readable(context):
+    manifest = deepcopy(create(context).manifest)
+    legacy_contract = TrajectoryContract.model_validate(contract_payload())
+    manifest["trajectory"] = bind_trajectory_manifest(freeze_trajectory_contract(legacy_contract),
+        context[1].get_version("banking-agent", "native"))
+    manifest["measurement_digest"] = manifest_measurement_digest(manifest)
+    manifest["contract_digests"]["measurement"]["digest"] = manifest["measurement_digest"]
+    before = deepcopy(manifest)
+    restored = load_trajectory_contract(manifest)
+    assert restored.redaction_policy.content_policy_version is None
+    assert restored.digest == legacy_contract.digest
+    assert len(resolve_execution_plan(manifest)) == 4
+    assert manifest == before

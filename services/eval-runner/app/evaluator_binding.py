@@ -604,7 +604,8 @@ class BuiltinPythonExecutor(EvaluatorExecutor):
 
     def execute(self, implementation: Any, *, output: Any, expected_output: Any,
                 context: EvaluationContext | None = None, binding: EvaluatorBinding | None = None,
-                manifest_schema_version: str | None = None, trajectory_contract_digest: str | None = None) -> Evaluation:
+                manifest_schema_version: str | None = None, trajectory_contract_digest: str | None = None,
+                trajectory_contract: Any = None) -> Evaluation:
         fn = getattr(implementation, "fn", implementation)
         if fn is None:
             raise EvaluatorBindingError(
@@ -614,7 +615,8 @@ class BuiltinPythonExecutor(EvaluatorExecutor):
         from .trajectory.bindings import is_tool_rule
         if binding is not None and is_tool_rule(binding):
             from .trajectory.bindings import execute_rule
-            return execute_rule(fn, context=context, binding=binding, schema=manifest_schema_version, contract_digest=trajectory_contract_digest)
+            return execute_rule(fn, context=context, binding=binding, schema=manifest_schema_version, contract_digest=trajectory_contract_digest,
+                trajectory_contract=trajectory_contract)
         return fn(output=output, expected_output=expected_output)
 
 
@@ -787,6 +789,9 @@ def _verify_trajectory_manifest(manifest):
             if (manifest.get("measurement_digest") != measured or type(declared) is not dict
                 or declared.get("digest") != measured or declared.get("version") != "1.3"):
                 raise TrajectoryManifestError("MEASUREMENT_MISMATCH")
+        from .trajectory.bindings import validate_rule_contract
+        for binding in bindings_from_manifest(manifest):
+            validate_rule_contract(binding, trajectory)
     except TrajectoryManifestError as error:
         raise EvaluatorBindingError(error.reason_code, code=error.reason_code) from None
     from .required_evidence import frozen_required_policy, uses_required_contract
@@ -962,6 +967,10 @@ def evaluate_frozen_item(
             if tool_rule:
                 inputs.update(binding=binding, manifest_schema_version=manifest_schema_version,
                     trajectory_contract_digest=manifest.get("trajectory", {}).get("trajectory_contract_digest"))
+                from .trajectory.bindings import requires_human_policy
+                if requires_human_policy(binding):
+                    from .trajectory.manifest import load_trajectory_contract
+                    inputs["trajectory_contract"] = load_trajectory_contract(manifest)
             raw = executor.execute(
                 resolved.implementation, output=output, expected_output=expected_output, **inputs
             )

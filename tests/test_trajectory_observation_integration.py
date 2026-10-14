@@ -163,7 +163,11 @@ def invoke_worker(s40_runtime, monkeypatch, runtime, endpoint, scenario="serial"
                 ExecutionCheckpointRecord.item_execution_id == item.id))
             assert (checkpoint.created_at, checkpoint.output_digest, checkpoint.final_attempt_id) == original_response
         assert item.execution_status.lower() == "succeeded", item.execution_error
-        assert item.eval_status.lower() == expected_eval_status, item.eval_error
+        if item.eval_status.lower() != expected_eval_status:
+            from app.db_models import EvaluationResultRecord
+            diagnostics = session.execute(select(EvaluationResultRecord.evaluator_id, EvaluationResultRecord.status,
+                EvaluationResultRecord.error_code).where(EvaluationResultRecord.item_execution_id == item.id)).all()
+            pytest.fail(f"unexpected evaluation status {item.eval_status}: {diagnostics}")
         assert item.scores == {"intent_match": 1.0}
         assert item.quality_conclusion.lower() == expected_quality
         assert item.trace_id and item.observation_id
@@ -861,10 +865,65 @@ def test_retry_separates_real_attempt_traces(local_langfuse, s40_runtime, monkey
         local_langfuse.record("native_otel", "retry-success", second, second_rows)
 
 
+def signed_governed_payload(profile_id, authority):
+    from decimal import Decimal
+
+    from trajectory_contract_fixtures import observed_banking_contract_payload
+
+    payload = observed_banking_contract_payload()
+    payload["limits"] = {"page_size": 2, "deadline_seconds": Decimal(12), "quiet_window_seconds": Decimal("0.3"),
+        "max_steps": 64, "max_pages": 20, "max_source_bytes": 1024 * 1024, "max_artifact_bytes": 64 * 1024}
+    payload["redaction_policy"].update(content_policy_version="pii-v1", string_policies={"$.customer_id": "identifier"})
+    for profile in payload["source_profile_set"]:
+        if profile["profile_id"] != profile_id:
+            continue
+        profile["human_authority_id"] = authority["authority_id"]
+        profile["human_authority"] = authority
+        profile["capabilities"]["human_events"] = "COMPLETE"
+        profile["fields"]["human_receipt"] = [["metadata", "attributes.approval.receipt"]]
+        business_role = profile["structural_roles"][0]
+        profile["structural_roles"].extend({"provider_type": "SPAN", "raw_name": name,
+            "step_type": "CUSTOM", "safe_name": name, "metadata_equals": dict(business_role["metadata_equals"])}
+            for name in ("approval.http", "approval.inventory.http"))
+    return payload
+
+
+def assert_signed_human_artifact(runtime, s40_runtime, identity, agent, *, expected):
+    """真实诊断制品消费；不授予正式 Reader 准入或人员审批资格。"""
+    from app.registry import AgentRegistry
+    from app.trajectory.contract import TrajectoryContract
+    from app.trajectory.evidence import load_trajectory_evidence
+    from app.trajectory.inputs import EvaluationContext
+    from app.trajectory.rules import evaluate_trajectory_rule
+    from app.trajectory.schema import TrajectoryScope
+    version = AgentRegistry(s40_runtime[0]).get_version("test-agent", identity["agent_version"])
+    payload = signed_governed_payload(version.trajectory_source_profile_id, agent.human_authority)
+    contract = TrajectoryContract.model_validate(payload).bind_source_version(version)
+    scope = TrajectoryScope(launch_id=identity["launch_id"], item_execution_id=identity["item_id"],
+        dataset_item_id=identity["dataset_item_id"], attempt_id=identity["attempt_id"],
+        dispatch_generation=identity["generation"], trace_id=identity["trace_id"], root_observation_id=identity["root_id"])
+    acquired, _, _ = asyncio.run(acquire_real_trajectory(runtime, s40_runtime[0], scope, contract))
+    assert acquired.state == "READY" and acquired.evidence_ref is not None, acquired.reason_code
+    with s40_runtime[0].get_session() as session:
+        trajectory = load_trajectory_evidence(session, acquired.evidence_ref, scope=scope, contract=contract)
+    assert trajectory.completeness.capabilities["human_events"] == "COMPLETE", trajectory.completeness.model_dump()
+    registry = default_evaluator_registry
+    selected = freeze_binding(registry.definition("trajectory.require_human_escalation"),
+        registry.version("trajectory.require_human_escalation", "1.0.0"), runner_identity=current_runner_identity().model_dump(),
+        params={"rule": "require_human_escalation"})
+    result = evaluate_trajectory_rule(EvaluationContext({}, {}, {}, trajectory, acquired.evidence_ref),
+        selected.params, binding=selected, manifest_schema_version="1.3",
+        authority_policy=contract.source_profile.human_authority)
+    assert result.value is expected
+    assert result.evidence["reason_code"] == ("HUMAN_ESCALATION_OBSERVED" if expected else "HUMAN_ESCALATION_ABSENT")
+    return contract, acquired.evidence_ref
+
+
 @pytest.mark.parametrize("profile", ["native_otel", "pydantic_ai"])
 def test_trusted_human_source(local_langfuse, s40_runtime, monkeypatch, tmp_path, profile):
     with AgentProcess(local_langfuse, tmp_path, profile, approval=True) as agent:
-        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint, "approved")
+        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint, "approved",
+            trajectory_source_profile_id={"native_otel": "native-otel-v1", "pydantic_ai": "pydantic-ai-v1"}[profile])
         rows = local_langfuse.wait_observations(identity["trace_id"], minimum=10)
         human = [row for row in rows if row.get("metadata", {}).get("attributes.workflow.phase") == "HUMAN"]
         assert len(human) == 1
@@ -875,14 +934,31 @@ def test_trusted_human_source(local_langfuse, s40_runtime, monkeypatch, tmp_path
         terminal = next(row for row in rows if row["name"] == "workflow.terminal")
         assert metadata["attributes.workflow.scope_id"] == terminal["metadata"]["attributes.workflow.scope_id"]
         assert metadata["attributes.workflow.event_id"] in terminal["metadata"]["attributes.workflow.event_ids"]
+        from app.trajectory.human import HumanReceiptError, verify_human_receipt
+        receipt = verify_human_receipt(agent.human_authority, metadata["attributes.approval.receipt"],
+            trace_id=identity["trace_id"], workflow_scope_id=metadata["attributes.workflow.scope_id"],
+            observation_id=human[0]["id"], root_observation_id=identity["root_id"])
+        assert receipt.body.event_id == metadata["attributes.workflow.event_id"]
+        inventory = next(row for row in rows if row["name"] == "approval.inventory")
+        closed = verify_human_receipt(agent.human_authority, inventory["metadata"]["attributes.approval.receipt"],
+            trace_id=identity["trace_id"], workflow_scope_id=metadata["attributes.workflow.scope_id"],
+            observation_id=inventory["id"], root_observation_id=identity["root_id"])
+        assert closed.body.scope_closed is True
+        assert closed.body.event_ids == [receipt.body.event_id]
+        with pytest.raises(HumanReceiptError, match="HUMAN_RECEIPT_SCOPE_MISMATCH"):
+            verify_human_receipt(agent.human_authority, receipt,
+                trace_id=identity["trace_id"], workflow_scope_id=metadata["attributes.workflow.scope_id"],
+                observation_id=human[0]["id"], root_observation_id="f" * 16)
         assert_lineage(rows, identity)
+        assert_signed_human_artifact(local_langfuse, s40_runtime, identity, agent, expected=True)
         local_langfuse.record(profile, "approved", identity, rows)
 
 
 @pytest.mark.parametrize("scenario", ["serial", "escalate"])
 def test_closed_approval_source_without_human_event(local_langfuse, s40_runtime, monkeypatch, tmp_path, scenario):
     with AgentProcess(local_langfuse, tmp_path, "native_otel", approval=True) as agent:
-        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint, scenario)
+        identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint, scenario,
+            trajectory_source_profile_id="native-otel-v1")
         rows = local_langfuse.wait_observations(identity["trace_id"], minimum=10 if scenario == "serial" else 12)
         inventories = [row for row in rows if row["name"] == "approval.inventory"]
         assert len(inventories) == 1
@@ -890,8 +966,197 @@ def test_closed_approval_source_without_human_event(local_langfuse, s40_runtime,
         assert metadata["attributes.approval.event_count"] == 0
         assert metadata["attributes.approval.scope_closed"] is True
         assert metadata["resourceAttributes.service.name"] == "s4-approval-system"
+        from app.trajectory.human import verify_human_receipt
+        closed = verify_human_receipt(agent.human_authority, metadata["attributes.approval.receipt"],
+            trace_id=identity["trace_id"], workflow_scope_id=metadata["attributes.workflow.scope_id"],
+            observation_id=inventories[0]["id"], root_observation_id=identity["root_id"])
+        assert closed.body.event_ids == []
+        assert closed.body.scope_closed is True
         assert not any(row.get("metadata", {}).get("attributes.workflow.phase") == "HUMAN" for row in rows)
         if scenario == "escalate":
             assert any(row.get("metadata", {}).get("attributes.gen_ai.tool.name") == "escalate" for row in rows)
         assert_lineage(rows, identity)
+        assert_signed_human_artifact(local_langfuse, s40_runtime, identity, agent, expected=False)
         local_langfuse.record("native_otel", "approval-zero-" + scenario, identity, rows)
+
+
+@pytest.mark.parametrize("profile,profile_id", [("native_otel", "native-otel-v1"), ("pydantic_ai", "pydantic-ai-v1")])
+def test_governed_reader_qualification_and_formal_consumers(local_langfuse, s40_runtime, monkeypatch, tmp_path,
+                                                          profile, profile_id, caplog):
+    """固定公钥下重复校准后才批准受控 fixture 合同，生产仍须独立准入。"""
+    import hashlib
+    import logging
+
+    from app.db_models import EvaluationResultRecord, ExperimentLaunchRecord
+    from app.evaluation_recovery import recover_evaluation
+    from app.result_snapshots import create_result_snapshot
+    from app.trajectory.factory import QualifiedReaderFactory, ReaderApproval, reader_artifact_digest
+    from app.trajectory.worker_acquisition import WorkerTrajectoryCollector
+    from test_trajectory_rule_integration import assert_frozen_diagnosis
+
+    api_digest = "sha256:" + hashlib.sha256((local_langfuse.directory / "langfuse-openapi.yaml").read_bytes()).hexdigest()
+    artifact_digest = reader_artifact_digest()
+    caplog.set_level(logging.DEBUG, logger="app")
+    with AgentProcess(local_langfuse, tmp_path, profile, approval=True) as agent:
+        samples, refs, traces = [], set(), set()
+        for scenario in ("approved", "serial", "escalate"):
+            for _ in range(10):
+                identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint, scenario,
+                    trajectory_source_profile_id=profile_id)
+                contract, ref = assert_signed_human_artifact(local_langfuse, s40_runtime, identity, agent,
+                    expected=scenario == "approved")
+                rows = local_langfuse.wait_observations(identity["trace_id"], minimum=10)
+                assert_lineage(rows, identity)
+                samples.append(contract.digest)
+                refs.add(ref.artifact_id)
+                traces.add(identity["trace_id"])
+                local_langfuse.record(profile, "governed-calibration-" + scenario, identity, rows, normalization={
+                    "calibration_sample": True, "qualification_group": profile + ":governed-" + scenario,
+                    "trajectory_contract_digest": contract.digest, "reader_artifact_digest": artifact_digest,
+                    "api_document_digest": api_digest, "signed_human_expected": scenario == "approved",
+                    "human_events_complete": True, "frozen_artifact_roundtrip": True})
+        assert len(samples) == len(refs) == len(traces) == 30 and len(set(samples)) == 1
+        factory = QualifiedReaderFactory(server_url=local_langfuse.base_url,
+            public_key=local_langfuse.env["S4_PUBLIC_KEY"], secret_key=local_langfuse.env["S4_SECRET_KEY"],
+            approvals=(ReaderApproval(contract.digest, artifact_digest, api_digest),))
+        worker = s40_runtime[4]
+        monkeypatch.setattr(worker, "trajectory_collector", WorkerTrajectoryCollector(s40_runtime[0].get_session,
+            factory_provider=lambda: factory))
+        params = [
+            {"rule": "tool_argument_match", "tool_identity": "banking.balance.read", "path": "$.customer_id",
+                "operator": "eq", "expected_json": '"synthetic-001"'},
+            {"rule": "max_same_tool_repeats", "tool_identity": "banking.balance.read", "identity_paths": ["$.customer_id"],
+                "max_repeats": 1},
+            {"rule": "required_step_sequence", "steps": [{"type": "TOOL", "phase": "EXECUTED", "tool_identity": name}
+                for name in ("banking.customer.lookup", "banking.balance.read")]},
+            {"rule": "require_human_escalation"},
+        ]
+        selections = [{"id": "trajectory." + selected["rule"], "params": selected} for selected in params]
+        for scenario in ("approved", "serial"):
+            expected_quality = "pass" if scenario == "approved" else "fail"
+            identity = invoke_worker(s40_runtime, monkeypatch, local_langfuse, agent.endpoint, scenario,
+                trajectory_source_profile_id=profile_id, trajectory_contract=contract, rule_selections=selections,
+                expected_quality=expected_quality)
+            with s40_runtime[0].get_session() as session:
+                launch = session.get(ExperimentLaunchRecord, identity["launch_id"])
+                launch.status = "COMPLETED"
+                snapshot = create_result_snapshot(session, launch)
+                assert snapshot.evidence_state == "COMPLETE"
+                assert snapshot.items[0]["required_evidence_status"] == "COMPLETE"
+                results = session.scalars(select(EvaluationResultRecord).where(
+                    EvaluationResultRecord.item_execution_id == identity["item_id"])).all()
+                measured = {result.evaluator_id: (result.status, result.value, result.evidence)
+                    for result in results if result.evaluator_id.startswith("trajectory.")}
+                assert len(measured) == 4
+                for evaluator, (status, value, evidence) in measured.items():
+                    assert status == "succeeded"
+                    assert value is (scenario == "approved" if evaluator.endswith("require_human_escalation") else True)
+                    assert evidence["evidence_ref"] == snapshot.items[0]["trajectory_input"]["acquisition"]["evidence_ref"]
+                item = session.get(ExperimentItemExecutionRecord, identity["item_id"])
+                item.evaluation_status, item.evaluation_generation = "evaluating", 1
+                item.eval_status, item.quality_conclusion = "failed", "unknown"
+                for result in results:
+                    result.status = "failed"
+            original_factory = worker.trajectory_collector._get_factory
+            with monkeypatch.context() as recovery_patch:
+                recovery_patch.setattr(worker.trajectory_collector, "_get_factory", lambda: pytest.fail("eval-only reopened Reader"))
+                async def forbid_invoke(*args, **kwargs):
+                    pytest.fail("eval-only called business Agent")
+                recovery_patch.setattr("app.worker.RemoteAgentExecutor.invoke_once", forbid_invoke)
+                outcome = recover_evaluation(s40_runtime[0], item_id=identity["item_id"], evaluation_generation=1,
+                    worker_id="governed-rules")
+            assert worker.trajectory_collector._get_factory == original_factory
+            assert outcome["finalized"] and outcome["quality_conclusion"] == expected_quality
+            with s40_runtime[0].get_session() as session:
+                after = session.scalars(select(EvaluationResultRecord).where(
+                    EvaluationResultRecord.item_execution_id == identity["item_id"])).all()
+                assert {result.evaluator_id: (result.status, result.value, result.evidence) for result in after
+                    if result.evaluator_id.startswith("trajectory.")} == measured
+            diagnosis = assert_frozen_diagnosis(s40_runtime, monkeypatch, snapshot, identity["dataset_item_id"])
+            assert len(diagnosis["rule_results"]) == 4
+            assert {result["conclusion"] for result in diagnosis["rule_results"]} == (
+                {"pass"} if scenario == "approved" else {"pass", "fail"})
+
+        for privacy_operation in ("privacy", "privacy_ssn"):
+            assert_governed_privacy_consumers(local_langfuse, s40_runtime, monkeypatch, agent, profile_id, contract, caplog,
+                                             operation=privacy_operation)
+
+
+def assert_governed_privacy_consumers(runtime, s40_runtime, monkeypatch, agent, profile_id, contract, caplog, *, operation="privacy"):
+    """真实来源哨兵 → 正式测量 → Snapshot/API/Outbox/实际 Score 的最小数据链路。"""
+    from app.db_models import (
+        ExperimentLaunchRecord,
+        LangfuseSyncTaskRecord,
+        RunResultSnapshotRecord,
+        TrajectoryEvidenceArtifactRecord,
+    )
+    from app.langfuse_sync import _project_scores
+    from app.result_snapshots import create_result_snapshot
+    from app.trajectory.codec import canonical_dumps
+    from test_trajectory_rule_integration import assert_frozen_diagnosis
+
+    sentinels = ("123-45-6789" if operation == "privacy_ssn" else "4111111111111111", "11010519491231002X", "synthetic-privacy-sentinel")
+    selections = [{"id": "trajectory.require_tool", "params": {"rule": "require_tool", "tool_identity": "banking.customer.lookup"}},
+        {"id": "trajectory.tool_argument_match", "params": {"rule": "tool_argument_match", "tool_identity": "banking.balance.read",
+            "path": "$.customer_id", "operator": "eq", "expected_json": '"synthetic-001"'}}]
+    identity = invoke_worker(s40_runtime, monkeypatch, runtime, agent.endpoint, operation,
+        trajectory_source_profile_id=profile_id, trajectory_contract=contract, rule_selections=selections,
+        expected_quality="unknown", expected_eval_status="failed")
+    rows = runtime.wait_observations(identity["trace_id"], minimum=10)
+    raw = json.dumps(rows, sort_keys=True)  # 仅检查真实 HTTP DTO 的哨兵存在性，不用 float DTO 作为冻结证据。
+    assert all(sentinel in raw for sentinel in sentinels), "privacy scenario did not actually collect the raw sentinels"
+    with s40_runtime[0].get_session() as session:
+        launch = session.get(ExperimentLaunchRecord, identity["launch_id"])
+        launch.status = "COMPLETED"
+        snapshot = create_result_snapshot(session, launch)
+        assert snapshot.evidence_state == "DIAGNOSTIC"
+        assert snapshot.items[0]["required_evidence_status"] == "INCOMPLETE"
+        snapshots = session.scalars(select(RunResultSnapshotRecord).where(
+            RunResultSnapshotRecord.launch_id == identity["launch_id"])).all()
+        artifacts = session.scalars(select(TrajectoryEvidenceArtifactRecord).where(
+            TrajectoryEvidenceArtifactRecord.item_execution_id == identity["item_id"])).all()
+        tasks = session.scalars(select(LangfuseSyncTaskRecord).where(
+            LangfuseSyncTaskRecord.item_id == identity["item_id"])).all()
+        assert artifacts and tasks
+        serialized = [json.dumps({"manifest": row.manifest, "items": row.items, "summary": row.summary}) for row in snapshots]
+        serialized += [row.payload_json for row in artifacts]
+        serialized += [json.dumps(row.scores_payload) for row in tasks]
+        assert all(sentinel not in value for sentinel in sentinels for value in serialized)
+        task = tasks[0]
+        projected = _project_scores({"item_id": task.item_id, "dispatch_generation": task.dispatch_generation, "attempts": task.attempts},
+            scores=task.scores_payload, snapshot_id=snapshot.id, revision=snapshot.revision,
+            policy_digest=task.scores_payload.get("_policy_digest"))
+        assert {score.evaluator_id for score in projected} == {"intent_match", "trajectory.require_tool"}
+        boolean = next(score for score in projected if score.evaluator_id == "trajectory.require_tool")
+        assert boolean.evidence["original_value"] is True
+    diagnosis = assert_frozen_diagnosis(s40_runtime, monkeypatch, snapshot, identity["dataset_item_id"])
+    assert all(sentinel not in canonical_dumps(diagnosis) for sentinel in sentinels)
+    balance = [step for step in diagnosis["trajectory"]["steps"] if step["tool_identity"] == "banking.balance.read"]
+    assert balance and all(step["argument_visibility"]["$.customer_id"] == "REDACTED" for step in balance)
+    argument = next(result for result in diagnosis["rule_results"] if result["evaluator_id"] == "trajectory.tool_argument_match")
+    assert argument["conclusion"] == "unknown"
+    # 使用 Outbox 的生产 projector 与真实本地 Score API；租约/重投的整体验证仍属于 T7。
+    for score in projected:
+        assert all(sentinel not in json.dumps(score.evidence) for sentinel in sentinels)
+        runtime.sdk.api.scores.create(id=score.score_id, name=score.evaluator_id, value=score.value,
+            trace_id=identity["trace_id"], observation_id=identity["root_id"], comment=score.comment, metadata=score.evidence)
+    import time
+    expected_ids = {score.score_id for score in projected}
+    deadline = time.monotonic() + 15
+    while True:
+        response = runtime.http.get("/api/public/v3/scores", params={"traceId": identity["trace_id"], "fields": "details,subject"}, timeout=5)
+        assert response.status_code == 200
+        assert all(sentinel not in response.text for sentinel in sentinels)
+        scores = response.json()["data"]
+        if {score["id"] for score in scores} == expected_ids:
+            break
+        assert time.monotonic() < deadline, "projected scores did not become visible within 15 seconds"
+        time.sleep(0.1)
+    measured_boolean = next(score for score in scores if score["id"] == boolean.score_id)
+    assert measured_boolean["metadata"]["original_value"] is True
+    assert all(sentinel not in repr(record.__dict__) for sentinel in sentinels for record in caplog.records
+        if record.name.startswith("app."))
+    runtime.record(agent.profile, "governed-" + operation.replace("_", "-"), identity, rows, normalization={
+        "trajectory_contract_digest": contract.digest, "raw_sentinels_observed": True, "required_no_result_unknown": True,
+        "artifact_snapshot_api_outbox_score_minimized": True, "argus_log_records_minimized": True,
+        "actual_score_ids": sorted(score["id"] for score in scores)})

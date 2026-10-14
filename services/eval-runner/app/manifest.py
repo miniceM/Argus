@@ -169,7 +169,6 @@ class LaunchService:
             ).to_payload()
             for spec in eval_specs
         ]
-
         # ---- Issue #83: freeze an independent, digested QualityPolicy --------
         # Judgement is a separate, versioned decision from measurement. When the
         # user does not supply rules, every selected diagnostic becomes a
@@ -225,12 +224,25 @@ class LaunchService:
                         f"Idempotency key conflict: key '{idempotency_key}' already used with different payload."
                     )
 
+        if frozen_trajectory is not None:
+            from .trajectory.manifest import TrajectoryManifestError, parse_launch_contract
+            # 新建入口必须治理所有轨迹；相同幂等请求返回既有历史，不回写其合同。
+            new_contract = parse_launch_contract(frozen_trajectory["contract_json"])
+            if new_contract.redaction_policy.content_policy_version != "pii-v1":
+                raise TrajectoryManifestError("CONTENT_POLICY_REQUIRED")
+
         ver_rec = self.registry.get_version(agent_id, agent_version)
         if not ver_rec:
             raise ValueError(f"AgentVersion '{agent_id}:{agent_version}' not found")
         if not ver_rec.is_active:
             raise ValueError(f"AgentVersion '{agent_id}:{agent_version}' is archived/inactive")
         trajectory = bind_trajectory_manifest(frozen_trajectory, ver_rec) if frozen_trajectory is not None else None
+        if has_trajectory_rules:
+            from .trajectory.bindings import validate_rule_contract
+            from .trajectory.manifest import parse_launch_contract
+            checked_contract = parse_launch_contract(frozen_trajectory["contract_json"]).bind_source_version(ver_rec)
+            for spec in eval_specs:
+                validate_rule_contract(EvaluatorBinding.from_payload(spec), checked_contract)
 
         version_environment = ver_rec.environment or ("production" if ver_rec.credential_id else None)
         if version_environment is not None and normalize_environment(version_environment) != normalized_environment:

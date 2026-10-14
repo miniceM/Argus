@@ -318,6 +318,8 @@ def _normalize_observation(
             step_type, phase, status = "CUSTOM", "EXECUTED", "UNKNOWN"
             capabilities = dict(empty)
         else:
+            if values.get("human_receipt", _MISSING) is not _MISSING:
+                return _human_observation(values, profile, scope, observation_id, parent, index, limits)
             metadata = row.get("metadata")
             structural_role = _structural_role(profile, values, metadata)
             if structural_role is not None:
@@ -391,9 +393,13 @@ def _normalize_observation(
                 limits=limits,
                 hidden_paths=hidden,
                 source_visibility=argument_marker,
+                content_policy_version=checked.redaction_policy.content_policy_version,
+                string_policies=checked.redaction_policy.string_policies,
             )
         except (ValueError, UnicodeError, RecursionError):
-            arguments = project_json(None, argument_paths, limits=limits, source_visibility="INVALID")
+            arguments = project_json(None, argument_paths, limits=limits, source_visibility="INVALID",
+                content_policy_version=checked.redaction_policy.content_policy_version,
+                string_policies=checked.redaction_policy.string_policies)
         if not root and not arguments.complete:
             capabilities["tool_arguments"] = "NONE" if arguments.value is None else "PARTIAL"
         warnings.extend(arguments.warnings)
@@ -401,6 +407,8 @@ def _normalize_observation(
             None if values.get("output", _MISSING) is _MISSING else values["output"],
             checked.redaction_policy.output_paths if root else checked.redaction_policy.result_paths,
             limits=limits,
+            content_policy_version=checked.redaction_policy.content_policy_version,
+            string_policies=checked.redaction_policy.string_policies,
         )
         result_summary = output.value
         if not output.complete:
@@ -467,9 +475,41 @@ def _normalize_observation(
         return NormalizedObservation(step=None, capabilities=empty, warnings=["SOURCE_FIELD_INVALID"])
 
 
+def _human_observation(values, profile, scope, observation_id, parent, index, limits):
+    from .human import HumanReceiptError, verify_human_receipt
+
+    if profile.human_authority is None or profile.capabilities["human_events"] == "NONE":
+        raise _InvalidField("HUMAN_AUTHORITY_UNAVAILABLE")
+    workflow = _opaque(values.get("workflow_scope_id"))
+    try:
+        receipt = verify_human_receipt(profile.human_authority, values["human_receipt"], trace_id=scope.trace_id,
+            workflow_scope_id=workflow, observation_id=observation_id, root_observation_id=scope.root_observation_id)
+    except HumanReceiptError as error:
+        raise _InvalidField(str(error)) from None
+    event = receipt.body.kind == "ESCALATION"
+    sequence = _integer(values.get("sequence"), limits.max_steps) if event else None
+    if event and (_opaque(values.get("event_id")) != receipt.body.event_id or sequence is None):
+        raise _InvalidField("HUMAN_RECEIPT_SCOPE_MISMATCH")
+    warnings = []
+    start = _optional(values.get("started_at", _MISSING), Timestamp, "STEP_TIME_INVALID", warnings)
+    end = _optional(values.get("ended_at", _MISSING), Timestamp, "STEP_TIME_INVALID", warnings)
+    capabilities = {key: "NONE" for key in get_args(Capability)}
+    capabilities["human_events"] = profile.capabilities["human_events"]
+    if event:
+        capabilities["ordering"] = "COMPLETE" if start is not None and end is not None and end >= start else "PARTIAL"
+    step = TrajectoryStep(step_id=observation_id, observation_id=observation_id, parent_step_id=parent, index=index,
+        type="HUMAN" if event else "CUSTOM", raw_name="human.escalation" if event else "human.inventory",
+        tool_identity=None, phase="EVENT", status="FAILED" if receipt.body.outcome == "DECLINED" else "SUCCEEDED",
+        started_at=start, ended_at=end, duration_ms=None, arguments_redacted=None, argument_visibility={},
+        result_summary={"human_receipt": receipt.model_dump(exclude_none=True)}, error_code=None,
+        causal_predecessor_ids=[], workflow_scope_id=workflow)
+    return NormalizedObservation(step=step, capabilities=capabilities, warnings=sorted(set(warnings)),
+        structural=not event, event_id=receipt.body.event_id, sequence=sequence)
+
+
 def _structural_role(profile, values, metadata):
     # 业务语义无论值是否有效都不能退回结构角色，防止漏埋字段被洗成完整结构。
-    if type(metadata) is not dict or any(
+    if values.get("human_receipt", _MISSING) is not _MISSING or type(metadata) is not dict or any(
         values.get(key, _MISSING) is not _MISSING for key in _STRUCTURAL_SEMANTIC_FIELDS
     ):
         return None

@@ -155,6 +155,17 @@ def assemble_trajectory(
                 events, key=lambda event: (event["sequence"], event["step_id"]))
     caps = _capabilities(profile, business, arguments, closed=closed,
                          invalid_ordering=bool(causal.invalid_ordering_ids), clock_skew="GRAPH_CLOCK_SKEW" in warnings)
+    if profile.capabilities["human_events"] != "NONE":
+        from .human import closed_human_workflows
+        _, human_closed, invalid_human = closed_human_workflows([observation.step for observation in candidates.values()], scope,
+            profile.human_authority)
+        workflows = {observation.step.workflow_scope_id for observation in business}
+        if not workflows or None in workflows or not workflows <= human_closed or invalid_human:
+            if caps["human_events"] == "COMPLETE":
+                caps["human_events"] = "PARTIAL"
+            warnings.add("HUMAN_INVENTORY_MISMATCH" if human_closed or invalid_human or any(
+                type(observation.step.result_summary) is dict and "human_receipt" in observation.step.result_summary
+                and observation.step.raw_name == "human.inventory" for observation in candidates.values()) else "HUMAN_INVENTORY_UNAVAILABLE")
     required_complete = all(caps[key] == "COMPLETE" for key in contract.required_capabilities)
     if not required_complete:
         warnings.add("TRAJECTORY_REQUIRED_CAPABILITY_UNAVAILABLE")

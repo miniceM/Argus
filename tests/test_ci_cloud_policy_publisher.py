@@ -169,7 +169,7 @@ def _jobs(*, cloud_conclusion: str = "success") -> list[dict[str, Any]]:
             "conclusion": cloud_conclusion,
             "html_url": "https://github.com/miniceM/Argus/actions/runs/6001/job/6101",
             "steps": [
-                {"name": "Validate candidate Langfuse Cloud secrets", "status": "completed", "conclusion": "success"},
+                {"name": "Revalidate candidate and write test credentials", "status": "completed", "conclusion": "success"},
                 {"name": "Run cloud end-to-end tests", "status": "completed", "conclusion": cloud_conclusion},
             ],
         },

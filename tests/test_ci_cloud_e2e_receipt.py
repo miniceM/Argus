@@ -13,7 +13,6 @@ import yaml
 
 from scripts.ci import cloud_e2e_receipt as receipt_cli
 from scripts.ci.ci_constants import (
-    CANDIDATE_ENVIRONMENT,
     CANDIDATE_WORKFLOW,
     REQUIRED_CI_CHECKS,
     REQUIRED_SECRETS,

@@ -86,7 +86,8 @@ jobs:
   unit-tests:
     name: Full Python Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 上次含 PostgreSQL 的 coverage 门禁在 66% 处耗尽 10 分钟，保留有限扩展预算。
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16-alpine
@@ -125,7 +126,7 @@ jobs:
         env:
           TEST_POSTGRES_URL: postgresql+psycopg://argus:argus_password@localhost:5432/argus_test
         run: |
-          python -m pytest tests -q -m "not trajectory_local" \
+          python -m pytest tests -q --maxfail=1 --tb=short --durations=20 -m "not trajectory_local" \
             --junitxml=artifacts/junit.xml \
             --cov=services/demo-agent \
             --cov=services/eval-runner/app \

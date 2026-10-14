@@ -251,6 +251,74 @@ def _validate_console_dev_dependency_change(
         raise ValueError("snapshot changes outside changed development dependency closure")
 
 
+
+# Medium is intentionally narrower than general runtime code: scoped tests
+# and Console presentation receive the five regular CI checks, without
+# exposing PR code to Cloud secrets. Unknown paths remain high risk.
+MEDIUM_DENIED_TEST_PREFIXES = (
+    "tests/test_ci_",
+    "tests/test_cloud_",
+    "tests/test_langfuse_",
+    "tests/test_trajectory_",
+    "tests/test_release_",
+    "tests/test_policy_",
+    "tests/test_auth_",
+    "tests/test_credential_",
+    "tests/test_security_",
+    "tests/test_expected_pass_rate",
+)
+MEDIUM_DENIED_CONSOLE_TERMS = (
+    "auth", "cloud", "credential", "gate", "integration", "langfuse",
+    "login", "permission", "policy", "release", "secret", "security",
+    "session", "settings", "token", "trace",
+)
+
+
+def _medium_regular_file(path: str, status: str, modes: Mapping[str, Any]) -> bool:
+    """Require a modified regular file; no addition, rename, symlink or executable."""
+    if status != "modified":
+        return False
+    file_mode = modes.get(path, {})
+    return (
+        isinstance(file_mode, Mapping)
+        and file_mode.get("base") == "100644"
+        and file_mode.get("head") == "100644"
+    )
+
+
+def _medium_scope(path: str) -> bool:
+    # Test modules never execute in the production image. Exclude CI/Cloud,
+    # security and frozen release baselines even when named test_*.py.
+    if (
+        path.startswith("tests/test_")
+        and path.count("/") == 1
+        and path.endswith(".py")
+        and not path.startswith(MEDIUM_DENIED_TEST_PREFIXES)
+        and re.fullmatch(r"tests/test_[a-zA-Z0-9_]+\.py", path)
+    ):
+        return True
+
+    # Only existing UI components/pages, not API clients, policy/auth views,
+    # build scripts, configuration, shared backend or dependencies.
+    root = "services/console/src/"
+    if not path.startswith(root):
+        return False
+    relative = path[len(root):]
+    if not relative.startswith(("components/", "pages/")):
+        return False
+    if not relative.endswith((".tsx", ".css")):
+        return False
+    return not any(term in relative.lower() for term in MEDIUM_DENIED_CONSOLE_TERMS)
+
+
+def _medium_or_low_file(path: str, status: str, modes: Mapping[str, Any]) -> bool:
+    if not _medium_regular_file(path, status, modes):
+        return False
+    if path.startswith("docs/") and path.endswith(".md"):
+        return True
+    return _medium_scope(path)
+
+
 def classify_change_set(
     *,
     files: Sequence[Mapping[str, Any]],
@@ -282,6 +350,14 @@ def classify_change_set(
         ):
             return {**high, "reason": "documentation symlink or executable file"}
         return {"risk": "low", "reason": "documentation-only change"}
+
+    # One sensitive, renamed, new or non-regular file escalates the entire PR.
+    modes = file_modes or {}
+    if all(
+        _medium_or_low_file(path, str(file.get("status", "")), modes)
+        for path, file in zip(paths, files, strict=True)
+    ):
+        return {"risk": "medium", "reason": "scoped test or Console presentation change"}
 
     manifest_path = "services/console/package.json"
     lock_path = "services/console/pnpm-lock.yaml"
@@ -389,7 +465,7 @@ def evaluate_integration_policy(
         return {"status": "pending", "state": "waiting_for_ci", "cloud_state": "skipped_by_policy"}
     if any(value != "success" for value in values):
         return {"status": "failure", "state": "required_ci_failed", "cloud_state": "skipped_by_policy"}
-    if risk == "low":
+    if risk in {"low", "medium"}:
         return {"status": "success", "state": "passed", "cloud_state": "skipped_by_policy"}
     if receipt is None:
         return {

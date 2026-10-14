@@ -1,0 +1,133 @@
+{
+  "version": "s4-http-only-ci-followup-v1",
+  "date": "2026-10-14",
+  "tested_source_commit": "701cf1aadab0df792d0487ab98d10dc8611233c3",
+  "command": "python -m pytest -vv tests/test_trajectory_observation_integration.py -m trajectory_local -k 'reader_qualification_repeated_real_samples and http_only'",
+  "pytest": {
+    "passed": 1,
+    "deselected": 66,
+    "duration_seconds": 139.55
+  },
+  "independent_samples": 10,
+  "additional_reader_factory_probe": 1,
+  "deadline_seconds": 12,
+  "ready_grace_ms": 250,
+  "field_matrix_sha256": "266e2d4f0b7cadb066d3b4197239b2da271d9e48f8c89565f23b6e2475f29400",
+  "source_sha256": {
+    "tests/test_trajectory_observation_integration.py": "d84d28ff6a3e612a0ab6d39f9835e6b62690f9b527d531da399bc146727cccb7",
+    "tests/fixtures/trajectory_agents/local_runtime.py": "cbc0393bbf85b5b2cc895ae7e73a6cfe9acf0859ba7a946fbba37a0064136981",
+    "services/eval-runner/app/trajectory/acquisition.py": "3680b298d090e2739a2bd3b81c26cc5888efb72e92acba77ef292b6baf283244"
+  },
+  "samples": [
+    {
+      "trace_id": "79c2e8d5c49cde8feba829152a796c7a",
+      "item_id": "35017757-e63b-4fc5-b472-319d215e9804",
+      "attempt_id": "a3c2a427-55cb-42b5-af22-a3ddff465747",
+      "trajectory_digest": "sha256:c6de7f5eb66fb695faa505c32d80a106d710f6d3fc5c7bd3ff38988beae57365",
+      "contract_digest": "sha256:b6c77bad5727a0efa6fc8b70f0363f659cdfd9d03585ce499d559f7ed45712e3",
+      "response_to_ready_ms": 12018.974999999999,
+      "completeness": "ROOT_ONLY",
+      "artifact_roundtrip": true,
+      "original_deadline_preserved": true
+    },
+    {
+      "trace_id": "c00afc0c4730c1dca6cfbb733e3143bc",
+      "item_id": "843bd443-e462-4439-8b8a-ff3a37b5eb1c",
+      "attempt_id": "d364cfbd-0c50-41b0-9c3b-c90d0e430d21",
+      "trajectory_digest": "sha256:d70418ba3f35f224aae86b4b2f00a6ea6e37748587ac75bb11c85473fbade277",
+      "contract_digest": "sha256:b6c77bad5727a0efa6fc8b70f0363f659cdfd9d03585ce499d559f7ed45712e3",
+      "response_to_ready_ms": 12017.276,
+      "completeness": "ROOT_ONLY",
+      "artifact_roundtrip": true,
+      "original_deadline_preserved": true
+    },
+    {
+      "trace_id": "aa09a8ec778589365eaeb9a00ef8c8d1",
+      "item_id": "1b3bbe3a-dd0f-4acf-bdaf-38becfd6b408",
+      "attempt_id": "5f240eca-31e9-407e-a76c-fcedb74fdfe7",
+      "trajectory_digest": "sha256:eb654b6d0ed85c4bd85a0b5ec54cc7a4080e438fce0e6a5df3c148937f395589",
+      "contract_digest": "sha256:b6c77bad5727a0efa6fc8b70f0363f659cdfd9d03585ce499d559f7ed45712e3",
+      "response_to_ready_ms": 12012.603000000001,
+      "completeness": "ROOT_ONLY",
+      "artifact_roundtrip": true,
+      "original_deadline_preserved": true
+    },
+    {
+      "trace_id": "c8b80b80d1d97640ee7382932bda67f1",
+      "item_id": "64f348f9-6290-4825-96fc-a40fd1f9e960",
+      "attempt_id": "f13bc9b1-b6b7-47ed-ab90-b0267af9479e",
+      "trajectory_digest": "sha256:98fe9c1bbb109083e4d3683793ca7152cb842c157a43cabd493ec1fcdf0551aa",
+      "contract_digest": "sha256:b6c77bad5727a0efa6fc8b70f0363f659cdfd9d03585ce499d559f7ed45712e3",
+      "response_to_ready_ms": 12019.33,
+      "completeness": "ROOT_ONLY",
+      "artifact_roundtrip": true,
+      "original_deadline_preserved": true
+    },
+    {
+      "trace_id": "290032e00e6e8521e1402047a69d4d7d",
+      "item_id": "42389b94-e2b5-4271-9ae8-1a6d863d2a74",
+      "attempt_id": "bffbb411-aeb0-4883-b8b0-315ae05a7442",
+      "trajectory_digest": "sha256:925ab164f34540d1ba7eb903c687d1901e2acf7f5560c228080a0dd554794d89",
+      "contract_digest": "sha256:b6c77bad5727a0efa6fc8b70f0363f659cdfd9d03585ce499d559f7ed45712e3",
+      "response_to_ready_ms": 12021.371000000001,
+      "completeness": "ROOT_ONLY",
+      "artifact_roundtrip": true,
+      "original_deadline_preserved": true
+    },
+    {
+      "trace_id": "5db9692a5af5112ea533f5ea2a6a849e",
+      "item_id": "4ee79d67-a6b5-4fce-9c34-dd4bf8e9e116",
+      "attempt_id": "ccad390c-6335-4eb7-9ca2-d5397b96144a",
+      "trajectory_digest": "sha256:5cd36965cfc02fc9bfaf2602d9f50809dd6f2bbaa6a07c9e3be3a223043c61e0",
+      "contract_digest": "sha256:b6c77bad5727a0efa6fc8b70f0363f659cdfd9d03585ce499d559f7ed45712e3",
+      "response_to_ready_ms": 12023.823999999999,
+      "completeness": "ROOT_ONLY",
+      "artifact_roundtrip": true,
+      "original_deadline_preserved": true
+    },
+    {
+      "trace_id": "ae3ce1c753ec6bb740d68c3028615fe3",
+      "item_id": "7c315cbd-ee3b-49f8-b302-378d90842efa",
+      "attempt_id": "452ab786-9ae8-439f-b788-b21e8c842653",
+      "trajectory_digest": "sha256:d5b703c35db7be6d862cb311aa8a1ddd43484fd2e0206da4ca2830ef5ed1b643",
+      "contract_digest": "sha256:b6c77bad5727a0efa6fc8b70f0363f659cdfd9d03585ce499d559f7ed45712e3",
+      "response_to_ready_ms": 12023.853000000001,
+      "completeness": "ROOT_ONLY",
+      "artifact_roundtrip": true,
+      "original_deadline_preserved": true
+    },
+    {
+      "trace_id": "b39d0850aa503fa753b2cc8b2df0e36d",
+      "item_id": "dfd917f1-f26a-4821-b05d-2b408d3b2435",
+      "attempt_id": "60f62ff5-8a53-4a96-9894-2a1c78be2e6d",
+      "trajectory_digest": "sha256:5a09a822038a14fed3d06fbe9a23d799753b9506e33272b2f90bb1cdaa612909",
+      "contract_digest": "sha256:b6c77bad5727a0efa6fc8b70f0363f659cdfd9d03585ce499d559f7ed45712e3",
+      "response_to_ready_ms": 12021.108999999999,
+      "completeness": "ROOT_ONLY",
+      "artifact_roundtrip": true,
+      "original_deadline_preserved": true
+    },
+    {
+      "trace_id": "8fb428d3b0c713879132f6b8b7928904",
+      "item_id": "b1657c73-6bb0-41d7-b209-35680a15747d",
+      "attempt_id": "c1b09e6d-419b-47d7-a185-f0b62d98b0d3",
+      "trajectory_digest": "sha256:14412373b45cbf7f12fc1737fd25ff08f493dceeb7bc96c0a727cb24c198eb06",
+      "contract_digest": "sha256:b6c77bad5727a0efa6fc8b70f0363f659cdfd9d03585ce499d559f7ed45712e3",
+      "response_to_ready_ms": 12019.994999999999,
+      "completeness": "ROOT_ONLY",
+      "artifact_roundtrip": true,
+      "original_deadline_preserved": true
+    },
+    {
+      "trace_id": "9f71896e710188e0c2fbdb84c3cf31fb",
+      "item_id": "5f25f0bb-42c3-4d1b-9daa-eb742aa86918",
+      "attempt_id": "fc13f432-1d3c-41a8-aa3f-8fab43bc2835",
+      "trajectory_digest": "sha256:7ba9ecf997d04af7cf4ddf0bc3d998bfe4e1e47940929e26027629461cd32de8",
+      "contract_digest": "sha256:b6c77bad5727a0efa6fc8b70f0363f659cdfd9d03585ce499d559f7ed45712e3",
+      "response_to_ready_ms": 12023.61,
+      "completeness": "ROOT_ONLY",
+      "artifact_roundtrip": true,
+      "original_deadline_preserved": true
+    }
+  ]
+}

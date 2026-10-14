@@ -18,7 +18,9 @@
 
 本轮完整本地 `make validate` 8 步通过：Python 2333 passed / 0 skipped / 86 real deselected（163.71s），Console 864 passed，契约同步、Token lint、typecheck、build、Compose 均通过。该次全量 pytest 收集在轮询回归新增之前，因此新增轮询测试以独立 GREEN 1 passed 记录，不计入 2333。三个相关文件 ruff 与 git diff --check 通过。
 
-这两个修复不等价于最终 CI 通过。HTTP-only 真实复验和后续发布 HEAD CI 结果继续单独记录；T8 Judge 与 T9 全量验收仍未完成。
+HTTP-only 真实复验为 1 passed / 66 deselected（139.55s）：10 次独立校准样本保留原 deadline，ROOT_ONLY 和真实制品往返断言通过；另有一次真实 Reader 工厂准入探针。版本、命令、实际 Trace/Item/Attempt、冻结摘要和延迟见 [真实复验回执](ci-http-only-real-receipt.json)。定向复验不替代完整真实集成。
+
+修复已作为 `701cf1a` 推送至 PR #181，新的 [CI 38528223428](https://github.com/miniceM/Argus/actions/runs/38528223428) 已启动；结果以其终态为准。这两个修复不等价于最终 CI 通过。T8 Judge 与 T9 全量验收仍未完成。
 
 ```bash
 python -m pytest -q tests/test_trajectory_inputs.py tests/test_trajectory_api.py tests/test_trajectory_required_evidence.py tests/test_trajectory_comparison.py tests/test_trajectory_acquisition.py tests/test_trajectory_worker.py tests/test_trajectory_coordinator.py

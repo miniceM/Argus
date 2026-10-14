@@ -290,7 +290,34 @@ def _binding_category_values(binding: Any) -> tuple[str, ...] | None:
     return tuple(str(value) for value in values) if values else None
 
 
+def _judge_mode(binding: Any) -> str | None:
+    if getattr(binding, "executor_type", None) != "trajectory_judge":
+        return None
+    from .evaluator_binding import EvaluatorBindingError
+    from .trajectory.judge_execution import judge_policy_mode
+
+    try:
+        return judge_policy_mode(binding)
+    except EvaluatorBindingError as error:
+        raise QualityPolicyError(
+            "Judge 冻结身份或准入配置无效。", code=error.code,
+            evaluator_id=str(getattr(binding, "evaluator_id", "")),
+        ) from None
+
+
 def _validate_rule(rule: QualityRule, binding: Any) -> None:
+    judge_mode = _judge_mode(binding)
+    if judge_mode is not None:
+        if rule.critical:
+            raise QualityPolicyError(
+                "critical Judge 必须具有同风险的独立来源与联合校准；当前尚未完成该准入。",
+                code="CRITICAL_JUDGE_SINGLE_SOURCE", evaluator_id=rule.evaluator_id,
+            )
+        if judge_mode == "diagnostic" and rule.required:
+            raise QualityPolicyError(
+                "diagnostic Judge 只能作为可选诊断；必要规则须冻结 release 模式并完成正式准入。",
+                code="JUDGE_DIAGNOSTIC_RULE_REQUIRED", evaluator_id=rule.evaluator_id,
+            )
     result_type = rule.result_type or _binding_result_type(binding)
     allowed = SUPPORTED_OPERATORS_BY_RESULT_TYPE.get(result_type)
 
@@ -432,15 +459,23 @@ def freeze_quality_policy(
 def default_quality_policy(bindings: Sequence[Any]) -> QualityPolicy:
     """The default all-required policy over the four diagnostic metrics.
 
-    A numeric binding keeps its own frozen direction: higher-is-better uses
-    ``>=``, lower-is-better uses ``<=``. A non-numeric binding becomes an
-    optional diagnostic so a new Launch never depends on a composite metric.
+    Numeric bindings retain their frozen direction; trajectory booleans compare
+    to true. Judge compares to PASS, required only in frozen release mode.
+    Other non-numeric bindings retain their existing diagnostic behavior.
     """
     rules: list[QualityRule] = []
+    has_judge = False
     for binding in bindings:
         result_type = _binding_result_type(binding)
         evaluator_id = str(getattr(binding, "evaluator_id", ""))
-        if result_type == "numeric":
+        judge_mode = _judge_mode(binding)
+        if judge_mode is not None:
+            has_judge = True
+            rules.append(QualityRule(evaluator_id=evaluator_id, operator="==", expected_value="PASS",
+                result_type="categorical", required=judge_mode == "release"))
+        elif result_type == "boolean" and getattr(binding, "input_contract", {}).get("input_kind") == "trajectory":
+            rules.append(QualityRule(evaluator_id=evaluator_id, operator="==", expected_value=True, result_type="boolean", required=True))
+        elif result_type == "numeric":
             operator = "<=" if str(getattr(binding, "direction", "")) == "lower_is_better" else ">="
             rules.append(
                 QualityRule(
@@ -463,11 +498,14 @@ def default_quality_policy(bindings: Sequence[Any]) -> QualityPolicy:
                 )
             )
     return freeze_quality_policy(
-        policy_id="default-all-required",
+        policy_id="default-typed-required" if has_judge else "default-all-required",
         version=QUALITY_POLICY_SCHEMA_VERSION,
         rules=rules,
         bindings={str(getattr(b, "evaluator_id", "")): b for b in bindings},
-        description="默认策略：全部诊断指标均为必要规则，按各自冻结方向判定。",
+        description=(
+            "默认策略：按冻结类型判定；diagnostic Judge 为可选诊断，release Judge 为必要规则。"
+            if has_judge else "默认策略：全部诊断指标均为必要规则，按各自冻结方向判定。"
+        ),
     )
 
 
@@ -552,9 +590,13 @@ class QualityDecision:
     rule_evaluations: tuple[RuleEvaluation, ...] = ()
     unknown_reasons: tuple[str, ...] = ()
     releasable: bool = False
+    required_evidence_status: str | None = None
+    evidence_contract_version: str | None = None
 
     def payload(self) -> dict[str, Any]:
         return {
+            **({"required_evidence_status": self.required_evidence_status,
+                "evidence_contract_version": self.evidence_contract_version} if self.evidence_contract_version is not None else {}),
             "conclusion": self.conclusion,
             "policy_id": self.policy_id,
             "policy_version": self.policy_version,

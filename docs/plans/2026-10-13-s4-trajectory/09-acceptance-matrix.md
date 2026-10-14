@@ -1,6 +1,6 @@
 # S4 统一验收矩阵与证据要求
 
-状态：提议 / 待实施。本文映射分期验收到测试、任务和 issue 关闭条件；不是测试通过报告。公共契约见 [01](01-technical-design.md)，执行顺序见 [08](08-implementation-plan.md)。分期验收 ID 的完整定义保留在对应 02–07 文档，以免复制后口径漂移。
+状态：PR #136 已合并的验收基线。本文映射分期验收到测试、任务和 issue 关闭条件；不是测试通过报告。当前逐项证据见[固定版本归档](../../validation/s4-final/884b181/README.md)，后续数据测试责任见[管理员交接](../../validation/s4-final/administrator-validation-handoff.md)。公共契约见 [01](01-technical-design.md)，执行顺序见 [08](08-implementation-plan.md)。分期验收 ID 的完整定义保留在对应 02–07 文档，原始 79+10 标准不变，交接或跳过不计通过。
 
 ## 1. 四类证据必须分开
 

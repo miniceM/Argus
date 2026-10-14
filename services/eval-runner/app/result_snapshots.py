@@ -18,7 +18,15 @@ from .db_models import (
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
     LangfuseRunScoreTaskRecord,
+    LangfuseSyncTaskRecord,
     RunResultSnapshotRecord,
+)
+from .langfuse_projection import TRAJECTORY_PROJECTION_VERSION
+from .required_evidence import (
+    EVIDENCE_CONTRACT_VERSION,
+    item_is_evaluated,
+    required_quality_decision,
+    validate_snapshot_contract,
 )
 
 
@@ -97,7 +105,7 @@ EVIDENCE_DIAGNOSTIC = "DIAGNOSTIC"
 _UNSETTLED_EXECUTION = {"pending", "queued", "running", "retry_wait"}
 
 
-def evaluate_snapshot_evidence(items: list[dict[str, Any]]) -> tuple[str, list[str]]:
+def evaluate_snapshot_evidence(items: list[dict[str, Any]], *, manifest: dict[str, Any] | None = None) -> tuple[str, list[str]]:
     """Classify a frozen result set by its own evidence, not by Launch status.
 
     Issue #85: an evaluation-only retry (#84) leaves the Launch terminal while
@@ -109,6 +117,14 @@ def evaluate_snapshot_evidence(items: list[dict[str, Any]]) -> tuple[str, list[s
     """
     if not items:
         return EVIDENCE_DIAGNOSTIC, ["快照没有任何用例结果 (snapshot contains no case results)"]
+
+    if any("evidence_contract_version" in i or "required_evidence_status" in i for i in items):
+        expected = [i["id"] for i in manifest["dataset"]["items"]] if manifest is not None else [i["dataset_item_id"] for i in items]
+        actual = [i["dataset_item_id"] for i in items]
+        if sorted(expected) != sorted(actual) or len(set(actual)) != len(actual):
+            return EVIDENCE_DIAGNOSTIC, ["REQUIRED_CASE_COVERAGE_INCOMPLETE"]
+        incomplete = sum(not item_is_evaluated(i) for i in items)
+        return (EVIDENCE_DIAGNOSTIC, [f"REQUIRED_EVIDENCE_INCOMPLETE: {incomplete}/{len(items)}"]) if incomplete else (EVIDENCE_COMPLETE, [])
 
     reasons: list[str] = []
     execution_failed = [i for i in items if str(i.get("execution_status", "")).lower() != "succeeded"]
@@ -233,7 +249,19 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
                 },
             })
     result_items = build_result_items(launch, items, attempts, typed_by_item)
-    evidence_state, evidence_reasons = evaluate_snapshot_evidence(result_items)
+    if (launch.manifest or {}).get("schema_version") == "1.3":
+        from .trajectory.inputs import freeze_trajectory_input
+        by_dataset = {item.dataset_item_id: item for item in items}
+        for result_item in result_items:
+            result_item["trajectory_input"] = freeze_trajectory_input(session,
+                item=by_dataset[result_item["dataset_item_id"]], manifest=launch.manifest)
+    if "evidence_contract_version" in launch.manifest:
+        for result_item in result_items:
+            decision = required_quality_decision(launch.manifest, result_item["evaluation_results"], trajectory_input=result_item.get("trajectory_input") or {})
+            result_item.update(evidence_contract_version=EVIDENCE_CONTRACT_VERSION,
+                required_evidence_status=decision.required_evidence_status,
+                quality_evaluation=decision.payload(), quality_conclusion=decision.conclusion)
+    evidence_state, evidence_reasons = evaluate_snapshot_evidence(result_items, manifest=launch.manifest)
     source_digest = _canonical_digest(result_items)
     existing = session.scalars(select(RunResultSnapshotRecord).where(
         RunResultSnapshotRecord.launch_id == launch.id,
@@ -243,7 +271,14 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
         return existing
 
     evaluator_specs = launch.manifest.get("evaluators", [])
-    summary = aggregate_run(result_items, evaluator_specs)
+    options = {}
+    if "evidence_contract_version" in launch.manifest:
+        options = {"required_case_ids": [i["id"] for i in launch.manifest["dataset"]["items"]],
+            "evidence_contract_version": launch.manifest["evidence_contract_version"]}
+    summary = aggregate_run(result_items, evaluator_specs, **options)
+    if launch.manifest.get("schema_version") == "1.3" and launch.manifest.get("trajectory"):
+        # 新 Snapshot 明确启用；既有同 digest 的历史 Snapshot 在上方原样返回。
+        summary["item_score_projection_version"] = TRAJECTORY_PROJECTION_VERSION
     latest_revision = session.scalar(select(func.max(RunResultSnapshotRecord.revision)).where(
         RunResultSnapshotRecord.launch_id == launch.id
     )) or 0
@@ -261,6 +296,7 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
         evidence_state=evidence_state,
         evidence_reasons=evidence_reasons,
     )
+    validate_snapshot_contract(snapshot, session=session)
     session.add(snapshot)
     session.flush()
 
@@ -281,7 +317,32 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
         status="PENDING",
         next_retry_at=datetime.utcnow(),
     ))
+    if launch.manifest.get("schema_version") == "1.3" and launch.manifest.get("trajectory"):
+        _enqueue_trajectory_item_scores(session, launch, snapshot, items)
     return snapshot
+
+
+def _enqueue_trajectory_item_scores(session, launch, snapshot, items):
+    """调用方事务同时持有 Snapshot、Run Score 与固定 revision 的 Item 投影。"""
+    by_dataset = {item.dataset_item_id: item for item in items}
+    policy = snapshot.manifest.get("quality_policy") or {}
+    for frozen in snapshot.items:
+        item = by_dataset[frozen["dataset_item_id"]]
+        session.add(LangfuseSyncTaskRecord(
+            id=str(uuid.uuid4()), launch_id=launch.id, item_id=item.id,
+            dataset_item_id=frozen["dataset_item_id"], dataset_version=launch.dataset_version,
+            dispatch_generation=frozen["dispatch_generation"], result_snapshot_id=snapshot.id,
+            task_type="TRAJECTORY_ITEM_SCORES", trace_id=frozen["trace_id"] or "",
+            observation_id=frozen["observation_id"],
+            dataset_run_name=snapshot.manifest.get("name") or f"argus-{launch.id[:12]}",
+            scores_payload={
+                "snapshot_id": snapshot.id, "revision": snapshot.revision,
+                "policy_digest": policy.get("policy_digest"),
+                "typed_results": frozen["evaluation_results"],
+                "trajectory_input": frozen.get("trajectory_input"),
+            },
+            status="PENDING", next_retry_at=datetime.utcnow(),
+        ))
 
 
 def list_result_snapshots(session: Session, launch_id: str) -> list[RunResultSnapshotRecord]:

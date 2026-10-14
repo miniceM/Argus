@@ -560,6 +560,36 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
 
   return (
     <div className="space-y-6">
+      {summary?.launch_id === launchId && summary.snapshot_id === snapshotId && (
+        <section data-testid="frozen-gate-observations" aria-label="当前 Snapshot 的冻结门禁观测"
+          className="rounded-lg border border-border bg-surface p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-foreground">当前 Snapshot 的冻结门禁观测</h3>
+          <p className="text-xs text-muted-foreground">
+            已决通过率 = PASS / (PASS + FAIL)；已决覆盖率 = (PASS + FAIL) / Dataset 全部 Case。
+            轨迹覆盖率仅表示拥有可校验冻结轨迹的 Case 比例，不替代必需证据资格。
+          </p>
+          <dl className="grid gap-3 sm:grid-cols-3 text-xs">
+            <div><dt className="text-muted-foreground">已决通过率</dt>
+              <dd data-testid="frozen-decided-pass-rate" className="mt-1 font-mono">{percent(metrics?.decided_pass_rate)}</dd></div>
+            <div><dt className="text-muted-foreground">已决覆盖率</dt>
+              <dd data-testid="frozen-decision-coverage" className="mt-1 font-mono">{percent(metrics?.decision_coverage)}</dd></div>
+            <div><dt className="text-muted-foreground">轨迹覆盖率</dt>
+              <dd data-testid="frozen-trajectory-coverage" className="mt-1 font-mono">{percent(summary.trajectory_coverage)}</dd></div>
+            <div><dt className="text-muted-foreground">UNKNOWN Case</dt>
+              <dd data-testid="frozen-unknown-count" className="mt-1 font-mono">{count(metrics?.quality_unknown_count)}</dd></div>
+            <div><dt className="text-muted-foreground">critical 违规 Case</dt>
+              <dd data-testid="frozen-critical-count" className="mt-1 font-mono">{count(metrics?.critical_failure_count)}</dd></div>
+            <div><dt className="text-muted-foreground">必需证据状态</dt>
+              <dd className="mt-1 font-mono">{metrics?.required_evidence_status ?? "—"}</dd></div>
+          </dl>
+          <p data-testid="frozen-case-counts" className="text-xs text-foreground">
+            Dataset Case：{summary.required_case_counts
+              ? `${summary.required_case_counts.total} / PASS ${summary.required_case_counts.passed} / FAIL ${summary.required_case_counts.failed} / UNKNOWN ${summary.required_case_counts.unknown}`
+              : "—"}
+          </p>
+          <p className="text-xs text-muted-foreground">必要 UNKNOWN 或 critical 违规会阻断发布；可选诊断缺失单独展示。</p>
+        </section>
+      )}
       {/* 错误提示横幅 (Alert) */}
       {comparisonQuery.isError && (
         <div

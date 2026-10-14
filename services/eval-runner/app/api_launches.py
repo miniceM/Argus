@@ -72,6 +72,10 @@ def create_experiment_launch(
     _, _, launch_svc, orchestrator = services
     effective_key = idempotency_key or payload.idempotency_key
     try:
+        trajectory_options = {}
+        if payload.trajectory_contract_json is not None:
+            from .trajectory.manifest import parse_launch_contract
+            trajectory_options["trajectory_contract"] = parse_launch_contract(payload.trajectory_contract_json)
         launch = launch_svc.create_launch(
             agent_id=payload.agent_id,
             agent_version=payload.agent_version,
@@ -93,6 +97,7 @@ def create_experiment_launch(
                 if payload.quality_policy is not None
                 else None
             ),
+            **trajectory_options,
         )
         return _enrich_launch(launch, orchestrator)
     except QualityPolicyError as exc:
@@ -335,6 +340,15 @@ def _query_launch_items(
         if not items:
             return []
 
+        from .required_evidence import frozen_required_policy, uses_required_contract
+        launch = session.get(ExperimentLaunchRecord, launch_id)
+        current = launch is not None and uses_required_contract(launch.manifest)
+        if current:
+            try:
+                frozen_required_policy(launch.manifest)
+            except ValueError:
+                raise HTTPException(status_code=409, detail="EVIDENCE_CONTRACT_INVALID") from None
+
         item_ids = [i.id for i in items]
         final_attempt_ids = [i.final_attempt_id for i in items if i.final_attempt_id]
 
@@ -394,6 +408,9 @@ def _query_launch_items(
         responses = []
         for i in items:
             res = ExperimentItemExecutionResponse.model_validate(i)
+            if current:
+                res.required_evidence_status = ((i.quality_evaluation or {}).get("required_evidence_status", "INCOMPLETE")
+                    if i.execution_status == "succeeded" and i.evaluation_status != "evaluating" else "INCOMPLETE")
             res.evaluation_results = typed_by_item.get(i.id, [])
             res.evaluation_recoverable = recoverable_map.get(i.id, False)
             res.attempt_count = counts_map.get(i.id, 0)

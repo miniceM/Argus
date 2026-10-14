@@ -14,7 +14,14 @@ from sqlalchemy.exc import IntegrityError
 
 from .db_models import AgentRecord, ReleaseGateRecord, ReleasePolicyRecord, RunResultSnapshotRecord
 from .evaluator_binding import canonical_digest
-from .release_gates import ENGINE_VERSION, GateEvaluation, ReleasePolicy, evaluate_gate, frozen_environment
+from .release_gates import (
+    GateEvaluation,
+    ReleasePolicy,
+    evaluate_gate,
+    frozen_environment,
+    gate_engine_version,
+    trajectory_release_policy_error,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["Release Gates"])
 
@@ -122,13 +129,24 @@ def create_release_gate(payload: EvaluateGateRequest) -> ReleaseGateResponse:
                 raise HTTPException(409, "Candidate Agent/environment does not match ReleasePolicy scope")
             request_digest = canonical_digest({
                 "candidate_snapshot_id": candidate.id, "policy_digest": policy.content_digest,
-                "engine_version": ENGINE_VERSION,
+                "engine_version": gate_engine_version(candidate),
             })
             existing = session.scalars(select(ReleaseGateRecord).where(
                 ReleaseGateRecord.request_digest == request_digest,
             )).first()
             if existing:
                 return ReleaseGateResponse.model_validate(existing.result)
+            if (type(candidate.manifest) is not dict
+                or type(candidate.manifest.get("comparison", {})) is not dict):
+                raise HTTPException(409, "EVIDENCE_CONTRACT_INVALID")
+            from .required_evidence import validate_snapshot_contract
+            try:
+                validate_snapshot_contract(candidate)
+            except ValueError:
+                raise HTTPException(409, "EVIDENCE_CONTRACT_INVALID") from None
+            policy_error = trajectory_release_policy_error(policy, candidate)
+            if policy_error:
+                raise HTTPException(409, policy_error)
             baseline_id = candidate.manifest.get("comparison", {}).get("baseline_snapshot_id")
             baseline = session.get(RunResultSnapshotRecord, baseline_id) if baseline_id else None
             evaluated = evaluate_gate(policy, candidate, baseline)

@@ -4,7 +4,7 @@ import hashlib
 import json
 from collections.abc import Iterator
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import Decimal, DecimalException
 from typing import Any
 
 from pydantic import BaseModel
@@ -160,7 +160,7 @@ def canonical_loads(raw: str, *, max_bytes: int = MAX_ARTIFACT_BYTES) -> Any:
     _check_depth(raw)
     try:
         value = json.loads(raw, parse_float=Decimal, parse_constant=_reject_constant, object_pairs_hook=_unique_object)
-    except (ValueError, RecursionError) as error:
+    except (ValueError, RecursionError, DecimalException) as error:
         code = str(error)
         if not code.startswith("TRAJECTORY_JSON_"):
             code = "TRAJECTORY_JSON_INVALID"

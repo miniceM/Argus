@@ -6,6 +6,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -17,17 +18,29 @@ from .db_models import (
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
     LangfuseSyncTaskRecord,
+    RunResultSnapshotRecord,
 )
 from .langfuse_links import LangfuseLaunchLinkService, select_current_run_evidence
 from .langfuse_projection import (
+    TRAJECTORY_PROJECTION_VERSION,
     CombinedSyncState,
     combine_scope_states,
     project_typed_result,
     scope_state_from_tasks,
+    trajectory_score_id,
 )
 from .state_machine import TERMINAL_LAUNCH_STATUSES
 
 logger = logging.getLogger("argus.langfuse_sync")
+
+
+def _uses_snapshot_projection(snapshot):
+    version = (snapshot.summary or {}).get("item_score_projection_version") if snapshot is not None else None
+    if version is None:
+        return False
+    if version != TRAJECTORY_PROJECTION_VERSION:
+        raise ValueError("TRAJECTORY_PROJECTION_CONTRACT_UNSUPPORTED")
+    return True
 
 
 def aggregate_launch_sync_status(db_mgr: DatabaseManager, launch_id: str) -> str:
@@ -59,7 +72,7 @@ def aggregate_launch_sync_status(db_mgr: DatabaseManager, launch_id: str) -> str
         tasks = session.scalars(
             select(LangfuseSyncTaskRecord).where(LangfuseSyncTaskRecord.launch_id == launch_id)
         ).all()
-        tasks_map = {(t.item_id, t.dispatch_generation): t for t in tasks}
+        tasks_map = {(t.item_id, t.dispatch_generation): t for t in tasks if t.task_type == "FULL_EVAL_SYNC"}
 
         # Current generation task for each item
         current_tasks_map = {
@@ -90,6 +103,17 @@ def aggregate_launch_sync_status(db_mgr: DatabaseManager, launch_id: str) -> str
             return "SYNCING"
 
         valid_tasks = [current_tasks_map[it.id] for it in items_needing_sync if current_tasks_map[it.id] is not None]
+        if launch.manifest.get("schema_version") == "1.3" and launch.manifest.get("trajectory"):
+            snapshot = session.scalar(select(RunResultSnapshotRecord).where(
+                RunResultSnapshotRecord.launch_id == launch_id).order_by(RunResultSnapshotRecord.revision.desc()).limit(1))
+            if _uses_snapshot_projection(snapshot):
+                projection_by_item = {t.item_id: t for t in tasks
+                    if t.task_type == "TRAJECTORY_ITEM_SCORES" and t.result_snapshot_id == snapshot.id}
+                if any(it.id not in projection_by_item for it in items):
+                    launch.langfuse_sync_status = "SYNCING"
+                    session.commit()
+                    return "SYNCING"
+                valid_tasks.extend(projection_by_item[it.id] for it in items)
 
         # 4. Extract and validate Run IDs from current-generation tasks only.
         # The same selection rule backs the link service, so a link can never point at a
@@ -135,7 +159,7 @@ def aggregate_launch_sync_status(db_mgr: DatabaseManager, launch_id: str) -> str
             return "SYNCED"
 
         # - Unconfigured check: to converge to NOT_APPLICABLE, all items needing sync must have a task materialized AND all be SKIPPED
-        if items_needing_sync and len(valid_tasks) == len(items_needing_sync) and all(s == "SKIPPED" for s in task_statuses):
+        if valid_tasks and all(s == "SKIPPED" for s in task_statuses):
             launch.langfuse_sync_status = "NOT_APPLICABLE"
             launch.langfuse_sync_error = None
             session.commit()
@@ -238,6 +262,21 @@ def launch_sync_breakdown(db_mgr: DatabaseManager, launch_id: str, *, max_attemp
         run_rows = session.scalars(
             select(LangfuseRunScoreTaskRecord).where(LangfuseRunScoreTaskRecord.launch_id == launch_id)
         ).all()
+        missing_projection = False
+        launch = session.get(ExperimentLaunchRecord, launch_id)
+        if launch and launch.manifest.get("schema_version") == "1.3" and launch.manifest.get("trajectory"):
+            items = session.scalars(select(ExperimentItemExecutionRecord).where(
+                ExperimentItemExecutionRecord.launch_id == launch_id)).all()
+            generations = {item.id: item.dispatch_generation for item in items}
+            snapshot = session.scalar(select(RunResultSnapshotRecord).where(
+                RunResultSnapshotRecord.launch_id == launch_id).order_by(RunResultSnapshotRecord.revision.desc()).limit(1))
+            if _uses_snapshot_projection(snapshot):
+                item_rows = [row for row in item_rows if (
+                    row.task_type == "FULL_EVAL_SYNC" and row.dispatch_generation == generations.get(row.item_id)
+                    or row.task_type == "TRAJECTORY_ITEM_SCORES" and row.result_snapshot_id == snapshot.id)]
+                projected_items = {row.item_id for row in item_rows if row.task_type == "TRAJECTORY_ITEM_SCORES"}
+                missing_projection = any(item.id not in projected_items for item in items)
+                run_rows = [row for row in run_rows if row.snapshot_id == snapshot.id]
         item_tasks = [
             {"status": row.status, "attempts": row.attempts, "last_error": row.last_error}
             for row in item_rows
@@ -247,8 +286,11 @@ def launch_sync_breakdown(db_mgr: DatabaseManager, launch_id: str, *, max_attemp
             for row in run_rows
         ]
 
+    item_state = scope_state_from_tasks(item_tasks, max_attempts=max_attempts)
+    if missing_projection and item_state.status in {"SYNCED", "NOT_APPLICABLE"}:
+        item_state = replace(item_state, status="PENDING", reason="CURRENT_SNAPSHOT_PROJECTION_TASK_MISSING")
     return combine_scope_states(
-        item_trace=scope_state_from_tasks(item_tasks, max_attempts=max_attempts),
+        item_trace=item_state,
         run_score=scope_state_from_tasks(run_tasks, max_attempts=max_attempts),
     )
 
@@ -457,6 +499,8 @@ class LangfuseOutboxSyncer:
                     "dataset_version": task.dataset_version,
                     "item_id": task.item_id,
                     "dispatch_generation": task.dispatch_generation,
+                    "task_type": task.task_type,
+                    "result_snapshot_id": task.result_snapshot_id,
                     "trace_id": task.trace_id,
                     "observation_id": task.observation_id,
                     "scores_payload": dict(task.scores_payload or {}),
@@ -567,11 +611,96 @@ class LangfuseOutboxSyncer:
             logger.warning("Could not resolve snapshot provenance for launch %s: %s", launch_id, exc)
             return None, None
 
+    def _trajectory_projection(self, task_id, payload):
+        """只读任务指定的 Snapshot；不查 latest、CP 或在线 Observation。"""
+        from .required_evidence import validate_snapshot_contract
+        from .trajectory.inputs import load_frozen_snapshot_input
+
+        with self.db_mgr.get_session() as session:
+            task = session.get(LangfuseSyncTaskRecord, task_id)
+            identity_fields = ("launch_id", "item_id", "dataset_item_id", "dispatch_generation",
+                               "task_type", "result_snapshot_id", "trace_id", "observation_id", "scores_payload")
+            if (task is None or payload.get("task_id") != task_id
+                or any(getattr(task, field) != payload.get(field) for field in identity_fields)):
+                raise ValueError("TRAJECTORY_PROJECTION_CLAIM_MISMATCH")
+            snapshot = session.get(RunResultSnapshotRecord, payload.get("result_snapshot_id"))
+            if snapshot is None or snapshot.launch_id != payload["launch_id"]:
+                raise ValueError("TRAJECTORY_PROJECTION_SNAPSHOT_INVALID")
+            rows = [row for row in snapshot.items if row["dataset_item_id"] == payload["dataset_item_id"]]
+            if len(rows) != 1:
+                raise ValueError("TRAJECTORY_PROJECTION_CASE_INVALID")
+            row = rows[0]
+            policy = snapshot.manifest.get("quality_policy") or {}
+            expected_payload = {
+                "snapshot_id": snapshot.id, "revision": snapshot.revision,
+                "policy_digest": policy.get("policy_digest"),
+                "typed_results": row["evaluation_results"], "trajectory_input": row.get("trajectory_input"),
+            }
+            if payload["scores_payload"] != expected_payload:
+                raise ValueError("TRAJECTORY_PROJECTION_FROZEN_PAYLOAD_MISMATCH")
+            frozen = load_frozen_snapshot_input(session, snapshot=snapshot, dataset_item_id=payload["dataset_item_id"])
+            if frozen is None or frozen.trajectory is None:
+                return [], (frozen.reason_code if frozen else None) or "TRAJECTORY_PROJECTION_ROOT_UNAVAILABLE"
+            validate_snapshot_contract(snapshot, session=session)
+            scope = frozen.trajectory.scope
+            if (scope.item_execution_id, scope.dispatch_generation, scope.trace_id, scope.root_observation_id) != (
+                payload["item_id"], payload["dispatch_generation"], payload["trace_id"], payload.get("observation_id")
+            ):
+                raise ValueError("TRAJECTORY_PROJECTION_SCOPE_MISMATCH")
+            projected = []
+            for result in row["evaluation_results"]:
+                provenance = result.get("provenance") or {}
+                score_id = trajectory_score_id(item_id=scope.item_execution_id, snapshot_id=snapshot.id,
+                                               binding_id=provenance.get("binding_id"))
+                score = project_typed_result(result, item_id=scope.item_execution_id,
+                    generation=scope.dispatch_generation, snapshot_id=snapshot.id, revision=snapshot.revision,
+                    policy_digest=policy.get("policy_digest"), definition_digest=provenance.get("definition_digest"))
+                if score.applicable:
+                    evidence = dict(score.evidence or {}) | {
+                        "trajectory_contract_digest": frozen.trajectory_evidence_ref.trajectory_contract_digest,
+                        "trajectory_digest": frozen.trajectory_evidence_ref.trajectory_digest,
+                        "artifact_id": frozen.trajectory_evidence_ref.artifact_id,
+                        "root_observation_id": scope.root_observation_id,
+                        "attempt_id": scope.attempt_id, "dispatch_generation": scope.dispatch_generation,
+                    }
+                    projected.append(replace(score, score_id=score_id, evidence=evidence))
+            return projected, None if projected else "TRAJECTORY_PROJECTION_NO_APPLICABLE_RESULT"
+
+    def _full_eval_link_only(self, launch_id):
+        with self.db_mgr.get_session() as session:
+            launch = session.get(ExperimentLaunchRecord, launch_id)
+            if not (launch and launch.manifest.get("schema_version") == "1.3" and launch.manifest.get("trajectory")):
+                return False
+            snapshot = session.scalar(select(RunResultSnapshotRecord).where(
+                RunResultSnapshotRecord.launch_id == launch_id).order_by(RunResultSnapshotRecord.revision.desc()).limit(1))
+            return snapshot is None or _uses_snapshot_projection(snapshot)
+
+    def _claim_route_error(self, task_id, payload, task_type):
+        """先核验 DB 分流身份，不能靠更改 payload 类型绕过轨迹校验。"""
+        with self.db_mgr.get_session() as session:
+            task = session.get(LangfuseSyncTaskRecord, task_id)
+            if task is None or task.task_type != task_type:
+                return "SYNC_TASK_CLAIM_TYPE_MISMATCH"
+            if task.task_type == "TRAJECTORY_ITEM_SCORES" or task.result_snapshot_id is not None:
+                fields = ("launch_id", "item_id", "dataset_item_id", "dispatch_generation",
+                          "task_type", "result_snapshot_id", "trace_id", "observation_id", "scores_payload")
+                if (payload.get("task_id") != task_id
+                    or any(getattr(task, field) != payload.get(field) for field in fields)):
+                    return "TRAJECTORY_PROJECTION_CLAIM_MISMATCH"
+            return None
+
     def process_single_task(self, task_id: str, claim_token: str, payload: dict[str, Any]) -> bool:
         """Executes remote HTTP sync calls outside of DB transactions, renews lease during execution,
         and strongly verifies responses with post-lock instantaneous clock CAS.
         """
-        client_st, lf, err_detail = self.resolve_client_status()
+        task_type = payload.get("task_type", "FULL_EVAL_SYNC")
+        route_error = self._claim_route_error(task_id, payload, task_type)
+        if route_error:
+            client_st, lf, err_detail = "INCOMPATIBLE", None, route_error
+        elif task_type not in {"FULL_EVAL_SYNC", "TRAJECTORY_ITEM_SCORES"}:
+            client_st, lf, err_detail = "INCOMPATIBLE", None, "SYNC_TASK_TYPE_UNSUPPORTED"
+        else:
+            client_st, lf, err_detail = self.resolve_client_status()
 
         # Explicitly unconfigured branch -> transition to SKIPPED
         if client_st == "UNCONFIGURED":
@@ -588,7 +717,8 @@ class LangfuseOutboxSyncer:
         else:
             scores = payload.get("scores_payload", {})
             dataset_source = scores.get("_dataset_source")
-            snapshot_id, revision = self._resolve_snapshot_provenance(payload["launch_id"])
+            snapshot_id, revision = (self._resolve_snapshot_provenance(payload["launch_id"])
+                                     if task_type == "FULL_EVAL_SYNC" else (None, None))
 
             stop_hb = threading.Event()
             lease_lost = threading.Event()
@@ -659,8 +789,13 @@ class LangfuseOutboxSyncer:
                 return max(0.001, rem)
 
             try:
+                trajectory_scores = None
+                if task_type == "TRAJECTORY_ITEM_SCORES":
+                    trajectory_scores, reason = self._trajectory_projection(task_id, payload)
+                    if reason is not None:
+                        return self._mark_task_skipped(task_id, claim_token, reason, payload["launch_id"])
                 # 1. Dataset Run Item linking (Skip for local seed datasets)
-                if dataset_source == "seed":
+                if task_type == "TRAJECTORY_ITEM_SCORES" or dataset_source == "seed":
                     logger.debug("Skipping remote DatasetRunItem association for seed dataset item %s", payload["dataset_item_id"])
                 else:
                     # Production Langfuse Dataset: dataset_version MUST be explicitly frozen
@@ -703,13 +838,13 @@ class LangfuseOutboxSyncer:
                 # Typed results are projected with their real semantics; a type
                 # Langfuse cannot represent is recorded as NOT_APPLICABLE and is
                 # never written as a number.
-                projected = _project_scores(
-                    payload,
-                    scores=scores,
-                    snapshot_id=snapshot_id,
-                    revision=revision,
-                    policy_digest=scores.get("_policy_digest"),
-                )
+                if trajectory_scores is not None:
+                    projected = trajectory_scores
+                elif self._full_eval_link_only(payload["launch_id"]):
+                    projected = []
+                else:
+                    projected = _project_scores(payload, scores=scores, snapshot_id=snapshot_id,
+                        revision=revision, policy_digest=scores.get("_policy_digest"))
                 for projected_score in projected:
                     if _is_timeout_or_lost():
                         logger.warning("Syncer %s lost lease or timed out on task %s before score upload, aborting", self.syncer_id, task_id)

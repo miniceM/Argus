@@ -1,8 +1,10 @@
 """有界 Langfuse v2 只读传输；原始页仅供进程内 Normalizer 消费。"""
 
 import asyncio
+import hashlib
 import ipaddress
 import math
+import re
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -98,6 +100,40 @@ class LangfuseObservationReader:
 
     async def aclose(self) -> None:
         await self._client.aclose()
+
+    async def verify_api_contract(self, approved_digests: frozenset[str], *, timeout_seconds: float) -> None:
+        """只探测固定公开 API 文档；1 MiB/单请求 timeout，不解码或保留原文。"""
+        if (type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds)
+                or not 0 < timeout_seconds <= 5):
+            raise ValueError("TRAJECTORY_READER_LIMIT_INVALID")
+        if (type(approved_digests) is not frozenset or not 1 <= len(approved_digests) <= 16
+                or any(type(value) is not str or re.fullmatch(r"sha256:[a-f0-9]{64}", value) is None
+                       for value in approved_digests)):
+            raise ValueError("TRAJECTORY_READER_APPROVAL_CONFIGURATION_INVALID")
+        size, digest = 0, hashlib.sha256()
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                async with self._client.stream("GET", "api/openapi.yaml", timeout=timeout_seconds) as response:
+                    self._check_status(response.status_code)
+                    if response.headers.get("content-encoding", "identity").lower() != "identity":
+                        raise ObservationReadError("TRAJECTORY_SOURCE_ENCODING_UNSUPPORTED", retryable=False)
+                    declared = response.headers.get("content-length")
+                    if declared is not None:
+                        if not declared.isascii() or not declared.isdigit() or len(declared) > 20:
+                            raise ObservationReadError("TRAJECTORY_SOURCE_CONTRACT_ERROR", retryable=False)
+                        if int(declared) > 1024 * 1024:
+                            raise ObservationReadError("TRAJECTORY_SOURCE_API_DOCUMENT_LIMIT", retryable=False)
+                    async for chunk in response.aiter_bytes():
+                        size += len(chunk)
+                        if size > 1024 * 1024:
+                            raise ObservationReadError("TRAJECTORY_SOURCE_API_DOCUMENT_LIMIT", retryable=False)
+                        digest.update(chunk)
+        except (TimeoutError, httpx.TimeoutException):
+            raise ObservationReadError("TRAJECTORY_SOURCE_TIMEOUT", retryable=True) from None
+        except httpx.HTTPError:
+            raise ObservationReadError("TRAJECTORY_SOURCE_TRANSPORT_ERROR", retryable=True) from None
+        if "sha256:" + digest.hexdigest() not in approved_digests:
+            raise ObservationReadError("TRAJECTORY_SOURCE_API_CONTRACT_MISMATCH", retryable=False)
 
     async def read_page(
         self, scope: TrajectoryScope, *, cursor: str | None, page_size: int, timeout_seconds: float, max_bytes: int

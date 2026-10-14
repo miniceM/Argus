@@ -189,7 +189,7 @@ class LocalLangfuse:
             time.sleep(0.3)
         raise AssertionError(f"Local ingestion deadline: expected {minimum} observations; observed {len(rows)}")
 
-    def record(self, profile, scenario, identity, rows):
+    def record(self, profile, scenario, identity, rows, *, normalization=None):
         paged = self.observations(identity["trace_id"])
         full_page = self.observations(identity["trace_id"], limit=1000)
         if {row["id"] for row in full_page} != {row["id"] for row in paged}:
@@ -261,6 +261,8 @@ class LocalLangfuse:
                                  "human_events": sum(row.get("metadata", {}).get("attributes.workflow.phase") == "HUMAN" for row in rows)},
                              "dependency_edges": dependency_edges,
                              "edges": [{"id": row["id"], "parent": row.get("parentObservationId")} for row in rows]})
+        if normalization is not None:
+            self.reports[-1]["normalization"] = normalization
         report = {"captured_at": datetime.now(UTC).isoformat(), "server": "4.38.0",
                   "runner_sdk": importlib.metadata.version("langfuse"), "agent_packages": self.agent_packages,
                   "api": "/api/public/v2/observations", "poll_interval_ms": 300, "cases": self.reports}
@@ -295,6 +297,7 @@ class AgentProcess:
         self.export_mode, self.approval = export_mode, approval
         self.approval_process = self.approval_log = None
         self.process = self.log = None
+        self.human_authority = None
 
     def __enter__(self):
         python = FIXTURES / ".venv" / "bin" / "python"
@@ -326,7 +329,9 @@ class AgentProcess:
                     if self.approval_process.poll() is not None or time.monotonic() >= deadline:
                         raise RuntimeError("S4 approval system readiness failed")
                     time.sleep(0.05)
-                env["S4_APPROVAL_URL"] = json.loads(approval_ready.read_text())["endpoint"]
+                ready = json.loads(approval_ready.read_text())
+                self.human_authority = ready["human_authority"]
+                env["S4_APPROVAL_URL"] = ready["endpoint"]
                 require_loopback(env["S4_APPROVAL_URL"])
             self.log = (self.directory / (self.profile + ".log")).open("w")
             self.process = subprocess.Popen([str(python), str(FIXTURES / self.profile / "agent.py")],

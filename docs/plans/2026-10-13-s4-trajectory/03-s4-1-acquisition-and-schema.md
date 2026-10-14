@@ -1,6 +1,6 @@
 # S4.1 Acquisition、StandardTrajectory 与只读 Assembler：#128
 
-状态：提议，待方案 PR 评审；本文件是实现蓝图，不表示功能已经交付。核验基线：2026-10-13，main@4b043739c63357ecc10131e1ba54bc1bc53d862a。字段、枚举、函数签名和 digest 语义统一服从 [01 技术契约](01-technical-design.md)；不得在本文件另起接口或枚举。
+状态：PR #136 已合并设计；采集、冻结制品与恢复实现已汇入 PR #181，最终数据验收交管理员，见[交接说明](../../validation/s4-final/administrator-validation-handoff.md)。原设计核验基线：2026-10-13，main@4b043739c63357ecc10131e1ba54bc1bc53d862a。字段、枚举、函数签名和 digest 语义统一服从 [01 技术契约](01-technical-design.md)；不得在本文件另起接口或枚举。
 
 ## 目标、现状与 Issue 修订
 
@@ -28,6 +28,7 @@ S4.1 接收 S4.0 的真实 Langfuse 字段/延迟矩阵，完成按 Attempt 限�
 | trajectory/schema.py | 定义并校验 01 的现有类型、版本与必要约束；包含可选 causal_predecessor_ids/workflow_scope_id；不创建并行 DTO |
 | trajectory/acquisition.py | 唯一 Langfuse v2 只读分页、限时重查与状态收敛入口；不调用 Agent、不判规则 |
 | trajectory/normalizer.py | 按 S4.0 已验证的 source profile 将 API 字段映射到 StandardTrajectory 使用的通用字段 |
+| trajectory/factory.py 与 reader.py | 从 Runner 可信批准配置匹配完整合同/Reader 实现/API 文档身份，固定公开文档有界探测后提供 Reader；不从 Trace 自报资格、不自动批准 |
 | trajectory/assembler.py | 从 root 闭包建图、去重、识别异常、产生稳定展示序列和 completeness |
 | trajectory/redaction.py | 仅保留冻结规则允许的脱敏 input/output/arguments/result；raw Observation 不出 Adapter |
 | trajectory/evidence.py | 对冻结 StandardTrajectory canonicalize、计算 digest、插入或读取不可变制品 |
@@ -52,10 +53,20 @@ Langfuse API 的物理字段名仅存在 Normalizer source profile。最初的 p
 生产调用严格采用 01 中签名：
 
     async def acquire_trajectory(scope, contract, *, client: ObservationReader) -> TrajectoryAcquisition
-    def normalize_observations(rows, contract) -> NormalizedObservations
+    def normalize_observations(rows, contract, *, scope) -> NormalizedObservations
     def assemble_trajectory(scope, observations, contract) -> StandardTrajectory
 
 调用方只从完成中的 ExperimentItemExecutionRecord、Attempt 和冻结 Manifest 构造 scope/contract。不得另加 trace_id、attempt_id、profile、cursor 或 timeout 的旁路 API 参数；分页状态属于 acquisition 内部，reader 仅由依赖注入提供。
+
+内部 `AcquisitionRuntime` 通过调用上下文注入原始开始时间、事务工厂及共享限流器，公开采集签名保持上述约定；每调用读取一个有界分页轮次，协调器负责持久化 PENDING 与后续调度。静默只计算两次完整分页的观测时刻差，语义变化重置，不计归一化/组装耗时。READY 由真实制品仓储生成；读截止后保存另受冻结单请求 timeout 限制。实现与实测见 [有界采集验收](../../validation/s4-1/trajectory-acquisition.md)。正式 Worker/Manifest 与成功响应执行恢复已接通，eval-only 冻结输入装载已接通，见 [冻结输入验收](../../validation/s4-1/frozen-input.md)；轨迹规则与新资格仍须继续，不把入口交付当作完整 S4.1。
+
+`TrajectoryCoordinator` 已统一消费 [checkpoint 事务边界](../../validation/s4-1/trajectory-checkpoint.md)：原时间/累计扣减恢复、quiet 重建、真实候选保留/失效、独立线程事务、取消及截止收尾。运行合同不共享调用方可变容器；正式 Worker/Manifest、qualified 工厂与成功响应执行恢复已启用，eval-only 冻结输入装载已接通，见 [冻结输入验收](../../validation/s4-1/frozen-input.md)；轨迹规则与新资格仍须继续，边界与实测见 [协调器验收](../../validation/s4-1/trajectory-coordinator.md)。
+
+`QualifiedReaderFactory` 已提供依赖注入边界，批准记录只能由 Runner 可信配置提供，精确匹配完整 `trajectory_contract_digest`、Reader/codec 实现摘要和固定 `/api/openapi.yaml` 文档摘要。空配置默认拒绝；合同或实现不匹配在网络前拒绝，API 漂移不回退旧版本。探测只增量计算 SHA-256，受 1 MiB、冻结单请求 timeout 与并发限制，排队计入同一请求预算；所有退出关闭客户端，消费方异常保持原语义。API 探测不扣 Observation wire 额度，正式调用方仍须按原响应 Checkpoint 截止接入协调器。
+
+正式 `ExecutionWorker` 对显式 Manifest 1.3 已在成功 HTTP 响应的原 Checkpoint 之后、冻结评测之前自动调用 `WorkerTrajectoryCollector`；Agent HTTP 许可此前已释放，原执行租约继续续期。Collector 从持久化 Checkpoint 构造 scope 并复核真实 AgentVersion，Lazy Reader 只在协调器完成原期限/租约/CAS 预留后打开可信工厂，探测也计原截止；READY/UNAVAILABLE 写原采集账本。Runner 的 `ARGUS_TRAJECTORY_READER_APPROVALS` 为最多 16 KiB/16 条的精确三摘要 JSON，默认空批准，首次有效配置在 Worker 实例内冻结；旧 1.2 不读取新配置或采集源。租约/代数/取消 fence 失败阻止后续评测；没有可信 Root/Checkpoint 或存储不可用时仅给有限诊断、不伪造公共 Acquisition，不丢弃 Agent 成功响应。损坏合同产生有限诊断后仍保留业务成功，由共享冻结评测边界拒绝评分并返回失败/UNKNOWN。有效合同的当前 Output Binding 语义保留，正式 Binding 输入 Adapter 与 eval-only 冻结证据恢复仍须继续接通，Snapshot 新资格仍 T4 原子启用。实测与部署说明见 [Worker 自动采集验收](../../validation/s4-1/worker-trajectory.md)。
+
+受控银行夹具按 native OTel/Pydantic AI 的 serial、blocked、parallel、late_all 各 10 次与 HTTP-only serial 10 次独立校准，共 90 次真实单 Attempt。采用完整合同：12s 原响应截止、0.3s quiet、64 steps、page_size=2/max_pages=20、1 MiB source、64 KiB artifact；保留 8s 迟到，不临时扩大失败样本预算。校准归档字段 presence/null、父闭包、请求/执行配对、因果、参数语义、实际容量和响应到 READY 延迟；每组成功后真实消费工厂一次。这个合同只覆盖受控夹具，不替换通用默认值，也不承诺生产 SLA；实际部署的 Agent/SDK/映射/容量/服务版本变化必须重新校准并批准新身份。正式 Worker 自动采集与可信配置装载器已接通；成功响应执行恢复已接通，生产负载容量校准仍须实施。实现与证据见 [Reader 来源校准验收](../../validation/s4-1/qualified-reader.md)。
 
 Normalizer 先校验原始字段类型，再依据冻结 source profile 做一对一映射：Langfuse observation ID → observation_id；trace ID → scope.trace_id；parent observation ID → parent_step_id；开始/结束时间 → started_at/ended_at；provider type/name → type/raw_name；获准的 input/output → redacted arguments/result 和轨迹 input/output。最终别名以 S4.0 实测为准。别名同时存在且值冲突时不挑一个赢家，丢弃冲突记录并降低完整度。
 
@@ -86,6 +97,8 @@ input/output/arguments 进入 StandardTrajectory 前先运行统一 redaction po
 
 ## 图闭包、时序与 digest
 
+实现按中等规模增量拆分：内部 `trajectory/graph.py` 的 `assemble_root_graph` 先输出绑定 scope/合同/来源的 `RootObservationGraph`，只负责身份闭包、去重、稳定展示顺序和 Step 预算；后续 `assemble_trajectory` 消费它完成因果、terminal inventory、能力/完整度、最终制品预算和 digest。内部图不替代 `StandardTrajectory` 或完成协议。实现与验证见 [Root 图验收](../../validation/s4-1/root-graph.md)。
+
 Assembler 先确认 scope.root_observation_id 对应的唯一 root，随后只沿真实 parent_step_id 递归收集其后代；父边之外的同 Trace 兄弟树不进入本 Attempt。每条记录的 trace_id 必须等于冻结 scope.trace_id。root 的 Launch/Item/Attempt/generation 来源是 Runner 数据库身份，不从 Trace metadata 或请求 Header 自报覆盖。其它 Attempt 即使 Trace ID 相同也不并入当前闭包。
 
 使用 observation_id 建索引，验证父引用存在性、唯一性、同 Trace 和无环。缺 parent、跨 Trace 子节点、重复冲突、孤立节点、父环均保留稳定 warning。Assembler 可按 01 规则断开无效边以形成可展示子图，但相关工具执行/时序能力降级；不能虚构 parent。成环节点不能参与因果判定。
@@ -94,9 +107,13 @@ Assembler 先确认 scope.root_observation_id 对应的唯一 root，随后只�
 
 Assembler 校验因果边时要求 predecessor 与当前 Step 都在同一个冻结 scope/Attempt 内，且 predecessor ID 唯一存在、没有自环或环路。因果边与已验证工作流序列冲突时，不选一方作为真值；剔除冲突关系、记录 warning，并降低 ordering coverage。display index 与因果图是两个并存的数据面，任何下游测量不得把 index 当作 predecessor 列表。
 
+内部 `trajectory/causal.py` 的 `validate_causal_links` 消费同一 scope/批次/合同并调用 Root 图阶段，校验显式 event 引用、同 workflow 的事件/序号唯一性、原始回环和时间关系，返回已验证 observation 前驱及唯一 request/action 配对。它不生成隐式全序，不传递参数、不作完整度结论；最终 `assemble_trajectory` 消费这些映射。terminal 虽不作工具顺序节点，仍参与事件命名空间冲突检查。实现、参数来源状态修复和实测见 [显式因果验收](../../validation/s4-1/causal-links.md)。
+
 上限采用 01 的起始提议：1000 steps、100 条/页且最多 20 页、最多 8 MiB 源数据、最多 2 MiB artifact、每请求 5 秒、采集总期限 60 秒、静默观察 2 秒、同时最多 4 个 acquisition。它们不是已承诺 SLA：S4.0 的真实延迟/体积矩阵与 S4.1 的本地负载测试必须校准，所有结果相关限额纳入冻结 TrajectoryContract/digest；调参应生成新 contract 身份。
 
 canonical digest 使用 UTF-8、键排序、紧凑 JSON、UTC 微秒、拒绝 NaN/Infinity、按稳定规则排序 Step 与 warnings，再计算 SHA-256。摘要主体按 01 中 StandardTrajectory 的冻结 scope、脱敏输入/输出、completeness、steps 组成；计算时排除 provenance 内自身的 trajectory_digest，避免循环。source profile、schema、assembler、mapping 与 redaction 的配置身份由 trajectory_contract_digest 固定。
+
+`trajectory/assembler.py` 已组合 Root/因果内部阶段，核对含 terminal 自身的逐 workflow inventory、按业务角色聚合能力、保留可信调用参数状态，并按最终字节预算裁剪和计算语义摘要。内部可选 `ObservationConvergence` 随批次绑定全部规范化输入；没有来自 Acquisition 的分页/quiet 证明时不发布 OBSERVED_COMPLETE。真实 Reader 的单次消费验证也保持该边界。实现和实测见 [冻结轨迹组装验收](../../validation/s4-1/trajectory-assembly.md)；生产 Acquisition 与成功响应执行恢复已接通，eval-only 已按原引用装载制品，见 [冻结输入验收](../../validation/s4-1/frozen-input.md)；轨迹规则与新资格仍须继续。
 
 Step.duration_ms 表达 Step 执行语义；若来源提供且 profile 验证该值，则它属于 StandardTrajectory 的语义字段，必须进入 trajectory_digest，值变化必须改变摘要。字段缺失保持 null 并降低 timing capability，不得用采集时间推算。仅排除采集/组装运行耗时、采集时刻、临时 Worker ID 和不稳定错误文本。完全相同的冻结规范化输入必须字节级得到相同 digest；增加/删除/修改一个证据 Step 或其已提供的 duration_ms 必须改变摘要。
 
@@ -104,15 +121,23 @@ Step.duration_ms 表达 Step 执行语义；若来源提供且 profile 验证该
 
 新增trajectory_evidence_artifacts表按01的字段清单保存一份最小StandardTrajectory JSON和所属身份：id、launch_id、item_execution_id、attempt_id、trajectory_contract_digest、trajectory_digest、schema_version、payload_json、created_at。payload_json用TEXT存canonical UTF-8 JSON，局部Decimal decoder/encoder完成精确往返；不改变ORM全局JSON序列化。外键复用既有Launch/Item/Attempt身份；唯一键为item_execution_id + attempt_id + trajectory_contract_digest + trajectory_digest。payload不超过冻结max_artifact_bytes，数据库以octet_length约束字节上限；仅保存脱敏内容。写入使用insert-only：命中唯一键时读取并校验既有记录，不更新旧payload。读取时重算digest，并验证Launch/Item/Attempt/Schema/contract/ref相互一致。
 
+内部 `trajectory/evidence.py` 已复用 `017` 的表实现 Session 所有权明确的 insert-only 保存/读取，重新验证安全投影、provenance、原 checkpoint scope 和 DB 归属；历史制品读取不依赖 checkpoint TTL。terminal summary 增补已规范化的 `observed_events(step_id/event_id/sequence)` 安全映射，解决公开 Step 未保存业务 event 身份而无法重算覆盖的缺口，映射进入摘要并随展示裁剪。协议补充、边界与实测见 [不可变轨迹证据验收](../../validation/s4-1/trajectory-evidence.md)。生产 Acquisition、checkpoint lease/CAS 与成功响应执行恢复已接通，eval-only 已按原引用装载制品，见 [冻结输入验收](../../validation/s4-1/frozen-input.md)；轨迹规则与新资格仍须继续。
+
 现有execution_checkpoints按item_execution_id + dispatch_generation唯一，保存Agent输出及其冻结Manifest provenance。迁移增加可空JSON字段trajectory_acquisition_json，值只序列化01的TrajectoryAcquisition，不保存Observations或第二份完整Trace。T1统一拥有AgentVersion profile列、artifact表及checkpoint扩展的Schema迁移，T2复用它接入持久化；本次基线最高016，候选文件migrations/017_trajectory_evidence.sql。真正实施时必须重新查看最新main和并行迁移，按序号追加；不得改已发布迁移。
+
+`017` 已交付后追加 `018` 的私有 `trajectory_runtime_json`，保存原 checkpoint.created_at、来源/合同摘要、累计/预留 wire 预算、轮次 CAS 及安全候选制品指针。公开 PENDING 仍无 EvidenceRef；私有指针解决进程中断后原截止到达时保留已验证候选，不保存第二份 Trace。读前预留剩余额度、发布后退未用量，崩溃/取消不退未知在途额度。来源校验、历史 READY 仅读取诊断、锁后时间/租约验证和实施边界见 [采集 Checkpoint 验收](../../validation/s4-1/trajectory-checkpoint.md)；正式 Worker/Manifest 与成功响应恢复调度已接入，eval-only 冻结输入装载已接通，见 [冻结输入验收](../../validation/s4-1/frozen-input.md)；轨迹规则与新资格仍须继续。
 
 执行顺序保持不重调 Agent：成功收到业务响应后，先写现有 execution checkpoint；随后完成有界 Acquisition；READY 时写 evidence artifact，再以当前 generation/lease/CAS 更新 checkpoint acquisition ref；最后才交由后续阶段的冻结 Evaluator 消费。UNAVAILABLE 表达采集不可用；READY 可携带 ROOT_ONLY 或 PARTIAL completeness。它们只表达证据状态，不回滚 Agent 成功响应，也不在 #128 判断规则或质量。S4.1 不改变旧 Manifest 的行为。
 
 本期提供 trajectory contract 的 Manifest 1.3 序列化与 checkpoint/artifact；Manifest 1.2 及其它已注册历史版本按原逻辑执行。Snapshot 引用的 serializer/validator 可在本期实现，但不提前写 evidence_contract_version=trajectory-1.0。T4 同时接入 required_evidence_status、新聚合合同与该 discriminator 后，才生成新资格快照，避免出现缺字段的半契约 Snapshot。
 
-S4.1 不添加 rule_results、不改质量状态、不改变 Baseline/Gate 资格；Context Adapter 与正式 Binding 启用在 #129。测试证明旧 Snapshot 字节语义兼容、EvidenceRef 可校验以及本期不会提前激活资格分支。不按字符串排序比较版本，不回填历史 Snapshot。
+内部 `LaunchService` 显式冻结 trajectory contract 时提供 Manifest 1.3：局部 canonical JSON TEXT 保持 JSONB 往返的 Decimal 精度，完整合同参与 measurement 和幂等请求身份，选中 AgentVersion profile 另记执行元数据。执行计划与共享重评入口校验合同及测量声明；无合同路径保持 1.2，来源准入、正式 Worker 采集和 Binding 选择仍须接入。格式与验收见 [轨迹 Manifest 验收](../../validation/s4-1/trajectory-manifest.md)。
+
+S4.1 不添加 rule_results、不改质量状态、不改变 Baseline/Gate 资格；可选 EvaluationContext 输入装载已交付，轨迹规则 Adapter 与正式 Binding 启用在 #129。测试证明旧 Snapshot 字节语义兼容、EvidenceRef 可校验以及本期不会提前激活资格分支。不按字符串排序比较版本，不回填历史 Snapshot。
 
 恢复读取 checkpoint 时，校验 Agent output digest、冻结 Binding provenance、trajectory contract digest 和 acquisition ref。已有 READY artifact 必须从 Argus 的不可变制品恢复，不读当前 Langfuse Trace；PENDING 状态仅可在原 deadline 尚未过期时续查同一 scope/contract，恢复不能重置 deadline；deadline 已过则固化可用的 ROOT_ONLY/PARTIAL/UNAVAILABLE 结果。READY artifact 的保留跟随引用它的 Result Snapshot，不继承 execution checkpoint TTL，也不另设自动 TTL/清理任务。Artifact 因授权保留/删除策略、损坏或身份不符而不可用时，必须明确记录 unavailable 原因，后续消费降为 UNKNOWN。所有路径均禁止静默改用最新 Trace 或重调 Agent。
+
+正式执行恢复已接通 Manifest 1.3 成功响应后的过期租约重新调度：保留原 generation/Attempt/执行者及响应，新租约先校验本地 Checkpoint 后续原采集，不再取得业务许可、调用 Agent 或创建 Attempt。原期限/保守 wire 预留保持，终态不开 Reader；旧响应写入补齐 ownership fence，当前持有者也不能替换已有响应。损坏/过期响应仅给有限诊断与失败/UNKNOWN；响应同事务保存 RESPONSE_RECEIVED，重新调度前后清理 Checkpoint 均不重调 Agent，缺响应为有限 CHECKPOINT_MISSING/UNKNOWN。最终写入沿 Launch→Item 锁序处理取消竞态。eval-only 冻结输入与 Snapshot 最小引用已接通，见 [冻结输入验收](../../validation/s4-1/frozen-input.md)；轨迹规则 Adapter 与 Snapshot 新资格仍须实施；范围与实测见 [成功响应恢复验收](../../validation/s4-1/execution-recovery.md)。
 
 采集在 Runner 中使用独立的有界 semaphore；等待时释放 Agent HTTP 并发许可。每个 async task 必须在取消时释放 semaphore/HTTP response；网络请求有 timeout；总运行时间、游标数、页面、原始字节、step 数和保存字节均硬限。发生 lease/generation 变化时，旧 Worker 不得更新 checkpoint 或覆盖新结果；写入前沿用现有 Attempt/lease/CAS 核验。所有原始响应在离开 acquisition 调用栈后释放。
 

@@ -125,6 +125,8 @@ class ExperimentLaunchRecord(Base):
         String(64), ForeignKey("agent_versions.id", ondelete="RESTRICT"), nullable=False
     )
     manifest: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    # 可变 Judge 调用账本；不改不可变 Manifest，旧 Launch 保持 NULL。
+    judge_budget_state_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     langfuse_experiment_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     langfuse_experiment_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     langfuse_sync_status: Mapped[str] = mapped_column(String(32), default="PENDING", nullable=False)
@@ -332,6 +334,8 @@ class ExecutionCheckpointRecord(Base):
     binding_provenance: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
     manifest_digest: Mapped[str] = mapped_column(String(128), nullable=False)
     trajectory_acquisition_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # 私有恢复账本只保存预算/轮次身份及安全制品指针，不保存 Observation。
+    trajectory_runtime_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     final_attempt_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     observation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -470,7 +474,11 @@ class TrajectoryEvidenceArtifactRecord(Base):
 class LangfuseSyncTaskRecord(Base):
     __tablename__ = "langfuse_sync_tasks"
     __table_args__ = (
-        UniqueConstraint("item_id", "dispatch_generation", "task_type", name="uq_sync_item_gen_type"),
+        Index("uq_sync_legacy_item_gen_type", "item_id", "dispatch_generation", "task_type", unique=True,
+              postgresql_where=text("result_snapshot_id IS NULL"), sqlite_where=text("result_snapshot_id IS NULL")),
+        Index("uq_sync_item_snapshot_type", "item_id", "result_snapshot_id", "task_type", unique=True,
+              postgresql_where=text("result_snapshot_id IS NOT NULL"), sqlite_where=text("result_snapshot_id IS NOT NULL")),
+        Index("idx_sync_result_snapshot", "result_snapshot_id"),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -483,6 +491,9 @@ class LangfuseSyncTaskRecord(Base):
     dataset_item_id: Mapped[str] = mapped_column(String(128), nullable=False)
     dataset_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     dispatch_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    result_snapshot_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("run_result_snapshots.id", ondelete="RESTRICT"), nullable=True
+    )
     task_type: Mapped[str] = mapped_column(String(32), default="FULL_EVAL_SYNC", nullable=False)
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False)
     observation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

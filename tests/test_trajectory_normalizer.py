@@ -7,6 +7,7 @@ from app.trajectory.codec import canonical_dumps
 from app.trajectory.contract import TrajectoryContract
 from app.trajectory.normalizer import normalize_observation
 from app.trajectory.schema import TrajectoryScope
+from pydantic import BaseModel
 from test_trajectory_contract import version
 from trajectory_contract_fixtures import contract_payload
 
@@ -292,3 +293,38 @@ def test_execution_without_input_or_visibility_marker_is_uncollected_instead_of_
     assert result.step.phase == "EXECUTED"
     assert result.step.arguments_redacted is None and result.step.argument_visibility == {}
     assert result.capabilities["tool_arguments"] == "NONE"
+
+
+@pytest.mark.parametrize("field", ["input", "output"])
+def test_sdk_payload_is_invalid_without_invoking_its_serializer(field):
+    class SdkPayload(BaseModel):
+        customer_id: str = "synthetic-secret"
+
+        def model_dump(self, *args, **kwargs):
+            raise AssertionError("source SDK serialization must not execute")
+
+    row, contract, scope = inputs()
+    row[field] = SdkPayload()
+    result = normalize_observation(row, contract, scope, index=1)
+    assert result.step is not None
+    assert "synthetic-secret" not in canonical_dumps(result)
+    if field == "input":
+        assert result.step.argument_visibility == {"$.customer_id": "INVALID"}
+    else:
+        assert result.step.result_summary == {} and "OUTPUT_SUMMARY_UNAVAILABLE" in result.warnings
+
+
+def test_alias_comparison_rejects_sdk_model_before_serialization():
+    class SdkAlias(BaseModel):
+        name: str = "synthetic-secret"
+
+        def model_dump(self, *args, **kwargs):
+            raise AssertionError("source SDK serialization must not execute")
+
+    row, contract, scope = inputs()
+    payload = contract.model_dump()
+    payload["source_profile_set"][0]["fields"]["raw_name"].append(["legacyName"])
+    contract = TrajectoryContract.model_validate(payload).bind_source_version(version("native-otel-v1"))
+    row["legacyName"] = SdkAlias()
+    result = normalize_observation(row, contract, scope, index=1)
+    assert result.step is None and result.warnings == ["SOURCE_FIELD_INVALID"]

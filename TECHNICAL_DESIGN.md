@@ -5,7 +5,7 @@
 **日期：** 2026-09-16  
 **方案：** Langfuse Evaluation System of Record + Enterprise Remote Agent Eval Runner
 
-**S4 待实施方案：** [Issue #5 轨迹评测方案集](docs/plans/2026-10-13-s4-trajectory/README.md)，包含 #127–#132 的技术契约、实施计划和验收矩阵。该方案为提议，不表示以下已交付模型或 API 已具备轨迹能力。
+**S4 实施基线：** [Issue #5 轨迹评测方案集](docs/plans/2026-10-13-s4-trajectory/README.md) 已经 PR #136 批准，包含 #127–#132 的技术契约、实施计划和验收矩阵；PR #181 统一实施。冻结轨迹、确定性规则、诊断与门禁逐步落地，Judge 治理及完整验收仍待完成；当前轨迹 Snapshot/比较/投影合同见 §8.3.8。
 
 ---
 
@@ -655,7 +655,7 @@ Snapshot 内容、`source_result_digest`、质量结论与后续 Gate 消费的�
 `snapshot_id`、`revision`、`policy_digest`、`definition_digest`、`attempt` 与
 `binding_id` / `contract_status`，可回溯到产生它的冻结结果与判定规则。
 
-**稳定幂等键**：`score:{item_id}:gen{dispatch_generation}:{evaluator_id}`。
+**历史路径稳定幂等键**：`score:{item_id}:gen{dispatch_generation}:{evaluator_id}`。
 键同时覆盖**逻辑结果身份**（item + evaluator）与**评测 revision**（dispatch generation）：
 
 - 同一 revision 重复投递 → 同一条 Score（Langfuse upsert，不产生重复）；
@@ -682,6 +682,20 @@ langfuse_sync: {
 Console：Comparison Report 新增「Langfuse 同步」面板，逐范围显示状态徽标与文本原因，
 并显式声明"同步失败不会改变上方质量结论、结果修订或 digest"。同步状态与执行、质量结论
 分区展示，互不冒充。
+
+#### 8.3.8 S4 冻结轨迹、正式比较与 Snapshot 级投影
+
+非轨迹合同继续使用已有 Reader；显式启用轨迹的新 Launch 使用 Manifest 1.3 与 `trajectory-1.0` 证据合同。Snapshot 引用受控、脱敏、不可变 Artifact，固定 Item / Attempt / generation / Trace / Root 归属；读取时验证制品与摘要，不从在线 Trace 补造冻结结果。采集合同摘要进入 Measurement，单个 Case 的轨迹摘要仅用于来源核验，两侧不要求其相等。
+
+required 测量完整度与 optional 诊断独立：已测得 false 是完整证据，可以形成 COMPLETE Snapshot，同时使质量 FAIL。任一 required UNKNOWN、未执行 Case 或无效引用阻断发布；optional 缺轨迹不缩小 required 分母。N 是冻结 Dataset 的 Case 总数，P / (P+F) 为已判通过率，(P+F) / N 为判定覆盖率；零分母为 null。轨迹覆盖另计通过受控校验的 Artifact 数 / N，不替代必需证据资格。
+
+新 trajectory Gate 固定 `trajectory-release-gate-v1` 引擎，拒绝关闭 critical 阻断及 optional critical 配置。critical FAIL + required UNKNOWN 返回 UNKNOWN，保留违规原因且不可发布。LLM Judge 的独立来源、联合校准与准入在 T8 补齐，不能以当前确定性阶段证据宣称完整 Judge Gate 已验收。
+
+正式比较要求双方完整、三层合同匹配及全量 Case 覆盖。双方共同缺失的 Case 仍在冻结 Dataset 分母；不完整 Snapshot、策略不匹配或失效 Baseline 引用的 Case 只作诊断。合法容器中的 Artifact 失效返回 withheld 原因，无法安全解析的 Baseline 容器返回证据冲突；均不修改历史记录。
+
+新 trajectory Score 使用 `score:trajectory-v1:` 加 `(item_id,snapshot_id,binding_id)` 的 canonical SHA-256，同 generation 的新 revision 不覆盖旧 Score。追加 migration 019 为已有 Outbox 增加 nullable Snapshot FK 与新旧路径部分唯一索引；Snapshot 冻结与任务入队同事务提交。任务只读其固定 Snapshot，取得远端 Score API 确认后以 lease/CAS 完成；重试不查询 latest，不回读 Score 决定质量。新 FULL_EVAL_SYNC 仅维护 Run Item 关联，避免重复写分数；同步汇总只纳入当前 Snapshot 投影，历史任务不污染当前状态。旧任务、未启用新投影标记的历史 Snapshot 及既有 Score key 原样保留。
+
+具体 API 字段以 [OpenAPI](docs/openapi.json) 为准；[T7 验收记录](docs/validation/s4-5/t7-acceptance.md) 区分本地断言、真实制品版本及待完成的发布/Judge 验收。
 
 ### 8.4 ExperimentItemExecution
 

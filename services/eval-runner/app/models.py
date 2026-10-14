@@ -2,13 +2,32 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    WithJsonSchema,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
+from .release_gates import RequiredCaseCounts
 from .security import validate_credential_ref, validate_endpoint_url
-from .trajectory.schema import Identity
+from .trajectory.codec import validate_json_value
+from .trajectory.schema import (
+    Duration,
+    Identity,
+    StandardTrajectory,
+    TrajectoryCompleteness,
+    TrajectoryEvidenceRef,
+    TrajectoryStep,
+)
 
 
 # ---------------------------------------------------------
@@ -25,6 +44,58 @@ class ExperimentRequest(BaseModel):
         le=50,
         description="Optional concurrency override; if omitted, inherits from AgentVersion",
     )
+
+
+# 仅诊断 DTO 声明 JSON number；domain artifact 的类型、encoder 与摘要不变。
+TrajectoryNumber = Annotated[Decimal, WithJsonSchema({"type": "number"})]
+type TrajectoryDisplayJson = None | bool | int | TrajectoryNumber | str | list[TrajectoryDisplayJson] | dict[str, TrajectoryDisplayJson]
+TrajectoryDisplayValue = Annotated[TrajectoryDisplayJson, BeforeValidator(validate_json_value)]
+
+
+class TrajectoryStepDiagnosisResponse(TrajectoryStep):
+    duration_ms: Annotated[Duration, WithJsonSchema({"type": "number"})] | None
+    arguments_redacted: TrajectoryDisplayValue
+    result_summary: TrajectoryDisplayValue
+
+
+class TrajectoryDisplayResponse(StandardTrajectory):
+    input_redacted: TrajectoryDisplayValue
+    output_redacted: TrajectoryDisplayValue
+    steps: list[TrajectoryStepDiagnosisResponse] = Field(min_length=1, max_length=1000)
+
+
+class TrajectoryRuleDiagnosisResponse(BaseModel):
+    evaluator_id: str
+    evaluator_version: str
+    binding_id: str | None
+    typed_status: Literal["succeeded", "failed", "skipped", "no_result"]
+    value: bool | None
+    conclusion: Literal["pass", "fail", "unknown"]
+    frozen_conclusion: Literal["pass", "fail", "unknown"]
+    required: bool
+    critical: bool
+    reason_code: str | None
+    evidence_step_ids: list[str]
+
+
+class TrajectoryDiagnosisResponse(BaseModel):
+    # 本端点局部 canonical encoder 以 JSON number 输出 Decimal。
+    model_config = ConfigDict(extra="forbid")
+
+    launch_id: str
+    snapshot_id: str
+    dataset_item_id: str
+    acquisition_state: Literal["PENDING", "READY", "UNAVAILABLE"]
+    completeness: TrajectoryCompleteness | None
+    trajectory: TrajectoryDisplayResponse | None
+    rule_results: list[TrajectoryRuleDiagnosisResponse]
+    reason_code: str | None
+    evidence_ref: TrajectoryEvidenceRef | None
+    step_argument_display_json: dict[str, str]
+    langfuse_trace_url: str | None
+    execution_status: str
+    quality_conclusion: Literal["pass", "fail", "unknown"]
+    required_evidence_status: Literal["COMPLETE", "INCOMPLETE"] | None
 
 
 
@@ -320,6 +391,8 @@ class ExperimentLaunchCreateRequest(BaseModel):
     name: str | None = Field(default=None, description="Optional experiment name")
     agent_id: str
     agent_version: str
+    trajectory_contract_json: str | None = Field(default=None, min_length=2, max_length=1_048_576,
+        description="显式启用轨迹采集的 canonical JSON 合同；字符串承载以保留十进制精度，来源须匹配不可变 AgentVersion。")
     dataset_name: str
     dataset_version: str | None = None
     environment: str = Field(default="production", min_length=1, max_length=64)
@@ -454,6 +527,8 @@ class QualityEvaluationResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     conclusion: str
+    required_evidence_status: Literal["COMPLETE", "INCOMPLETE"] | None = None
+    evidence_contract_version: Literal["trajectory-1.0"] | None = None
     policy_id: str | None = None
     policy_version: str | None = None
     policy_digest: str | None = None
@@ -468,6 +543,7 @@ class EvaluatorSelection(BaseModel):
 
     id: str = Field(..., min_length=1, max_length=128)
     version: str = Field(..., min_length=1, max_length=64)
+    params: dict[str, Any] = Field(default_factory=dict, description="冻结的规则参数；现有 Output 规则仅接受空参数。")
 
 
 class EvaluatorSelectionErrorResponse(BaseModel):
@@ -540,6 +616,18 @@ class RunCostSummaryResponse(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+    decided_pass_rate: float | None = None
+    decision_coverage: float | None = None
+    quality_pass_count: int | None = None
+    quality_fail_count: int | None = None
+    quality_unknown_count: int | None = None
+    critical_failure_count: int | None = None
+
+    required_evidence_status: Literal["COMPLETE", "INCOMPLETE"] | None = None
+    evidence_contract_version: Literal["trajectory-1.0"] | None = None
+    required_evidence_complete_cases: int | None = None
+    required_evidence_incomplete_cases: int | None = None
+
     total_cost: float | None = None
     cost_per_case: float | None = None
     cost_currency: str | None = None
@@ -550,6 +638,16 @@ class RunCostSummaryResponse(BaseModel):
     cost_policy_version: str | None = None
     cost_partial: bool | None = None
     cost_unavailable_reason: RunCostUnavailableReason | None = None
+
+
+    @model_serializer(mode="wrap")
+    def preserve_missing_frozen_metrics(self, handler):
+        payload = handler(self)
+        for key in ("decided_pass_rate", "decision_coverage", "quality_pass_count",
+                    "quality_fail_count", "quality_unknown_count", "critical_failure_count"):
+            if key not in self.model_fields_set:
+                payload.pop(key, None)
+        return payload
 
 
 class CostComparisonResponse(BaseModel):
@@ -588,6 +686,8 @@ class ComparisonSummaryResponse(BaseModel):
     score_mean_deltas: dict[str, float]
 
 
+
+
 class RunSummaryResponse(BaseModel):
     launch_id: str
     snapshot_id: str
@@ -604,6 +704,8 @@ class RunSummaryResponse(BaseModel):
     evidence_reasons: list[str] = Field(default_factory=list)
     versions: dict[str, Any]
     summary: RunCostSummaryResponse
+    required_case_counts: RequiredCaseCounts | None = None
+    trajectory_coverage: float | None = None
     langfuse_score_sync_status: str = "PENDING"
     # Issue #87: quality results and sync state are separate facts. A Langfuse
     # outage never changes the Snapshot, its digest or the quality conclusion,
@@ -922,6 +1024,7 @@ class ExperimentItemExecutionResponse(BaseModel):
     # before QualityPolicy existed — their verdict stands, it is just not
     # re-explained under a policy they never had.
     quality_evaluation: QualityEvaluationResponse | None = None
+    required_evidence_status: Literal["COMPLETE", "INCOMPLETE"] | None = None
     # Issue #84: the independent evaluation-recovery lifecycle. `eval_status`
     # stays the measurement outcome; these describe whether a re-evaluation is
     # idle / running / recovered / failed, and which output digest it reused.

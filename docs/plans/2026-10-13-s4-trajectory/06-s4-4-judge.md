@@ -1,6 +1,6 @@
 # S4.4 Trajectory Judge 实施方案
 
-状态：**提议，待方案 PR 评审；本文是实施设计，不表示 Judge 已交付。**
+状态：**PR #136 已批准方案；PR #181 保留已实现的 T8 基础，剩余实施交维护者。** 输出、统计、定义、安全准备、异步传输、预算账本与冻结执行器桥接已实现；正式 Worker/recovery、真实校准与准入尚未交付。边界见[#131 交接](../../validation/s4-4/maintainer-handoff.md)；后续数据测试交管理员，不计为通过。
 核验基线：2026-10-13，`main@4b043739c63357ecc10131e1ba54bc1bc53d862a`。
 关联：[Issue #5](https://github.com/miniceM/Argus/issues/5)、[#131](https://github.com/miniceM/Argus/issues/131)。
 共同契约：[01 技术设计](01-technical-design.md)；阶段顺序见[完整实施计划](08-implementation-plan.md)，验收追踪见[验收矩阵](09-acceptance-matrix.md)。
@@ -12,11 +12,11 @@ Judge 只补足确定性规则无法判断的语义问题，并把每次调用�
 能由工具身份、状态、顺序、参数等确定性事实判定的条件应由规则处理。
 
 当前已有冻结 Evaluator Binding：包含 `params`、`definition_digest`、实现制品摘要、执行器类型和 `binding_digest`。
-当前 `BuiltinPythonExecutor` 是唯一注册执行器；执行入口接收 `output/expected_output`，没有轨迹上下文。[实现](../../../services/eval-runner/app/evaluator_binding.py)
+2026-10-14 当前注册 `BuiltinPythonExecutor` 与 `TrajectoryJudgeExecutor`；执行入口有 keyword-only `context`、`prepared_results` 和 `evaluation_generation`。轨迹规则消费冻结制品，Judge 执行器只消费受预算异步准备阶段签发、与当前固定输入匹配的结果，不自行调用 Provider；正式 Worker 尚未接线。[实现](../../../services/eval-runner/app/evaluator_binding.py)
 当前 typed result 支持 numeric、boolean、categorical、text；值缺失会成为 `no_result`，不会补零。
 当前 QualityPolicy 已有 required/optional、critical、三态结论和 `unknown_not_releasable`。[策略实现](../../../services/eval-runner/app/quality_policy.py)
-当前 evaluator 绑定可冻结实现制品，但没有 LLM Provider、Resolved Model 或 Judge 输出验证器。
-当前 optional 评测异常会留在 `eval_status`，S4.2/T4 先接入 required 证据与 Snapshot 资格，S4.5 在此基础上接通门禁。
+当前 evaluator 绑定可冻结实现制品；Judge 输出验证、留出集统计、异步 HTTP、预算与执行器桥接已有阶段实现。真实 Provider/Resolved Model/Token 上界和校准准入未完成，Judge 版本仍不具备正式发布资格。[初始契约证据](../../validation/s4-4/contract-progress.md)、[执行器桥接记录](../../validation/s4-4/executor-progress.md)
+当前 optional 评测异常保留在 `eval_status`；T4 已独立计算 required 证据与 Snapshot 资格，T7 已在此基础上接通确定性门禁和 Snapshot 投影，Judge 阶段 B 仍待本期补验。当前接入点与 RED 顺序见 [T8 集成预检](../../validation/s4-4/preflight.md)。
 
 Issue #131 当前只要求模型、Prompt、参数摘要冻结，校准报告和低置信分流，并在全量通过时不调用 Judge。
 实施前应把本文 S44 验收项补入 Issue，明确诊断采样与正式发布覆盖不是同一口径。
@@ -26,6 +26,7 @@ Issue 所称“自动进人审队列”在本方案中落为 `UNKNOWN` 和原因
 
 新增路径 `services/eval-runner/app/trajectory/judge.py`，只负责 Judge 契约、调用适配、结构验证和校准统计。
 新增 `services/eval-runner/app/trajectory/judge_provider.py`，只定义 Provider 协议和首个获准 Provider Adapter。
+新增 `services/eval-runner/app/trajectory/judge_execution.py`，注册冻结 Judge 版本并桥接异步准备结果与同步 typed 汇总。实现边界、版本与证据见[执行器记录](../../validation/s4-4/executor-progress.md)。
 沿用现有 Evaluator Registry、Binding、Typed Result、QualityPolicy、Snapshot 与 Release Gate。
 轨迹采集和规范化由 #127/#128 提供；Judge 不自行查询 Langfuse，也不重复组装 Observation。
 Judge 对同一 Item/Attempt 复用冻结 `TrajectoryEvidenceRef`；同一制品可供多个 Judge 规则共享。
@@ -41,13 +42,15 @@ Judge 对同一 Item/Attempt 复用冻结 `TrajectoryEvidenceRef`；同一制品
 | 配置组 | 冻结字段 | 验证要求 |
 |---|---|---|
 | 任务身份 | `judge_kind`、`risk_id`、`version` | kind 仅允许四类；`risk_id` 非空且区分业务风险 |
-| Provider | `provider_id`、`provider_api_version`、`resolved_model_id` | 记录实际解析后的不可变模型身份；禁止用 `latest`、别名或静默 fallback |
+| Provider | `provider_id`、`provider_api_version`、`resolved_model_id`、`resolved_model_artifact_digest` | ID 与模型制品摘要共同冻结；Provider 准入仍须证明实际解析身份，Schema 不证明目录名不可变。禁止 `latest`、别名或静默 fallback |
 | 指令 | `prompt_text`、`rubric_text`、各自 SHA-256 | 原文进入版本制品；改任一文本即新 `definition_digest` 和新 Binding |
 | 执行制品 | `implementation_ref`、`implementation_artifact.digest`、依赖锁摘要 | 运行时必须验证制品；制品不匹配时拒绝执行 |
 | 解码预算 | `temperature`、`top_p`、`max_output_tokens`、`request_timeout_seconds`、`max_attempts` | 数值有限且在 Provider 支持范围；首版 `max_attempts=1` |
 | 输入预算 | `max_steps`、`max_input_bytes`、`max_evidence_refs` | 超限产出 UNKNOWN 与原因码，不截断成可通过结论 |
+| 证据资格 | `required_capabilities` | 按冻结 rubric 声明所需能力，各项必须 COMPLETE；release 另须 OBSERVED_COMPLETE。语义浪费动作判断不强制依赖 timing |
+| criteria 投影 | `criteria_policy.version/paths/string_policies/content_policy_version` | 有限 allowlist 路径与 `pii-v1`；拒绝根路径、敏感键及无法证明安全的内容，安全投影摘要参加调用身份 |
 | Launch预算 | max_total_calls、max_total_input_tokens、max_total_output_tokens | 固定Case×required Binding最坏预算先校验；不足时拒绝启动或UNKNOWN，不缩小覆盖分母 |
-| 触发 | `mode`、`eligible_when`、`min_confidence`、`sample_rate`、`sampling_seed` | 表达式受限且确定；触发配置参加 digest |
+| 触发 | `mode`、`eligible_when`、`trigger_confidence_threshold`、`output_policy.min_confidence`、`sample_rate`、`sampling_seed` | 确定性触发阈值与 Judge 输出置信阈值分开冻结；表达式受限且确定，配置参加 digest |
 | 覆盖 | `required_case_policy`、`required_case_ids_digest` | diagnostic 可采样；release 对必需 Case 全量覆盖 |
 | 校准 | `calibration_set_id/version/digest`、`calibration_policy` | 标签、切分和阈值均绑定不可变版本 |
 
@@ -60,6 +63,8 @@ Provider 无法报告 Resolved Model 或不支持冻结的 JSON Schema/预算时
 ## 4. 请求、输出与异常语义
 
 Judge 接收固定 EvaluationContext，但只读取 trajectory 内的脱敏 input/output、获准的 expected criteria 和 evidence ref；不得把为旧规则保留的原始 context.output/input_payload/expected_output 直接出站。expected criteria 在请求构造前通过同一 allowlist、内容与长度检查，安全摘要参加调用身份。Step 的因果/scope 字段只作为冻结上下文。
+实际准备入口须先验证 Manifest、Checkpoint 原 Dataset 输入和 Artifact 归属，再在短事务内预裁定经过验证的 `expected_output`。外部预裁定 criteria 必须与该安全投影的 scope、policy 和摘要一致；同 Case 替换条件也须拒绝。纯请求构造函数不得读取任意业务 Context 字段，不能用调用者自报的摘要代替来源校验。
+离线 `PreparedJudgeRequest` 仅在同一 Runner 进程内使用；只有 `prepare_judge_request` 完成 DB 归属与权威 criteria 校验后才以进程随机 HMAC seal 绑定完整消息摘要、scope/ref、定义、criteria 与 Step 集，纯 builder 不签发，Provider 出站前重验。可复现 `input_digest` 不包含 seal；公开 SHA-256 不能充当准备来源证明。seal 不落库、不跨进程复用，恢复须重新从原 Checkpoint/Artifact 准备；它证明本进程已完成来源准备，不代替最终 generation/lease CAS 或真实 Provider 准入。
 Adapter 的入口与规则输入保持同构，并显式接收 Runner 已验证的 Binding 与 Manifest schema：
 
 ```python
@@ -94,6 +99,10 @@ Prompt 明确声明轨迹文本、工具输出和参数值都是数据，不可�
 对 Provider 使用结构化输出约束；即使 Provider 宣称已约束，Runner 仍在本地再次校验 Schema 和 Step 引用。
 `PASS`/`FAIL` 且通过 confidence、风险和引用校验，才构造 succeeded categorical typed result。
 输出契约为 categorical，合法确定值仅 PASS/FAIL；QualityPolicy 默认 operator="=="、expected_value="PASS"。有序投影如需启用，显式冻结 FAIL→0、PASS→1；UNCERTAIN 不加入数字映射，而是 no_result。confidence 是模型自报量，不能当成已校准概率；准入仍依赖独立人标留出集。
+
+默认与显式策略冻结均核验完整 Judge Binding；diagnostic 为 optional，不能升级为 required。
+release 默认 required，但判定 PASS 不等于取得正式发布资格。当前 critical Judge 的策略冻结
+仍拒绝未完成独立来源准入的配置；实施与回归见[策略记录](../../validation/s4-4/quality-policy-progress.md)。
 `UNCERTAIN`、低于冻结 `min_confidence`、缺少必要 Step 证据统一形成 `no_result`，QualityPolicy 得到 UNKNOWN。
 超时、网络错误、额度不足、模型身份变化、Schema 无效或 Provider 错误形成 failed typed result 和稳定错误码。
 所有失败均不生成 `0`、`FAIL`、均值样本或空引用；失败详情限制长度并去除响应中的潜在敏感字段。
@@ -103,7 +112,7 @@ Prompt 明确声明轨迹文本、工具输出和参数值都是数据，不可�
 
 保留现有同步 EvaluatorExecutor 和 evaluate_frozen_item，异步网络调用放在 Worker 的受控准备阶段，不在同步函数里 asyncio.run。新增冻结 executor_type=trajectory_judge：resolve/validate 复用绑定和制品校验，execute 只消费已验证 prepared_results，缺失则 failed，不能自行发请求或回退模型。T3 已使 executor outcome 可保留 TypedEvaluationResult；本期增加 keyword-only prepared_results，按 binding_id 查找并再次校验 scope、input/criteria digest、provenance 和 evidence_ref，随后仍由同一 summarize_typed_results/QualityPolicy 汇总。
 
-Worker 先 resolve_execution_plan，再 await Judge Adapter 得到绑定到当前 Item 的 Mapping[binding_id, TypedEvaluationResult]，然后沿既有 to_thread 执行同步汇总/持久化。Recovery 将现有流程拆成同步 prepare_recovery（claim lease、验证 checkpoint、选 needed bindings）、异步 Judge、同步 finalize_recovery（合并既有成功值并 CAS）三段；全程复用现有 EvaluationAttempt，Provider await 期间不持有 DB transaction/锁。旧 recover_evaluation 保持无 Judge 路径兼容，新 recover_evaluation_async 用于含 Judge 的队列 Worker；所有调用方逐一测试，历史 /experiments/run 继续固定旧 Binding，不自动启用 Judge。
+Worker 先 resolve_execution_plan，再 await Judge Adapter 得到绑定到当前 Item 的 Mapping[binding_id, PreparedJudgeEvaluation]，然后沿既有 to_thread 执行同步汇总/持久化。封套包含 TypedEvaluationResult、Binding/输入/criteria 摘要、scope/evidence ref、evaluation generation 及进程内签发凭证；同步入口重建当前固定请求并再次验证，不直接信任裸 TypedResult。该细化依据执行器替换结果、跨 scope/criteria/generation 与异常原文的回归证据；不会跨进程持久化凭证。Recovery 将现有流程拆成同步 prepare_recovery（claim lease、验证 checkpoint、选 needed bindings）、异步 Judge、同步 finalize_recovery（合并既有成功值并 CAS）三段；全程复用现有 EvaluationAttempt，Provider await 期间不持有 DB transaction/锁。旧 recover_evaluation 保持无 Judge 路径兼容，新 recover_evaluation_async 用于含 Judge 的队列 Worker；所有调用方逐一测试，历史 /experiments/run 继续固定旧 Binding，不自动启用 Judge。
 
 Provider 用异步 HTTP client，在 asyncio.timeout 的冻结总预算内执行非流式单次请求，connect/read/write/pool 也分别限时；限制响应字节与 JSON 深度。首版并发 semaphore 为 2，配置、总预算及输入/输出限制随 Judge execution profile 冻结。CancelledError 必须向上传播并关闭 response、释放 semaphore；超时转换为 failed。任务取消/lease 丢失后即使 Provider 迟到也不能写结果，所有持久化继续 CAS。测试同时证明 event loop 心跳不中断、取消实际关闭请求、超时和恢复不重调 Agent。
 
@@ -127,6 +136,8 @@ Diagnostic `sample_rate` 使用 `SHA256(sampling_seed || dataset_item_id || judg
 仅允许同一进程、同一冻结 scope/Artifact 内复用 (artifact_id, binding_digest, expected_criteria_digest) 的已验证结果；禁止跨 Case/Binding 复用或引用别的 Item Step。运行 usage 是诊断，不改输入 digest；实际输出随 Result revision 保存，不承诺模型逐次输出相同。
 一次调用失败后不自动重试；若未来开放 retry，必须计入冻结 `max_attempts`、费用和幂等策略并形成新版本。
 Worker 取消与恢复复用现有 generation/lease/CAS；旧 generation 响应不能覆盖新结果。
+
+预算账本切片见[预算实施记录](../../validation/s4-4/budget-progress.md)。用量结算不表示质量结果已落库，没有持久成功结果时也不得重发。未发送的取消占位可在新 key 需要容量时淘汰，但已发送记录保留、旧 receipt 不能复活；key 总数仍不超过冻结 `max_total_calls`。
 
 ## 6. Critical Judge 准入与校准
 

@@ -26,5 +26,6 @@ export const queryKeys = {
     summary: (launchId: string, snapshotId: string | null = null, latestRequest = 0) => [...queryKeys.launches.all, "summary", launchId, snapshotId ?? "latest", snapshotId ? 0 : latestRequest] as const,
     comparison: (launchId: string, snapshotId: string, filter?: string) => [...queryKeys.launches.all, "comparison", launchId, snapshotId, filter] as const,
     case: (launchId: string, snapshotId: string, datasetItemId: string) => [...queryKeys.launches.all, "case", launchId, snapshotId, datasetItemId] as const,
+    trajectory: (launchId: string, snapshotId: string, datasetItemId: string) => [...queryKeys.launches.all, "trajectory", launchId, snapshotId, datasetItemId] as const,
   },
 };

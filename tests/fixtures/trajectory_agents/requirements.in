@@ -2,3 +2,5 @@
 pydantic-ai-slim==2.55.0
 opentelemetry-sdk==1.45.1
 opentelemetry-exporter-otlp-proto-http==1.45.1
+# 独立审批进程的签名能力；普通业务 Agent 不导入此通用密码库。
+cryptography==46.0.7

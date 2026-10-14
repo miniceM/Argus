@@ -300,6 +300,11 @@ def test_decoder_rejects_invalid_or_ambiguous_evidence_without_echo(raw):
     assert raw not in str(error.value)
 
 
+def test_decoder_maps_decimal_implementation_overflow_to_safe_contract_error():
+    with pytest.raises(ValueError, match="^TRAJECTORY_JSON_INVALID$"):
+        canonical_loads("1e999999999999999999999999")
+
+
 def test_encoded_artifact_size_has_an_independent_byte_cap():
     with pytest.raises(ValueError, match="TRAJECTORY_JSON_BYTE_LIMIT"):
         canonical_dumps({"amount": 12}, max_bytes=1)

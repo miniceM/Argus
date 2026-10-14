@@ -86,7 +86,8 @@ jobs:
   unit-tests:
     name: Full Python Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 上次含 PostgreSQL 的 coverage 门禁在 66% 处耗尽 10 分钟，保留有限扩展预算。
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16-alpine
@@ -125,7 +126,7 @@ jobs:
         env:
           TEST_POSTGRES_URL: postgresql+psycopg://argus:argus_password@localhost:5432/argus_test
         run: |
-          python -m pytest tests -q -m "not trajectory_local" \
+          python -m pytest tests -q --maxfail=1 --tb=short --durations=20 -m "not trajectory_local" \
             --junitxml=artifacts/junit.xml \
             --cov=services/demo-agent \
             --cov=services/eval-runner/app \
@@ -137,7 +138,7 @@ jobs:
 
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: python-test-reports
           path: artifacts/
@@ -147,7 +148,7 @@ jobs:
   trajectory-local:
     name: S4 Local Langfuse Integration
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -166,11 +167,11 @@ jobs:
       - name: Verify real local ingestion and production invocation
         run: |
           mkdir -p artifacts
-          python -m pytest -q tests/test_trajectory_backend_integration.py tests/test_trajectory_observation_integration.py -m trajectory_local \
-            --basetemp=artifacts/s4-local --junitxml=artifacts/s4-junit.xml --tb=short
+          python -u -m pytest -vv -x tests/test_trajectory_backend_integration.py tests/test_trajectory_observation_integration.py tests/test_trajectory_rule_integration.py -m trajectory_local \
+            --basetemp=artifacts/s4-local --junitxml=artifacts/s4-junit.xml --tb=short --durations=10
       - name: Upload field and lineage evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: s4-local-observation-evidence
           path: |
@@ -245,7 +246,7 @@ jobs:
           version: 10.5.2
           run_install: false
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -515,7 +516,7 @@ jobs:
 
       - name: Upload main Cloud acceptance receipt
         if: success()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: main-cloud-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/main-cloud-acceptance/receipt.json

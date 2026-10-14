@@ -15,7 +15,7 @@ trajectory-prepare:
 	$(S4_PYTHON) tests/fixtures/trajectory_agents/prepare.py
 
 trajectory-test:
-	$(S4_PYTHON) -m pytest -q tests/test_trajectory_backend_integration.py tests/test_trajectory_observation_integration.py -m trajectory_local
+	$(S4_PYTHON) -m pytest -q tests/test_trajectory_backend_integration.py tests/test_trajectory_observation_integration.py tests/test_trajectory_rule_integration.py -m trajectory_local
 
 validate-i18n:
 	./deploy/langfuse/scripts/validate-i18n.sh

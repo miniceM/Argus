@@ -14,6 +14,7 @@ from .evaluator_binding import canonical_digest
 from .runner_identity import RunnerIdentity
 
 ENGINE_VERSION = "release-gate-v3"
+TRAJECTORY_ENGINE_VERSION = "trajectory-release-gate-v1"
 ABSOLUTE_METRICS = {"pass_rate", "evaluation_coverage", "execution_error_rate", "critical_failure_count", "p95_latency_ms"}
 RELATIVE_METRICS = {"regression_count", "pass_rate_delta", "p95_latency_regression_percent"}
 
@@ -78,6 +79,13 @@ class GateRuleResult(BaseModel):
     reason: str
 
 
+class RequiredCaseCounts(BaseModel):
+    total: int = Field(ge=0)
+    passed: int = Field(ge=0)
+    failed: int = Field(ge=0)
+    unknown: int = Field(ge=0)
+
+
 class GateEvaluation(BaseModel):
     decision: Literal["PASS", "FAIL", "UNKNOWN"]
     releasable: bool
@@ -86,6 +94,14 @@ class GateEvaluation(BaseModel):
     baseline_snapshot_id: str | None = None
     reason_codes: list[str]
     rules: list[GateRuleResult]
+    # 历史已保存 Gate 不补算；新增观测来自本次冻结 Snapshot 的 Case 聚合。
+    decided_pass_rate: float | None = None
+    decision_coverage: float | None = None
+    unknown_count: int | None = None
+    critical_failure_count: int | None = None
+    required_case_counts: RequiredCaseCounts | None = None
+    evidence_contract_version: str | None = None
+    trajectory_coverage: float | None = None
 
 
 def _finite(value: Any) -> float | None:
@@ -96,7 +112,11 @@ def _finite(value: Any) -> float | None:
 
 def frozen_environment(snapshot) -> str | None:
     """缺失或未规范化的历史环境不能推定为 production。"""
-    comparison = snapshot.manifest.get("comparison") or {}
+    if type(snapshot.manifest) is not dict:
+        return None
+    comparison = snapshot.manifest.get("comparison")
+    if type(comparison) is not dict:
+        return None
     value = comparison.get("environment")
     if not isinstance(value, str):
         return None
@@ -107,7 +127,11 @@ def frozen_environment(snapshot) -> str | None:
 
 
 def _summary(snapshot) -> dict[str, Any]:
-    summary = aggregate_run(snapshot.items, snapshot.manifest.get("evaluators", []))
+    options = {}
+    if "evidence_contract_version" in snapshot.manifest:
+        options = {"required_case_ids": [i.get("id") for i in snapshot.manifest.get("dataset", {}).get("items", [])],
+            "evidence_contract_version": snapshot.manifest["evidence_contract_version"]}
+    summary = aggregate_run(snapshot.items, snapshot.manifest.get("evaluators", []), **options)
     if any((latency := _finite(item.get("latency_ms"))) is None or latency < 0 for item in snapshot.items):
         summary["p95_latency_ms"] = None
     # S3.1 的逐规则 critical 证据比旧数字阈值聚合更精确（也支持布尔与分类）。
@@ -122,6 +146,11 @@ def _summary(snapshot) -> dict[str, Any]:
 
 def _evidence_reasons(snapshot, label: str) -> list[str]:
     reasons = []
+    from .required_evidence import validate_snapshot_contract
+    try:
+        validate_snapshot_contract(snapshot)
+    except ValueError:
+        return [f"{label}_EVIDENCE_CONTRACT_INVALID"]
     if frozen_environment(snapshot) is None:
         reasons.append(f"{label}_ENVIRONMENT_UNKNOWN")
     if snapshot.evidence_state != "COMPLETE" or not snapshot.items:
@@ -136,7 +165,11 @@ def _evidence_reasons(snapshot, label: str) -> list[str]:
     if not provenance.comparable:
         reasons.extend(provenance.reason_codes)
     frozen_aggregation = snapshot.manifest.get("contract_digests", {}).get("aggregation_comparison", {}).get("digest")
-    if frozen_aggregation and frozen_aggregation != aggregation_comparison_digest():
+    try:
+        supported = aggregation_comparison_digest(evidence_contract_version=snapshot.manifest.get("evidence_contract_version"))
+    except ValueError:
+        supported = None
+    if frozen_aggregation and frozen_aggregation != supported:
         reasons.append("AGGREGATION_CONTRACT_UNSUPPORTED")
     dataset = snapshot.manifest.get("dataset", {})
     def frozen_version(value):
@@ -163,10 +196,12 @@ def _comparison(candidate, baseline) -> tuple[dict[str, Any], list[str]]:
         return {}, ["BASELINE_NOT_BOUND"]
     if baseline.id != frozen_id or baseline.agent_id != candidate.agent_id:
         return {}, ["BASELINE_IDENTITY_MISMATCH"]
+    reasons = _evidence_reasons(baseline, "BASELINE")
+    if "BASELINE_EVIDENCE_CONTRACT_INVALID" in reasons:
+        return {}, reasons
     baseline_environment, candidate_environment = frozen_environment(baseline), frozen_environment(candidate)
     if baseline_environment is not None and candidate_environment is not None and baseline_environment != candidate_environment:
         return {}, ["BASELINE_ENVIRONMENT_MISMATCH"]
-    reasons = _evidence_reasons(baseline, "BASELINE")
     comparability = assess_comparability(baseline.manifest, candidate.manifest)
     reasons.extend(comparability.reason_codes)
     before = {item["dataset_item_id"]: item for item in baseline.items}
@@ -193,8 +228,75 @@ def _comparison(candidate, baseline) -> tuple[dict[str, Any], list[str]]:
     }, []
 
 
+def gate_engine_version(snapshot) -> str:
+    if type(snapshot.manifest) is not dict:
+        return ENGINE_VERSION
+    return (TRAJECTORY_ENGINE_VERSION
+        if snapshot.manifest.get("schema_version") == "1.3" and snapshot.manifest.get("trajectory")
+        else ENGINE_VERSION)
+
+
+def trajectory_release_policy_error(policy: ReleasePolicy, snapshot) -> str | None:
+    if gate_engine_version(snapshot) != TRAJECTORY_ENGINE_VERSION:
+        return None
+    if not policy.block_critical_failures:
+        return "TRAJECTORY_CRITICAL_BLOCK_REQUIRED"
+    if any(rule.get("critical") and not rule.get("required", True)
+        for rule in snapshot.manifest.get("quality_policy", {}).get("rules", [])):
+        return "TRAJECTORY_OPTIONAL_CRITICAL_INVALID"
+    return None
+
+
+def frozen_trajectory_coverage(snapshot) -> float | None:
+    """Dataset 全量分母；仅计受控 Loader 校验通过的冻结轨迹，不访问在线来源。"""
+    if gate_engine_version(snapshot) != TRAJECTORY_ENGINE_VERSION:
+        return None
+    from sqlalchemy import inspect
+
+    from .trajectory.inputs import load_frozen_snapshot_input
+
+    state = inspect(snapshot, raiseerr=False)
+    session = state.session if state is not None else None
+    if session is None:
+        return None
+    case_ids = [item["id"] for item in snapshot.manifest["dataset"]["items"]]
+    if not case_ids:
+        return None
+    available = sum(
+        loaded is not None and loaded.trajectory is not None
+        for loaded in (load_frozen_snapshot_input(session, snapshot=snapshot, dataset_item_id=case_id)
+            for case_id in case_ids)
+    )
+    return available / len(case_ids)
+
+
+def _frozen_observations(snapshot, summary) -> dict[str, Any]:
+    return {
+        "decided_pass_rate": summary.get("decided_pass_rate"),
+        "decision_coverage": summary.get("decision_coverage"),
+        "unknown_count": summary.get("quality_unknown_count"),
+        "critical_failure_count": summary.get("critical_failure_count"),
+        "required_case_counts": RequiredCaseCounts(
+            total=summary["total_cases"], passed=summary["quality_pass_count"],
+            failed=summary["quality_fail_count"], unknown=summary["quality_unknown_count"],
+        ),
+        "evidence_contract_version": snapshot.manifest.get("evidence_contract_version"),
+        "trajectory_coverage": frozen_trajectory_coverage(snapshot),
+    }
+
+
 def evaluate_gate(policy: ReleasePolicy, candidate, baseline=None) -> GateEvaluation:
     reasons = _evidence_reasons(candidate, "CANDIDATE")
+    if "CANDIDATE_EVIDENCE_CONTRACT_INVALID" in reasons:
+        return GateEvaluation(
+            decision="UNKNOWN", releasable=False, candidate_snapshot_id=candidate.id,
+            engine_version=gate_engine_version(candidate),
+            reason_codes=reasons, rules=[GateRuleResult(**rule.model_dump(), actual=None,
+                conclusion="UNKNOWN", reason=reasons[0]) for rule in policy.rules],
+        )
+    policy_error = trajectory_release_policy_error(policy, candidate)
+    if policy_error:
+        reasons.append(policy_error)
     environment = frozen_environment(candidate)
     if environment is not None and environment != policy.environment:
         reasons.append("CANDIDATE_ENVIRONMENT_MISMATCH")
@@ -250,6 +352,7 @@ def evaluate_gate(policy: ReleasePolicy, candidate, baseline=None) -> GateEvalua
     reasons.extend(rule.reason for rule in rule_results if rule.conclusion != "PASS")
     return GateEvaluation(
         decision=decision, releasable=decision == "PASS", candidate_snapshot_id=candidate.id,
+        engine_version=gate_engine_version(candidate), **_frozen_observations(candidate, summary),
         baseline_snapshot_id=candidate.manifest.get("comparison", {}).get("baseline_snapshot_id"),
         reason_codes=list(dict.fromkeys(reasons)), rules=rule_results,
     )

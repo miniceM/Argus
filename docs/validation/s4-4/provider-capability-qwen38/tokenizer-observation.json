@@ -1,0 +1,40 @@
+{
+  "schema_version": "tokenizer-observation-v1",
+  "model_id": "Qwen3.8-27B-MLX-4bit",
+  "libraries": {
+    "transformers": "5.17.0",
+    "tokenizers": "0.23.2",
+    "jinja2": "3.1.6"
+  },
+  "tokenizer_class": "Qwen2Tokenizer",
+  "local_files_only": true,
+  "trust_remote_code": false,
+  "add_generation_prompt": true,
+  "enable_thinking": false,
+  "template_digest": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+  "implementation_files": [
+    {
+      "name": "chat_template_utils",
+      "size_bytes": 26143,
+      "sha256": "3125114cf05646e7bc526ec30a6838da15bc9aa4591e42527e1012eaca3d276d"
+    },
+    {
+      "name": "Qwen2Tokenizer",
+      "size_bytes": 3323,
+      "sha256": "fac4e6576bfe2369731be147a4e530f262bdf32f2ac50436f96f0d8bdd2fc628"
+    }
+  ],
+  "probes": [
+    {
+      "probe": "basic",
+      "input_tokens": 85,
+      "rendered_prompt_digest": "sha256:35c96823625cb50c7bbbd0fe89aa0176d83b9a6da90020ee531b4f4ce89bd3ef"
+    },
+    {
+      "probe": "format_injection",
+      "input_tokens": 86,
+      "rendered_prompt_digest": "sha256:0b1dc13ae8b3c4a11f6fe2e8f464bd20dea26522eec9a5e92950476dd1a9dbbb"
+    }
+  ],
+  "formal_upper_bound_admission": false
+}

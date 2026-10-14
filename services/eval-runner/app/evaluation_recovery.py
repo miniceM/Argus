@@ -391,6 +391,8 @@ def recover_evaluation(
         output = checkpoint.agent_output
         expected_output = checkpoint.expected_output
         output_digest = checkpoint.output_digest
+        from .trajectory.inputs import make_evaluation_context
+        context = make_evaluation_context(session, checkpoint, manifest)
         # Preserve already-successful results verbatim.
         existing_rows = list(
             session.scalars(
@@ -452,7 +454,9 @@ def recover_evaluation(
         manifest,
         output=output,
         expected_output=expected_output,
-        only_binding_ids=needed_ids or None,
+        # 空集合表示所有成功结果均可复用；None 才表示执行全部 Binding。
+        only_binding_ids=needed_ids,
+        context=context,
     )
     new_by_key: dict[str, Any] = {}
     for result in partial.typed_results:
@@ -482,7 +486,7 @@ def recover_evaluation(
             )
 
     # One shared truth table decides the new verdict (Issue #83 rules).
-    summary = summarize_typed_results(full_plan, merged, manifest=manifest)
+    summary = summarize_typed_results(full_plan, merged, manifest=manifest, context=context)
 
     finalized = finalize_evaluation(
         db_mgr,

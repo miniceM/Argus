@@ -15,6 +15,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from .trajectory.codec import canonical_digest
+
 # Langfuse scores are numeric. These typed results have an exact numeric
 # representation; everything else must be explained rather than forced.
 _NUMERIC_RESULT_TYPES = {"numeric", "number"}
@@ -25,6 +27,7 @@ NOT_APPLICABLE_FAILED_REASON = "EVALUATION_RESULT_NOT_SUCCEEDED"
 NOT_APPLICABLE_MISSING_VALUE_REASON = "RESULT_VALUE_MISSING"
 
 PROJECTION_SOURCE = "ARGUS_FROZEN_SNAPSHOT"
+TRAJECTORY_PROJECTION_VERSION = "trajectory-snapshot-v1"
 
 
 @dataclass(frozen=True)
@@ -60,6 +63,15 @@ def stable_score_id(*, item_id: str, generation: int, evaluator_id: str) -> str:
     re-evaluation produces a new id, so the old revision's projection is kept.
     """
     return f"score:{item_id}:gen{generation}:{evaluator_id}"
+
+
+def trajectory_score_id(*, item_id: str, snapshot_id: str, binding_id: str) -> str:
+    """轨迹结果按不可变 Snapshot 隔离；同 Snapshot 重投保持同一身份。"""
+    identity = {"item_id": item_id, "snapshot_id": snapshot_id, "binding_id": binding_id}
+    if any(type(value) is not str or not value.strip() for value in identity.values()):
+        raise ValueError("TRAJECTORY_PROJECTION_IDENTITY_INVALID")
+    digest = canonical_digest(identity).removeprefix("sha256:")
+    return f"score:trajectory-v1:{digest}"
 
 
 def _evidence(

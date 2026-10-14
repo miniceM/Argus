@@ -22,6 +22,7 @@ from .models import (
     ResultSnapshotListResponse,
     ResultSnapshotRevisionResponse,
     RunSummaryResponse,
+    TrajectoryDiagnosisResponse,
 )
 from .result_outputs import ComparisonCaseOutputResponse, fetch_observation_output
 from .result_snapshots import (
@@ -38,6 +39,29 @@ def _db_manager():
     from .main import db_manager
 
     return db_manager
+
+
+@router.get("/{launch_id}/trajectory", response_model=TrajectoryDiagnosisResponse,
+    summary="Read frozen trajectory diagnosis for one Snapshot Case",
+    responses={404: {"description": "Snapshot 或 Case 不属于所选身份"},
+        409: {"description": "EVIDENCE_CONTRACT_INVALID：冻结证据合同不一致"}})
+def get_trajectory_diagnosis(launch_id: str, snapshot_id: str = Query(..., min_length=1),
+    dataset_item_id: str = Query(..., min_length=1)):
+    from .trajectory.diagnosis import build_diagnosis, diagnosis_response
+
+    with _db_manager().get_session() as session:
+        snapshot = session.scalar(select(RunResultSnapshotRecord).where(
+            RunResultSnapshotRecord.id == snapshot_id, RunResultSnapshotRecord.launch_id == launch_id))
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="Result snapshot not found")
+        if not isinstance(snapshot.items, list) or any(not isinstance(i, dict) for i in snapshot.items):
+            raise HTTPException(status_code=409, detail="EVIDENCE_CONTRACT_INVALID")
+        matches = [i for i in snapshot.items if i.get("dataset_item_id") == dataset_item_id]
+        if not matches:
+            raise HTTPException(status_code=404, detail="Snapshot Case not found")
+        if len(matches) != 1:
+            raise HTTPException(status_code=409, detail="EVIDENCE_CONTRACT_INVALID")
+        return diagnosis_response(build_diagnosis(session, snapshot, matches[0]))
 
 
 
@@ -91,20 +115,62 @@ def _get_snapshot(
         if snapshot is None:
             # Do not reveal whether an ID exists under another Launch.
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Result snapshot not found")
+        _validate_snapshot_read(snapshot)
         return launch, snapshot
 
     # 发布门禁显式要求当前已完成的结果，不能回退到评测重试前的快照。
     if refresh:
-        snapshot = create_result_snapshot(session, launch)
+        snapshot = _freeze_snapshot(session, launch)
         session.commit()
     else:
         snapshot = latest_result_snapshot(session, launch_id)
     if not refresh and snapshot is None and launch.status in {"COMPLETED", "PARTIAL_FAILED", "FAILED", "CANCELLED"}:
-        snapshot = create_result_snapshot(session, launch)
+        snapshot = _freeze_snapshot(session, launch)
         session.commit()
     if snapshot is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Launch result snapshot is not ready")
+    _validate_snapshot_read(snapshot)
     return launch, snapshot
+
+
+def _validate_snapshot_read(snapshot):
+    if not _snapshot_contract_valid(snapshot):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="EVIDENCE_CONTRACT_INVALID")
+
+
+def _snapshot_contract_valid(snapshot) -> bool:
+    from .required_evidence import validate_snapshot_contract
+    try:
+        validate_snapshot_contract(snapshot)
+    except ValueError:
+        return False
+    return True
+
+
+def _validate_comparison_baseline_structure(snapshot) -> None:
+    """损坏容器无法安全展示；合法容器中的失效制品仍可供诊断。"""
+    if snapshot is None:
+        return
+    manifest, items, summary = snapshot.manifest, snapshot.items, snapshot.summary
+    valid = isinstance(manifest, dict) and isinstance(items, list)
+    if valid:
+        dataset = manifest.get("dataset", {})
+        valid = (isinstance(dataset, dict)
+            and isinstance(dataset.get("items", []), list)
+            and all(isinstance(i, dict) and isinstance(i.get("id"), str) for i in dataset.get("items", []))
+            and all(isinstance(i, dict) and isinstance(i.get("dataset_item_id"), str) for i in items)
+            and (isinstance(summary, dict) or (summary is None and "evidence_contract_version" not in manifest)))
+    if not valid:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="EVIDENCE_CONTRACT_INVALID")
+
+
+def _freeze_snapshot(session, launch):
+    try:
+        return create_result_snapshot(session, launch)
+    except ValueError as exc:
+        if str(exc) == "EVIDENCE_CONTRACT_INVALID":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="EVIDENCE_CONTRACT_INVALID") from None
+        raise
 
 
 def _dataset_identity(manifest: dict[str, Any]) -> tuple[str, str] | None:
@@ -129,6 +195,9 @@ def _run_summary(
         score_sync_status = score_task.status if score_task else (
             "NOT_APPLICABLE" if snapshot.manifest.get("dataset", {}).get("source") != "langfuse" else "PENDING"
         )
+        from .release_gates import _frozen_observations, _summary
+
+        observations = _frozen_observations(snapshot, _summary(snapshot))
         return RunSummaryResponse(
             launch_id=snapshot.launch_id,
             snapshot_id=snapshot.id,
@@ -140,6 +209,8 @@ def _run_summary(
             evidence_reasons=list(snapshot.evidence_reasons or []),
             versions=_versions(snapshot.manifest),
             summary=snapshot.summary,
+            required_case_counts=observations["required_case_counts"],
+            trajectory_coverage=observations["trajectory_coverage"],
             langfuse_score_sync_status=score_sync_status,
             langfuse_sync=_sync_status(launch_id),
         )
@@ -159,6 +230,7 @@ def freeze_run_results(launch_id: str) -> RunSummaryResponse:
 
 
 def _revision_row(snapshot: RunResultSnapshotRecord, is_latest: bool) -> ResultSnapshotRevisionResponse:
+    _validate_snapshot_read(snapshot)
     summary = snapshot.summary or {}
     return ResultSnapshotRevisionResponse(
         snapshot_id=snapshot.id,
@@ -229,6 +301,7 @@ def get_launch_result_snapshot(launch_id: str, snapshot_id: str) -> ResultSnapsh
         if snapshot is None:
             # Do not reveal whether an ID exists under another Launch.
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Result snapshot not found")
+        _validate_snapshot_read(snapshot)
         evidence_state = (snapshot.evidence_state or EVIDENCE_COMPLETE).upper()
         return ResultSnapshotDetailResponse(
             launch_id=launch_id,
@@ -269,6 +342,9 @@ def _formal_verdict(
     if not baseline_bound:
         withheld.append("BASELINE_NOT_BOUND")
     for label, snapshot in (("BASELINE", baseline_snapshot), ("CANDIDATE", candidate_snapshot)):
+        if snapshot is not None:
+            if not _snapshot_contract_valid(snapshot):
+                withheld.append(f"{label}_EVIDENCE_CONTRACT_INVALID")
         state = ((snapshot.evidence_state if snapshot else None) or EVIDENCE_COMPLETE).upper()
         if state != EVIDENCE_COMPLETE:
             withheld.append(f"{label}_EVIDENCE_INCOMPLETE")
@@ -322,11 +398,22 @@ def get_launch_comparison(
         baseline_snapshot = session.get(RunResultSnapshotRecord, baseline_id) if baseline_id else None
         if baseline_id and baseline_snapshot is None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Frozen Baseline result snapshot is unavailable")
+        _validate_comparison_baseline_structure(baseline_snapshot)
         baseline_launch = session.get(ExperimentLaunchRecord, baseline_snapshot.launch_id) if baseline_snapshot else None
 
         baseline_items = {item["dataset_item_id"]: item for item in (baseline_snapshot.items if baseline_snapshot else [])}
         candidate_items = {item["dataset_item_id"]: item for item in candidate_snapshot.items}
-        all_case_ids = sorted(set(baseline_items) | set(candidate_items))
+        required_case_ids = set(baseline_items) | set(candidate_items)
+        # 新合同的 required cohort 由冻结 Dataset 定义；双方都缺失的 Case
+        # 仍是 NOT_COMPARABLE，不能从分母消失。历史合同保持原语义。
+        for snapshot in (baseline_snapshot, candidate_snapshot):
+            if snapshot is not None and snapshot.manifest.get("evidence_contract_version") == "trajectory-1.0":
+                required_case_ids.update(item["id"] for item in snapshot.manifest["dataset"]["items"])
+        all_case_ids = sorted(required_case_ids)
+        baseline_contract_valid = baseline_snapshot is not None and _snapshot_contract_valid(baseline_snapshot)
+        snapshots_complete = all(snapshot is not None and
+            ((snapshot.evidence_state or EVIDENCE_COMPLETE).upper() == EVIDENCE_COMPLETE)
+            for snapshot in (baseline_snapshot, candidate_snapshot))
         candidate_dataset_identity = _dataset_identity(candidate_snapshot.manifest)
         baseline_dataset_identity = _dataset_identity(baseline_snapshot.manifest) if baseline_snapshot else None
         dataset_identity_error = None
@@ -374,7 +461,7 @@ def get_launch_comparison(
             classification_counts[diff["classification"]] += 1
             diff["basis"] = (
                 "FORMAL"
-                if comparability.comparable and diff["classification"] != "NOT_COMPARABLE"
+                if baseline_contract_valid and snapshots_complete and comparability.comparable and diff["classification"] != "NOT_COMPARABLE"
                 else "DIAGNOSTIC_ONLY"
             )
             if diff["classification"] != "NOT_COMPARABLE" and base_case and candidate_case:
@@ -486,6 +573,7 @@ def get_comparison_case(
         baseline_snapshot = session.get(RunResultSnapshotRecord, baseline_id) if baseline_id else None
         if baseline_id and baseline_snapshot is None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Frozen Baseline result snapshot is unavailable")
+        _validate_comparison_baseline_structure(baseline_snapshot)
         baseline_launch = session.get(ExperimentLaunchRecord, baseline_snapshot.launch_id) if baseline_snapshot else None
         baseline_case = next(
             (item for item in (baseline_snapshot.items if baseline_snapshot else [])
@@ -497,6 +585,8 @@ def get_comparison_case(
 
         if baseline_snapshot is None:
             classification, reason = "NOT_COMPARABLE", "BASELINE_NOT_BOUND"
+        elif not _snapshot_contract_valid(baseline_snapshot):
+            classification, reason = "NOT_COMPARABLE", "BASELINE_EVIDENCE_CONTRACT_INVALID"
         else:
             baseline_identity = _dataset_identity(baseline_snapshot.manifest)
             candidate_identity = _dataset_identity(candidate_snapshot.manifest)

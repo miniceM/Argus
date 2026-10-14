@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import ast
 import os
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -105,6 +107,25 @@ def test_regular_ci_checks_keep_names_and_workflow_actions_are_sha_pinned() -> N
         for step in job.get("steps", []):
             if "uses" in step:
                 assert _is_sha(_action(step)[1]), f"unpinned Action: {step['uses']}"
+
+
+def test_trajectory_ci_covers_every_module_excluded_from_regular_tests() -> None:
+    workflow = _workflow(".github/workflows/ci.yml")
+    runs = [step["run"] for step in workflow["jobs"]["trajectory-local"]["steps"] if "run" in step]
+    commands = [shlex.split(run.replace("\\\n", " ")) for run in runs if "pytest" in run]
+    selected = {
+        token for command in commands if "trajectory_local" in command
+        for token in command if token.startswith("tests/")
+    }
+    required = set()
+    for module in (ROOT / "tests").glob("test_*.py"):
+        for node in ast.parse(module.read_text()).body:
+            if isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "pytestmark" for target in node.targets
+            ) and "pytest.mark.trajectory_local" in ast.unparse(node.value):
+                required.add(module.relative_to(ROOT).as_posix())
+    assert required, "expected real local integration modules"
+    assert required <= selected, f"real integration modules missing from CI: {sorted(required - selected)}"
 
 
 def test_cloud_summary_imports_without_optional_policy_dependencies() -> None:

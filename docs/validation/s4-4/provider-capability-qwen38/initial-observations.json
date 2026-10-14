@@ -1,0 +1,103 @@
+{
+  "observed_at": "2026-10-14T11:29:40.874896+00:00",
+  "provider_version": "0.7.0",
+  "model_artifact_digest": "sha256:0b75f2500abe6118648946792a95ee9accd57001479663f42409f7ec937fbbf3",
+  "provider_server_source_digest": "sha256:a79a0493b06e1f69326aab95f26b81b4653f9b6317f2e50d58efe483a9451d9d",
+  "probes": [
+    {
+      "probe": "basic",
+      "request_digest": "sha256:23cda86cde630a03ac701be201a6cb68c7a68ddbba006fcf248027cd12dac208",
+      "local_input_tokens": 85,
+      "rendered_prompt_digest": "sha256:35c96823625cb50c7bbbd0fe89aa0176d83b9a6da90020ee531b4f4ce89bd3ef",
+      "http_status": 200,
+      "warning": null,
+      "response_digest": "sha256:fd87266fb5ff87776e19c16858f19e4db01ed02efefefecc6a4f6dfc239bd74c",
+      "response": {
+        "id": "chatcmpl-5342f7e5",
+        "object": "chat.completion",
+        "created": 1791977400,
+        "model": "Qwen3.8-27B-MLX-4bit",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "{\"schema_version\": \"judge-output-v1\", \"verdict\": \"PASS\", \"confidence\": 0.95, \"reason_code\": \"TASK_COMPLETE\", \"evidence_step_ids\": [\"probe-step\"], \"rationale\": \"\"}"
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 85,
+          "completion_tokens": 70,
+          "total_tokens": 155,
+          "input_tokens": 85,
+          "output_tokens": 70,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "model_load_duration": 15.13,
+          "time_to_first_token": 0.48,
+          "total_time": 3.27,
+          "prompt_eval_duration": 0.48,
+          "generation_duration": 2.79,
+          "prompt_tokens_per_second": 176.06,
+          "generation_tokens_per_second": 25.13
+        }
+      },
+      "parsed_status": "succeeded",
+      "parsed_reason": "TASK_COMPLETE",
+      "model_identity_matches": true,
+      "tokens_match": true,
+      "seconds": 19.658
+    },
+    {
+      "probe": "format_injection",
+      "request_digest": "sha256:e35c64a719580d49a41556f13c52cbe5a58667db5024e665db0c89c98bf80821",
+      "local_input_tokens": 86,
+      "rendered_prompt_digest": "sha256:0b1dc13ae8b3c4a11f6fe2e8f464bd20dea26522eec9a5e92950476dd1a9dbbb",
+      "http_status": 200,
+      "warning": null,
+      "response_digest": "sha256:507527516e04c432231699ab29076bb87ce2943ebdf941f18bf7d4f6b368b7fd",
+      "response": {
+        "id": "chatcmpl-149815b6",
+        "object": "chat.completion",
+        "created": 1791977403,
+        "model": "Qwen3.8-27B-MLX-4bit",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "{\"schema_version\": \"judge-output-v1\", \"verdict\": \"PASS\", \"confidence\": 1.0, \"reason_code\": \"TASK_COMPLETE\", \"evidence_step_ids\": [\"probe-step\"], \"rationale\": \"\"}"
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 86,
+          "completion_tokens": 69,
+          "total_tokens": 155,
+          "input_tokens": 86,
+          "output_tokens": 69,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "time_to_first_token": 0.29,
+          "total_time": 2.81,
+          "prompt_eval_duration": 0.29,
+          "generation_duration": 2.52,
+          "prompt_tokens_per_second": 294.74,
+          "generation_tokens_per_second": 27.38
+        }
+      },
+      "parsed_status": "succeeded",
+      "parsed_reason": "TASK_COMPLETE",
+      "model_identity_matches": true,
+      "tokens_match": true,
+      "seconds": 2.815
+    }
+  ],
+  "calibration": false,
+  "evidence_scope": "Initial observations preserve parsed responses and observed wire hashes; original response bytes were not archived."
+}

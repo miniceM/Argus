@@ -884,7 +884,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     });
     renderComponent(`/launches/${mockLaunch.id}?snapshot_id=snap-v2-001&tab=cases`);
     fireEvent.click(await screen.findByTestId("case-row-expand-item-001"));await screen.findByText("candidate works");
-    expect(screen.getByRole("button",{name:/重试.*输出|重试读取/})).toBeInTheDocument();
+    expect(screen.getByRole("button",{name:"重试读取基准输出"})).toBeInTheDocument();
   });
 
   it("RECHECK: UUID copy must not display success before Clipboard completes",async()=>{

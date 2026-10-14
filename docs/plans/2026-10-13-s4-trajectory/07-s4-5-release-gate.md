@@ -1,9 +1,11 @@
 # S4.5 Trajectory Release Gate 实施方案
 
-状态：**提议，待方案 PR 评审；本文是实施设计，不表示轨迹门禁已交付。**
+状态：**PR #136 已批准方案；PR #181 已汇入 T7 确定性门禁、比较与 Snapshot 级投影实现，整期尚未验收。** 阶段结果见[T7 记录](../../validation/s4-5/t7-acceptance.md)与[当前归档](../../validation/s4-final/884b181/README.md)；Judge 阶段 B、后续数据和发布验收交维护者/管理员，见[交接说明](../../validation/s4-final/administrator-validation-handoff.md)。
 核验基线：2026-10-13，`main@4b043739c63357ecc10131e1ba54bc1bc53d862a`。
 关联：[Issue #5](https://github.com/miniceM/Argus/issues/5)、[#132](https://github.com/miniceM/Argus/issues/132)。
 共同契约：[01 技术设计](01-technical-design.md)；总阶段见[完整实施计划](08-implementation-plan.md)，ID 对照见[验收矩阵](09-acceptance-matrix.md)。
+
+实施记录（2026-10-14）：T6 已推送为 `d53d541a5d11b9fde4cfa383166f0ac7fd491e28`，其 CI 独立核验中。T7 首先验证 Snapshot 维度 Score 身份：新路径冻结 `(item_id, snapshot_id, binding_id)` 的 canonical SHA-256，旧 generation ID 保持原样。新增回归 RED 为 20 failed / 1 passed（新 API 尚不存在），最小实现后与旧投影回归合计 56 passed。此结果仅证明 ID 合同；尚未接入 Outbox，不作为 S45-15 整体通过。下一步追加现有 Outbox 的 nullable Snapshot FK/部分唯一性，并将固定 Snapshot 任务在冻结事务内入队。
 
 ## 1. 目标、现状与 Issue 修订
 
@@ -20,7 +22,7 @@ Issue #132 的方向与现有系统一致；实施应聚焦 trajectory-aware 证
 | Formal comparison | 合同不兼容时 `formal.available=false`，返回 `withheld_reasons` | 加入 trajectory evidence/ref 完整性与实际 required Case 覆盖检查 |
 | 投影 | Langfuse Score 经 outbox 从 Snapshot 单向投影，score ID 可幂等重放 | 投影带冻结 root/trajectory ref；不从 Langfuse 回读来更改 Argus 决定 |
 
-当前 Manifest schema 为 1.2；轨迹启用配置使用明确的 1.3 分支，Snapshot 冻结 `evidence_contract_version="trajectory-1.0"`。
+当前非轨迹 Manifest schema 为 1.2；已实现的轨迹启用配置使用明确的 1.3 分支，Snapshot 冻结 `evidence_contract_version="trajectory-1.0"`。
 当前 Snapshot 分类会把任意非 succeeded `eval_status` 归为 DIAGNOSTIC；optional evaluator skip 可导致 `eval_status=partial`，即便 QualityPolicy 已 PASS。
 当前 Comparison 有 `MEASUREMENT_CHANGED`、`QUALITY_POLICY_CHANGED`、`AGGREGATION_COMPARISON_CHANGED`；阈值改变会撤销正式可比性。
 当前 Gate 要求 COMPLETE、Case 覆盖、全评测覆盖、Frozen identity 和 critical 证据；critical FAIL 可一票否决。[实现](../../../services/eval-runner/app/release_gates.py)
@@ -227,3 +229,14 @@ make console-e2e
 通过显式 1.2/1.3 Reader、schema 约束、Snapshot 引用验证、outbox 幂等键、公式独立单测和全量门禁缓解。
 回退时停止为新 Launch 创建 trajectory-enabled Binding；保留已冻结的 1.3 Artifact、Snapshot、Baseline 和 Gate 记录。
 不得回滚或删除已发布迁移；配置回退保留可读1.3及新任务类型的Runner，禁止直接退回不了解它们的旧binary。未知schema/类型在新读者中fail closed，binary回退另需兼容与待处理任务评审。
+
+
+## T7 当前实施记录（2026-10-14）
+
+Snapshot Outbox、Gate 双比率/Case 计数、冻结轨迹覆盖摘要和 Console 展示已实现；完整阶段验收仍在进行。详见 [实施进度与证据](../../validation/s4-5/gate-progress.md)。
+
+`trajectory_coverage` 以冻结 Dataset 全量 Case 为分母，分子只计受控 Loader 校验通过的实际 Artifact；它不替代 `required_evidence_status`。旧合同、零 Case 或脱离校验 Session 的对象返回 null。新 Gate 引擎固定为 `trajectory-release-gate-v1`，API 幂等 request digest 使用同一版本；历史 `release-gate-v3` 记录不补算新增字段。历史 summary 的未存储指标保持缺失。
+
+新 trajectory 的 optional critical 在新 Launch/Gate 冻结边界拒绝（`TRAJECTORY_OPTIONAL_CRITICAL_INVALID`）；幂等查询先返回已有请求，旧合同不回写。关闭 critical 阻断则新 Gate 冻结返回 `TRAJECTORY_CRITICAL_BLOCK_REQUIRED`。损坏 Manifest/comparison 返回稳定冲突，包含 legacy 1.2 的 null 比较对象。
+
+只读独立审阅发现的任务分流、历史投影兼容、optional critical、损坏 Manifest 与幂等重放问题均已通过针对性 RED/GREEN 和静态复核修复。最终本地门禁为 Python 2288、Console 861、E2E 129 项通过；完整真实来源门禁及发布 CI 未验收，不能据此标记 T7 或完整 S4 完成。

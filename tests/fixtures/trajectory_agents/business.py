@@ -45,13 +45,14 @@ def deny_external_network():
 
 
 class Workflow:
-    def __init__(self, tracer, profile, operation):
+    def __init__(self, tracer, profile, operation, *, root_id=None):
         self.tracer, self.profile, self.operation = tracer, profile, operation
         self.scope = uuid.uuid4().hex
         self.sequence = 0
         self.lock = threading.Lock()
         self.inventory = []
         self.last_completed = None
+        self.root_id = root_id
 
     def attributes(self, event_id, phase, status, call_id=None):
         with self.lock:
@@ -74,6 +75,10 @@ class Workflow:
             visibility = {"missing": "MISSING", "redacted": "REDACTED", "uncollected": "UNCOLLECTED"}.get(self.operation, visibility)
         event_id = uuid.uuid4().hex
         arguments = {"customer_id": customer_id}
+        if self.operation in {"privacy", "privacy_ssn"} and semantic_name == "balance_read":
+            # 合成业务隐私场景，原样观测；由消费方按自己的合同治理。
+            arguments = {"customer_id": "123-45-6789" if self.operation == "privacy_ssn" else "4111111111111111", "identity_number": "11010519491231002X",
+                "Authorization": "Bearer synthetic-privacy-sentinel", "Cookie": "session=synthetic-privacy-sentinel"}
         if visibility == "MISSING":
             arguments = {}
         attrs = {**self.attributes(event_id, "REQUESTED", "SUCCEEDED", call_id),
@@ -127,7 +132,7 @@ class Workflow:
     def terminal(self):
         if os.environ.get("S4_APPROVAL_URL"):
             from opentelemetry.propagate import inject
-            endpoint = os.environ["S4_APPROVAL_URL"].rsplit("/", 1)[0] + "/inventory?workflow_id=" + self.scope
+            endpoint = os.environ["S4_APPROVAL_URL"].rsplit("/", 1)[0] + "/inventory?workflow_id=" + self.scope + "&root_id=" + self.root_id
             with self.tracer.start_as_current_span("approval.inventory.http"):
                 headers = {}
                 inject(headers)
@@ -154,7 +159,7 @@ class Workflow:
             headers = {"Content-Type": "application/json"}
             inject(headers)
             request = Request(endpoint, json.dumps({"workflow_id": self.scope, "sequence": sequence,
-                              "case_reference": "synthetic-approval"}).encode(), headers=headers, method="POST")
+                              "root_id": self.root_id, "case_reference": "synthetic-approval"}).encode(), headers=headers, method="POST")
             with build_opener(ProxyHandler({})).open(request, timeout=5) as response:
                 approval = json.load(response)
         assert approval["decision"] == "approved"
@@ -269,10 +274,13 @@ def serve(profile):
                 output = {"intent": "balance", "balance": "12.50"}
                 if tracer:
                     from opentelemetry.propagate import extract
+                    from opentelemetry.trace import get_current_span
                     carrier = {key.lower(): value for key, value in self.headers.items()}
-                    with tracer.start_as_current_span(profile + ".business", context=extract(carrier),
+                    incoming = extract(carrier)
+                    root_id = f"{get_current_span(incoming).get_span_context().span_id:016x}"
+                    with tracer.start_as_current_span(profile + ".business", context=incoming,
                                                       attributes={"business.operation": operation}):
-                        workflow = Workflow(tracer, profile, operation)
+                        workflow = Workflow(tracer, profile, operation, root_id=root_id)
                         workflow.tracer_provider = provider
                         async def run():
                             if profile == "pydantic_ai":

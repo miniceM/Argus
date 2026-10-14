@@ -24,7 +24,10 @@ import textwrap
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .trajectory.inputs import EvaluationContext
 
 from .evaluators import (
     Evaluation,
@@ -41,7 +44,7 @@ LEGACY_MANIFEST_SCHEMAS = ("1.0", "1.1")
 FROZEN_CONTRACT_STATUS = "FROZEN_VERIFIED"
 LEGACY_CONTRACT_STATUS = "HISTORICAL_CONTRACT_UNRECORDED"
 
-SUPPORTED_EXECUTOR_TYPES = ("builtin_python",)
+SUPPORTED_EXECUTOR_TYPES = ("builtin_python", "trajectory_judge")
 
 _DIGEST_PREFIX_RE = r"^sha256:[0-9a-f]{64}$"
 
@@ -177,6 +180,8 @@ def python_source_artifact(
     dependencies: tuple[str, ...] = (),
 ) -> ImplementationArtifact | None:
     """Derive a verifiable artifact identity from the implementation source."""
+    from .trajectory.bindings import implementation_dependencies
+    dependencies = tuple(dependencies) + implementation_dependencies(fn)
     try:
         source = textwrap.dedent(inspect.getsource(fn)).strip()
     except (OSError, TypeError):  # pragma: no cover - non-source callables
@@ -411,6 +416,7 @@ def freeze_binding(
     *,
     runner_identity: dict[str, Any],
     composed_of: tuple[str, ...] = (),
+    params: dict[str, Any] | None = None,
 ) -> EvaluatorBinding:
     """Freeze the execution identity of one resolved Evaluator version.
 
@@ -439,6 +445,18 @@ def freeze_binding(
             actual=None,
         )
 
+    from .trajectory.bindings import is_tool_rule
+    trajectory_rule = is_tool_rule(version)
+    trajectory_judge = version.executor_type == "trajectory_judge"
+    frozen_params, frozen_input = {}, dict(version.input_contract)
+    if trajectory_rule:
+        from .trajectory.bindings import freeze_rule_config
+        frozen_params, frozen_input = freeze_rule_config(version, params)
+    elif trajectory_judge:
+        from .trajectory.judge_execution import freeze_judge_config
+        frozen_params, frozen_input = freeze_judge_config(version, params)
+    elif params:
+        raise EvaluatorBindingError("EVALUATOR_PARAMS_UNSUPPORTED", code="EVALUATOR_PARAMS_UNSUPPORTED")
     reasons = evaluate_release_eligibility(version, execution_owner=definition.execution_owner)
     dependencies = tuple(composed_of)
     artifact = python_source_artifact(
@@ -461,6 +479,8 @@ def freeze_binding(
         "artifact": artifact.payload(),
         "runner": runner_identity,
     }
+    if trajectory_rule or trajectory_judge:
+        binding_seed.update(params=frozen_params, input_contract=frozen_input)
     binding = EvaluatorBinding(
         binding_id=f"bind_{canonical_digest(binding_seed).split(':', 1)[1][:16]}",
         evaluator_id=definition.id,
@@ -470,15 +490,15 @@ def freeze_binding(
         threshold=float(version.threshold),
         direction=version.direction,
         critical=bool(version.critical),
-        input_contract=dict(version.input_contract),
+        input_contract=frozen_input,
         output_contract=dict(version.output_contract),
-        params={},
+        params=frozen_params,
         definition_digest=normalize_digest(version.content_digest),
         implementation_ref=version.implementation_ref,
         executor_type=version.executor_type,
         artifact=artifact,
         category_values=version.category_values,
-        normalization_rule=normalization_rule_for(version),
+        normalization_rule=None if trajectory_rule else normalization_rule_for(version),
         runner=dict(runner_identity),
         composed_of=dependencies,
         contract_status=FROZEN_CONTRACT_STATUS,
@@ -518,7 +538,8 @@ class EvaluatorExecutor(ABC):
         """Return a stable error code when the frozen identity cannot be honored."""
 
     @abstractmethod
-    def execute(self, implementation: Any, *, output: Any, expected_output: Any) -> Evaluation:
+    def execute(self, implementation: Any, *, output: Any, expected_output: Any,
+                context: EvaluationContext | None = None) -> Evaluation:
         """Run the resolved implementation for one item."""
 
 
@@ -571,23 +592,43 @@ class BuiltinPythonExecutor(EvaluatorExecutor):
             return "EVALUATOR_ARTIFACT_UNRESOLVABLE"
         if artifact.digest != binding.artifact.digest:
             return "EVALUATOR_ARTIFACT_DIGEST_MISMATCH"
+        from .trajectory.bindings import is_tool_rule
+        if is_tool_rule(implementation):
+            try:
+                expected = freeze_binding(self.registry.definition(binding.evaluator_id), implementation,
+                    runner_identity=binding.runner, composed_of=binding.composed_of, params=binding.params)
+            except EvaluatorBindingError:
+                return "TRAJECTORY_RULE_BINDING_MISMATCH"
+            if (binding.binding_id != expected.binding_id or binding.input_contract != expected.input_contract
+                or binding.params != expected.params or binding.normalization_rule is not None):
+                return "TRAJECTORY_RULE_BINDING_MISMATCH"
         if implementation.fn is None:
             return "EVALUATOR_ARTIFACT_UNRESOLVABLE"
         return None
 
-    def execute(self, implementation: Any, *, output: Any, expected_output: Any) -> Evaluation:
+    def execute(self, implementation: Any, *, output: Any, expected_output: Any,
+                context: EvaluationContext | None = None, binding: EvaluatorBinding | None = None,
+                manifest_schema_version: str | None = None, trajectory_contract_digest: str | None = None,
+                trajectory_contract: Any = None) -> Evaluation:
         fn = getattr(implementation, "fn", implementation)
         if fn is None:
             raise EvaluatorBindingError(
                 "冻结的实现不可执行。",
                 code="EVALUATOR_ARTIFACT_UNRESOLVABLE",
             )
+        from .trajectory.bindings import is_tool_rule
+        if binding is not None and is_tool_rule(binding):
+            from .trajectory.bindings import execute_rule
+            return execute_rule(fn, context=context, binding=binding, schema=manifest_schema_version, contract_digest=trajectory_contract_digest,
+                trajectory_contract=trajectory_contract)
         return fn(output=output, expected_output=expected_output)
 
 
 def build_executor_registry(registry: Any) -> dict[str, EvaluatorExecutor]:
     """Executors available in this Runner, keyed by their frozen executor type."""
-    return {BuiltinPythonExecutor.executor_type: BuiltinPythonExecutor(registry)}
+    from .trajectory.judge_execution import TrajectoryJudgeExecutor
+    return {BuiltinPythonExecutor.executor_type: BuiltinPythonExecutor(registry),
+        TrajectoryJudgeExecutor.executor_type: TrajectoryJudgeExecutor(registry)}
 
 
 def executor_for(
@@ -692,7 +733,7 @@ def manifest_contract_status(manifest: dict[str, Any] | None) -> str:
     manifest = manifest or {}
     schema = str(manifest.get("schema_version") or "")
     bindings = manifest.get("evaluators") or []
-    if schema >= MANIFEST_BINDING_SCHEMA_VERSION and bindings and all(
+    if schema in (MANIFEST_BINDING_SCHEMA_VERSION, "1.3") and bindings and all(
         isinstance(entry, dict) and entry.get("binding_digest") for entry in bindings
     ):
         return FROZEN_CONTRACT_STATUS
@@ -708,16 +749,20 @@ def manifest_measurement_digest(manifest: dict[str, Any] | None) -> str:
     decision.
     """
     manifest = manifest or {}
-    return canonical_digest(
-        {
-            "schema_version": str(manifest.get("schema_version") or ""),
-            "bindings": [
-                EvaluatorBinding.from_payload(dict(entry)).measurement_digest
-                for entry in (manifest.get("evaluators") or [])
-                if isinstance(entry, dict)
-            ],
-        }
-    )
+    measured = {
+        "schema_version": str(manifest.get("schema_version") or ""),
+        "bindings": [
+            EvaluatorBinding.from_payload(dict(entry)).measurement_digest
+            for entry in (manifest.get("evaluators") or [])
+            if isinstance(entry, dict)
+        ],
+    }
+    from .trajectory.manifest import load_trajectory_contract
+
+    trajectory = load_trajectory_contract(manifest)
+    if trajectory is not None:
+        measured["trajectory_contract_digest"] = trajectory.digest
+    return canonical_digest(measured)
 
 
 def manifest_quality_policy(manifest: dict[str, Any] | None) -> Any | None:
@@ -738,6 +783,33 @@ def manifest_quality_policy(manifest: dict[str, Any] | None) -> Any | None:
         return None
 
 
+def _verify_trajectory_manifest(manifest):
+    from .trajectory.manifest import TrajectoryManifestError, load_trajectory_contract
+
+    try:
+        trajectory = load_trajectory_contract(manifest)
+        if trajectory is not None:
+            measured = manifest_measurement_digest(manifest)
+            block = manifest.get("contract_digests")
+            declared = block.get("measurement") if type(block) is dict else None
+            if (manifest.get("measurement_digest") != measured or type(declared) is not dict
+                or declared.get("digest") != measured or declared.get("version") != "1.3"):
+                raise TrajectoryManifestError("MEASUREMENT_MISMATCH")
+        from .trajectory.bindings import validate_rule_contract
+        from .trajectory.judge_execution import validate_judge_contract
+        for binding in bindings_from_manifest(manifest):
+            validate_rule_contract(binding, trajectory)
+            validate_judge_contract(binding, trajectory, (manifest or {}).get("schema_version"))
+    except TrajectoryManifestError as error:
+        raise EvaluatorBindingError(error.reason_code, code=error.reason_code) from None
+    from .required_evidence import frozen_required_policy, uses_required_contract
+    if manifest is not None and uses_required_contract(manifest):
+        try:
+            frozen_required_policy(manifest)
+        except ValueError:
+            raise EvaluatorBindingError("EVIDENCE_CONTRACT_INVALID", code="EVIDENCE_CONTRACT_INVALID") from None
+
+
 def resolve_execution_plan(
     manifest: dict[str, Any] | None,
     *,
@@ -745,6 +817,7 @@ def resolve_execution_plan(
     executors: dict[str, EvaluatorExecutor] | None = None,
 ) -> list[ResolvedEvaluator]:
     """Validate every frozen binding of a Launch before any Agent call."""
+    _verify_trajectory_manifest(manifest)
     registry = registry or default_evaluator_registry
     executors = executors if executors is not None else build_executor_registry(registry)
     plan: list[ResolvedEvaluator] = []
@@ -788,6 +861,7 @@ class FrozenItemEvaluation:
     # Issue #83: the per-rule decision, so a reviewer can read *why* this item
     # is pass / fail / unknown instead of only seeing the verdict.
     quality_decision: Any = None
+    required_evidence_status: str | None = None
 
     @property
     def failed_result_count(self) -> int:
@@ -813,6 +887,9 @@ def evaluate_frozen_item(
     executors: dict[str, EvaluatorExecutor] | None = None,
     quality_policy: dict[str, Any] | None = None,
     only_binding_ids: set[str] | None = None,
+    context: EvaluationContext | None = None,
+    prepared_results: dict[str, Any] | None = None,
+    evaluation_generation: int | None = None,
 ) -> FrozenItemEvaluation:
     """The single evaluation entry point for Worker, run and resume paths.
 
@@ -832,6 +909,7 @@ def evaluate_frozen_item(
 
     plan: list[ResolvedEvaluator] = []
     try:
+        _verify_trajectory_manifest(manifest)
         plan = [
             resolved
             for resolved in (
@@ -840,12 +918,14 @@ def evaluate_frozen_item(
             if resolved.binding.scope == "item"
         ]
     except EvaluatorBindingError as exc:
+        from .required_evidence import uses_required_contract
         return FrozenItemEvaluation(
             scores={},
             quality_conclusion="unknown",
             eval_status="failed",
             eval_error=str(exc),
             verification_status=manifest_contract_status(manifest),
+            required_evidence_status="INCOMPLETE" if uses_required_contract(manifest) else None,
         )
 
     if only_binding_ids is not None:
@@ -889,23 +969,50 @@ def evaluate_frozen_item(
         )
         executor = executor_for(binding, executors)
         started = time.perf_counter()
+        trajectory_judge = binding.executor_type == "trajectory_judge"
         try:
+            # 旧 Output Executor 仍只收到原有两个参数；轨迹声明由后续规则版本冻结。
+            inputs = {"context": context} if binding.input_contract.get("input_kind") == "trajectory" else {}
+            from .trajectory.bindings import is_tool_rule
+            tool_rule = is_tool_rule(binding) and isinstance(executor, BuiltinPythonExecutor)
+            if trajectory_judge:
+                from .trajectory.manifest import load_trajectory_contract
+                inputs.update(binding=binding, trajectory_contract=load_trajectory_contract(manifest),
+                    prepared_result=prepared_results.get(binding.binding_id) if type(prepared_results) is dict else None,
+                    evaluation_generation=evaluation_generation)
+            if tool_rule:
+                inputs.update(binding=binding, manifest_schema_version=manifest_schema_version,
+                    trajectory_contract_digest=manifest.get("trajectory", {}).get("trajectory_contract_digest"))
+                from .trajectory.bindings import requires_human_policy
+                if requires_human_policy(binding):
+                    from .trajectory.manifest import load_trajectory_contract
+                    inputs["trajectory_contract"] = load_trajectory_contract(manifest)
             raw = executor.execute(
-                resolved.implementation, output=output, expected_output=expected_output
+                resolved.implementation, output=output, expected_output=expected_output, **inputs
             )
+            if trajectory_judge:
+                from .trajectory.judge_execution import adapt_prepared_judge_result
+                raw = adapt_prepared_judge_result(raw, **inputs)
         except Exception as exc:  # noqa: BLE001 - one Binding must not kill the rest
             duration_ms = round((time.perf_counter() - started) * 1000, 3)
             typed_results.append(
                 failed_result(
                     binding,
-                    error_code="EVALUATION_FAILED",
-                    error_message=str(exc),
+                    error_code="JUDGE_PREPARED_RESULT_INVALID" if trajectory_judge else "EVALUATION_FAILED",
+                    error_message="JUDGE_PREPARED_RESULT_INVALID" if trajectory_judge else str(exc),
                     duration_ms=duration_ms,
                     manifest_schema_version=manifest_schema_version,
                 )
             )
             continue
         duration_ms = round((time.perf_counter() - started) * 1000, 3)
+        if trajectory_judge:
+            typed_results.append(raw)
+            continue
+        if tool_rule:
+            from .trajectory.bindings import adapt_result
+            typed_results.append(adapt_result(raw, binding=binding, context=context, schema=manifest_schema_version, duration_ms=duration_ms))
+            continue
         typed_results.append(
             build_result(
                 binding,
@@ -928,6 +1035,7 @@ def evaluate_frozen_item(
         quality_policy=quality_policy,
         evaluators=evaluators,
         verification_status=verification_status,
+        context=context,
     )
 
 
@@ -959,6 +1067,7 @@ def summarize_typed_results(
     quality_policy: dict[str, Any] | None = None,
     evaluators: list[dict[str, Any]] | None = None,
     verification_status: str | None = None,
+    context: EvaluationContext | None = None,
 ) -> FrozenItemEvaluation:
     """Turn a complete set of typed results into the recorded verdict.
 
@@ -1001,6 +1110,11 @@ def summarize_typed_results(
         policy = legacy_quality_policy([resolved.binding for resolved in plan])
         decided_by = "LEGACY_MANIFEST_POLICY"
     decision = evaluate_quality_policy(typed_results, policy, decided_by=decided_by)
+    if manifest is not None and "evidence_contract_version" in manifest:
+        from .required_evidence import required_quality_decision
+        owned_input = getattr(context, "trajectory_input", None)
+        decision = required_quality_decision(manifest, typed_results,
+            trajectory_input=owned_input.to_payload() if owned_input is not None else {})
     quality_conclusion = decision.conclusion
 
     # An evaluation anomaly is always surfaced, even when it does not change the
@@ -1025,6 +1139,7 @@ def summarize_typed_results(
         evaluators=tuple(evaluators or ()),
         typed_results=tuple(typed_results),
         quality_decision=decision,
+        required_evidence_status=decision.required_evidence_status,
     )
 
 

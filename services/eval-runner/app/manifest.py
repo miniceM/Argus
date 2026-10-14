@@ -31,6 +31,12 @@ from .quality_policy import (
 )
 from .registry import AgentRegistry
 from .runner_identity import current_runner_identity, validate_runner_identity
+from .trajectory.contract import TrajectoryContract
+from .trajectory.manifest import (
+    TRAJECTORY_MANIFEST_SCHEMA_VERSION,
+    bind_trajectory_manifest,
+    freeze_trajectory_contract,
+)
 
 
 def compute_payload_digest(payload: dict[str, Any]) -> str:
@@ -79,10 +85,13 @@ class LaunchService:
         dataset_client: Any | None = None,
         allow_run_scope: bool = False,
         quality_policy_rules: list[dict[str, Any]] | None = None,
+        trajectory_contract: TrajectoryContract | None = None,
+        capture_only: bool = False,
     ) -> ExperimentLaunchRecord:
         from .baselines import normalize_environment
 
         normalized_environment = normalize_environment(environment)
+        frozen_trajectory = freeze_trajectory_contract(trajectory_contract) if trajectory_contract is not None else None
         runner_identity = current_runner_identity(runner_version=self.runner_version)
         identity_error = validate_runner_identity(runner_identity.model_dump(), runner_identity)
         if identity_error:
@@ -137,6 +146,15 @@ class LaunchService:
             for evaluator_id, version in requested
         ]
         eval_specs.sort(key=lambda spec: spec["id"])
+        selection_params = {item["id"]: item.get("params") for item in (evaluator_selections or [])}
+        has_trajectory_rules = any(default_evaluator_registry.version(spec["id"], spec["version"]).input_contract.get("input_kind") == "trajectory"
+            for spec in eval_specs)
+        if frozen_trajectory is None and has_trajectory_rules:
+            from .evaluator_binding import EvaluatorBindingError
+            raise EvaluatorBindingError("TRAJECTORY_RULE_CONTRACT_REQUIRED", code="TRAJECTORY_RULE_CONTRACT_REQUIRED")
+        if frozen_trajectory is not None and not has_trajectory_rules and not capture_only:
+            from .evaluator_binding import EvaluatorBindingError
+            raise EvaluatorBindingError("TRAJECTORY_RULE_BINDING_REQUIRED", code="TRAJECTORY_RULE_BINDING_REQUIRED")
 
         # ---- Issue #81: freeze the *execution identity*, not only id/version ----
         # A Launch is only reproducible when the implementation artifact and the
@@ -147,10 +165,10 @@ class LaunchService:
                 default_evaluator_registry.version(spec["id"], spec["version"]),
                 runner_identity=runner_identity.model_dump(),
                 composed_of=default_evaluator_registry.definition(spec["id"]).composed_of,
+                params=selection_params.get(spec["id"]),
             ).to_payload()
             for spec in eval_specs
         ]
-
         # ---- Issue #83: freeze an independent, digested QualityPolicy --------
         # Judgement is a separate, versioned decision from measurement. When the
         # user does not supply rules, every selected diagnostic becomes a
@@ -187,6 +205,11 @@ class LaunchService:
             "name": name,
             "quality_policy_digest": policy.policy_digest,
         }
+        if frozen_trajectory is not None:
+            payload_data["trajectory_contract_digest"] = frozen_trajectory["trajectory_contract_digest"]
+        if has_trajectory_rules:
+            payload_data["evaluator_selections"] = [
+                {"id": spec["id"], "version": spec["version"], "params": spec["params"]} for spec in eval_specs]
         payload_digest = compute_payload_digest(payload_data)
 
         # Upfront idempotency check: never call external services if key already exists
@@ -201,11 +224,26 @@ class LaunchService:
                         f"Idempotency key conflict: key '{idempotency_key}' already used with different payload."
                     )
 
+        if frozen_trajectory is not None:
+            _validate_trajectory_critical_policy(policy)
+            from .trajectory.manifest import TrajectoryManifestError, parse_launch_contract
+            # 新建入口必须治理所有轨迹；相同幂等请求返回既有历史，不回写其合同。
+            new_contract = parse_launch_contract(frozen_trajectory["contract_json"])
+            if new_contract.redaction_policy.content_policy_version != "pii-v1":
+                raise TrajectoryManifestError("CONTENT_POLICY_REQUIRED")
+
         ver_rec = self.registry.get_version(agent_id, agent_version)
         if not ver_rec:
             raise ValueError(f"AgentVersion '{agent_id}:{agent_version}' not found")
         if not ver_rec.is_active:
             raise ValueError(f"AgentVersion '{agent_id}:{agent_version}' is archived/inactive")
+        trajectory = bind_trajectory_manifest(frozen_trajectory, ver_rec) if frozen_trajectory is not None else None
+        if has_trajectory_rules:
+            from .trajectory.bindings import validate_rule_contract
+            from .trajectory.manifest import parse_launch_contract
+            checked_contract = parse_launch_contract(frozen_trajectory["contract_json"]).bind_source_version(ver_rec)
+            for spec in eval_specs:
+                validate_rule_contract(EvaluatorBinding.from_payload(spec), checked_contract)
 
         version_environment = ver_rec.environment or ("production" if ver_rec.credential_id else None)
         if version_environment is not None and normalize_environment(version_environment) != normalized_environment:
@@ -241,8 +279,9 @@ class LaunchService:
         launch_name = name or f"{agent_id}-{agent_version}-{dataset_name}"
 
         # Build 4D Manifest snapshot
+        manifest_schema = TRAJECTORY_MANIFEST_SCHEMA_VERSION if trajectory is not None else MANIFEST_BINDING_SCHEMA_VERSION
         manifest = {
-            "schema_version": MANIFEST_BINDING_SCHEMA_VERSION,
+            "schema_version": manifest_schema,
             "dataset": resolved_snapshot,
             "comparison": {
                 "environment": normalized_environment,
@@ -270,10 +309,6 @@ class LaunchService:
             "evaluators": eval_specs,
             # Issue #83: the real, digested policy replaces the old placeholder.
             "quality_policy": policy.to_payload(),
-            # What was measured, kept separate from how it is judged.
-            "measurement_digest": manifest_measurement_digest(
-                {"schema_version": MANIFEST_BINDING_SCHEMA_VERSION, "evaluators": eval_specs}
-            ),
             "runner": {
                 **runner_identity.model_dump(),
             },
@@ -284,6 +319,16 @@ class LaunchService:
                 "rate_limit_per_minute": ver_rec.rate_limit_per_minute,
             },
         }
+        if ver_rec.trajectory_source_profile_id is not None:
+            manifest["agent"]["trajectory_source_profile_id"] = ver_rec.trajectory_source_profile_id
+        if trajectory is not None:
+            manifest["trajectory"] = trajectory
+        if has_trajectory_rules:
+            from .required_evidence import COMPARISON_POLICY_VERSION, EVIDENCE_CONTRACT_VERSION
+            manifest["evidence_contract_version"] = EVIDENCE_CONTRACT_VERSION
+            manifest["comparison"]["comparison_policy_version"] = COMPARISON_POLICY_VERSION
+        # Measurement 与 QualityPolicy 分开，完整轨迹合同不因实际 profile 分支改变。
+        manifest["measurement_digest"] = manifest_measurement_digest(manifest)
 
         # ---- Issue #86: freeze the three comparison contracts independently ----
         # Measurement, judgement and comparison semantics move independently, so
@@ -292,13 +337,13 @@ class LaunchService:
         measurement_digest = manifest["measurement_digest"]
         manifest["contract_digests"] = {
             "schema_version": COMPARISON_CONTRACT_SCHEMA_VERSION,
-            "measurement": {"digest": measurement_digest, "version": MANIFEST_BINDING_SCHEMA_VERSION},
+            "measurement": {"digest": measurement_digest, "version": manifest_schema},
             "quality_policy": {
                 "digest": policy.policy_digest,
                 "version": f"{policy.policy_id}@{policy.version}",
             },
             "aggregation_comparison": {
-                "digest": aggregation_comparison_digest(),
+                "digest": aggregation_comparison_digest(evidence_contract_version=manifest.get("evidence_contract_version")),
                 "version": manifest["comparison"]["comparison_policy_version"],
             },
         }
@@ -444,3 +489,9 @@ class LaunchService:
             if limit is not None:
                 stmt = stmt.limit(limit)
             return list(session.scalars(stmt).all())
+
+
+def _validate_trajectory_critical_policy(policy):
+    if any(rule.critical and not rule.required for rule in policy.rules):
+        from .quality_policy import QualityPolicyError
+        raise QualityPolicyError("轨迹 critical 规则必须声明为 required。", code="TRAJECTORY_OPTIONAL_CRITICAL_INVALID")

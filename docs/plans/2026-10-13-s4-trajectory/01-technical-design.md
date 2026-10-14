@@ -1,6 +1,6 @@
 # S4 轨迹评测总体技术契约
 
-状态：**提议，待方案 PR 评审；本文件描述目标实现，不表示功能已交付。** 核验基线：2026-10-13，`main@4b043739c63357ecc10131e1ba54bc1bc53d862a`。范围：[Issue #5](https://github.com/miniceM/Argus/issues/5)、[#127](https://github.com/miniceM/Argus/issues/127)–[#132](https://github.com/miniceM/Argus/issues/132)。入口：[方案目录](README.md)。
+状态：**PR #136 已合并的技术契约；实施汇总在 PR #181，完整验收仍待完成。** 本文保留目标实现与原始约束，实际证据与后续数据责任见[管理员交接](../../validation/s4-final/administrator-validation-handoff.md)。原设计核验基线：2026-10-13，`main@4b043739c63357ecc10131e1ba54bc1bc53d862a`。范围：[Issue #5](https://github.com/miniceM/Argus/issues/5)、[#127](https://github.com/miniceM/Argus/issues/127)–[#132](https://github.com/miniceM/Argus/issues/132)。入口：[方案目录](README.md)。
 
 ## 1. 目标、现状与方案选择
 
@@ -84,7 +84,11 @@ Tool Mapping 使用同一冻结映射配置覆盖两个 Demo 框架的原始名�
 
 TrajectoryContract冻结source_profile_set（所有获准profile的ID、版本、字段映射、完成协议）及选择算法；实际selected_source_profile_id由不可变AgentVersion的声明选取，记录在Launch执行元数据与TrajectoryProvenance。Measurement/trajectory_contract_digest包含同一完整profile_set及选择算法，不把本次Agent选中的分支当成不同测量配置；否则两个框架会被误判不可比。选中分支仍需完整版本冻结、属于获准集合且与实测来源一致；来源未获准不得自动猜profile。AgentVersion新增可选trajectory_source_profile_id，使用nullable顶层数据库列与AgentVersionSpec/DTO承载，不塞入当前未参与spec_digest的metadata；非空时纳入spec_digest，空值保持历史digest算法和旧路径。配置变更创建新AgentVersion并同步契约快照。
 
+SourceProfile 可显式声明 `structural_roles`：按精确 provider type、原始名称与非敏感 metadata 等值条件匹配已实测的框架父节点。只允许 AGENT/LLM/CUSTOM，统一为 EVENT/UNKNOWN；仅保留受控身份、真实 parent、合法时间与固定安全展示名，全部工具/人工/顺序/时长能力为 NONE，不采集其 input/output、业务参数、workflow 或因果引用。物理 TOOL 类型的 SDK 包装 Span 也不能因此成为工具执行证据。匹配业务来源谓词或存在 phase/status/event/sequence/call/terminal 等语义标记的行不得回退为结构角色；业务字段缺失或非法仍需降级。角色配置按身份唯一、稳定排序并进入完整合同摘要；新增角色使用新来源/算法版本。未声明角色时省略该字段，保持历史合同 canonical bytes/digest。实际原始名称可含 ASCII 空格（如 `agent run`），属于精确来源匹配字符串，不能套用无空格 ID 约束；安全展示名仍使用受控 Identity。本机真实来源依据与边界见 [结构来源验收](../../validation/s4-1/structural-sources.md)。
+
 timing 描述所需 Step 时长证据覆盖；duration_ms 缺失为 null+timing PARTIAL/NONE，不推导为 0，也不因此降低无关工具身份能力。duration_ms 仅映射 profile 已验证的显式来源字段，不以跨服务时间差补造。ordering 仍须满足可信完成→请求因果和可靠时间校验。raw_name、workflow_scope_id、input/output/result 摘要同样受 allowlist/长度/内容检查；未获准来源名称用固定安全占位并记 warning，不能借名称泄漏自由文本。
+
+启用结构角色的 profile 必须提供 `phase`、`status`、`event_id`、`sequence`、`call_id`、`causal_event_ids`、`terminal_event_count`、`terminal_event_ids`、`terminal_final_sequence` 的冻结字段映射，缺少任一检测路径时拒绝合同，不能通过省略映射隐藏原始业务标记。未启用结构角色的旧 profile 保持既有字段要求。
 
 ## 4. Acquisition、完整性与异常图处理
 
@@ -93,13 +97,18 @@ timing 描述所需 Step 时长证据覆盖；duration_ms 缺失为 null+timing 
 ```python
 async def acquire_trajectory(scope: TrajectoryScope, contract: TrajectoryContract,
                              *, client: ObservationReader) -> TrajectoryAcquisition: ...
-def normalize_observations(rows: Sequence[Mapping[str, object]],
-                           contract: TrajectoryContract) -> NormalizedObservations: ...
+def normalize_observations(rows: list[dict[str, object]] | tuple[dict[str, object], ...],
+                           contract: TrajectoryContract, *,
+                           scope: TrajectoryScope) -> NormalizedObservations: ...
 def assemble_trajectory(scope: TrajectoryScope, observations: NormalizedObservations,
                         contract: TrajectoryContract) -> StandardTrajectory: ...
 ```
 
 TrajectoryContract 冻结 schema/assembler/source_profile/mapping/redaction、所需能力、完整性协议、规则范围及所有结果相关限额。ObservationReader 消费 S4.0 确认的 Langfuse v2 API，优先复用 SDK；若 SDK 会在预算检查前完整解码响应，采用最小异步 HTTP Reader，在流读取时计字节、按已发布 schema 校验，避免大响应先占满内存。fields/cursor 的实际名称以锁定实例/SDK实测为准，不复制 Langfuse 领域模型。
+
+批量 Normalizer 显式接收调用方已冻结的同一 scope：真实单行入口需要该对象验证 Trace 和识别 Root，不能从 Trace 自报信息补造。当前 wire 批次只接受有界 list/tuple JSON 行；SDK 对象、无限迭代器及任意 Sequence 子类不进入该边界。输出 `NormalizedObservations` 绑定完整 scope、合同摘要、选中 profile ID/版本，并保留拒绝行经字段映射确认的安全 ID/Trace/parent 线索，供 Assembler 隔离兄弟树和归属诊断；不保存原始行。
+
+批次 `source_bytes` 计成功编码行的 canonical UTF-8 字节，不等于 HTTP wire 字节；无法编码或未读完时 `source_bytes_complete=false`，不能把计数下界当作完整来源。整行受 wire codec 硬限额约束；合同中更低的字段/投影预算仍由单行归一化按字段降级，不能因可选 duration 或未使用 metadata 超过这些预算而丢弃独立确认的工具身份。批次按冻结 `page_size * max_pages` 与累计 canonical 字节限界，Reader/Acquisition 仍独立核算实际传输总量。临时 Step index 固定为 0，重复记录保留到 Assembler；`max_steps` 在其去重、scope 闭包与展示排序后应用，不能因到达顺序提前消耗名额。该批次不证明闭包、quiet window 或 OBSERVED_COMPLETE。实现与实测见 [批量输入验收](../../validation/s4-1/normalized-batches.md)。
 
 | 限额 | 起始默认值 | 固定语义 |
 |---|---|---|
@@ -139,7 +148,7 @@ def evaluate_trajectory_rule(context: EvaluationContext,
                              manifest_schema_version: str) -> TypedEvaluationResult: ...
 ```
 
-`TypedEvaluationResult` 复用现有 `evaluator_results.py` 的类型。旧版本走 `fn(output, expected_output)`；新 observed Evaluator 使用独立 identity/version，并在冻结 input_contract 声明 `input_kind=trajectory` 及所需能力。公共 executor 保持兼容的可选 `context` 参数，在 Adapter 内选择调用约定；新 Adapter 校验返回的 typed status/value/证据和冻结 provenance，保留 no_result/skipped，不再次按旧 numeric 路径转换。仅有 trajectory Binding 才启动 Acquisition；旧 Launch 不自动新增轨迹规则。
+`TypedEvaluationResult` 复用现有 `evaluator_results.py` 的类型。旧版本走 `fn(output, expected_output)`；新 observed Evaluator 使用独立 identity/version，并在冻结 input_contract 声明 `input_kind=trajectory` 及所需能力。公共 executor 保持兼容的可选 `context` 参数，在 Adapter 内选择调用约定；新 Adapter 校验返回的 typed status/value/证据和冻结 provenance，保留 no_result/skipped，不再次按旧 numeric 路径转换。新公共创建请求仅有 trajectory Binding 才启动 Acquisition；旧 Launch 不自动新增轨迹规则。Reader 准入前的内部受控采集校准允许显式 `capture_only=True`，此参数不暴露在公共 DTO；历史已冻结 1.3 合同不迁移，继续原有采集恢复协议。创建守卫及校准例外实测见[正式规则接入](../../validation/s4-2/frozen-rule-execution.md)。
 
 Executor outcome 扩展为旧 Evaluation 或 TypedEvaluationResult，不复制汇总器。Judge 网络调用在 Worker 异步准备阶段 await；同步 evaluate_frozen_item 接收 keyword-only prepared_results 并再次校验绑定、scope、criteria/input digest 与 ref，再走既有 typed 汇总。同步 executor 不调用网络或 asyncio.run。Recovery 拆 claim/checkpoint prepare→await Judge→合并/CAS finalize，网络期间不持有 DB 锁；旧纯同步路径保持兼容。详细接口与取消测试见 06。
 
@@ -159,6 +168,10 @@ Executor outcome 扩展为旧 Evaluation 或 TypedEvaluationResult，不复制�
 首版八条规则均为 boolean 测量。max_count/max_repeats/参数匹配条件是冻结 Evaluator 约束，修改属于 Measurement；QualityPolicy 对规则输出的 operator/expected_value/required/critical 是另一层决策口径。未声明的 count 证据不能作为 numeric score；若后续需要独立计数测量，另注册版本并定义部分证据下界。
 
 既有汇总存在 optional skipped→eval_status partial→Snapshot DIAGNOSTIC 的断层。修订分为三个维度：原有 `eval_status` 保留运行诊断兼容；新冻结 `required_evidence_status=COMPLETE|INCOMPLETE` 按 QualityPolicy 的 required 集合计算；Snapshot/Gate 对新 schema 使用 required_evidence_status 和质量结论决定资格，旧 schema 继续原判断。optional 失败仍可见，不能把 required 的 skipped 当 COMPLETE。该规则属于 #129 的集成交付。
+
+T4 的版本标记、聚合/比较口径、原子冻结和兼容验证见 [required 证据验收记录](../../validation/s4-2/required-evidence.md)。诊断状态与证据完整度分别暴露，不以 Snapshot 的正式证据资格代替 Release Gate 的发布决策。
+
+T5 的固定 Snapshot/Case API、精确参数显示和只读诊断边界见 [冻结诊断记录](../../validation/s4-2/frozen-diagnosis.md)。在线 Trace 内容变化不改变冻结结论。
 
 ## 6. Digest、持久化与恢复
 

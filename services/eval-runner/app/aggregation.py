@@ -5,6 +5,8 @@ import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from .required_evidence import EVIDENCE_CONTRACT_VERSION, item_is_evaluated
+
 _COMPARABLE_QUALITY = {"pass", "fail"}
 
 
@@ -68,16 +70,21 @@ def _item_result_types(item: dict[str, Any]) -> dict[str, str]:
     return types
 
 
-def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, Any]]) -> dict[str, Any]:
+def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, Any]], *,
+                  required_case_ids: list[str] | None = None, evidence_contract_version: str | None = None) -> dict[str, Any]:
     """Build deterministic run-level metrics without conflating execution and quality failures."""
     evaluator_specs = _item_evaluator_specs(evaluator_specs)
-    total = len(items)
+    current = evidence_contract_version == EVIDENCE_CONTRACT_VERSION or any("evidence_contract_version" in i for i in items)
+    if current and required_case_ids is not None:
+        required_ids = set(required_case_ids)
+        items = [i for i in items if i.get("dataset_item_id") in required_ids]
+        total = len(required_case_ids)
+    else:
+        total = len(items)
     evaluated = [
         item
         for item in items
-        if str(item.get("execution_status", "")).lower() == "succeeded"
-        and str(item.get("eval_status", "")).lower() == "succeeded"
-        and str(item.get("quality_conclusion", "")).lower() in _COMPARABLE_QUALITY
+        if item_is_evaluated(item)
     ]
     passed = sum(str(item.get("quality_conclusion", "")).lower() == "pass" for item in evaluated)
     # Issue #83: the three-way quality split. UNKNOWN is a first-class outcome,
@@ -91,7 +98,7 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
     )
     quality_unknown_count = sum(
         str(item.get("quality_conclusion", "")).lower() not in {"pass", "fail"} for item in items
-    )
+    ) + max(0, total - len(items))
     decided_count = quality_pass_count + quality_fail_count
     execution_errors = sum(
         str(item.get("execution_status", "")).lower() in {"failed", "timed_out"} for item in items
@@ -109,7 +116,10 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
         str(spec["id"]): str(spec.get("result_type") or "numeric") for spec in evaluator_specs
     }
     for item in items:
-        if str(item.get("execution_status", "")).lower() != "succeeded" or str(item.get("eval_status", "")).lower() != "succeeded":
+        if "evidence_contract_version" in item or "required_evidence_status" in item:
+            if not item_is_evaluated(item):
+                continue
+        elif str(item.get("execution_status", "")).lower() != "succeeded" or str(item.get("eval_status", "")).lower() != "succeeded":
             continue
         numeric_values = _item_numeric_values(item)
         item_types = _item_result_types(item)
@@ -121,8 +131,13 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
             value = numeric_values.get(evaluator_id)
             if value is not None:
                 score_values[evaluator_id].append(value)
-            if spec.get("critical") and (value is None or value < float(spec.get("threshold", 1.0))):
+            if "evidence_contract_version" not in item and spec.get("critical") and (value is None or value < float(spec.get("threshold", 1.0))):
                 critical_failed_cases.add(case_id)
+        if item.get("evidence_contract_version") == EVIDENCE_CONTRACT_VERSION and any(
+            rule.get("critical") and rule.get("conclusion") == "fail"
+            for rule in (item.get("quality_evaluation") or {}).get("rules", [])
+        ):
+            critical_failed_cases.add(case_id)
 
     score_means = {
         evaluator_id: sum(values) / len(values) if values else None
@@ -210,6 +225,11 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
         cost_reason = "PARTIAL_COST_COVERAGE"
 
     return {
+        **({"evidence_contract_version": EVIDENCE_CONTRACT_VERSION,
+            "required_evidence_status": "COMPLETE" if total and len(evaluated) == total else "INCOMPLETE",
+            "required_evidence_complete_cases": len(evaluated),
+            "required_evidence_incomplete_cases": total - len(evaluated)}
+            if current else {}),
         "total_cases": total,
         "evaluated_cases": len(evaluated),
         "passed_cases": passed,
@@ -337,10 +357,14 @@ def compare_case_results(
     if any(str(item.get("execution_status", "")).lower() != "succeeded" for item in (baseline, candidate)):
         result.update(classification="NOT_COMPARABLE", reason="EXECUTION_ERROR")
         return result
-    if any(str(item.get("eval_status", "")).lower() == "failed" for item in (baseline, candidate)):
+    current = all(item.get("evidence_contract_version") == EVIDENCE_CONTRACT_VERSION for item in (baseline, candidate))
+    if current and not all(item_is_evaluated(item) for item in (baseline, candidate)):
+        result.update(classification="NOT_COMPARABLE", reason="REQUIRED_EVIDENCE_INCOMPLETE")
+        return result
+    if not current and any(str(item.get("eval_status", "")).lower() == "failed" for item in (baseline, candidate)):
         result.update(classification="NOT_COMPARABLE", reason="EVALUATOR_ERROR")
         return result
-    if any(str(item.get("eval_status", "")).lower() != "succeeded" for item in (baseline, candidate)):
+    if not current and any(str(item.get("eval_status", "")).lower() != "succeeded" for item in (baseline, candidate)):
         result.update(classification="NOT_COMPARABLE", reason="EVALUATION_NOT_COMPLETED")
         return result
     baseline_scores, baseline_non_numeric = _comparable_values(baseline)
@@ -350,8 +374,11 @@ def compare_case_results(
     result["candidate_scores"] = candidate_scores
     has_regression = False
     has_improvement = False
+    required_ids = {r.get("evaluator_id") for r in (candidate.get("quality_evaluation") or {}).get("rules", []) if r.get("required")}
     for spec in evaluator_specs:
         evaluator_id = str(spec["id"])
+        if current and evaluator_id not in required_ids:
+            continue
         if evaluator_id in result["non_numeric_evaluators"]:
             # Diagnosed qualitatively; no numeric delta may be invented.
             continue

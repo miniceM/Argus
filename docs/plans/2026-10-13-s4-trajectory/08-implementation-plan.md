@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12 / FastAPI / Pydantic / SQLAlchemy / PostgreSQL；Langfuse当前锁定SDK `4.16.0`、服务 `4.38.0`；OTel；测试Agent `pydantic-ai-slim==2.55.0`（无extras、FunctionModel），与Runner分离环境；React / TypeScript / Vite / Vitest / Playwright；Node 22、pnpm。
 
-**Spec:** [01-technical-design.md](01-technical-design.md)。分期细节见 [02](02-s4-0-observation-validation.md)、[03](03-s4-1-acquisition-and-schema.md)、[04](04-s4-2-rules-and-diagnosis.md)、[05](05-s4-3-arguments-and-redaction.md)、[06](06-s4-4-judge.md)、[07](07-s4-5-release-gate.md)。状态：提议 / 待实施。
+**Spec:** [01-technical-design.md](01-technical-design.md)。分期细节见 [02](02-s4-0-observation-validation.md)、[03](03-s4-1-acquisition-and-schema.md)、[04](04-s4-2-rules-and-diagnosis.md)、[05](05-s4-3-arguments-and-redaction.md)、[06](06-s4-4-judge.md)、[07](07-s4-5-release-gate.md)。状态：PR #136 已合并设计，实施汇总 PR #181；后续数据测试交管理员，原计划与验收依赖保留。
 
 ## 1. Global Constraints
 
@@ -62,7 +62,17 @@
 | T8 | 4–6 | Async Judge/恢复桥接、校准与准入 / #131 |
 | T9 | 2–3 | Judge Gate 和母 issue Demo / #132-B、#5 |
 
-实施 PR 按 T0、T1+T2、T3+T4+T5、T6、T7、T8、T9 形成可验收交付；若一个交付过大，按可独立否决的纵向结果拆分。每个 PR 用 `Refs` 关联当前 issue；只有该 issue 全部验收完成的最终实现 PR 才使用关闭引用。每个任务中间提交保持单一目的。
+交付方式更新（2026-10-14）：按用户要求，#160–#180 的全部实现汇入 [PR #181](https://github.com/miniceM/Argus/pull/181)，19 个未合并源 PR 已关闭，#162/#165 已合并并继承；源分支与历史保留。后续任务继续向该汇总 PR 追加可独立验证、单一目的的提交。PR 用 `Refs` 关联当前 issue；只有对应 issue 的全部验收完成后才使用关闭引用。
+
+实施责任更新（2026-10-14）：用户将 #131 剩余工作交给维护者，已开发成果保留；
+随后用户进一步明确：后续凡需数据进行测试的任务跳过代理执行，交管理员；
+已有实现与实测结果保留。当前代理继续静态检查、文档、PR 和 Issue 交接，
+不等待 GitHub Actions。
+T8、S45-08 阶段 B 和母 issue 的 Judge 验收要求保持原定义，
+标记交接/待验，不计通过、不提前关闭 #131、#132 或 #5。
+当前实现、剩余事项和安全边界见[维护者交接](../../validation/s4-4/maintainer-handoff.md)。
+所有分期的数据测试责任见[管理员验收交接](../../validation/s4-final/administrator-validation-handoff.md)；
+原始验收标准和关闭条件不变，交接或跳过不计通过。
 
 ## 4. T0：证明真实 Observation 链路
 
@@ -148,14 +158,16 @@ assert result.evidence["evidence_step_ids"] == [first_b_step_id]
 
 ## 8. T4：修复 optional 与正式证据资格断层
 
+实施记录（2026-10-14）：[T4 资格链路与验收](../../validation/s4-2/required-evidence.md)及[版本/命令/制品摘要](../../validation/s4-2/required-evidence-receipt.json)，随汇总 PR #181 提交。T5 及后续任务继续实施。
+
 **Files:** evaluator_binding.py、quality_policy.py、result_snapshots.py、aggregation.py、models.py、comparison_contracts.py、release_gates.py/baselines.py；test_trajectory_required_evidence.py；扩展#83/#85测试。
 
 **Interfaces:** 原 eval_status 保持诊断；新 `required_evidence_status` 按冻结 required 集合生成，Snapshot 按 discriminator 使用新契约。
 
-- [ ] RED：先锁定当前复现：required 全 PASS、optional skipped，质量 PASS 但 Snapshot DIAGNOSTIC；新期望为保留 optional skipped 而 Snapshot COMPLETE。
-- [ ] 运行 `python -m pytest -q tests/test_trajectory_required_evidence.py tests/test_issue_83_quality_policy.py tests/test_issue_85_snapshot_revision.py`。
-- [ ] 实现required集合完整度，同一Writer事务写required_evidence_status/资格discriminator与聚合合同；注入序列化/提交故障验证整体回滚，不留下半契约Snapshot；手工缺字段的新快照读取fail closed；旧Snapshot不重新分类。
-- [ ] GREEN：覆盖optional failed/skipped/no_result；required缺Binding、failed/skipped/no_result、无值、provenance mismatch均INCOMPLETE；required false为完整FAIL；1.0/1.1 legacy与1.2旧Reader保持。
+- [x] RED：先锁定当前复现：required 全 PASS、optional skipped，质量 PASS 但 Snapshot DIAGNOSTIC；新期望为保留 optional skipped 而 Snapshot COMPLETE。
+- [x] 运行 `python -m pytest -q tests/test_trajectory_required_evidence.py tests/test_issue_83_quality_policy.py tests/test_issue_85_snapshot_revision.py`。
+- [x] 实现required集合完整度，同一Writer事务写required_evidence_status/资格discriminator与聚合合同；注入序列化/提交故障验证整体回滚，不留下半契约Snapshot；手工缺字段的新快照读取fail closed；旧Snapshot不重新分类。
+- [x] GREEN：覆盖optional failed/skipped/no_result；required缺Binding、failed/skipped/no_result、无值、provenance mismatch均INCOMPLETE；required false为完整FAIL；1.0/1.1 legacy与1.2旧Reader保持。
 
 ```python
 assert new_item.eval_status == "partial"
@@ -168,7 +180,7 @@ assert required_false_gate.decision == "FAIL"
 assert required_false_gate.releasable is False
 ```
 
-- [ ] 提交 `fix: separate required evidence completeness from diagnostic status`；完成真实持久化到 Snapshot/Gate 的集成测试，不能只测试 Policy 函数。
+- [x] 提交 `fix: separate required evidence completeness from diagnostic status`；完成真实持久化到 Snapshot/Gate 的集成测试，不能只测试 Policy 函数。
 
 ## 9. T5：固定 Snapshot 的 Case 诊断闭环
 
@@ -176,10 +188,10 @@ assert required_false_gate.releasable is False
 
 **Interfaces:** GET trajectory 的 snapshot_id/dataset_item_id 必填；消费冻结 artifact、规则结果和 Policy conclusion；UI 只展示获准内容。
 
-- [ ] RED：跨 Launch/Snapshot/Case 返回404；旧无轨迹历史200并有原因；no_result不能显示绿PASS；快照切换不能复用上一 Case 数据。
-- [ ] 运行 `python -m pytest -q tests/test_trajectory_api.py` 与 Console 对应 Vitest；记录 RED。
-- [ ] 实现只读路由和获准DTO，step_argument_display_json从同artifact派生；在现有CaseDetailPanel懒加载，使用该字符串精确显示大整数/小数；点击规则定位Step，键盘可操作，声明原始链接指向在线观测。
-- [ ] GREEN：同步契约并执行用户交互验证。
+- [x] RED：跨 Launch/Snapshot/Case 返回404；旧无轨迹历史200并有原因；no_result不能显示绿PASS；快照切换不能复用上一 Case 数据。
+- [x] 运行 `python -m pytest -q tests/test_trajectory_api.py` 与 Console 对应 Vitest；记录 RED。
+- [x] 实现只读路由和获准DTO，step_argument_display_json从同artifact派生；在现有CaseDetailPanel懒加载，使用该字符串精确显示大整数/小数；点击规则定位Step，键盘可操作，声明原始链接指向在线观测。
+- [x] GREEN：同步契约并执行用户交互验证。
 
 ```bash
 python scripts/export_openapi.py
@@ -189,7 +201,9 @@ make console-test
 ARGUS_E2E_API_PORT=28080 ARGUS_E2E_CONSOLE_PORT=28083 make console-e2e
 ```
 
-- [ ] 提交 `feat: diagnose frozen trajectory rules per case`；#129 只有 T3/T4/T5 全部证据齐全才能关闭。
+- [x] 提交 `feat: diagnose frozen trajectory rules per case`，追加至汇总 PR #181。#129 在统一验收审计后关闭。
+
+实施记录（2026-10-14）：[T5 固定诊断与截图](../../validation/s4-2/frozen-diagnosis.md)及[版本/命令/断言/制品摘要](../../validation/s4-2/frozen-diagnosis-receipt.json)。一次独立审阅、Required 一轮修复后，PG 1240、Python 1944、Console 858、E2E 128、真实诊断消费者 17 项全部通过，无正式 skip；完整 S4 目标继续 T6–T9。
 
 ## 10. T6：安全参数规则与其余确定性能力
 

@@ -1,0 +1,2319 @@
+{
+  "verified_at": "2026-10-14",
+  "tested_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+  "description": "89 original criteria inventory; NOT_RUN means individual final audit pending, not absence of historical passing tests.",
+  "records": [
+    {
+      "acceptance_id": "S40-01",
+      "issue": 127,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/02-s4-0-observation-validation.md",
+        "line": 171,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-0/README.md"
+      ],
+      "expected": "| S40-01 | 镜像/依赖预先准备后，测试实际连到隔离本地 Langfuse；运行期间无外网/线上凭据仍可执行；失败时不会访问外部默认 URL |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S40-02",
+      "issue": 127,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/02-s4-0-observation-validation.md",
+        "line": 172,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-0/README.md"
+      ],
+      "expected": "| S40-02 | Worker 路径中 Runner trace_id 与 Agent spans 相同，remote-agent-http root ID 与 Agent parent ID 关系经真实 API 验证 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S40-03",
+      "issue": 127,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/02-s4-0-observation-validation.md",
+        "line": 173,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-0/README.md"
+      ],
+      "expected": "| S40-03 | 原生OTel与Pydantic AI真实Agent.run两组完整运行都产生可查询Observation，真实字段矩阵逐差异说明 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S40-04",
+      "issue": 127,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/02-s4-0-observation-validation.md",
+        "line": 174,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-0/README.md"
+      ],
+      "expected": "| S40-04 | 每条链路可从 DB 的 Launch、item_execution、dispatch_generation、Attempt、trace_id、root observation_id 追溯；重试 Attempt 不与另一条 Trace 混合 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S40-05",
+      "issue": 127,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/02-s4-0-observation-validation.md",
+        "line": 175,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-0/README.md"
+      ],
+      "expected": "| S40-05 | 矩阵记录九个必测字段及可选因果来源的键名、空/缺失频率、映射和能力影响；报告附本地 Langfuse 与 SDK 版本 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S40-06",
+      "issue": 127,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/02-s4-0-observation-validation.md",
+        "line": 176,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-0/README.md"
+      ],
+      "expected": "| S40-06 | 延迟 span 测试先观察到 Root，再在有界轮询内查询到子 span；强制多页查询无丢失、重复或游标环 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S40-07",
+      "issue": 127,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/02-s4-0-observation-validation.md",
+        "line": 177,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-0/README.md"
+      ],
+      "expected": "| S40-07 | HTTP-only Agent 在冻结窗口内明确报告 Root-only/无内部 span，业务响应和最终答案评测仍成功 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S40-08",
+      "issue": 127,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/02-s4-0-observation-validation.md",
+        "line": 178,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-0/README.md"
+      ],
+      "expected": "| S40-08 | Agent独立环境锁文件与实际distribution闭包无Evaluation SDK；slim无evals/logfire/provider extras，实际无网运行；services/demo-agent及v1 2/6、v2 6/6基线未改 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S40-09",
+      "issue": 127,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/02-s4-0-observation-validation.md",
+        "line": 179,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-0/README.md"
+      ],
+      "expected": "| S40-09 | 测试报告与日志不包含 Header、凭据、原始 input/output 或未经脱敏参数 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S40-10",
+      "issue": 127,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/02-s4-0-observation-validation.md",
+        "line": 180,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-0/README.md"
+      ],
+      "expected": "| S40-10 | 完成本地回归与 CI 命令，保留失败/通过摘要、矩阵报告和可重复启动说明；此项通过后才允许 #128 冻结 profile |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S40-11",
+      "issue": 127,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/02-s4-0-observation-validation.md",
+        "line": 181,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-0/README.md"
+      ],
+      "expected": "| S40-11 | 串行与并行场景证明 workflow_scope_id/受信 sequence 或显式 link 的真实可见性；只有明确映射的因果来源可支持 predecessor，parent/time/index 单独不能判 happens-before |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S40-12",
+      "issue": 127,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/02-s4-0-observation-validation.md",
+        "line": 182,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-0/README.md"
+      ],
+      "expected": "| S40-12 | phase/status、请求→执行关联、参数可见性、duration、HUMAN来源与terminal inventory矩阵完整；terminal先到但前序缺号仍不完整；递增序号不串行化并行；未覆盖能力NONE/PARTIAL、人工正例来源可审核 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S41-01",
+      "issue": 128,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/03-s4-1-acquisition-and-schema.md",
+        "line": 209,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-1/contract.md"
+      ],
+      "expected": "| S41-01 | Schema/Scope/Step/Completeness/Provenance/EvidenceRef/Acquisition与01一致；profile_set合同固定，两AgentVersion选不同获准分支仍同Measurement；未获准分支拒绝，实际profile provenance可复现 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S41-02",
+      "issue": 128,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/03-s4-1-acquisition-and-schema.md",
+        "line": 210,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-1/contract.md"
+      ],
+      "expected": "| S41-02 | acquire_trajectory 只读使用冻结 scope/contract；不得调用 Agent；PENDING/READY/UNAVAILABLE 与 ROOT_ONLY/PARTIAL/OBSERVED_COMPLETE 轴分离 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S41-03",
+      "issue": 128,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/03-s4-1-acquisition-and-schema.md",
+        "line": 211,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-1/contract.md"
+      ],
+      "expected": "| S41-03 | S4.0 的每个 provider profile 字段都有唯一映射和缺失处理；别名冲突、未知版本、缺 ID/parent/time/input/output 不猜测、不伪造 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S41-04",
+      "issue": 128,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/03-s4-1-acquisition-and-schema.md",
+        "line": 212,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-1/contract.md"
+      ],
+      "expected": "| S41-04 | 同 trace 的兄弟 Item、不同 Attempt、跨 Trace 行均被排除；仅从指定 root 的真实 parent 闭包组装 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S41-05",
+      "issue": 128,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/03-s4-1-acquisition-and-schema.md",
+        "line": 213,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-1/contract.md"
+      ],
+      "expected": "| S41-05 | 相同重复 observation 合并；冲突 duplicate、orphan、parent 缺失/环、跨 trace 和时钟异常都落 warning/PARTIAL；独立可信违规证据不会被冲突抹掉 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S41-06",
+      "issue": 128,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/03-s4-1-acquisition-and-schema.md",
+        "line": 214,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-1/contract.md"
+      ],
+      "expected": "| S41-06 | 并行调用不被 index 强制成因果序；parent/time 单独不生成因果关系；profile 验证的显式 link/可信 workflow 序列可产生可回链 predecessor，否则 ordering 为 NONE/PARTIAL |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S41-06a",
+      "issue": 128,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/03-s4-1-acquisition-and-schema.md",
+        "line": 215,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-1/contract.md"
+      ],
+      "expected": "| S41-06a | 参数路径仅在完整 arguments 对象已采集且确实缺键时为 MISSING；整个参数未采、脱敏、截断、解析失败分别降低能力或按已有 visibility 区分 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S41-07",
+      "issue": 128,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/03-s4-1-acquisition-and-schema.md",
+        "line": 216,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-1/contract.md"
+      ],
+      "expected": "| S41-07 | 分页/环/迟到/页字节step/deadline/永久错误均有资源上界；terminal inventory缺口不能被quiet window覆盖，冻结安全计数可重算完整性 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S41-08",
+      "issue": 128,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/03-s4-1-acquisition-and-schema.md",
+        "line": 217,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-1/contract.md"
+      ],
+      "expected": "| S41-08 | 同冻结规范化输入/contract 得到相同 digest；改一项证据或已提供的 Step.duration_ms 得到不同 trajectory_digest；字段缺失保留 null 并降低 timing capability；仅采集/组装耗时与采集时刻不污染摘要 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S41-09",
+      "issue": 128,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/03-s4-1-acquisition-and-schema.md",
+        "line": 218,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-1/contract.md"
+      ],
+      "expected": "| S41-09 | artifact insert-only、唯一键/外键正确、最大字节受限、读取重算 digest；PostgreSQL migration 往返测试通过；artifact 与引用它的 Result Snapshot 同生命周期保留，不受 execution checkpoint TTL 影响 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S41-10",
+      "issue": 128,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/03-s4-1-acquisition-and-schema.md",
+        "line": 219,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-1/contract.md"
+      ],
+      "expected": "| S41-10 | checkpoint 恢复复用已冻结 EvidenceRef；PENDING 沿用原 deadline；授权删除、损坏或身份不符导致 artifact unavailable 时结果显式降为 UNKNOWN；恢复不重调 Agent、不以线上最新 Trace 替换历史输入 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S41-11",
+      "issue": 128,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/03-s4-1-acquisition-and-schema.md",
+        "line": 220,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-1/contract.md"
+      ],
+      "expected": "| S41-11 | 全部原始参数/响应先过 redaction；产物、API、日志和异常文本均无未授权 PII、Authorization、Cookie 或密钥 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S41-12",
+      "issue": 128,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/03-s4-1-acquisition-and-schema.md",
+        "line": 221,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-1/contract.md"
+      ],
+      "expected": "| S41-12 | 提供Manifest 1.3与EvidenceRef序列化；checkpoint/artifact引用一致；本期不写Snapshot资格discriminator，不产出半契约快照；旧Manifest/Snapshot可读且不回填；Registry可选字段及OpenAPI同步，无新诊断路由/Console交互/规则Gate行为，Demo 2/6、6/6保持 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S41-13",
+      "issue": 128,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/03-s4-1-acquisition-and-schema.md",
+        "line": 222,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-1/contract.md"
+      ],
+      "expected": "| S41-13 | 本地真实集成、目标单测、迁移测试和 make validate 全通过，所有实测命令与 Langfuse profile 版本归档 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S42-01",
+      "issue": 129,
+      "result": "PASS",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/04-s4-2-rules-and-diagnosis.md",
+        "line": 210,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-2/required-evidence.md"
+      ],
+      "expected": "- [ ] **S42-01**：返回体谎报工具名但 Observation 未出现调用时，`require_tool` 不得 PASS；输入证据仅来自冻结轨迹。",
+      "observed": "Complete observations contain no tool; response self-report cannot produce PASS.",
+      "assertion_refs": [
+        "tests/test_trajectory_rules.py:99"
+      ],
+      "artifacts": [
+        {
+          "path": "rules-junit.xml.gz",
+          "raw_sha256": "ef705103cbf997effcbba58e2affe8281f762640c55fbbb4f1e664ab2afbb4f3",
+          "gzip_sha256": "3d742ec59948c92335970a1ac7853d4b10df3179a244295ae5e6311a5f62e3d1"
+        }
+      ],
+      "limitations": "Synthetic evidence proves algorithm semantics only; does not independently prove real instrumentation, ingestion or whole S4 acceptance.",
+      "validation_layer": "unit / deterministic fixture only",
+      "command": "python -m pytest -q tests/test_trajectory_rules.py --junitxml=<output.xml>",
+      "exit_code": 0,
+      "test_nodes": [
+        "test_lied_output_cannot_create_a_tool_missing_from_complete_observations"
+      ],
+      "executed_at": "2026-10-14T20:16:42.462888+08:00",
+      "duration_seconds": 1.514,
+      "runner_build_id": "Not a formal Experiment: exact tested Git commit recorded above",
+      "dataset_version": "deterministic fixture; see test source",
+      "agent_version": "No business Agent invoked for unit/contract assertions",
+      "evaluator_binding": "Frozen fixture binding; see test source",
+      "policy_digest": "Frozen fixture policy; see test source",
+      "subsequent_data_test_owner": "administrator"
+    },
+    {
+      "acceptance_id": "S42-02",
+      "issue": 129,
+      "result": "PASS",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/04-s4-2-rules-and-diagnosis.md",
+        "line": 211,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-2/required-evidence.md"
+      ],
+      "expected": "- [ ] **S42-02**：`REQUESTED/EXECUTED/BLOCKED` 区分可测；禁止执行默认 EXECUTED、显式禁止尝试按 REQUESTED；计数遵循冻结 phase/上限并输出 boolean 与 observed_count 证据。",
+      "observed": "REQUESTED/EXECUTED/BLOCKED remain distinct; phase-specific counts return boolean and observed_count.",
+      "assertion_refs": [
+        "tests/test_trajectory_rules.py:108",
+        "tests/test_trajectory_rules.py:124",
+        "tests/test_trajectory_rules.py:143"
+      ],
+      "artifacts": [
+        {
+          "path": "rules-junit.xml.gz",
+          "raw_sha256": "ef705103cbf997effcbba58e2affe8281f762640c55fbbb4f1e664ab2afbb4f3",
+          "gzip_sha256": "3d742ec59948c92335970a1ac7853d4b10df3179a244295ae5e6311a5f62e3d1"
+        }
+      ],
+      "limitations": "Synthetic evidence proves algorithm semantics only; does not independently prove real instrumentation, ingestion or whole S4 acceptance.",
+      "validation_layer": "unit / deterministic fixture only",
+      "command": "python -m pytest -q tests/test_trajectory_rules.py --junitxml=<output.xml>",
+      "exit_code": 0,
+      "test_nodes": [
+        "test_require_uses_the_frozen_phase_and_real_success_for_executions[EXECUTED]",
+        "test_require_uses_the_frozen_phase_and_real_success_for_executions[REQUESTED]",
+        "test_blocked_action_is_a_request_without_becoming_an_execution",
+        "test_max_count_is_distinct_per_phase_and_not_a_numeric_measurement[0-False-REQUESTED]",
+        "test_max_count_is_distinct_per_phase_and_not_a_numeric_measurement[0-False-EXECUTED]",
+        "test_max_count_is_distinct_per_phase_and_not_a_numeric_measurement[1-False-REQUESTED]",
+        "test_max_count_is_distinct_per_phase_and_not_a_numeric_measurement[1-False-EXECUTED]",
+        "test_max_count_is_distinct_per_phase_and_not_a_numeric_measurement[2-True-REQUESTED]",
+        "test_max_count_is_distinct_per_phase_and_not_a_numeric_measurement[2-True-EXECUTED]",
+        "test_max_count_is_distinct_per_phase_and_not_a_numeric_measurement[3-True-REQUESTED]",
+        "test_max_count_is_distinct_per_phase_and_not_a_numeric_measurement[3-True-EXECUTED]"
+      ],
+      "executed_at": "2026-10-14T20:16:42.462888+08:00",
+      "duration_seconds": 1.514,
+      "runner_build_id": "Not a formal Experiment: exact tested Git commit recorded above",
+      "dataset_version": "deterministic fixture; see test source",
+      "agent_version": "No business Agent invoked for unit/contract assertions",
+      "evaluator_binding": "Frozen fixture binding; see test source",
+      "policy_digest": "Frozen fixture policy; see test source",
+      "subsequent_data_test_owner": "administrator"
+    },
+    {
+      "acceptance_id": "S42-03",
+      "issue": 129,
+      "result": "PASS",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/04-s4-2-rules-and-diagnosis.md",
+        "line": 212,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-2/required-evidence.md"
+      ],
+      "expected": "- [ ] **S42-03**：每次 B 都有成功完成且可信因果先行 A 才 PASS；完整 `B → A → B` 必须 FAIL；先 UNKNOWN 后确证违规仍 FAIL；PARTIAL 中仅见较晚 A 不冒充完整负证据；时间/数组/parent 单独不足时 UNKNOWN。",
+      "observed": "B-A-B fails, display order is irrelevant, missing causal proof stays UNKNOWN; confirmed later violation remains FAIL.",
+      "assertion_refs": [
+        "tests/test_trajectory_rules.py:158",
+        "tests/test_trajectory_rules.py:165",
+        "tests/test_trajectory_rules.py:196",
+        "tests/test_trajectory_rules.py:203",
+        "tests/test_trajectory_rules.py:227",
+        "tests/test_trajectory_rules.py:232"
+      ],
+      "artifacts": [
+        {
+          "path": "rules-junit.xml.gz",
+          "raw_sha256": "ef705103cbf997effcbba58e2affe8281f762640c55fbbb4f1e664ab2afbb4f3",
+          "gzip_sha256": "3d742ec59948c92335970a1ac7853d4b10df3179a244295ae5e6311a5f62e3d1"
+        }
+      ],
+      "limitations": "Synthetic evidence proves algorithm semantics only; does not independently prove real instrumentation, ingestion or whole S4 acceptance.",
+      "validation_layer": "unit / deterministic fixture only",
+      "command": "python -m pytest -q tests/test_trajectory_rules.py --junitxml=<output.xml>",
+      "exit_code": 0,
+      "test_nodes": [
+        "test_every_after_checks_the_first_b_instead_of_accepting_the_later_valid_pair",
+        "test_successful_order_carries_the_observed_proof_and_is_independent_of_display_order",
+        "test_time_parent_and_display_index_without_causal_edges_never_imply_order",
+        "test_order_with_unproven_prerequisite_never_passes[missing_time]",
+        "test_order_with_unproven_prerequisite_never_passes[overlap]",
+        "test_order_with_unproven_prerequisite_never_passes[clock_reversal]",
+        "test_order_with_unproven_prerequisite_never_passes[scope]",
+        "test_order_with_unproven_prerequisite_never_passes[cycle]",
+        "test_order_with_unproven_prerequisite_never_passes[missing_ref]",
+        "test_order_with_unproven_prerequisite_never_passes[failed_a]",
+        "test_partial_only_late_a_does_not_fabricate_absence_of_an_earlier_a",
+        "test_first_unknown_does_not_hide_a_later_locally_proven_violation"
+      ],
+      "executed_at": "2026-10-14T20:16:42.462888+08:00",
+      "duration_seconds": 1.514,
+      "runner_build_id": "Not a formal Experiment: exact tested Git commit recorded above",
+      "dataset_version": "deterministic fixture; see test source",
+      "agent_version": "No business Agent invoked for unit/contract assertions",
+      "evaluator_binding": "Frozen fixture binding; see test source",
+      "policy_digest": "Frozen fixture policy; see test source",
+      "subsequent_data_test_owner": "administrator"
+    },
+    {
+      "acceptance_id": "S42-04",
+      "issue": 129,
+      "result": "PASS",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/04-s4-2-rules-and-diagnosis.md",
+        "line": 213,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-2/required-evidence.md"
+      ],
+      "expected": "- [ ] **S42-04**：PARTIAL 中已观察到的 forbid/order 违规逐规则仍为 FAIL；未见违规但覆盖不足为 UNKNOWN；HTTP-only 不伪造过程结论。",
+      "observed": "PARTIAL preserves independently proved violation; incomplete absence and HTTP-only/missing trajectory remain no_result without legacy score.",
+      "assertion_refs": [
+        "tests/test_trajectory_rules.py:119",
+        "tests/test_trajectory_rules.py:131",
+        "tests/test_trajectory_rules.py:232",
+        "tests/test_trajectory_rules.py:256"
+      ],
+      "artifacts": [
+        {
+          "path": "rules-junit.xml.gz",
+          "raw_sha256": "ef705103cbf997effcbba58e2affe8281f762640c55fbbb4f1e664ab2afbb4f3",
+          "gzip_sha256": "3d742ec59948c92335970a1ac7853d4b10df3179a244295ae5e6311a5f62e3d1"
+        }
+      ],
+      "limitations": "Synthetic evidence proves algorithm semantics only; does not independently prove real instrumentation, ingestion or whole S4 acceptance.",
+      "validation_layer": "unit / deterministic fixture only",
+      "command": "python -m pytest -q tests/test_trajectory_rules.py --junitxml=<output.xml>",
+      "exit_code": 0,
+      "test_nodes": [
+        "test_no_tools_with_incomplete_coverage_never_proves_absence_or_compliance[require_tool-kwargs0]",
+        "test_no_tools_with_incomplete_coverage_never_proves_absence_or_compliance[forbid_tool-kwargs1]",
+        "test_no_tools_with_incomplete_coverage_never_proves_absence_or_compliance[max_tool_calls-kwargs2]",
+        "test_partial_known_forbidden_execution_is_preserved_and_contains_only_safe_references",
+        "test_first_unknown_does_not_hide_a_later_locally_proven_violation",
+        "test_http_only_and_missing_input_remain_unknown[require_tool]",
+        "test_http_only_and_missing_input_remain_unknown[forbid_tool]",
+        "test_http_only_and_missing_input_remain_unknown[max_tool_calls]",
+        "test_http_only_and_missing_input_remain_unknown[tool_order]"
+      ],
+      "executed_at": "2026-10-14T20:16:42.462888+08:00",
+      "duration_seconds": 1.514,
+      "runner_build_id": "Not a formal Experiment: exact tested Git commit recorded above",
+      "dataset_version": "deterministic fixture; see test source",
+      "agent_version": "No business Agent invoked for unit/contract assertions",
+      "evaluator_binding": "Frozen fixture binding; see test source",
+      "policy_digest": "Frozen fixture policy; see test source",
+      "subsequent_data_test_owner": "administrator"
+    },
+    {
+      "acceptance_id": "S42-05",
+      "issue": 129,
+      "result": "PASS",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/04-s4-2-rules-and-diagnosis.md",
+        "line": 214,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-2/required-evidence.md"
+      ],
+      "expected": "- [x] **S42-05**：optional failed/skipped/no_result保持诊断且不降低required完整度；required缺Binding、failed/skipped/no_result、无值或provenance不符为INCOMPLETE/DIAGNOSTIC；required false为完整FAIL，Snapshot可COMPLETE、Gate仍拒绝；覆盖DB→Snapshot→Baseline/Gate；Writer序列化/提交故障整体回滚、无半契约Snapshot，Reader缺字段fail closed，旧Snapshot语义不变。",
+      "observed": "SQLite and PostgreSQL: optional diagnostics remain COMPLETE; missing/failed/invalid required evidence stays INCOMPLETE; proven false is COMPLETE but release refuses; four injected transaction failures leave zero Snapshot/Outbox; half-contract refused and historical branch retained.",
+      "assertion_refs": [
+        "tests/test_trajectory_required_evidence.py:120",
+        "tests/test_trajectory_required_evidence.py:138",
+        "tests/test_trajectory_required_evidence.py:151",
+        "tests/test_trajectory_required_evidence.py:164",
+        "tests/test_trajectory_required_evidence.py:196",
+        "tests/test_trajectory_required_evidence.py:238",
+        "tests/test_trajectory_required_evidence.py:286",
+        "tests/test_trajectory_required_evidence.py:301"
+      ],
+      "artifacts": [
+        {
+          "path": "required-junit.xml.gz",
+          "raw_sha256": "98510976cb46bad9bb6cc0ca1a09a401a0f1a921f046412a84af2a4c3fee858f",
+          "gzip_sha256": "e6debab770138095fa4baf10efb34c8ab5c0bcdf9f48b8c85cee43028002d6bd"
+        }
+      ],
+      "limitations": "Contract evidence uses synthetic measurement and isolated databases; real Agent ingestion and whole S4 acceptance remain separately verified.",
+      "validation_layer": "contract / SQLite and isolated PostgreSQL",
+      "command": "TEST_POSTGRES_URL=<isolated PostgreSQL> python -m pytest -q tests/test_trajectory_required_evidence.py --junitxml=<output.xml>",
+      "exit_code": 0,
+      "test_nodes": [
+        "test_optional_diagnostics_preserve_complete_snapshot_baseline_and_gate[sqlite-skipped]",
+        "test_optional_diagnostics_preserve_complete_snapshot_baseline_and_gate[sqlite-failed]",
+        "test_optional_diagnostics_preserve_complete_snapshot_baseline_and_gate[sqlite-no_result]",
+        "test_optional_diagnostics_preserve_complete_snapshot_baseline_and_gate[postgres-skipped]",
+        "test_optional_diagnostics_preserve_complete_snapshot_baseline_and_gate[postgres-failed]",
+        "test_optional_diagnostics_preserve_complete_snapshot_baseline_and_gate[postgres-no_result]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[sqlite-missing-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[sqlite-failed-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[sqlite-skipped-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[sqlite-no_result-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[sqlite-None-None]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[sqlite-None-1]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[sqlite-binding-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[sqlite-schema-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[postgres-missing-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[postgres-failed-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[postgres-skipped-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[postgres-no_result-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[postgres-None-None]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[postgres-None-1]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[postgres-binding-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[postgres-schema-True]",
+        "test_proven_false_is_complete_evidence_but_gate_refuses_release[sqlite]",
+        "test_proven_false_is_complete_evidence_but_gate_refuses_release[postgres]",
+        "test_new_half_contract_is_rejected_by_api_baseline_and_gate[sqlite-item_status]",
+        "test_new_half_contract_is_rejected_by_api_baseline_and_gate[sqlite-item_version]",
+        "test_new_half_contract_is_rejected_by_api_baseline_and_gate[sqlite-summary_version]",
+        "test_new_half_contract_is_rejected_by_api_baseline_and_gate[sqlite-aggregation]",
+        "test_new_half_contract_is_rejected_by_api_baseline_and_gate[sqlite-discriminator]",
+        "test_new_half_contract_is_rejected_by_api_baseline_and_gate[postgres-item_status]",
+        "test_new_half_contract_is_rejected_by_api_baseline_and_gate[postgres-item_version]",
+        "test_new_half_contract_is_rejected_by_api_baseline_and_gate[postgres-summary_version]",
+        "test_new_half_contract_is_rejected_by_api_baseline_and_gate[postgres-aggregation]",
+        "test_new_half_contract_is_rejected_by_api_baseline_and_gate[postgres-discriminator]",
+        "test_snapshot_qualification_and_outbox_roll_back_together[sqlite-summary]",
+        "test_snapshot_qualification_and_outbox_roll_back_together[sqlite-serialization]",
+        "test_snapshot_qualification_and_outbox_roll_back_together[sqlite-outbox]",
+        "test_snapshot_qualification_and_outbox_roll_back_together[sqlite-commit]",
+        "test_snapshot_qualification_and_outbox_roll_back_together[postgres-summary]",
+        "test_snapshot_qualification_and_outbox_roll_back_together[postgres-serialization]",
+        "test_snapshot_qualification_and_outbox_roll_back_together[postgres-outbox]",
+        "test_snapshot_qualification_and_outbox_roll_back_together[postgres-commit]",
+        "test_legacy_snapshots_keep_optional_diagnostic_qualification[sqlite-1.0]",
+        "test_legacy_snapshots_keep_optional_diagnostic_qualification[sqlite-1.1]",
+        "test_legacy_snapshots_keep_optional_diagnostic_qualification[sqlite-1.2]",
+        "test_legacy_snapshots_keep_optional_diagnostic_qualification[sqlite-1.3]",
+        "test_legacy_snapshots_keep_optional_diagnostic_qualification[postgres-1.0]",
+        "test_legacy_snapshots_keep_optional_diagnostic_qualification[postgres-1.1]",
+        "test_legacy_snapshots_keep_optional_diagnostic_qualification[postgres-1.2]",
+        "test_legacy_snapshots_keep_optional_diagnostic_qualification[postgres-1.3]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[sqlite-evaluator_id]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[sqlite-evaluator_version]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[sqlite-definition_digest]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[sqlite-executor_type]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[sqlite-contract_status]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[postgres-evaluator_id]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[postgres-evaluator_version]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[postgres-definition_digest]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[postgres-executor_type]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[postgres-contract_status]",
+        "test_missing_required_binding_is_finite_incomplete_before_execution[sqlite]",
+        "test_missing_required_binding_is_finite_incomplete_before_execution[postgres]"
+      ],
+      "executed_at": "2026-10-14T20:17:20.501086+08:00",
+      "duration_seconds": 21.358,
+      "runner_build_id": "Not a formal Experiment: exact tested Git commit recorded above",
+      "dataset_version": "deterministic fixture; see test source",
+      "agent_version": "No business Agent invoked for unit/contract assertions",
+      "evaluator_binding": "Frozen fixture binding; see test source",
+      "policy_digest": "Frozen fixture policy; see test source",
+      "subsequent_data_test_owner": "administrator"
+    },
+    {
+      "acceptance_id": "S42-06",
+      "issue": 129,
+      "result": "PASS",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/04-s4-2-rules-and-diagnosis.md",
+        "line": 215,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-2/required-evidence.md"
+      ],
+      "expected": "- [x] **S42-06**：新API只返回选定Snapshot的冻结证据；历史缺证据、跨Case身份和Snapshot错配都有稳定响应；大于2^53的整数/高精度小数在artifact/API与Console参数显示不舍入，显示字符串与同artifact一致。",
+      "observed": "API reads only fixed Snapshot after live checkpoint/Manifest changes, rejects foreign identities, returns finite historical reason; exact integer/Decimal artifact values reach browser display without rounding.",
+      "assertion_refs": [
+        "tests/test_trajectory_api.py:33",
+        "tests/test_trajectory_api.py:68",
+        "tests/test_trajectory_api.py:124",
+        "tests/test_trajectory_api.py:162",
+        "services/console/e2e/trajectory-diagnosis.spec.ts:74"
+      ],
+      "artifacts": [
+        {
+          "path": "api-junit.xml.gz",
+          "raw_sha256": "c3444d3cc1a201298a6f98fefa17cb76d4930512c2af936366813d147c8de7dc",
+          "gzip_sha256": "e7af69f7e4964559ec01e9db1f01bf6881e4d9bbc87f90b396f2b22bbd1d41df"
+        },
+        {
+          "path": "console-e2e.log.gz",
+          "raw_sha256": "896b750eb9bb71645f020945bdb79a4120d87bf89b5e71e527ac4500a6e2709c",
+          "gzip_sha256": "260345df235419ec1d631c8ece6f58f1b3707672c1b0f5709f215fd8e4e98147"
+        },
+        {
+          "path": "console-trajectory-vitest.json.gz",
+          "raw_sha256": "8e2979e942c2a4ac4a7e08bb185110a33d65322574619f85f8b00eb541662dee",
+          "gzip_sha256": "5069bc4b347aa5da09a88bd67c6486102a52df763ccc1174d184f9437e5e6733"
+        }
+      ],
+      "limitations": "API uses isolated databases and browser uses controlled responses. These do not prove a real online Trace was opened; M5-06 real-link aspect remains separately pending.",
+      "validation_layer": "contract / API / controlled Console",
+      "exit_code": 0,
+      "command": "python -m pytest -q tests/test_trajectory_api.py; pnpm --dir services/console exec vitest run src/features/launches/__tests__/CasesTraceTab.trajectory.test.tsx; make console-e2e",
+      "runner_build_id": "Unit/contract/browser evidence, not a formal Experiment; exact source Git commit recorded.",
+      "dataset_version": "Fixture identity from linked test source; no formal dataset qualification claimed.",
+      "agent_version": "Fixture/no Agent for controlled test; separate real-run identity in real-receipt.json and field matrices.",
+      "evaluator_binding": "See immutable test source and applicable runtime field matrix; no guessed live binding.",
+      "policy_digest": "See immutable test source; no fabricated digest.",
+      "test_nodes": [
+        "test_read_uses_frozen_snapshot_after_checkpoint_and_live_manifest_change[sqlite]",
+        "test_read_uses_frozen_snapshot_after_checkpoint_and_live_manifest_change[postgres]",
+        "test_foreign_identity_is_not_disclosed[sqlite-launch]",
+        "test_foreign_identity_is_not_disclosed[sqlite-snapshot]",
+        "test_foreign_identity_is_not_disclosed[sqlite-case]",
+        "test_foreign_identity_is_not_disclosed[postgres-launch]",
+        "test_foreign_identity_is_not_disclosed[postgres-snapshot]",
+        "test_foreign_identity_is_not_disclosed[postgres-case]",
+        "test_historical_snapshot_has_contractual_unavailable_reason[sqlite]",
+        "test_historical_snapshot_has_contractual_unavailable_reason[postgres]",
+        "test_parameters_keep_exact_json_numbers_and_same_artifact_display[sqlite-9007199254740993]",
+        "test_parameters_keep_exact_json_numbers_and_same_artifact_display[sqlite-value1]",
+        "test_parameters_keep_exact_json_numbers_and_same_artifact_display[postgres-9007199254740993]",
+        "test_parameters_keep_exact_json_numbers_and_same_artifact_display[postgres-value1]"
+      ],
+      "subsequent_data_test_owner": "administrator"
+    },
+    {
+      "acceptance_id": "S42-07",
+      "issue": 129,
+      "result": "PASS",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/04-s4-2-rules-and-diagnosis.md",
+        "line": 216,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-2/required-evidence.md"
+      ],
+      "expected": "- [x] **S42-07**：CaseDetail 懒加载、三态、并行/阶段、规则↔Step 定位及历史/在线标签通过 Vitest 与 Playwright。",
+      "observed": "11 trajectory Vitest tests and five browser diagnosis tests passed: lazy fetch, PASS/FAIL/UNKNOWN, causal grouping/BLOCKED, bidirectional keyboard focus, exact parameters, Snapshot cache separation and historical label. Current mobile screenshot inspected.",
+      "assertion_refs": [
+        "services/console/src/features/launches/__tests__/CasesTraceTab.trajectory.test.tsx:28",
+        "services/console/e2e/trajectory-diagnosis.spec.ts:59",
+        "services/console/e2e/trajectory-diagnosis.spec.ts:74",
+        "services/console/e2e/trajectory-diagnosis.spec.ts:113",
+        "services/console/e2e/trajectory-diagnosis.spec.ts:128"
+      ],
+      "artifacts": [
+        {
+          "path": "console-trajectory-vitest.json.gz",
+          "raw_sha256": "8e2979e942c2a4ac4a7e08bb185110a33d65322574619f85f8b00eb541662dee",
+          "gzip_sha256": "5069bc4b347aa5da09a88bd67c6486102a52df763ccc1174d184f9437e5e6733"
+        },
+        {
+          "path": "console-e2e.log.gz",
+          "raw_sha256": "896b750eb9bb71645f020945bdb79a4120d87bf89b5e71e527ac4500a6e2709c",
+          "gzip_sha256": "260345df235419ec1d631c8ece6f58f1b3707672c1b0f5709f215fd8e4e98147"
+        },
+        {
+          "path": "console-e2e-receipt.json",
+          "sha256": "2a9acb502a291527ca748a64e515aa99cbf5c93aadc4a0531cb1eb29d117a907"
+        }
+      ],
+      "limitations": "API uses isolated databases and browser uses controlled responses. These do not prove a real online Trace was opened; M5-06 real-link aspect remains separately pending.",
+      "validation_layer": "Vitest / browser with controlled API",
+      "exit_code": 0,
+      "command": "python -m pytest -q tests/test_trajectory_api.py; pnpm --dir services/console exec vitest run src/features/launches/__tests__/CasesTraceTab.trajectory.test.tsx; make console-e2e",
+      "runner_build_id": "Unit/contract/browser evidence, not a formal Experiment; exact source Git commit recorded.",
+      "dataset_version": "Fixture identity from linked test source; no formal dataset qualification claimed.",
+      "agent_version": "Fixture/no Agent for controlled test; separate real-run identity in real-receipt.json and field matrices.",
+      "evaluator_binding": "See immutable test source and applicable runtime field matrix; no guessed live binding.",
+      "policy_digest": "See immutable test source; no fabricated digest.",
+      "test_nodes": [
+        "固定 Snapshot 轨迹诊断 只在展开 Case 且有 Snapshot 时读取",
+        "固定 Snapshot 轨迹诊断 区分测量与质量三态，并展示已证违规和降级原因",
+        "固定 Snapshot 轨迹诊断 规则定位 Step、Step 反向定位规则，参数不使用浮点舍入值",
+        "固定 Snapshot 轨迹诊断 拒绝外部身份响应，不能污染当前成功缓存",
+        "固定 Snapshot 轨迹诊断 反复激活同一规则与 Step 仍会重新聚焦目标",
+        "固定 Snapshot 轨迹诊断 残缺响应 quality 收敛到契约错误且不能进入成功缓存",
+        "固定 Snapshot 轨迹诊断 残缺响应 rule_fields 收敛到契约错误且不能进入成功缓存",
+        "固定 Snapshot 轨迹诊断 残缺响应 step_fields 收敛到契约错误且不能进入成功缓存",
+        "固定 Snapshot 轨迹诊断 残缺响应 null_rule 收敛到契约错误且不能进入成功缓存",
+        "固定 Snapshot 轨迹诊断 残缺响应 null_step 收敛到契约错误且不能进入成功缓存",
+        "固定 Snapshot 轨迹诊断 切换 Snapshot 后迟到的旧响应不会出现在当前 Case"
+      ],
+      "subsequent_data_test_owner": "administrator"
+    },
+    {
+      "acceptance_id": "S42-08",
+      "issue": 129,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/04-s4-2-rules-and-diagnosis.md",
+        "line": 217,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-2/required-evidence.md"
+      ],
+      "expected": "- [x] **S42-08**：规则变化进入 Measurement identity；Console OpenAPI 类型同步；`make validate` 通过，Demo 原有预期基线未改。",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S43-01",
+      "issue": 130,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/05-s4-3-arguments-and-redaction.md",
+        "line": 210,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-3/t6-acceptance.md"
+      ],
+      "expected": "- [ ] **S43-01**：JSONPath parser 只接受列明语法；任意 eval、wildcard/filter/recursive path 被拒绝，拒绝码稳定。",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S43-02",
+      "issue": 130,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/05-s4-3-arguments-and-redaction.md",
+        "line": 211,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-3/t6-acceptance.md"
+      ],
+      "expected": "- [ ] **S43-02**：JSON 类型不隐式转换；boolean/number 分离，小数精确；明显不匹配 FAIL，REDACTED/unavailable/invalid UNKNOWN。",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S43-03",
+      "issue": 130,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/05-s4-3-arguments-and-redaction.md",
+        "line": 212,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-3/t6-acceptance.md"
+      ],
+      "expected": "- [ ] **S43-03**：完整参数对象缺少 required path 为明确违规；未采集、REDACTED 与解析错误不得变成 FAIL。",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S43-04",
+      "issue": 130,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/05-s4-3-arguments-and-redaction.md",
+        "line": 213,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-3/t6-acceptance.md"
+      ],
+      "expected": "- [ ] **S43-04**：重复次数按 tool identity、冻结 phase、scope 与获准参数身份计算；并行或 identity 不足时 UNKNOWN；原始参数不进入 evidence。",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S43-05",
+      "issue": 130,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/05-s4-3-arguments-and-redaction.md",
+        "line": 214,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-3/t6-acceptance.md"
+      ],
+      "expected": "- [ ] **S43-05**：Step sequence 使用可信因果边；已验证来源且同 scope 的 HUMAN 事件为 true，完整覆盖下无事件为 false，来源未验证/缺 scope 为 no_result；工具名或文本自报不能证明人工事件，正例必须有 #127 来源矩阵。",
+      "observed": null,
+      "assertion_refs": [
+        "tests/test_trajectory_observation_integration.py:984",
+        "tests/test_trajectory_observation_integration.py:1018",
+        "tests/test_trajectory_observation_integration.py:1053",
+        "tests/test_trajectory_observation_integration.py:1079"
+      ],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "source_review": "Read actual assertion bodies on 2026-10-14; these cover components only. Full item result awaits terminal runtime and any other requirement assertions.",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S43-06",
+      "issue": 130,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/05-s4-3-arguments-and-redaction.md",
+        "line": 215,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-3/t6-acceptance.md"
+      ],
+      "expected": "- [ ] **S43-06**：只变 Redaction 时 tool_mapping_digest 不变，redaction_policy_digest、trajectory_contract_digest、Measurement 均改变；只改 QualityPolicy threshold 时仅该 Policy digest 改变，Measurement/轨迹合同保持。",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S43-07",
+      "issue": 130,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/05-s4-3-arguments-and-redaction.md",
+        "line": 216,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-3/t6-acceptance.md"
+      ],
+      "expected": "- [ ] **S43-07**：Baseline/Candidate 的轨迹内容不同不自动判不可比；比较身份只核对冻结配置和既有完整性合同。",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S43-08",
+      "issue": 130,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/05-s4-3-arguments-and-redaction.md",
+        "line": 217,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-3/t6-acceptance.md"
+      ],
+      "expected": "- [ ] **S43-08**：Snapshot、API、结构化日志和 Outbox 全链路都不含敏感哨兵、raw args、Authorization/Cookie、卡号和受支持身份号字段。",
+      "observed": null,
+      "assertion_refs": [
+        "tests/test_trajectory_observation_integration.py:1144",
+        "tests/test_trajectory_observation_integration.py:1166",
+        "tests/test_trajectory_observation_integration.py:1185",
+        "tests/test_trajectory_observation_integration.py:1204",
+        "tests/test_trajectory_observation_integration.py:1220",
+        "tests/test_trajectory_observation_integration.py:1228"
+      ],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "source_review": "Read actual assertion bodies on 2026-10-14; these cover components only. Full item result awaits terminal runtime and any other requirement assertions.",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S43-09",
+      "issue": 130,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/05-s4-3-arguments-and-redaction.md",
+        "line": 218,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-3/t6-acceptance.md"
+      ],
+      "expected": "- [ ] **S43-09**：boolean 投影仅保留布尔 `original_value`；text/无序 category 为 `NOT_APPLICABLE`；legacy 数值映射无漂移。",
+      "observed": null,
+      "assertion_refs": [
+        "tests/test_trajectory_observation_integration.py:1196",
+        "tests/test_trajectory_observation_integration.py:1227"
+      ],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "source_review": "Read actual assertion bodies on 2026-10-14; these cover components only. Full item result awaits terminal runtime and any other requirement assertions.",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S43-10",
+      "issue": 130,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/05-s4-3-arguments-and-redaction.md",
+        "line": 219,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-3/t6-acceptance.md"
+      ],
+      "expected": "- [ ] **S43-10**：旧 Manifest/Snapshot 继续旧解析路径；新 Manifest `1.3` 与 `evidence_contract_version=\"trajectory-1.0\"` 显式解析，不做字符串大小比较。",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S43-11",
+      "issue": 130,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/05-s4-3-arguments-and-redaction.md",
+        "line": 220,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-3/t6-acceptance.md"
+      ],
+      "expected": "- [ ] **S43-11**：本期 API/OpenAPI/Console schema 同步（若本期改 API），单元/集成测试和 `make validate` 通过，既有 Demo 基线保持原值。",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S44-01",
+      "issue": 131,
+      "result": "BLOCKED",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/06-s4-4-judge.md",
+        "line": 217,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/maintainer-handoff.md"
+      ],
+      "expected": "| S44-01 | 更换 Prompt 或 Rubric 文本 | `definition_digest` 与新 Binding 改变；旧 Snapshot 仍保存旧 digest 和结论 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Judge dependency handed to maintainer; original requirement remains",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S44-02",
+      "issue": 131,
+      "result": "BLOCKED",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/06-s4-4-judge.md",
+        "line": 218,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/maintainer-handoff.md"
+      ],
+      "expected": "| S44-02 | Model alias 解析与运行 | Manifest 冻结 Resolved Model；运行实际身份不符时报稳定错误，不 fallback |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Judge dependency handed to maintainer; original requirement remains",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S44-03",
+      "issue": 131,
+      "result": "BLOCKED",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/06-s4-4-judge.md",
+        "line": 219,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/maintainer-handoff.md"
+      ],
+      "expected": "| S44-03 | 参数冻结 | Provider、预算、解码、输入限制、触发、覆盖和 calibration policy 都进入 binding identity |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Judge dependency handed to maintainer; original requirement remains",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S44-04",
+      "issue": 131,
+      "result": "BLOCKED",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/06-s4-4-judge.md",
+        "line": 220,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/maintainer-handoff.md"
+      ],
+      "expected": "| S44-04 | 输出校验 | 缺字段、额外字段、无效枚举/置信度、越界 Step ref 全部为 UNKNOWN 且有错误码 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Judge dependency handed to maintainer; original requirement remains",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S44-05",
+      "issue": 131,
+      "result": "BLOCKED",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/06-s4-4-judge.md",
+        "line": 221,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/maintainer-handoff.md"
+      ],
+      "expected": "| S44-05 | 防注入 | 轨迹中包含“忽略规则”等文本仍只作为数据；输出需满足本地 Schema 和证据校验 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Judge dependency handed to maintainer; original requirement remains",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S44-06",
+      "issue": 131,
+      "result": "BLOCKED",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/06-s4-4-judge.md",
+        "line": 222,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/maintainer-handoff.md"
+      ],
+      "expected": "| S44-06 | 不补零与取消 | 错误/超时/无效 JSON/低置信不生成伪值；并发≤2、event loop 心跳持续、取消关闭 response/释放许可，迟到不写入 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Judge dependency handed to maintainer; original requirement remains",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S44-07",
+      "issue": 131,
+      "result": "BLOCKED",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/06-s4-4-judge.md",
+        "line": 223,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/maintainer-handoff.md"
+      ],
+      "expected": "| S44-07 | 证据定位 | 每个确定 verdict 的 `evidence_step_ids` 均属于冻结轨迹且可在 Case Detail 精确定位 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Judge dependency handed to maintainer; original requirement remains",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S44-08",
+      "issue": 131,
+      "result": "BLOCKED",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/06-s4-4-judge.md",
+        "line": 224,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/maintainer-handoff.md"
+      ],
+      "expected": "| S44-08 | 成本保护 | diagnostic全通过零调用、采样稳定；两Worker竞争/重复claim/发送后取消不超预算，未知usage保持最坏预留 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Judge dependency handed to maintainer; original requirement remains",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S44-09",
+      "issue": 131,
+      "result": "BLOCKED",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/06-s4-4-judge.md",
+        "line": 225,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/maintainer-handoff.md"
+      ],
+      "expected": "| S44-09 | 发布覆盖 | ALL_DATASET_CASES、IDs digest与冻结cohort相等；每required Judge调用数=Case总数，不套diagnostic触发/采样；漏评不能COMPLETE |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Judge dependency handed to maintainer; original requirement remains",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S44-10",
+      "issue": 131,
+      "result": "BLOCKED",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/06-s4-4-judge.md",
+        "line": 226,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/maintainer-handoff.md"
+      ],
+      "expected": "| S44-10 | 单来源拒绝 | Critical single Judge 创建/冻结失败，错误码为 `CRITICAL_JUDGE_SINGLE_SOURCE` 且提示中文 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Judge dependency handed to maintainer; original requirement remains",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S44-11",
+      "issue": 131,
+      "result": "BLOCKED",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/06-s4-4-judge.md",
+        "line": 227,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/maintainer-handoff.md"
+      ],
+      "expected": "| S44-11 | 校准报告 | 输出 risk slice 样本、误放行率、单侧95% Wilson上界(z=1.644854)、按冻结 repeat_runs 计算的分歧率和 holdout digest |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Judge dependency handed to maintainer; original requirement remains",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S44-12",
+      "issue": 131,
+      "result": "BLOCKED",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/06-s4-4-judge.md",
+        "line": 228,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/maintainer-handoff.md"
+      ],
+      "expected": "| S44-12 | 样本资格 | 不足最小样本或 UCB 超阈值时校准不合格，critical conclusion 为 UNKNOWN |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Judge dependency handed to maintainer; original requirement remains",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S44-13",
+      "issue": 131,
+      "result": "BLOCKED",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/06-s4-4-judge.md",
+        "line": 229,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/maintainer-handoff.md"
+      ],
+      "expected": "| S44-13 | 联合校准 | 同风险规则+Judge 或双身份 Judge 才可准入；双身份需联合 holdout 校准 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Judge dependency handed to maintainer; original requirement remains",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S44-14",
+      "issue": 131,
+      "result": "BLOCKED",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/06-s4-4-judge.md",
+        "line": 230,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/maintainer-handoff.md"
+      ],
+      "expected": "| S44-14 | 旧版本可读 | 显式支持 Manifest 1.0/1.1 legacy、1.2 与旧 Snapshot；1.3 Judge 走 await→prepared result；未知版本拒绝；恢复与同步旧调用均有测试 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Judge dependency handed to maintainer; original requirement remains",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S45-01",
+      "issue": 132,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 200,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-01 | schema 分支 | 1.0/1.1 legacy 与1.2保持原Reader；1.3需完整资格discriminator/字段；未知或半契约schema为UNKNOWN |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S45-02",
+      "issue": 132,
+      "result": "PASS",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 201,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-02 | optional skip | required PASS + optional skipped/failed 时 Snapshot 为 COMPLETE；optional 诊断仍可见 |",
+      "observed": "Required PASS plus optional skipped/failed/no_result retains COMPLETE and diagnostic rows; absolute and relative Gate stay eligible.",
+      "assertion_refs": [
+        "tests/test_trajectory_required_evidence.py:120",
+        "tests/test_trajectory_required_evidence.py:258"
+      ],
+      "artifacts": [
+        {
+          "path": "required-junit.xml.gz",
+          "raw_sha256": "98510976cb46bad9bb6cc0ca1a09a401a0f1a921f046412a84af2a4c3fee858f",
+          "gzip_sha256": "e6debab770138095fa4baf10efb34c8ab5c0bcdf9f48b8c85cee43028002d6bd"
+        }
+      ],
+      "limitations": "Contract evidence uses synthetic measurement and isolated databases; real Agent ingestion and whole S4 acceptance remain separately verified.",
+      "validation_layer": "contract / SQLite and isolated PostgreSQL",
+      "command": "TEST_POSTGRES_URL=<isolated PostgreSQL> python -m pytest -q tests/test_trajectory_required_evidence.py --junitxml=<output.xml>",
+      "exit_code": 0,
+      "test_nodes": [
+        "test_optional_diagnostics_preserve_complete_snapshot_baseline_and_gate[sqlite-skipped]",
+        "test_optional_diagnostics_preserve_complete_snapshot_baseline_and_gate[sqlite-failed]",
+        "test_optional_diagnostics_preserve_complete_snapshot_baseline_and_gate[sqlite-no_result]",
+        "test_optional_diagnostics_preserve_complete_snapshot_baseline_and_gate[postgres-skipped]",
+        "test_optional_diagnostics_preserve_complete_snapshot_baseline_and_gate[postgres-failed]",
+        "test_optional_diagnostics_preserve_complete_snapshot_baseline_and_gate[postgres-no_result]",
+        "test_optional_failure_does_not_block_relative_gate_and_api_exposes_frozen_status[sqlite]",
+        "test_optional_failure_does_not_block_relative_gate_and_api_exposes_frozen_status[postgres]"
+      ],
+      "executed_at": "2026-10-14T20:17:20.501086+08:00",
+      "duration_seconds": 21.358,
+      "runner_build_id": "Not a formal Experiment: exact tested Git commit recorded above",
+      "dataset_version": "deterministic fixture; see test source",
+      "agent_version": "No business Agent invoked for unit/contract assertions",
+      "evaluator_binding": "Frozen fixture binding; see test source",
+      "policy_digest": "Frozen fixture policy; see test source",
+      "subsequent_data_test_owner": "administrator"
+    },
+    {
+      "acceptance_id": "S45-03",
+      "issue": 132,
+      "result": "PASS",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 202,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-03 | required 缺失 | required no_result、failed、skipped 或 UNKNOWN 使 Item/Snapshot INCOMPLETE/DIAGNOSTIC |",
+      "observed": "Required missing/failed/skipped/no_result, invalid value or binding/provenance produce INCOMPLETE/DIAGNOSTIC, UNKNOWN Gate and Baseline refusal.",
+      "assertion_refs": [
+        "tests/test_trajectory_required_evidence.py:138",
+        "tests/test_trajectory_required_evidence.py:286",
+        "tests/test_trajectory_required_evidence.py:301"
+      ],
+      "artifacts": [
+        {
+          "path": "required-junit.xml.gz",
+          "raw_sha256": "98510976cb46bad9bb6cc0ca1a09a401a0f1a921f046412a84af2a4c3fee858f",
+          "gzip_sha256": "e6debab770138095fa4baf10efb34c8ab5c0bcdf9f48b8c85cee43028002d6bd"
+        }
+      ],
+      "limitations": "Contract evidence uses synthetic measurement and isolated databases; real Agent ingestion and whole S4 acceptance remain separately verified.",
+      "validation_layer": "contract / SQLite and isolated PostgreSQL",
+      "command": "TEST_POSTGRES_URL=<isolated PostgreSQL> python -m pytest -q tests/test_trajectory_required_evidence.py --junitxml=<output.xml>",
+      "exit_code": 0,
+      "test_nodes": [
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[sqlite-missing-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[sqlite-failed-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[sqlite-skipped-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[sqlite-no_result-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[sqlite-None-None]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[sqlite-None-1]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[sqlite-binding-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[sqlite-schema-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[postgres-missing-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[postgres-failed-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[postgres-skipped-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[postgres-no_result-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[postgres-None-None]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[postgres-None-1]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[postgres-binding-True]",
+        "test_required_missing_invalid_or_mismatched_results_are_incomplete[postgres-schema-True]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[sqlite-evaluator_id]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[sqlite-evaluator_version]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[sqlite-definition_digest]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[sqlite-executor_type]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[sqlite-contract_status]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[postgres-evaluator_id]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[postgres-evaluator_version]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[postgres-definition_digest]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[postgres-executor_type]",
+        "test_all_required_provenance_fields_must_match_the_frozen_binding[postgres-contract_status]",
+        "test_missing_required_binding_is_finite_incomplete_before_execution[sqlite]",
+        "test_missing_required_binding_is_finite_incomplete_before_execution[postgres]"
+      ],
+      "executed_at": "2026-10-14T20:17:20.501086+08:00",
+      "duration_seconds": 21.358,
+      "runner_build_id": "Not a formal Experiment: exact tested Git commit recorded above",
+      "dataset_version": "deterministic fixture; see test source",
+      "agent_version": "No business Agent invoked for unit/contract assertions",
+      "evaluator_binding": "Frozen fixture binding; see test source",
+      "policy_digest": "Frozen fixture policy; see test source",
+      "subsequent_data_test_owner": "administrator"
+    },
+    {
+      "acceptance_id": "S45-04",
+      "issue": 132,
+      "result": "PASS",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 203,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-04 | FAIL 与 COMPLETE | 所有证据完整但规则明确 FAIL 时 Snapshot 仍可 COMPLETE；Gate 可拒绝发布 |",
+      "observed": "All required evidence complete but false: Snapshot COMPLETE, pass_rate=0, Gate FAIL and releasable=false.",
+      "assertion_refs": [
+        "tests/test_trajectory_required_evidence.py:151"
+      ],
+      "artifacts": [
+        {
+          "path": "required-junit.xml.gz",
+          "raw_sha256": "98510976cb46bad9bb6cc0ca1a09a401a0f1a921f046412a84af2a4c3fee858f",
+          "gzip_sha256": "e6debab770138095fa4baf10efb34c8ab5c0bcdf9f48b8c85cee43028002d6bd"
+        }
+      ],
+      "limitations": "Contract evidence uses synthetic measurement and isolated databases; real Agent ingestion and whole S4 acceptance remain separately verified.",
+      "validation_layer": "contract / SQLite and isolated PostgreSQL",
+      "command": "TEST_POSTGRES_URL=<isolated PostgreSQL> python -m pytest -q tests/test_trajectory_required_evidence.py --junitxml=<output.xml>",
+      "exit_code": 0,
+      "test_nodes": [
+        "test_proven_false_is_complete_evidence_but_gate_refuses_release[sqlite]",
+        "test_proven_false_is_complete_evidence_but_gate_refuses_release[postgres]"
+      ],
+      "executed_at": "2026-10-14T20:17:20.501086+08:00",
+      "duration_seconds": 21.358,
+      "runner_build_id": "Not a formal Experiment: exact tested Git commit recorded above",
+      "dataset_version": "deterministic fixture; see test source",
+      "agent_version": "No business Agent invoked for unit/contract assertions",
+      "evaluator_binding": "Frozen fixture binding; see test source",
+      "policy_digest": "Frozen fixture policy; see test source",
+      "subsequent_data_test_owner": "administrator"
+    },
+    {
+      "acceptance_id": "S45-05",
+      "issue": 132,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 204,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-05 | 零分母 | `P+F=0` 或 `N=0` 返回 null，Console 见 `—`；Baseline/Gate 不因 null 通过 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S45-06",
+      "issue": 132,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 205,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-06 | 两项比率 | API/UI 给出P/(P+F)和(P+F)/N；N为冻结cohort的不同dataset_item_id数；6 Case×2规则仍N=6，缺证据留在分母 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S45-07",
+      "issue": 132,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 206,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-07 | UNKNOWN fail-closed | 任一 required UNKNOWN 时 `decision=UNKNOWN`、`releasable=false`，不得被均值稀释 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S45-08",
+      "issue": 132,
+      "result": "BLOCKED",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 207,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-08 | Critical veto | 新策略冻结block_critical_failures=true；critical FAIL+required UNKNOWN→UNKNOWN并保留CRITICAL_FAILURE、不可发布；纯已证违规→FAIL；无单Judge绕过 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Judge dependency handed to maintainer; original requirement remains",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S45-09",
+      "issue": 132,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 208,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-09 | Baseline qualification | DIAGNOSTIC 的设基线请求被拒并给原因；COMPLETE 根据冻结 Snapshot 判断 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S45-10",
+      "issue": 132,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 209,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-10 | QualityPolicy changed | 三层 digest 中 policy 改变时 `formal.available=false` 且含 `QUALITY_POLICY_CHANGED` |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S45-11",
+      "issue": 132,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 210,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-11 | Case rows | policy 不匹配时受影响行标 `DIAGNOSTIC_ONLY`，不伪造 regression/正式均值 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S45-12",
+      "issue": 132,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 211,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-12 | 轨迹契约可比性 | trajectory contract digest 进入 Measurement；改变时 formal withheld |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S45-13",
+      "issue": 132,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 212,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-13 | per-case digest | 同契约下 Baseline/Candidate trajectory digest 不同仍可比；两侧各自 ref 必须自洽 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S45-14",
+      "issue": 132,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 213,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-14 | 覆盖范围 | required Dataset Case 缺失、跨 Attempt 或证据不全时 withheld，列出稳定原因码 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S45-15",
+      "issue": 132,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 214,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-15 | 投影幂等 | 同Snapshot重试同ID/ref/provenance；dispatch_generation不变的新Snapshot使用新ID与Outbox任务；旧投影保留且唯一性/聚合状态正确 |",
+      "observed": null,
+      "assertion_refs": [
+        "tests/test_trajectory_observation_integration.py:1087",
+        "tests/test_trajectory_observation_integration.py:1101",
+        "tests/test_trajectory_observation_integration.py:1103",
+        "tests/test_trajectory_observation_integration.py:1108",
+        "tests/test_trajectory_observation_integration.py:1131",
+        "tests/test_trajectory_observation_integration.py:1136",
+        "tests/test_trajectory_observation_integration.py:1139"
+      ],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "source_review": "Read actual assertion bodies on 2026-10-14; these cover components only. Full item result awaits terminal runtime and any other requirement assertions.",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S45-16",
+      "issue": 132,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 215,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-16 | 投影隔离 | 投影失败不改质量结果；不得回读 Langfuse Score 决定 Argus Gate |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S45-17",
+      "issue": 132,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 216,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-17 | 历史保护 | 1.2 Snapshot、旧 Baseline、旧 Gate 记录不被重写或补造 trajectory digest |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S45-18",
+      "issue": 132,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 217,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-18 | Demo 基线 | `tests/test_expected_pass_rate.py` 原样通过，v1 2/6 与 v2 6/6 不变 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S45-19",
+      "issue": 132,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 218,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-19 | OpenAPI 同步 | export 后 `docs/openapi.json` 和生成的 `schema.d.ts` 无 drift |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "S45-20",
+      "issue": 132,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/07-s4-5-release-gate.md",
+        "line": 219,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-5/t7-acceptance.md"
+      ],
+      "expected": "| S45-20 | 全门禁 | 新测试、兼容回归、Console 测试与 `make validate` 通过；所有跳过项说明原因 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "M5-01",
+      "issue": 5,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/09-acceptance-matrix.md",
+        "line": 41,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/full-real-78f1a7c.md"
+      ],
+      "expected": "| M5-01 | 同一测试AgentDefinition的原生OTel/Pydantic AI两个不可变版本完成同一任务 | 同EvaluatorVersion、profile_set和Mapping；实际profile provenance可不同，合同/规则语义一致 | T0/T1/T3/T7；真实Agent.run及依赖闭包、版本、Trace/Step refs、typed results和合同digest |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "M5-02",
+      "issue": 5,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/09-acceptance-matrix.md",
+        "line": 42,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/full-real-78f1a7c.md"
+      ],
+      "expected": "| M5-02 | 独立slice要求查询客户→查询余额，故意执行禁止转账 | forbidden规则FAIL并定位违规Step；order规则按每个B和因果作用域判断 | T3/T5；Case UI、规则原因、Step和冻结结果 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "M5-03",
+      "issue": 5,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/09-acceptance-matrix.md",
+        "line": 43,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/full-real-78f1a7c.md"
+      ],
+      "expected": "| M5-03 | Agent响应谎报tool_calls，完整观测实际无工具 | observed require_tool为false；旧声明规则版本不变 | T3；响应/轨迹隔离的反例测试 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "M5-04",
+      "issue": 5,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/09-acceptance-matrix.md",
+        "line": 44,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/full-real-78f1a7c.md"
+      ],
+      "expected": "| M5-04 | HTTP-only Agent只产生Remote HTTP Root | 最终答案仍评；required轨迹缺失UNKNOWN且不可发布；optional诊断缺失不污染必需资格 | T4/T5；两种Policy的Snapshot/Gate链 |",
+      "observed": null,
+      "assertion_refs": [
+        "tests/test_trajectory_rule_integration.py:62",
+        "tests/test_trajectory_rule_integration.py:87",
+        "tests/test_trajectory_rule_integration.py:97",
+        "tests/test_trajectory_rule_integration.py:139",
+        "tests/test_trajectory_rule_integration.py:163"
+      ],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "source_review": "Read actual assertion bodies on 2026-10-14; these cover components only. Full item result awaits terminal runtime and any other requirement assertions.",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "M5-05",
+      "issue": 5,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/09-acceptance-matrix.md",
+        "line": 45,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/full-real-78f1a7c.md"
+      ],
+      "expected": "| M5-05 | 参数已全脱敏；另一Case具有获准但错误参数 | 前者UNKNOWN；后者按明确匹配约束FAIL；所有持久化和界面无敏感原文 | T6；泄漏测试、visibility与typed结果 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "M5-06",
+      "issue": 5,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/09-acceptance-matrix.md",
+        "line": 46,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/full-real-78f1a7c.md"
+      ],
+      "expected": "| M5-06 | 在Case中选择规则并打开原始Trace | 正确定位Step、展示获准摘要；原始链接真实且标在线内容；快照结论保持冻结 | T5/T9；Playwright操作与身份断言 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "M5-07",
+      "issue": 5,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/09-acceptance-matrix.md",
+        "line": 47,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/full-real-78f1a7c.md"
+      ],
+      "expected": "| M5-07 | 同一Case重评、迟到Span、旧generation和Langfuse断连 | Agent不重调用；旧Snapshot不变；新证据新revision；新Snapshot的Score/任务独立、同revision重投幂等 | T2/T7/T9；调用计数、revision/digest、CAS与Score ID |",
+      "observed": null,
+      "assertion_refs": [
+        "tests/test_trajectory_rule_integration.py:110",
+        "tests/test_trajectory_rule_integration.py:124",
+        "tests/test_trajectory_observation_integration.py:1087"
+      ],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "source_review": "Read actual assertion bodies on 2026-10-14; these cover components only. Full item result awaits terminal runtime and any other requirement assertions.",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "M5-08",
+      "issue": 5,
+      "result": "BLOCKED",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/09-acceptance-matrix.md",
+        "line": 48,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/full-real-78f1a7c.md"
+      ],
+      "expected": "| M5-08 | 改规则/Assembler/Redaction、只改阈值、Judge覆盖不匹配 | 分别移动正确合同身份，给出MEASUREMENT_CHANGED/QUALITY_POLICY_CHANGED/覆盖原因；不误报正式Agent回归 | T6/T8/T9；分层比较与withheld证据 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Judge dependency handed to maintainer; original requirement remains",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "M5-09",
+      "issue": 5,
+      "result": "BLOCKED",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/09-acceptance-matrix.md",
+        "line": 49,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/full-real-78f1a7c.md"
+      ],
+      "expected": "| M5-09 | Critical Gate使用单Judge或缺必需证据 | 创建时拒绝单来源；运行缺证据UNKNOWN不可发布；不被平均分稀释 | T8/T9；稳定错误码与Gate结果 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Judge dependency handed to maintainer; original requirement remains",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    },
+    {
+      "acceptance_id": "M5-10",
+      "issue": 5,
+      "result": "NOT_RUN",
+      "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b",
+      "criterion_source": {
+        "path": "docs/plans/2026-10-13-s4-trajectory/09-acceptance-matrix.md",
+        "line": 50,
+        "git_commit": "884b1810c68b3701877209dfdfb57f1eefd1a34b"
+      },
+      "historical_evidence": [
+        "docs/validation/s4-4/full-real-78f1a7c.md"
+      ],
+      "expected": "| M5-10 | 原Demo v1/v2和旧Launch/Manifest/Snapshot | v1=2/6、v2=6/6；历史只读兼容、不补造observed evidence | 全阶段；现有测试原样回归 |",
+      "observed": null,
+      "assertion_refs": [],
+      "artifacts": [],
+      "limitations": "Final individual audit pending; aggregate totals alone are insufficient",
+      "subsequent_data_test_owner": "administrator",
+      "execution_policy": "No new data-dependent tests by current agent; administrator performs remaining verification. Original criterion unchanged."
+    }
+  ],
+  "real_run_receipt": "real-receipt.json",
+  "source_manifest": "source-manifest.json",
+  "limitations": [
+    "Original 89 criteria retained. This is a partial final audit, not complete S4 acceptance.",
+    "10 current-scope PASS, 17 maintainer-dependent BLOCKED, 62 individual audits still pending; do not infer implementation completion percentages from these counts."
+  ],
+  "runtime_identity_receipt": "execution-identities-receipt.json",
+  "actual_real_runner_build_id": "test-build-001",
+  "execution_policy_update": {
+    "date": "2026-10-14",
+    "policy": "All subsequent tasks requiring data for testing are skipped by this agent and handed to administrators. Completed code/evidence retained; skipped/handed-off is not PASS.",
+    "handoff": "../administrator-validation-handoff.md"
+  }
+}

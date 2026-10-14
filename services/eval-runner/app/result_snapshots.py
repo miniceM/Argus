@@ -18,8 +18,10 @@ from .db_models import (
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
     LangfuseRunScoreTaskRecord,
+    LangfuseSyncTaskRecord,
     RunResultSnapshotRecord,
 )
+from .langfuse_projection import TRAJECTORY_PROJECTION_VERSION
 from .required_evidence import (
     EVIDENCE_CONTRACT_VERSION,
     item_is_evaluated,
@@ -274,6 +276,9 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
         options = {"required_case_ids": [i["id"] for i in launch.manifest["dataset"]["items"]],
             "evidence_contract_version": launch.manifest["evidence_contract_version"]}
     summary = aggregate_run(result_items, evaluator_specs, **options)
+    if launch.manifest.get("schema_version") == "1.3" and launch.manifest.get("trajectory"):
+        # 新 Snapshot 明确启用；既有同 digest 的历史 Snapshot 在上方原样返回。
+        summary["item_score_projection_version"] = TRAJECTORY_PROJECTION_VERSION
     latest_revision = session.scalar(select(func.max(RunResultSnapshotRecord.revision)).where(
         RunResultSnapshotRecord.launch_id == launch.id
     )) or 0
@@ -312,7 +317,32 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
         status="PENDING",
         next_retry_at=datetime.utcnow(),
     ))
+    if launch.manifest.get("schema_version") == "1.3" and launch.manifest.get("trajectory"):
+        _enqueue_trajectory_item_scores(session, launch, snapshot, items)
     return snapshot
+
+
+def _enqueue_trajectory_item_scores(session, launch, snapshot, items):
+    """调用方事务同时持有 Snapshot、Run Score 与固定 revision 的 Item 投影。"""
+    by_dataset = {item.dataset_item_id: item for item in items}
+    policy = snapshot.manifest.get("quality_policy") or {}
+    for frozen in snapshot.items:
+        item = by_dataset[frozen["dataset_item_id"]]
+        session.add(LangfuseSyncTaskRecord(
+            id=str(uuid.uuid4()), launch_id=launch.id, item_id=item.id,
+            dataset_item_id=frozen["dataset_item_id"], dataset_version=launch.dataset_version,
+            dispatch_generation=frozen["dispatch_generation"], result_snapshot_id=snapshot.id,
+            task_type="TRAJECTORY_ITEM_SCORES", trace_id=frozen["trace_id"] or "",
+            observation_id=frozen["observation_id"],
+            dataset_run_name=snapshot.manifest.get("name") or f"argus-{launch.id[:12]}",
+            scores_payload={
+                "snapshot_id": snapshot.id, "revision": snapshot.revision,
+                "policy_digest": policy.get("policy_digest"),
+                "typed_results": frozen["evaluation_results"],
+                "trajectory_input": frozen.get("trajectory_input"),
+            },
+            status="PENDING", next_retry_at=datetime.utcnow(),
+        ))
 
 
 def list_result_snapshots(session: Session, launch_id: str) -> list[RunResultSnapshotRecord]:

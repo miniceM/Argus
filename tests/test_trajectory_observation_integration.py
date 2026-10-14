@@ -1076,10 +1076,69 @@ def test_governed_reader_qualification_and_formal_consumers(local_langfuse, s40_
             assert len(diagnosis["rule_results"]) == 4
             assert {result["conclusion"] for result in diagnosis["rule_results"]} == (
                 {"pass"} if scenario == "approved" else {"pass", "fail"})
+            assert_governed_snapshot_projection_revisions(local_langfuse, s40_runtime, identity,
+                tmp_path / f"{profile_id}-{scenario}-snapshot-projection.json")
 
         for privacy_operation in ("privacy", "privacy_ssn"):
             assert_governed_privacy_consumers(local_langfuse, s40_runtime, monkeypatch, agent, profile_id, contract, caplog,
                                              operation=privacy_operation)
+
+
+def assert_governed_snapshot_projection_revisions(runtime, s40_runtime, identity, receipt_path):
+    """S45-15：真实 SDK 验证 eval-only 两个 Snapshot 同 generation 且旧 Score 保留。"""
+    import json
+    import time
+
+    from app.db_models import LangfuseSyncTaskRecord, RunResultSnapshotRecord
+    from app.langfuse_sync import LangfuseOutboxSyncer
+    from sqlalchemy import select
+
+    db = s40_runtime[0]
+    with db.get_session() as session:
+        snapshots = session.scalars(select(RunResultSnapshotRecord).where(
+            RunResultSnapshotRecord.launch_id == identity["launch_id"],
+            RunResultSnapshotRecord.evidence_state == "COMPLETE").order_by(RunResultSnapshotRecord.revision)).all()
+        assert len(snapshots) == 2
+        snapshot_ids = {snapshot.id for snapshot in snapshots}
+        assert len({snapshot.items[0]["dispatch_generation"] for snapshot in snapshots}) == 1
+        before = {snapshot.id: json.dumps({"manifest": snapshot.manifest, "items": snapshot.items,
+            "summary": snapshot.summary}, sort_keys=True) for snapshot in snapshots}
+        tasks = session.scalars(select(LangfuseSyncTaskRecord).where(
+            LangfuseSyncTaskRecord.result_snapshot_id.in_(snapshot_ids))).all()
+        assert len(tasks) == 2 and {task.result_snapshot_id for task in tasks} == snapshot_ids
+        task_ids = {task.id for task in tasks}
+    syncer = LangfuseOutboxSyncer(db, runtime.sdk, lease_duration_seconds=180)
+    claims = syncer.claim_tasks(batch_size=1000)
+    assert task_ids <= {task_id for task_id, _, _ in claims}
+    expected = {}
+    for task_id, _, payload in claims:
+        if task_id in task_ids:
+            scores, reason = syncer._trajectory_projection(task_id, payload)
+            assert reason is None
+            assert len([score for score in scores if score.evaluator_id.startswith("trajectory.")]) == 4
+            for score in scores:
+                assert score.score_id not in expected
+                expected[score.score_id] = score.evidence["snapshot_id"]
+    for task_id, token, payload in claims:
+        success = syncer.process_single_task(task_id, token, payload)
+        if task_id in task_ids:
+            assert success
+    deadline = time.monotonic() + 15
+    while True:
+        response = runtime.http.get("/api/public/v3/scores", params={"traceId": identity["trace_id"], "fields": "details,subject"}, timeout=5)
+        assert response.status_code == 200
+        actual = {score["id"]: score["metadata"]["snapshot_id"] for score in response.json()["data"]}
+        if actual == expected:
+            break
+        assert time.monotonic() < deadline, "two Snapshot projections did not remain visible within 15 seconds"
+        time.sleep(0.1)
+    with db.get_session() as session:
+        assert all(session.get(LangfuseSyncTaskRecord, task_id).status == "SYNCED" for task_id in task_ids)
+        for snapshot_id, original in before.items():
+            stored = session.get(RunResultSnapshotRecord, snapshot_id)
+            assert json.dumps({"manifest": stored.manifest, "items": stored.items, "summary": stored.summary}, sort_keys=True) == original
+    receipt_path.write_text(json.dumps({"snapshot_ids": sorted(snapshot_ids), "score_snapshot_ids": actual,
+        "same_dispatch_generation": True, "production_outbox_synced": True, "snapshot_unchanged": True}, indent=2))
 
 
 def assert_governed_privacy_consumers(runtime, s40_runtime, monkeypatch, agent, profile_id, contract, caplog, *, operation="privacy"):
@@ -1090,7 +1149,7 @@ def assert_governed_privacy_consumers(runtime, s40_runtime, monkeypatch, agent, 
         RunResultSnapshotRecord,
         TrajectoryEvidenceArtifactRecord,
     )
-    from app.langfuse_sync import _project_scores
+    from app.langfuse_sync import LangfuseOutboxSyncer
     from app.result_snapshots import create_result_snapshot
     from app.trajectory.codec import canonical_dumps
     from test_trajectory_rule_integration import assert_frozen_diagnosis
@@ -1111,6 +1170,8 @@ def assert_governed_privacy_consumers(runtime, s40_runtime, monkeypatch, agent, 
         snapshot = create_result_snapshot(session, launch)
         assert snapshot.evidence_state == "DIAGNOSTIC"
         assert snapshot.items[0]["required_evidence_status"] == "INCOMPLETE"
+        # DatabaseManager 使用 autoflush=False；事务提交前的查询须显式刷入待写 Outbox。
+        session.flush()
         snapshots = session.scalars(select(RunResultSnapshotRecord).where(
             RunResultSnapshotRecord.launch_id == identity["launch_id"])).all()
         artifacts = session.scalars(select(TrajectoryEvidenceArtifactRecord).where(
@@ -1122,24 +1183,34 @@ def assert_governed_privacy_consumers(runtime, s40_runtime, monkeypatch, agent, 
         serialized += [row.payload_json for row in artifacts]
         serialized += [json.dumps(row.scores_payload) for row in tasks]
         assert all(sentinel not in value for sentinel in sentinels for value in serialized)
-        task = tasks[0]
-        projected = _project_scores({"item_id": task.item_id, "dispatch_generation": task.dispatch_generation, "attempts": task.attempts},
-            scores=task.scores_payload, snapshot_id=snapshot.id, revision=snapshot.revision,
-            policy_digest=task.scores_payload.get("_policy_digest"))
-        assert {score.evaluator_id for score in projected} == {"intent_match", "trajectory.require_tool"}
-        boolean = next(score for score in projected if score.evaluator_id == "trajectory.require_tool")
-        assert boolean.evidence["original_value"] is True
+        task = next(row for row in tasks if row.task_type == "TRAJECTORY_ITEM_SCORES" and row.result_snapshot_id == snapshot.id)
+        task_id = task.id
+    syncer = LangfuseOutboxSyncer(s40_runtime[0], runtime.sdk, lease_duration_seconds=180)
+    claimed = syncer.claim_tasks(batch_size=1000)
+    target = next((entry for entry in claimed if entry[0] == task_id), None)
+    assert target is not None, "fixed Snapshot outbox task was not claimable"
+    projected, projection_reason = syncer._trajectory_projection(task_id, target[2])
+    assert projection_reason is None
+    assert {score.evaluator_id for score in projected} == {"intent_match", "trajectory.require_tool"}
+    boolean = next(score for score in projected if score.evaluator_id == "trajectory.require_tool")
+    assert boolean.evidence["original_value"] is True
+    for claimed_id, claim_token, payload in claimed:
+        succeeded = syncer.process_single_task(claimed_id, claim_token, payload)
+        if claimed_id == task_id:
+            assert succeeded
+    with s40_runtime[0].get_session() as session:
+        assert session.get(LangfuseSyncTaskRecord, task_id).status == "SYNCED"
     diagnosis = assert_frozen_diagnosis(s40_runtime, monkeypatch, snapshot, identity["dataset_item_id"])
     assert all(sentinel not in canonical_dumps(diagnosis) for sentinel in sentinels)
     balance = [step for step in diagnosis["trajectory"]["steps"] if step["tool_identity"] == "banking.balance.read"]
     assert balance and all(step["argument_visibility"]["$.customer_id"] == "REDACTED" for step in balance)
     argument = next(result for result in diagnosis["rule_results"] if result["evaluator_id"] == "trajectory.tool_argument_match")
     assert argument["conclusion"] == "unknown"
-    # 使用 Outbox 的生产 projector 与真实本地 Score API；租约/重投的整体验证仍属于 T7。
+    # 生产 Outbox 已经上传；此处只核验固定 Snapshot 的真实 Score 出口，不再旁路写入。
     for score in projected:
         assert all(sentinel not in json.dumps(score.evidence) for sentinel in sentinels)
-        runtime.sdk.api.scores.create(id=score.score_id, name=score.evaluator_id, value=score.value,
-            trace_id=identity["trace_id"], observation_id=identity["root_id"], comment=score.comment, metadata=score.evidence)
+        assert score.score_id.startswith("score:trajectory-v1:")
+        assert score.evidence["snapshot_id"] == snapshot.id
     import time
     expected_ids = {score.score_id for score in projected}
     deadline = time.monotonic() + 15
@@ -1159,4 +1230,5 @@ def assert_governed_privacy_consumers(runtime, s40_runtime, monkeypatch, agent, 
     runtime.record(agent.profile, "governed-" + operation.replace("_", "-"), identity, rows, normalization={
         "trajectory_contract_digest": contract.digest, "raw_sentinels_observed": True, "required_no_result_unknown": True,
         "artifact_snapshot_api_outbox_score_minimized": True, "argus_log_records_minimized": True,
+        "snapshot_outbox_claim_lease_projection_synced": True, "snapshot_id": snapshot.id,
         "actual_score_ids": sorted(score["id"] for score in scores)})

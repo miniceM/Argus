@@ -65,6 +65,11 @@ class MigrationRunner:
                 clean_content = re.sub(r"--[^\n]*", "", content)
                 statements = [s.strip() for s in clean_content.split(";") if s.strip()]
                 for statement in statements:
+                    # SQLite 的旧迁移只创建同名索引，没有可 ALTER DROP 的约束。
+                    # 019 后续 DROP INDEX 仍实际执行，不能跳过整个迁移。
+                    if (conn.dialect.name == "sqlite" and version == "019_trajectory_snapshot_outbox.sql"
+                        and statement == "ALTER TABLE langfuse_sync_tasks DROP CONSTRAINT IF EXISTS uq_sync_item_gen_type"):
+                        continue
                     # SQLite 测试保持 PostgreSQL UTF-8 字节上限语义；不依赖
                     # 新版 SQLite 才提供的 octet_length，也不修改全局 JSON codec。
                     if conn.dialect.name == "sqlite" and version == "017_trajectory_evidence.sql":

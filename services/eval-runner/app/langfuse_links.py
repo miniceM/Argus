@@ -256,6 +256,8 @@ def select_current_run_evidence(
     task_list = list(tasks)
     tasks_map: dict[tuple[str, int], Any] = {}
     for task in task_list:
+        if getattr(task, "task_type", "FULL_EVAL_SYNC") != "FULL_EVAL_SYNC":
+            continue
         key = (str(getattr(task, "item_id", "")), int(getattr(task, "dispatch_generation", 0) or 0))
         tasks_map.setdefault(key, task)
 

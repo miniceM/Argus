@@ -297,7 +297,7 @@ def assert_upgrade_preserves_history(engine, tmp_path):
             )
         )
     runner = MigrationRunner(engine, ROOT / "migrations")
-    assert runner.apply_all() == [MIGRATION, "018_trajectory_acquisition_runtime.sql"]
+    assert runner.apply_all() == [MIGRATION, "018_trajectory_acquisition_runtime.sql", "019_trajectory_snapshot_outbox.sql"]
     assert runner.apply_all() == []
     runner.check_schema_compatibility()
     with engine.connect() as conn:

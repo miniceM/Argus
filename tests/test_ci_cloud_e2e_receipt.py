@@ -212,10 +212,7 @@ def test_trusted_candidate_explicitly_reconciles_policy_without_manual_approval(
     assert dispatch["env"]["PR_NUMBER"] == "${{ inputs.pr_number }}"
     assert dispatch["env"]["CANDIDATE_RUN_ID"] == "${{ github.run_id }}"
     assert dispatch["env"]["CANDIDATE_RUN_ATTEMPT"] == "${{ github.run_attempt }}"
-    assert '"candidate_run_id"' in dispatch["run"]
-    assert '"candidate_run_attempt"' in dispatch["run"]
-    assert "cloud-integration-policy.yml/dispatches" in dispatch["run"]
-    assert '"ref": "main"' in dispatch["run"]
+    assert dispatch["run"] == "python -m scripts.ci.refresh_cloud_policy"
     assert not any("LANGFUSE_" in str(value) for value in dispatch["env"].values())
 
     policy_path = Path(__file__).resolve().parents[1] / ".github/workflows/cloud-integration-policy.yml"

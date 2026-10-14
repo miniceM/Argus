@@ -210,6 +210,10 @@ def test_trusted_candidate_explicitly_reconciles_policy_without_manual_approval(
     assert checkout["with"]["persist-credentials"] is False
     assert dispatch["working-directory"] == "trusted-control"
     assert dispatch["env"]["PR_NUMBER"] == "${{ inputs.pr_number }}"
+    assert dispatch["env"]["CANDIDATE_RUN_ID"] == "${{ github.run_id }}"
+    assert dispatch["env"]["CANDIDATE_RUN_ATTEMPT"] == "${{ github.run_attempt }}"
+    assert '"candidate_run_id"' in dispatch["run"]
+    assert '"candidate_run_attempt"' in dispatch["run"]
     assert "cloud-integration-policy.yml/dispatches" in dispatch["run"]
     assert '"ref": "main"' in dispatch["run"]
     assert not any("LANGFUSE_" in str(value) for value in dispatch["env"].values())
@@ -219,6 +223,15 @@ def test_trusted_candidate_explicitly_reconciles_policy_without_manual_approval(
     triggers = policy.get("on", policy.get(True, {}))
     assert "workflow_dispatch" in triggers
     assert "pr_number" in triggers["workflow_dispatch"]["inputs"]
+    assert "candidate_run_id" in triggers["workflow_dispatch"]["inputs"]
+    assert "candidate_run_attempt" in triggers["workflow_dispatch"]["inputs"]
+    wait_steps = [
+        step for step in policy["jobs"]["evaluate"]["steps"]
+        if step.get("name") == "Wait for the exact dispatched candidate to finish"
+    ]
+    assert len(wait_steps) == 1
+    assert "workflow_dispatch" in wait_steps[0]["if"]
+    assert "wait-candidate" in wait_steps[0]["run"]
 
 
 def test_real_candidate_cloud_step_names_generate_passed_receipt() -> None:

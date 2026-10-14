@@ -144,6 +144,11 @@ def _verified_binding(binding):
     return value
 
 
+def judge_policy_mode(binding):
+    """策略冻结只读取经过完整 Binding 校验的模式，不接受旁路配置。"""
+    return _verified_binding(binding).mode
+
+
 @dataclass(frozen=True)
 class PreparedJudgeEvaluation:
     binding_digest: str

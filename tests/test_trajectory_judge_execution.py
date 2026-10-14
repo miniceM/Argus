@@ -38,7 +38,7 @@ def runtime(tmp_path):
     from test_trajectory_assembler import configured
     from test_trajectory_inputs import context, ready
 
-    registry, frozen, binding = registered()
+    registry, frozen, binding = registered(mode="release")
     setup = context.__wrapped__(SimpleNamespace(param="sqlite"), tmp_path)
     db, scope, contract, started_at = next(setup)
     try:
@@ -192,6 +192,17 @@ def test_verified_result_retains_typed_provenance_and_frozen_evidence(runtime, v
     assert "rationale" not in row.evidence and row.duration_ms == 5
     assert result.scores == {}
     assert result.quality_conclusion == verdict.lower()
+
+
+@pytest.mark.parametrize("verdict", ["PASS", "FAIL"])
+def test_release_judge_default_policy_decides_prepared_result(runtime, verdict):
+    from app.quality_policy import default_quality_policy
+
+    prepared = prepare(runtime, verdict=verdict, reason="TASK_COMPLETE" if verdict == "PASS" else "TASK_INCOMPLETE")
+    policy = default_quality_policy([runtime[2]])
+    result = evaluate(runtime, prepared, quality_policy=policy.to_payload())
+    assert result.quality_conclusion == verdict.lower()
+    assert result.scores == {}
 
 
 @pytest.mark.parametrize("damage", ["seal", "result", "input", "criteria", "scope", "context_scope", "context_ref", "expected", "raw_typed"])

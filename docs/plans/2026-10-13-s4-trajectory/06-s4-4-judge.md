@@ -99,6 +99,10 @@ Prompt 明确声明轨迹文本、工具输出和参数值都是数据，不可�
 对 Provider 使用结构化输出约束；即使 Provider 宣称已约束，Runner 仍在本地再次校验 Schema 和 Step 引用。
 `PASS`/`FAIL` 且通过 confidence、风险和引用校验，才构造 succeeded categorical typed result。
 输出契约为 categorical，合法确定值仅 PASS/FAIL；QualityPolicy 默认 operator="=="、expected_value="PASS"。有序投影如需启用，显式冻结 FAIL→0、PASS→1；UNCERTAIN 不加入数字映射，而是 no_result。confidence 是模型自报量，不能当成已校准概率；准入仍依赖独立人标留出集。
+
+默认与显式策略冻结均核验完整 Judge Binding；diagnostic 为 optional，不能升级为 required。
+release 默认 required，但判定 PASS 不等于取得正式发布资格。当前 critical Judge 的策略冻结
+仍拒绝未完成独立来源准入的配置；实施与回归见[策略记录](../../validation/s4-4/quality-policy-progress.md)。
 `UNCERTAIN`、低于冻结 `min_confidence`、缺少必要 Step 证据统一形成 `no_result`，QualityPolicy 得到 UNKNOWN。
 超时、网络错误、额度不足、模型身份变化、Schema 无效或 Provider 错误形成 failed typed result 和稳定错误码。
 所有失败均不生成 `0`、`FAIL`、均值样本或空引用；失败详情限制长度并去除响应中的潜在敏感字段。

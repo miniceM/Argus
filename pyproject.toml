@@ -12,3 +12,4 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = ["trajectory_local: mandatory S4 local Langfuse integration gate (prepared Docker and Agent environment)"]

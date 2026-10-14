@@ -45,10 +45,10 @@ jobs:
           argus eval run --help
 
       - name: Ruff
-        run: python -m ruff check services tests --output-format=github
+        run: python -m ruff check services tests scripts/ci --output-format=github
 
       - name: Compile Python sources
-        run: python -m compileall -q services tests
+        run: python -m compileall -q services tests scripts/ci
 
       - name: Validate YAML / JSON
         run: |
@@ -119,12 +119,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
+          python -m pip check
 
       - name: Run all tests with coverage
         env:
           TEST_POSTGRES_URL: postgresql+psycopg://argus:argus_password@localhost:5432/argus_test
         run: |
-          python -m pytest tests -q \
+          python -m pytest tests -q -m "not trajectory_local" \
             --junitxml=artifacts/junit.xml \
             --cov=services/demo-agent \
             --cov=services/eval-runner/app \
@@ -141,6 +142,41 @@ jobs:
           name: python-test-reports
           path: artifacts/
           if-no-files-found: ignore
+          retention-days: 14
+
+  trajectory-local:
+    name: S4 Local Langfuse Integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            tests/fixtures/trajectory_agents/requirements.txt
+      - name: Install Runner test dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Prepare hash-locked Agents and digest-pinned local services
+        run: make trajectory-prepare
+      - name: Verify real local ingestion and production invocation
+        run: |
+          mkdir -p artifacts
+          python -m pytest -q tests/test_trajectory_backend_integration.py tests/test_trajectory_observation_integration.py -m trajectory_local \
+            --basetemp=artifacts/s4-local --junitxml=artifacts/s4-junit.xml --tb=short
+      - name: Upload field and lineage evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: s4-local-observation-evidence
+          path: |
+            artifacts/s4-junit.xml
+            artifacts/s4-local/**/field-matrix.json
+          if-no-files-found: error
           retention-days: 14
 
   docker-build:
@@ -222,12 +258,13 @@ jobs:
           cache-dependency-path: |
             requirements-dev.txt
             services/eval-runner/requirements.txt
+            services/demo-agent/requirements.txt
 
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
-          python -m pip install -r services/eval-runner/requirements.txt
+          python -m pip check
 
       - name: Install frontend dependencies
         run: pnpm --dir services/console install --frozen-lockfile
@@ -255,72 +292,232 @@ jobs:
       - name: Console Playwright E2E Tests (Mock & Real API)
         run: pnpm --dir services/console test:e2e
 
-  cloud-e2e:
+  cloud-e2e-policy:
     name: Langfuse Cloud E2E
-    needs: [quality, unit-tests, docker-build, console]
-    if: >
-      vars.LANGFUSE_E2E_ENABLED == 'true' &&
-      (github.event_name != 'pull_request' ||
-       github.event.pull_request.head.repo.full_name == github.repository)
+    needs: [quality, unit-tests, docker-build, console, trajectory-local]
+    if: >-
+      always() &&
+      (github.event_name == 'pull_request' ||
+       (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    steps:
+      - name: Summarize no-secret Cloud coverage
+        env:
+          CI_CHECKS_JSON: ${{ toJSON(needs) }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          TESTED_SHA: ${{ github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          needs = json.loads(os.environ["CI_CHECKS_JSON"])
+          checks = {
+              "Code Quality": needs.get("quality", {}).get("result", "not run"),
+              "Full Python Tests": needs.get("unit-tests", {}).get("result", "not run"),
+              "Docker / Compose Validation": needs.get("docker-build", {}).get("result", "not run"),
+              "Console Quality & E2E": needs.get("console", {}).get("result", "not run"),
+              "S4 Local Langfuse Integration": needs.get("trajectory-local", {}).get("result", "not run"),
+          }
+          lines = [
+              "## Langfuse Cloud E2E coverage",
+              "",
+              "- Cloud state: `skipped_by_policy`",
+              "- Policy state: `awaiting trusted policy evaluation`",
+              "- Reason: Pull requests and non-main dispatches never receive Langfuse secrets.",
+              f"- Event/ref: `{os.environ['EVENT_NAME']}` / `{os.environ['REF_NAME']}`",
+              f"- PR: `{os.environ['PR_NUMBER'] or 'not applicable'}`",
+              f"- Head/base/tested SHA: `{os.environ['HEAD_SHA']}` / `{os.environ['BASE_SHA'] or 'not applicable'}` / `{os.environ['TESTED_SHA']}`",
+              "- Risk: `unclassified by trusted policy publisher`",
+              "- Regular CI:",
+              *[f"  - {name}: `{result}`" for name, result in checks.items()],
+              f"- Evidence: {os.environ['RUN_URL']}",
+          ]
+          Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text("\n".join(lines) + "\n", encoding="utf-8")
+          print("Cloud state: skipped_by_policy; no Langfuse secrets were accessed")
+          PY
+
+  cloud-e2e-main:
+    name: Main Langfuse Cloud E2E
+    needs: [quality, unit-tests, docker-build, console, trajectory-local]
+    if: >-
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: langfuse-e2e
+    permissions:
+      contents: read
     concurrency:
       group: argus-langfuse-cloud-e2e
       cancel-in-progress: false
-    env:
-      LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
-      LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
-      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
-
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Validate Langfuse Cloud secrets
+      - name: Validate main Cloud prerequisites
+        id: gate
+        if: always()
+        env:
+          LANGFUSE_E2E_ENABLED: ${{ vars.LANGFUSE_E2E_ENABLED }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          PYTHON_RESULT: ${{ needs.unit-tests.result }}
+          DOCKER_RESULT: ${{ needs.docker-build.result }}
+          CONSOLE_RESULT: ${{ needs.console.result }}
+          S4_RESULT: ${{ needs.trajectory-local.result }}
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$LANGFUSE_BASE_URL" || { echo "Missing LANGFUSE_BASE_URL in environment langfuse-e2e"; exit 1; }
-          test -n "$LANGFUSE_PUBLIC_KEY" || { echo "Missing LANGFUSE_PUBLIC_KEY in environment langfuse-e2e"; exit 1; }
-          test -n "$LANGFUSE_SECRET_KEY" || { echo "Missing LANGFUSE_SECRET_KEY in environment langfuse-e2e"; exit 1; }
+          if [[ "$QUALITY_RESULT" != success || "$PYTHON_RESULT" != success || "$DOCKER_RESULT" != success || "$CONSOLE_RESULT" != success || "$S4_RESULT" != success ]]; then
+            echo "cloud_state=not_run_upstream_failed" >> "$GITHUB_OUTPUT"
+            echo "Main Cloud E2E blocked: all five regular CI jobs must succeed." >&2
+            exit 1
+          fi
+          if [[ "$LANGFUSE_E2E_ENABLED" != true ]]; then
+            echo "cloud_state=blocked_disabled" >> "$GITHUB_OUTPUT"
+            echo "Main Cloud E2E blocked: LANGFUSE_E2E_ENABLED must equal true." >&2
+            exit 1
+          fi
+          echo "cloud_state=ready" >> "$GITHUB_OUTPUT"
 
-      - name: Create CI cloud env file
-        shell: bash
-        run: |
-          umask 077
-          {
-            printf 'LANGFUSE_BASE_URL=%s\n' "$LANGFUSE_BASE_URL"
-            printf 'LANGFUSE_PUBLIC_KEY=%s\n' "$LANGFUSE_PUBLIC_KEY"
-            printf 'LANGFUSE_SECRET_KEY=%s\n' "$LANGFUSE_SECRET_KEY"
-            # CI-only default: the managed Cloud API host also serves the UI. This must never
-            # become an application runtime fallback for ARGUS_LANGFUSE_DASHBOARD_URL.
-            printf 'ARGUS_LANGFUSE_DASHBOARD_URL=%s\n' "$LANGFUSE_BASE_URL"
-          } > .env.cloud
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.ref == 'refs/heads/main' && steps.gate.outputs.cloud_state == 'ready'
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: github.ref == 'refs/heads/main' && steps.gate.outputs.cloud_state == 'ready'
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: services/eval-runner/requirements.txt
 
       - name: Install async link verification dependencies
+        if: github.ref == 'refs/heads/main' && steps.gate.outputs.cloud_state == 'ready'
         run: |
           python -m pip install --upgrade pip
           python -m venv .venv
           .venv/bin/python -m pip install -r services/eval-runner/requirements.txt
 
+      - name: Validate Langfuse Cloud secrets
+        id: cloud-secrets
+        if: github.ref == 'refs/heads/main' && steps.gate.outputs.cloud_state == 'ready'
+        env:
+          LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -n "$LANGFUSE_BASE_URL" ]] || missing+=(LANGFUSE_BASE_URL)
+          [[ -n "$LANGFUSE_PUBLIC_KEY" ]] || missing+=(LANGFUSE_PUBLIC_KEY)
+          [[ -n "$LANGFUSE_SECRET_KEY" ]] || missing+=(LANGFUSE_SECRET_KEY)
+          if (( ${#missing[@]} )); then
+            echo "cloud_state=blocked_missing_secrets" >> "$GITHUB_OUTPUT"
+            printf 'Missing required test-environment secret: %s\n' "${missing[@]}" >&2
+            exit 1
+          fi
+          umask 077
+          {
+            printf 'LANGFUSE_BASE_URL=%s\n' "$LANGFUSE_BASE_URL"
+            printf 'LANGFUSE_PUBLIC_KEY=%s\n' "$LANGFUSE_PUBLIC_KEY"
+            printf 'LANGFUSE_SECRET_KEY=%s\n' "$LANGFUSE_SECRET_KEY"
+            printf 'ARGUS_LANGFUSE_DASHBOARD_URL=%s\n' "$LANGFUSE_BASE_URL"
+          } > .env.cloud
+          echo "cloud_state=ready" >> "$GITHUB_OUTPUT"
+
       - name: Run cloud end-to-end tests
+        id: cloud-e2e
+        if: github.ref == 'refs/heads/main' && steps.cloud-secrets.outputs.cloud_state == 'ready'
         env:
           E2E_RUN_SUFFIX: ${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
         run: bash scripts/ci-e2e-cloud.sh
 
-      - name: Upload E2E evidence
+      - name: Remove Cloud credentials file
         if: always()
+        run: rm -f .env.cloud
+
+      - name: Record Cloud state
+        id: summary
+        if: always()
+        env:
+          GATE_STATE: ${{ steps.gate.outputs.cloud_state }}
+          SECRET_STATE: ${{ steps.cloud-secrets.outputs.cloud_state }}
+          SECRET_OUTCOME: ${{ steps.cloud-secrets.outcome }}
+          E2E_OUTCOME: ${{ steps.cloud-e2e.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GATE_STATE" != ready ]]; then
+            state="${GATE_STATE:-not_run_upstream_failed}"
+          elif [[ "$SECRET_STATE" != ready ]]; then
+            state="${SECRET_STATE:-blocked_missing_secrets}"
+          elif [[ "$E2E_OUTCOME" == success ]]; then
+            state=passed
+          elif [[ "$E2E_OUTCOME" == cancelled || "$SECRET_OUTCOME" == cancelled ]]; then
+            state=cancelled
+          else
+            state=failed
+          fi
+          printf 'cloud_state=%s\n' "$state" >> "$GITHUB_OUTPUT"
+          echo "Cloud state: $state"
+
+      - name: Summarize main Cloud coverage
+        if: always()
+        env:
+          CLOUD_STATE: ${{ steps.summary.outputs.cloud_state }}
+          CLOUD_REASON: trusted main Cloud execution result
+          POLICY_STATE: main acceptance verifies actual Cloud execution
+          RISK_STATE: main push or authorized main dispatch
+          CI_CHECKS_JSON: ${{ toJSON(needs) }}
+        run: python -m scripts.ci.write_cloud_summary
+
+  main-cloud-acceptance:
+    name: Main Cloud Acceptance
+    needs: [quality, unit-tests, docker-build, console, trajectory-local, cloud-e2e-policy, cloud-e2e-main]
+    if: >-
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install trusted Cloud evidence parser dependency
+        run: python -m pip install PyYAML==6.0.3
+
+      - name: Verify exact main Cloud acceptance
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m scripts.ci.verify_main_cloud_acceptance
+
+      - name: Upload main Cloud acceptance receipt
+        if: success()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: langfuse-cloud-e2e-${{ github.run_id }}
-          path: artifacts/e2e/
-          if-no-files-found: ignore
-          retention-days: 14
+          name: main-cloud-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/main-cloud-acceptance/receipt.json
+          if-no-files-found: error
+          retention-days: 90

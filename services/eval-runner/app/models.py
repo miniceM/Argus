@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .security import validate_credential_ref, validate_endpoint_url
+from .trajectory.schema import Identity
 
 
 # ---------------------------------------------------------
@@ -219,6 +220,9 @@ class AgentVersionSpecValidator(BaseModel):
     is_idempotent: bool = Field(default=False, description="Whether remote call has no side-effects and is safe to retry on read timeout")
     artifact_ref: str | None = Field(default=None, description="Commit SHA or image digest")
     environment: str | None = None
+    trajectory_source_profile_id: Identity | None = Field(
+        default=None, strict=True, description="冻结来源 profile ID；声明本身不证明获准或完整，NULL 保持历史执行路径"
+    )
     metadata: dict[str, Any] | None = None
 
 
@@ -300,6 +304,9 @@ class AgentVersionResponse(BaseModel):
     trace_propagation: str
     is_idempotent: bool
     environment: str | None = None
+    trajectory_source_profile_id: Identity | None = Field(
+        default=None, strict=True, description="冻结来源 profile ID；声明本身不证明获准或完整，NULL 保持历史执行路径"
+    )
     is_active: bool
     created_at: datetime
 

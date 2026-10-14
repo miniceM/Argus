@@ -1,0 +1,131 @@
+# S4 本地真实观测夹具。由 local_runtime.py 生成随机凭据；从不加载宿主机 .env。
+x-environment: &environment
+  DATABASE_URL: postgresql://langfuse:${S4_DB_PASSWORD:?}@postgres:5432/langfuse
+  NEXTAUTH_URL: http://localhost:3000
+  SALT: ${S4_SALT:?}
+  ENCRYPTION_KEY: ${S4_ENCRYPTION_KEY:?}
+  TELEMETRY_ENABLED: "false"
+  CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_USER: langfuse
+  CLICKHOUSE_PASSWORD: ${S4_CLICKHOUSE_PASSWORD:?}
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: s4local
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${S4_MINIO_PASSWORD:?}
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: s4local
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${S4_MINIO_PASSWORD:?}
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_BATCH_EXPORT_ENABLED: "false"
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_TLS_ENABLED: "false"
+
+x-depends: &depends
+  postgres: {condition: service_healthy}
+  clickhouse: {condition: service_healthy}
+  minio: {condition: service_healthy}
+  redis: {condition: service_healthy}
+
+services:
+  web:
+    image: docker.langfuse.com/langfuse/langfuse:4.38.0@sha256:47ef2f121e2959c8458c209d118949ade25778017e3f5b75b1e45f72276811c3
+    depends_on: *depends
+    ports: ["127.0.0.1::3000"]
+    environment:
+      <<: *environment
+      NEXTAUTH_SECRET: ${S4_AUTH_SECRET:?}
+      LANGFUSE_INIT_ORG_ID: ${S4_ORG_ID:?}
+      LANGFUSE_INIT_ORG_NAME: S4 isolated fixture
+      LANGFUSE_INIT_PROJECT_ID: ${S4_PROJECT_ID:?}
+      LANGFUSE_INIT_PROJECT_NAME: S4 observations
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${S4_PUBLIC_KEY:?}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${S4_SECRET_KEY:?}
+      LANGFUSE_INIT_USER_EMAIL: fixture@example.invalid
+      LANGFUSE_INIT_USER_NAME: S4 fixture
+      LANGFUSE_INIT_USER_PASSWORD: ${S4_ADMIN_PASSWORD:?}
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://'+process.env.HOSTNAME+':3000/api/public/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 3s
+      timeout: 3s
+      retries: 120
+      start_period: 60s
+  worker:
+    image: docker.langfuse.com/langfuse/langfuse-worker:4.38.0@sha256:8631cf429efc4a2981d4e6ced4c005b9f6f620a4e34625baf60152301ec6d006
+    depends_on: *depends
+    environment: *environment
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://'+process.env.HOSTNAME+':3030/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 3s
+      timeout: 3s
+      retries: 120
+      start_period: 60s
+  postgres:
+    image: docker.io/postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_DB: langfuse
+      POSTGRES_PASSWORD: ${S4_DB_PASSWORD:?}
+      TZ: UTC
+      PGTZ: UTC
+    volumes: [postgres:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "langfuse"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  clickhouse:
+    image: docker.io/clickhouse/clickhouse-server:25.12@sha256:8a790dd3468db22b1d4e7b18a176f378ff5ff6053b9c48dd4ea1fa71a24c5ba6
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: ${S4_CLICKHOUSE_PASSWORD:?}
+    volumes: [clickhouse:/var/lib/clickhouse, clickhouse_logs:/var/log/clickhouse-server]
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:8123/ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  minio:
+    image: cgr.dev/chainguard/minio@sha256:dc455cdd4db6e390b1b26514f15ff37681a777bf8dab41aac445a0259f751e56
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" /data'
+    environment:
+      MINIO_ROOT_USER: s4local
+      MINIO_ROOT_PASSWORD: ${S4_MINIO_PASSWORD:?}
+    volumes: [minio:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: docker.io/redis:7@sha256:4fa24486b8bcca8eec45ee0eb166edc674795e53a2b53d1a9ef263eecebaac85
+    command: ["redis-server", "--maxmemory-policy", "noeviction"]
+    volumes: [redis:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      # 禁用出站地址转换，保留唯一的 loopback Web 入口；不改 Docker 全局设置。
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+volumes:
+  postgres: {}
+  clickhouse: {}
+  clickhouse_logs: {}
+  minio: {}
+  redis: {}

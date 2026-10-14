@@ -6,11 +6,12 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
-# Assembler 必需字段。缺失其中任一即视为证据不完整，
-# 但全部缺失仍可容忍为 DEGRADED_ONLY_ROOT（仅有根节点）。
+# 审计原语的默认字段列，不是冻结的 Trajectory Schema 或能力结论。
+# S4.1 的必需字段和降级必须根据真实 profile 矩阵单独定义。
 REQUIRED_OBSERVATION_FIELDS: tuple[str, ...] = (
     "observation_id",
     "trace_id",
@@ -32,26 +33,21 @@ class ParsedTraceparent:
 
 
 def parse_traceparent(value: str) -> ParsedTraceparent:
-    """解析并校验 W3C traceparent，格式非法时抛 ValueError."""
-    parts = (value or "").strip().split("-")
-    if len(parts) != 4:
-        raise ValueError(f"traceparent 必须为 version-traceid-spanid-flags 四段式，实际：{value!r}")
-    version, trace_id, span_id, flags = parts
-    if len(trace_id) != 32 or not _is_hex(trace_id):
-        raise ValueError(f"trace_id 必须为 32 位十六进制，实际：{trace_id!r}")
-    if len(span_id) != 16 or not _is_hex(span_id):
-        raise ValueError(f"parent span id 必须为 16 位十六进制，实际：{span_id!r}")
-    return ParsedTraceparent(
-        version=version, trace_id=trace_id.lower(), parent_span_id=span_id.lower(), flags=flags
+    """校验 W3C 已知字段；未来版本后缀不解析，错误不回显 Header."""
+    text = value.strip() if isinstance(value, str) else ""
+    match = re.fullmatch(
+        r"([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})(-.*)?", text,
     )
-
-
-def _is_hex(text: str) -> bool:
-    try:
-        int(text, 16)
-        return True
-    except ValueError:
-        return False
+    if not match:
+        raise ValueError("INVALID_TRACEPARENT")
+    version, trace_id, span_id, flags, suffix = match.groups()
+    if version == "ff" or (version == "00" and suffix is not None):
+        raise ValueError("INVALID_TRACEPARENT")
+    if int(trace_id, 16) == 0 or int(span_id, 16) == 0:
+        raise ValueError("INVALID_TRACEPARENT")
+    return ParsedTraceparent(
+        version=version, trace_id=trace_id, parent_span_id=span_id, flags=flags,
+    )
 
 
 def same_trace(first: ParsedTraceparent, second: ParsedTraceparent) -> bool:

@@ -59,6 +59,10 @@ make console-e2e
 
 Console UI 改动请先阅读 `.agents/skills/argus-design-system/SKILL.md`。
 
+### Dependabot 依赖更新
+
+根目录 `requirements-dev.txt` 通过 `-r` 引用 Eval Runner 与 Demo Agent 的运行依赖；新增 Python manifest 时，须核对引用链和 Dependabot 实际覆盖，不能假定根目录会扫描所有子项目。CI 共享 Python 环境在安装聚合依赖后执行 `python -m pip check`；依赖改动还应在干净的 Python 3.12 环境验证安装与依赖一致性。Runtime major 升级仍需人工准入，并验证受影响服务的真实运行路径；解析成功或静态配置测试不能替代该准入。
+
 ### Playwright E2E：隔离服务与端口
 
 从仓库根目录运行。先完成上述 Python 虚拟环境和 Console 依赖安装；浏览器项目使用 `channel: "chrome"`，本机需有可启动的 Google Chrome。配置来源为 `services/console/playwright.config.ts`、`services/console/vite.config.ts` 和 `services/console/package.json`。
@@ -104,13 +108,14 @@ lsof -nP -iTCP:28080 -iTCP:28083 -sTCP:LISTEN
 - 分支建议：`codex/<简短描述>`（其他前缀也可以，但请保持短且语义清晰）。
 - Commit 使用 Conventional Commits：`feat` / `fix` / `test` / `refactor` / `docs` / `chore`。
 - PR 描述包含：问题、方案、测试证据（命令与结果）、兼容性影响、风险。
-- PR 必须通过 CI 的 5 项检查：Code Quality、Full Python Tests、Docker / Compose Validation、Console Quality & E2E、Langfuse Cloud E2E。
+- PR 常规 CI 必须通过 `Code Quality`、`Full Python Tests`、`Docker / Compose Validation`、`Console Quality & E2E`、`S4 Local Langfuse Integration`；`Cloud Integration Policy` 按风险分类，低风险要求五项当前身份检查全绿，高风险另需匹配的可信 Cloud receipt。PR 的 `Langfuse Cloud E2E` 为 `skipped_by_policy`，不得误报为已运行。活动 Ruleset 是否已要求这些 context 必须通过 GitHub 远端配置核验，详见 [`docs/ci/cloud-e2e-policy.md`](docs/ci/cloud-e2e-policy.md)。
+- 涉及观测采集的改动先执行 `make trajectory-prepare`、`make trajectory-test`；夹具自动创建与清理隔离服务，不使用 Cloud 凭据。普通单元测试通过不能代替真实采集通过。实测来源与复现说明见 [S4.0 验收记录](docs/validation/s4-0/README.md)。
 
 ## 安全与数据
 
 - 不要提交真实 Token、密码、Cookie、API Key 或数据库凭证；`.env.poc` 仅允许演示凭据。
 - 不要在日志、Trace 或测试 Fixture 中写入真实 PII。
-- 演示与 E2E 使用的 Langfuse Key 应通过 GitHub Environment / Repository Variables 配置，外部 fork PR 默认不获得密钥。
+- 演示与 E2E 使用的 Langfuse Key 应通过 GitHub Environment Secrets 配置；仅非敏感配置放入 Variables，外部 fork PR 默认不获得密钥。
 
 ## 许可
 

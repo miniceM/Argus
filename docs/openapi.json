@@ -2868,6 +2868,20 @@
             ],
             "title": "Environment"
           },
+          "trajectory_source_profile_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[\\x21-\\x7e]{1,64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trajectory Source Profile Id",
+            "description": "冻结来源 profile ID；声明本身不证明获准或完整，NULL 保持历史执行路径"
+          },
           "metadata": {
             "anyOf": [
               {
@@ -3035,6 +3049,20 @@
               }
             ],
             "title": "Environment"
+          },
+          "trajectory_source_profile_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[\\x21-\\x7e]{1,64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trajectory Source Profile Id",
+            "description": "冻结来源 profile ID；声明本身不证明获准或完整，NULL 保持历史执行路径"
           },
           "is_active": {
             "type": "boolean",

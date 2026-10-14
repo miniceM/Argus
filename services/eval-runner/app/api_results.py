@@ -346,7 +346,12 @@ def get_launch_comparison(
         diffs: list[dict[str, Any]] = []
         comparable_baseline: list[dict[str, Any]] = []
         comparable_candidate: list[dict[str, Any]] = []
-        classification_counts: Counter[str] = Counter()
+        classification_counts: Counter[str] = Counter({
+            "REGRESSION": 0,
+            "IMPROVEMENT": 0,
+            "UNCHANGED": 0,
+            "NOT_COMPARABLE": 0,
+        })
         for case_id in all_case_ids:
             base_case = baseline_items.get(case_id)
             candidate_case = candidate_items.get(case_id)

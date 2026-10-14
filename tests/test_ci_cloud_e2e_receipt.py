@@ -2,13 +2,20 @@ from __future__ import annotations
 
 import json
 import stat
+import sys
 import zipfile
 from io import BytesIO
 from typing import Any
 
 import pytest
 
-from scripts.ci.ci_constants import CANDIDATE_ENVIRONMENT, CANDIDATE_WORKFLOW, REQUIRED_CI_CHECKS
+from scripts.ci import cloud_e2e_receipt as receipt_cli
+from scripts.ci.ci_constants import (
+    CANDIDATE_ENVIRONMENT,
+    CANDIDATE_WORKFLOW,
+    REQUIRED_CI_CHECKS,
+    REQUIRED_SECRETS,
+)
 from scripts.ci.cloud_e2e_policy import validate_trusted_receipt
 from scripts.ci.cloud_e2e_receipt import (
     CandidateReceiptError,
@@ -400,3 +407,64 @@ def test_candidate_is_revalidated_after_environment_approval(client: _Preparatio
 
 def test_candidate_revalidation_accepts_only_the_frozen_manifest_identity() -> None:
     verify_candidate_unchanged(_PreparationClient(), _manifest())
+
+
+def test_verify_cli_exports_validated_cloud_secrets_for_following_steps(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    workspace = tmp_path / "workspace"
+    candidate = workspace / "candidate"
+    workspace.mkdir()
+    candidate.mkdir()
+    github_env = tmp_path / "github_env"
+    github_env.write_text("", encoding="utf-8")
+    values = {
+        "LANGFUSE_BASE_URL": "https://langfuse.example",
+        "LANGFUSE_PUBLIC_KEY": "pk-test",
+        "LANGFUSE_SECRET_KEY": "sk-test",
+    }
+
+    monkeypatch.setattr(receipt_cli, "_client_from_environment", lambda: object())
+    monkeypatch.setattr(
+        receipt_cli,
+        "_artifact_bytes",
+        lambda client, run_id, name: _zip_json({"manifest.json": _manifest()}),
+    )
+    monkeypatch.setattr(receipt_cli, "verify_candidate_unchanged", lambda client, manifest: None)
+    monkeypatch.setenv("GITHUB_RUN_ID", str(RUN_ID))
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", str(ATTEMPT))
+    monkeypatch.setenv("PR_NUMBER", "118")
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+    monkeypatch.setenv("CANDIDATE_DIR", str(candidate))
+    monkeypatch.setenv("GITHUB_ENV", str(github_env))
+    for name, value in values.items():
+        monkeypatch.setenv(name, value)
+
+    assert receipt_cli._verify_cli() == 0
+
+    assert github_env.read_text(encoding="utf-8").splitlines() == [
+        f"{name}={values[name]}" for name in REQUIRED_SECRETS
+    ]
+    assert (candidate / ".env.cloud").read_text(encoding="utf-8").splitlines() == [
+        *(f"{name}={values[name]}" for name in REQUIRED_SECRETS),
+        f"ARGUS_LANGFUSE_DASHBOARD_URL={values['LANGFUSE_BASE_URL']}",
+    ]
+    captured = capsys.readouterr()
+    assert all(value not in captured.out + captured.err for value in values.values())
+
+
+@pytest.mark.parametrize(
+    ("command", "handler_name"),
+    [
+        ("prepare", "_prepare_cli"),
+        ("verify", "_verify_cli"),
+        ("record", "_record_cli"),
+    ],
+)
+def test_cli_dispatches_supported_commands(
+    command: str, handler_name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["cloud_e2e_receipt", command])
+    monkeypatch.setattr(receipt_cli, handler_name, lambda: 0)
+
+    assert receipt_cli.main() == 0

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import {
   Check,
   Copy,
@@ -36,6 +36,7 @@ export const LaunchesList: React.FC = () => {
   const [filterAgent, setFilterAgent] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("");
   const [filterQuality, setFilterQuality] = useState<string>("");
+  const [filterOnlyBaseline, setFilterOnlyBaseline] = useState<boolean>(false);
   const [copiedLaunchId, setCopiedLaunchId] = useState<string | null>(null);
 
   // Non-blocking enrichment: fetch registered agents to display readable names
@@ -84,6 +85,59 @@ export const LaunchesList: React.FC = () => {
     refetchInterval: (query) => launchPollingInterval(query.state.data as LaunchResponse[] | undefined),
   });
 
+  // Fetch active baselines for visible agents across comparison and standard environments
+  const agentEnvPairs = useMemo(() => {
+    const pairs = new Map<string, { agentId: string; environment: string }>();
+    for (const l of launches || []) {
+      const manifestEnv = ((l.manifest as any)?.comparison?.environment as string);
+      if (manifestEnv) {
+        pairs.set(`${l.agent_id}::${manifestEnv}`, { agentId: l.agent_id, environment: manifestEnv });
+      }
+      const agentEnv = ((l.manifest as any)?.agent?.environment as string);
+      if (agentEnv) {
+        pairs.set(`${l.agent_id}::${agentEnv}`, { agentId: l.agent_id, environment: agentEnv });
+      }
+      pairs.set(`${l.agent_id}::production`, { agentId: l.agent_id, environment: "production" });
+      pairs.set(`${l.agent_id}::staging`, { agentId: l.agent_id, environment: "staging" });
+      pairs.set(`${l.agent_id}::test`, { agentId: l.agent_id, environment: "test" });
+    }
+    return Array.from(pairs.values());
+  }, [launches]);
+
+  const baselineQueries = useQueries({
+    queries: agentEnvPairs.map(({ agentId, environment }) => ({
+      queryKey: queryKeys.baselines.detail(agentId, environment),
+      retry: false,
+      queryFn: async (): Promise<{ agentId: string; environment: string; launchId: string } | null> => {
+        try {
+          const res = await api.GET("/api/v1/agents/{agent_id}/baselines", {
+            params: { path: { agent_id: agentId }, query: { environment } },
+          });
+          if (res.data?.launch_id) {
+            return { agentId, environment, launchId: res.data.launch_id };
+          }
+          return null;
+        } catch {
+          return null;
+        }
+      },
+    })),
+  });
+
+  const activeBaselineLaunchIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const q of baselineQueries) {
+      if (q.data?.launchId) ids.add(q.data.launchId);
+    }
+    return ids;
+  }, [baselineQueries]);
+
+  const displayedLaunches = useMemo(() => {
+    if (!launches) return [];
+    if (!filterOnlyBaseline) return launches;
+    return launches.filter((l) => activeBaselineLaunchIds.has(l.id));
+  }, [launches, filterOnlyBaseline, activeBaselineLaunchIds]);
+
   const handleCopyId = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
@@ -100,7 +154,7 @@ export const LaunchesList: React.FC = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="评测发射台 (Experiment Launches)"
+        title="评测中心"
         description="查看、检索与触发 Agent 自动化评测任务，所有历史记录均严格锁定不可变快照 (Frozen Manifest)。"
         actions={(
           <>
@@ -166,7 +220,18 @@ export const LaunchesList: React.FC = () => {
           <option value="unknown">UNKNOWN (未知/未测)</option>
         </SelectInput>
 
-        {(filterAgent || filterStatus || filterQuality) && (
+        {/* Baseline Filter */}
+        <label className="flex items-center gap-1.5 min-h-6 text-xs text-foreground cursor-pointer select-none px-2 py-1 rounded hover:bg-surface-muted transition-colors">
+          <input
+            type="checkbox"
+            checked={filterOnlyBaseline}
+            onChange={(e) => setFilterOnlyBaseline(e.target.checked)}
+            className="rounded border-border text-primary focus:ring-focus size-3.5"
+          />
+          <span>仅看当前基线</span>
+        </label>
+
+        {(filterAgent || filterStatus || filterQuality || filterOnlyBaseline) && (
           <Button
             type="button"
             variant="quiet"
@@ -174,6 +239,7 @@ export const LaunchesList: React.FC = () => {
               setFilterAgent("");
               setFilterStatus("");
               setFilterQuality("");
+              setFilterOnlyBaseline(false);
             }}
             className="ml-auto min-h-7 px-2 text-xs underline underline-offset-2"
           >
@@ -206,9 +272,16 @@ export const LaunchesList: React.FC = () => {
         />
       )}
 
-      {!isLoading && !error && launches && launches.length > 0 && (
+      {!isLoading && !error && launches && launches.length > 0 && displayedLaunches.length === 0 && (
+        <EmptyState
+          title="未匹配到当前基线"
+          description="当前过滤条件下没有被绑定为当前生效基准 (Active Baseline) 的评测任务，请尝试关闭“仅看当前基线”筛选。"
+        />
+      )}
+
+      {!isLoading && !error && displayedLaunches.length > 0 && (
         <Panel className="ui-table-shell">
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="ui-table min-w-table-lg table-fixed text-sm text-foreground-secondary">
               <colgroup>
                 <col className="w-col-xs" />
@@ -233,13 +306,21 @@ export const LaunchesList: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {launches.map((launch) => {
+                {displayedLaunches.map((launch) => {
                   const agentName = agentNameById.get(launch.agent_id);
                   const isCopied = copiedLaunchId === launch.id;
                   const langfuseLink = getLangfuseLinkView(launch);
+                  const isActiveBaseline = activeBaselineLaunchIds.has(launch.id);
 
                   return (
-                    <tr key={launch.id} className="hover:bg-surface-muted/80 transition-colors">
+                    <tr
+                      key={launch.id}
+                      className={
+                        isActiveBaseline
+                          ? "bg-primary-subtle/25 hover:bg-primary-subtle/40 transition-colors"
+                          : "hover:bg-surface-muted/80 transition-colors"
+                      }
+                    >
                       {/* Launch ID */}
                       <td className="px-3 py-2.5">
                         <div className="flex min-w-0 items-center gap-1.5">
@@ -250,6 +331,15 @@ export const LaunchesList: React.FC = () => {
                           >
                             {launch.id}
                           </Link>
+                          {isActiveBaseline && (
+                            <span
+                              data-testid="active-baseline-badge"
+                              className="shrink-0 px-1.5 py-0.5 rounded text-2xs font-semibold bg-pass-subtle text-pass border border-pass-border"
+                              title="当前生效质量基准 (Active Baseline)"
+                            >
+                              当前基线
+                            </span>
+                          )}
                           <button
                             type="button"
                             onClick={(e) => handleCopyId(launch.id, e)}
@@ -344,7 +434,7 @@ export const LaunchesList: React.FC = () => {
 
                       {/* Actions */}
                       <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="relative flex items-center justify-end gap-2">
                           <Link
                             to={`/launches/${launch.id}`}
                             aria-label={`查看 Launch ${launch.id} 详情`}
@@ -366,7 +456,7 @@ export const LaunchesList: React.FC = () => {
                             </a>
                           ) : (
                             <span
-                              className="text-xs text-muted-foreground"
+                              className="sr-only"
                               title={langfuseLink.title}
                               data-testid="langfuse-link-reason"
                             >

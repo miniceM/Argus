@@ -5,7 +5,8 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "cron"
+      cronjob: "0 0 1 */2 *"
     commit-message:
       prefix: "ci"
     labels:
@@ -19,7 +20,8 @@ updates:
   - package-ecosystem: "npm"
     directory: "/services/console"
     schedule:
-      interval: "weekly"
+      interval: "cron"
+      cronjob: "0 0 1 */2 *"
     commit-message:
       prefix: "build"
     labels:
@@ -29,7 +31,8 @@ updates:
   - package-ecosystem: "docker"
     directory: "/services/eval-runner"
     schedule:
-      interval: "weekly"
+      interval: "cron"
+      cronjob: "0 0 1 */2 *"
     commit-message:
       prefix: "build"
     labels:
@@ -37,7 +40,8 @@ updates:
   - package-ecosystem: "docker"
     directory: "/services/console"
     schedule:
-      interval: "weekly"
+      interval: "cron"
+      cronjob: "0 0 1 */2 *"
     commit-message:
       prefix: "build"
     labels:
@@ -45,7 +49,8 @@ updates:
   - package-ecosystem: "docker"
     directory: "/services/demo-agent"
     schedule:
-      interval: "weekly"
+      interval: "cron"
+      cronjob: "0 0 1 */2 *"
     commit-message:
       prefix: "build"
     labels:
@@ -53,7 +58,8 @@ updates:
   - package-ecosystem: "docker"
     directory: "/deploy/langfuse"
     schedule:
-      interval: "weekly"
+      interval: "cron"
+      cronjob: "0 0 1 */2 *"
     commit-message:
       prefix: "build"
     labels:
@@ -64,7 +70,8 @@ updates:
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "cron"
+      cronjob: "0 0 1 */2 *"
     commit-message:
       prefix: "build"
     labels:

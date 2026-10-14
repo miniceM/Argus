@@ -49,7 +49,7 @@ const ShellNav: React.FC<ShellNavProps> = ({ dashboardUrl, dashboardStatus, onNa
     <nav aria-label="主导航" className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-3">
       <NavLink to="/credentials" className={navLinkClass} onClick={onNavigate}>
         <ShieldCheck aria-hidden="true" className="size-4 shrink-0 text-muted-foreground group-hover:text-current" />
-        <span>Credentials</span>
+        <span>凭证</span>
       </NavLink>
       <NavLink to="/agents" className={navLinkClass} onClick={onNavigate}>
         <Bot aria-hidden="true" className="size-4 shrink-0 text-muted-foreground group-hover:text-current" />
@@ -57,7 +57,7 @@ const ShellNav: React.FC<ShellNavProps> = ({ dashboardUrl, dashboardStatus, onNa
       </NavLink>
       <NavLink to="/launches" className={navLinkClass} onClick={onNavigate}>
         <FlaskConical aria-hidden="true" className="size-4 shrink-0 text-muted-foreground group-hover:text-current" />
-        <span>Launches</span>
+        <span>评测</span>
       </NavLink>
     </nav>
 

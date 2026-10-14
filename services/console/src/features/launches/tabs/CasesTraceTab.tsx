@@ -58,6 +58,17 @@ const ruleSummary = (evaluation: QualityEvaluation): string => {
   return `违反规则：${violated.map(named).join("、")}`;
 };
 
+const outputReasonText = (reason: string | null | undefined): string => {
+  if (!reason) return "";
+  const map: Record<string, string> = {
+    UPSTREAM_ERROR: "远程追踪记录加载超时，请点击重试",
+    OBSERVATION_NOT_FOUND: "远程 Observation 记录不存在或已清理",
+    LANGFUSE_UNAVAILABLE: "Langfuse 观测服务暂不可用",
+    NO_OUTPUT_REFERENCE: "未记录输出引用",
+  };
+  return map[reason] ? `${map[reason]} (${reason})` : reason;
+};
+
 export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
   launchId,
   snapshotId,
@@ -550,7 +561,7 @@ const CaseDetailPanel: React.FC<{
               ) : baselineOutputStatus === "FETCH_FAILED" ? (
                 <div className="space-y-1.5" data-testid="baseline-fetch-failed">
                   <p className="text-fail text-micro">
-                    获取基准输出失败{baselineOutput.reason ? `: ${baselineOutput.reason}` : ""}
+                    获取基准输出失败{baselineOutput.reason ? `: ${outputReasonText(baselineOutput.reason)}` : ""}
                   </p>
                   {(baselineOutput.retryable ?? true) && (
                     <Button
@@ -614,7 +625,7 @@ const CaseDetailPanel: React.FC<{
                 <p className="text-micro text-timeout">输出超过大小限制，已截断显示。</p>
               )}
               {candidateOutput.reason && (
-                <p className="text-micro text-muted-foreground">{candidateOutput.reason}</p>
+                <p className="text-micro text-muted-foreground">{outputReasonText(candidateOutput.reason)}</p>
               )}
               {outputStatus === "AVAILABLE" && candidateOutput.output != null ? (
                 <div className="text-foreground">

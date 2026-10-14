@@ -158,7 +158,7 @@ const costReasonText: Record<CostReason, string> = {
   BASELINE_NOT_BOUND: "尚未绑定 Baseline，暂不能计算成本差值。",
   COST_NOT_RECORDED: "未记录成本的 Case 不按 0 计入。",
   INVALID_COST_EVIDENCE: "存在无效成本证据，成本暂不可比较。",
-  INCOMPLETE_ATTEMPT_COST: "至少一个 Retry Attempt 缺少成本证据，完整 Case 成本不可用。",
+  INCOMPLETE_ATTEMPT_COST: "部分调用未采集到成本数据，单例成本暂不可用。",
   MIXED_CURRENCIES: "存在多种币种，不会直接相加。",
   COST_CURRENCY_MISMATCH: "Baseline 与 Candidate 币种不同，不会直接比较。",
   COST_SCOPE_MISMATCH: "Baseline 与 Candidate 成本测量范围不同。",
@@ -333,19 +333,27 @@ export const ComparisonReport: React.FC<{
     ...Object.keys(cohort?.baseline.score_means ?? {}),
     ...Object.keys(cohort?.candidate.score_means ?? {}),
   ])).sort();
+  const hasCohortCost = Boolean(
+    cohort?.baseline.cost_per_case != null ||
+    cohort?.candidate.cost_per_case != null ||
+    (cohort?.baseline.cost_case_count ?? 0) > 0 ||
+    (cohort?.candidate.cost_case_count ?? 0) > 0
+  );
   const aggregateRows = cohort ? [
     { label: "质量通过率 (Quality Pass Rate)", baseline: percent(cohort.baseline.pass_rate), candidate: percent(cohort.candidate.pass_rate), delta: percentagePointDelta(cohort.baseline.pass_rate, cohort.candidate.pass_rate) },
     { label: "Critical Failure Cases", baseline: number(cohort.baseline.critical_failure_count), candidate: number(cohort.candidate.critical_failure_count), delta: signedDelta(cohort.baseline.critical_failure_count, cohort.candidate.critical_failure_count) },
     { label: "P95 Latency", baseline: number(cohort.baseline.p95_latency_ms, " ms"), candidate: number(cohort.candidate.p95_latency_ms, " ms"), delta: signedDelta(cohort.baseline.p95_latency_ms, cohort.candidate.p95_latency_ms, 2, " ms") },
-    {
-      label: "Cost / Case",
-      baseline: money(cohort.baseline.cost_per_case, cohort.baseline.cost_currency),
-      candidate: money(cohort.candidate.cost_per_case, cohort.candidate.cost_currency),
-      delta: comparisonSummary?.cost_comparison?.status === "COMPARABLE"
-        ? signedMoney(comparisonSummary.cost_comparison.delta, comparisonSummary.cost_comparison.currency)
-        : "—",
-    },
-    { label: "Cost Coverage", baseline: costCoverage(cohort.baseline), candidate: costCoverage(cohort.candidate), delta: percentagePointDelta(cohort.baseline.cost_coverage, cohort.candidate.cost_coverage) },
+    ...(hasCohortCost ? [
+      {
+        label: "Cost / Case",
+        baseline: money(cohort.baseline.cost_per_case, cohort.baseline.cost_currency),
+        candidate: money(cohort.candidate.cost_per_case, cohort.candidate.cost_currency),
+        delta: comparisonSummary?.cost_comparison?.status === "COMPARABLE"
+          ? signedMoney(comparisonSummary.cost_comparison.delta, comparisonSummary.cost_comparison.currency)
+          : "—",
+      },
+      { label: "Cost Coverage", baseline: costCoverage(cohort.baseline), candidate: costCoverage(cohort.candidate), delta: percentagePointDelta(cohort.baseline.cost_coverage, cohort.candidate.cost_coverage) },
+    ] : []),
     ...evaluatorIds.map((id) => ({
       label: `Score · ${id}`,
       baseline: number(cohort.baseline.score_means?.[id]),
@@ -353,6 +361,12 @@ export const ComparisonReport: React.FC<{
       delta: signedDelta(cohort.baseline.score_means?.[id], cohort.candidate.score_means?.[id]),
     })),
   ] : [];
+  const hasHealthCost = Boolean(
+    fullRunBaseline?.cost_per_case != null ||
+    fullRunCandidate?.cost_per_case != null ||
+    (fullRunBaseline?.cost_case_count ?? 0) > 0 ||
+    (fullRunCandidate?.cost_case_count ?? 0) > 0
+  );
   const healthRows = fullRunCandidate ? [
     { label: "Total Cases", baseline: count(fullRunBaseline?.total_cases), candidate: count(fullRunCandidate.total_cases), delta: signedDelta(fullRunBaseline?.total_cases, fullRunCandidate.total_cases, 0) },
     { label: "Evaluated Cases", baseline: count(fullRunBaseline?.evaluated_cases), candidate: count(fullRunCandidate.evaluated_cases), delta: signedDelta(fullRunBaseline?.evaluated_cases, fullRunCandidate.evaluated_cases, 0) },
@@ -360,16 +374,24 @@ export const ComparisonReport: React.FC<{
     { label: "Execution Errors", baseline: number(fullRunBaseline?.execution_error_count), candidate: number(fullRunCandidate.execution_error_count), delta: signedDelta(fullRunBaseline?.execution_error_count, fullRunCandidate.execution_error_count) },
     { label: "Execution Error Rate", baseline: percent(fullRunBaseline?.execution_error_rate), candidate: percent(fullRunCandidate.execution_error_rate), delta: percentagePointDelta(fullRunBaseline?.execution_error_rate, fullRunCandidate.execution_error_rate) },
     { label: "Evaluator Errors", baseline: number(fullRunBaseline?.evaluator_error_count), candidate: number(fullRunCandidate.evaluator_error_count), delta: signedDelta(fullRunBaseline?.evaluator_error_count, fullRunCandidate.evaluator_error_count) },
-    { label: "Run Cost / Case", baseline: money(fullRunBaseline?.cost_per_case, fullRunBaseline?.cost_currency), candidate: money(fullRunCandidate.cost_per_case, fullRunCandidate.cost_currency), delta: "—" },
-    { label: "Run Cost Coverage", baseline: costCoverage(fullRunBaseline), candidate: costCoverage(fullRunCandidate), delta: "—" },
+    ...(hasHealthCost ? [
+      { label: "Run Cost / Case", baseline: money(fullRunBaseline?.cost_per_case, fullRunBaseline?.cost_currency), candidate: money(fullRunCandidate.cost_per_case, fullRunCandidate.cost_currency), delta: "—" },
+      { label: "Run Cost Coverage", baseline: costCoverage(fullRunBaseline), candidate: costCoverage(fullRunCandidate), delta: "—" },
+    ] : []),
   ] : [];
   const comparability = comparison?.comparability;
   const formal = comparison?.formal;
-  const costExplanations = [
+  const hasAnyCostRecorded = (fullRunBaseline?.cost_case_count ?? 0) > 0
+    || (fullRunCandidate?.cost_case_count ?? 0) > 0
+    || (comparisonSummary?.baseline?.cost_case_count ?? 0) > 0
+    || (comparisonSummary?.candidate?.cost_case_count ?? 0) > 0
+    || (comparisonSummary?.cost_comparison?.baseline_cost_per_case != null)
+    || (comparisonSummary?.cost_comparison?.candidate_cost_per_case != null);
+  const costExplanations = hasAnyCostRecorded ? [
     { label: "全量 Baseline", reason: fullRunBaseline?.cost_unavailable_reason },
     { label: "全量 Candidate", reason: fullRunCandidate?.cost_unavailable_reason },
     { label: "共同可比 Case", reason: comparisonSummary?.cost_comparison?.reason },
-  ].filter((entry): entry is { label: string; reason: CostReason } => entry.reason != null);
+  ].filter((entry): entry is { label: string; reason: CostReason } => entry.reason != null) : [];
 
   if (!canReadResults) return null;
 

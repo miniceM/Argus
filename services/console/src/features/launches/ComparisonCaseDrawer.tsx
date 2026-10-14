@@ -9,13 +9,27 @@ import { JsonViewer } from "../../components/JsonViewer";
 type ComparisonCaseOutput = import("../../api/schema").components["schemas"]["ComparisonCaseOutputResponse"];
 type OutputSide = ComparisonCaseOutput["baseline"];
 
+const reasonTextMap: Record<string, string> = {
+  UPSTREAM_ERROR: "远程追踪记录加载超时，请点击重试",
+  OBSERVATION_NOT_FOUND: "远程 Observation 记录不存在或已清理",
+  LANGFUSE_UNAVAILABLE: "Langfuse 观测服务暂不可用",
+  NO_OUTPUT_REFERENCE: "未记录输出引用",
+};
+
 const OutputPanel: React.FC<{ title: string; side: OutputSide }> = ({ title, side }) => (
   <section aria-label={title} className="min-w-0 space-y-2 rounded-lg border border-border p-3">
     <div className="flex items-center justify-between gap-2">
       <h3 className="font-semibold">{title}</h3>
       <span className="rounded bg-canvas px-2 py-1 text-micro">{side.output_status}</span>
     </div>
-    {side.reason && <p className="text-xs text-muted-foreground">{side.reason}</p>}
+    {side.reason && (
+      <div className="space-y-0.5">
+        <p className="text-xs text-muted-foreground">{side.reason}</p>
+        {reasonTextMap[side.reason] && (
+          <p className="text-micro text-fail/80">{reasonTextMap[side.reason]}</p>
+        )}
+      </div>
+    )}
     {side.truncated && <p className="text-xs text-timeout">输出过大，已截断显示。</p>}
     {side.output_status === "AVAILABLE" && <JsonViewer data={side.output} title={`${title} Agent Output`} />}
     <JsonViewer data={side.scores ?? {}} title={`${title} Scores`} />

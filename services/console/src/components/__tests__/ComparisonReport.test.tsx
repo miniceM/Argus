@@ -190,6 +190,7 @@ describe("ComparisonReport", () => {
   let latestSummaryReads: number;
   let costReason: string | null;
   let fullRunCostUnavailable: boolean;
+  let noCostRecorded: boolean;
 
   beforeEach(() => {
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -197,6 +198,7 @@ describe("ComparisonReport", () => {
     latestSummaryReads = 0;
     costReason = null;
     fullRunCostUnavailable = false;
+    noCostRecorded = false;
     comparabilityOverride = null;
     formalOverride = null;
     window.history.replaceState({}, "", "/launches/candidate-launch");
@@ -244,6 +246,29 @@ describe("ComparisonReport", () => {
             page.summary.cost_comparison.candidate_cost_per_case = null;
             page.summary.cost_comparison.candidate_coverage = 0;
           }
+        }
+        if (noCostRecorded) {
+          page.summary.comparable_cohort.baseline.cost_per_case = null;
+          page.summary.comparable_cohort.baseline.total_cost = null;
+          page.summary.comparable_cohort.baseline.cost_case_count = 0;
+          page.summary.comparable_cohort.baseline.cost_coverage = 0;
+          page.summary.comparable_cohort.candidate.cost_per_case = null;
+          page.summary.comparable_cohort.candidate.total_cost = null;
+          page.summary.comparable_cohort.candidate.cost_case_count = 0;
+          page.summary.comparable_cohort.candidate.cost_coverage = 0;
+          page.summary.cost_comparison.baseline_cost_per_case = null;
+          page.summary.cost_comparison.candidate_cost_per_case = null;
+          page.summary.baseline.cost_per_case = null;
+          page.summary.baseline.total_cost = null;
+          page.summary.baseline.cost_case_count = 0;
+          page.summary.baseline.cost_coverage = 0;
+          page.summary.candidate.cost_per_case = null;
+          page.summary.candidate.total_cost = null;
+          page.summary.candidate.cost_case_count = 0;
+          page.summary.candidate.cost_coverage = 0;
+          page.summary.baseline.cost_unavailable_reason = "INCOMPLETE_ATTEMPT_COST";
+          page.summary.candidate.cost_unavailable_reason = "INCOMPLETE_ATTEMPT_COST";
+          page.summary.cost_comparison.reason = "INCOMPLETE_ATTEMPT_COST";
         }
         if (comparabilityOverride) page.comparability = comparabilityOverride;
         if (formalOverride) page.formal = { ...page.formal, ...formalOverride };
@@ -436,6 +461,14 @@ describe("ComparisonReport", () => {
     expect(row).toHaveTextContent("—");
     expect(within(aggregateTable).getByRole("row", { name: /Cost Coverage/ })).toHaveTextContent("0/8 (0.0%)");
     expect(await screen.findByText(/成本说明：/)).toHaveTextContent("未记录成本的 Case 不按 0 计入");
+  });
+
+  it("hides cost explanations when neither baseline nor candidate has any cost recorded", async () => {
+    noCostRecorded = true;
+    renderReport();
+    const aggregateTable = await screen.findByRole("table", { name: "Baseline 与 Candidate 聚合指标对比" });
+    expect(screen.queryByText(/成本说明：/)).not.toBeInTheDocument();
+    expect(within(aggregateTable).queryByRole("row", { name: /Cost \/ Case/ })).not.toBeInTheDocument();
   });
 
   it("explains full-run mixed currencies without hiding comparable-cohort costs", async () => {

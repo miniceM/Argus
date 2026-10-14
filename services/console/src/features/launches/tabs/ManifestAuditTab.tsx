@@ -232,11 +232,15 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
             <div className="space-y-1 text-muted-foreground">
               <div>
                 <span>Agent: </span>
-                <strong className="text-foreground">{manifestField(manifestAgent.id, launch.agent_id)}</strong>
+                <strong className="text-foreground">{manifestField(manifestAgent.agent_id ?? manifestAgent.id, launch.agent_id)}</strong>
               </div>
               <div>
                 <span>Version: </span>
                 <strong className="font-mono text-foreground">{manifestField(manifestAgent.version, launch.agent_version)}</strong>
+              </div>
+              <div>
+                <span>Environment: </span>
+                <strong className="text-foreground">{manifestField(manifestAgent.environment, (launch as any).environment ?? "默认 (Default)")}</strong>
               </div>
               <div className="truncate" title={manifestAgent.endpoint || ""}>
                 <span>Endpoint: </span>

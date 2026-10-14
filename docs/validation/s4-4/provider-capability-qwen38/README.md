@@ -17,6 +17,9 @@
 使用当前 Argus `judge_output_schema`，包括 Step ref 和受控 reason 枚举。
 输入是人工构造的格式能力探针；没有业务轨迹、客户数据或人工业务标签。
 仅请求本机回环服务，凭据经已有官方配置链在内存中使用，未进入任何归档。
+本次为直接 HTTP 能力探针；当前生产 `OpenAICompatibleJudgeProvider` 尚未发送或冻结
+上述 `seed` / thinking 选项。这两个探针的计数不能直接套用到当前 Adapter 的预算：
+必须先完成 execution profile 与 Adapter 接线，再按正式请求复验。
 
 | 请求 | 观察 | 本地 tokenizer / 服务输入 tokens | 输出 tokens | 首次 / 归档复测秒数 |
 |---|---|---|---|---|

@@ -10,6 +10,8 @@ os.environ.setdefault("ARGUS_BUILD_ID", "test-build-001")
 os.environ.setdefault("RUNNER_VERSION", "0.1.0")
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 if str(ROOT / "services" / "eval-runner") not in sys.path:
     sys.path.insert(0, str(ROOT / "services" / "eval-runner"))
 

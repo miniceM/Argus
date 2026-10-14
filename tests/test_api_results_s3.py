@@ -98,9 +98,31 @@ def test_summary_and_comparison_use_frozen_baseline_and_trace_links(setup_runtim
 
     comparison = api_results.get_launch_comparison(candidate_launch, classification=None, limit=50, cursor=0)
     assert comparison.baseline_snapshot_id == baseline_snapshot
-    assert comparison.classification_counts == {"REGRESSION": 1}
+    assert comparison.classification_counts == {
+        "REGRESSION": 1,
+        "IMPROVEMENT": 0,
+        "UNCHANGED": 0,
+        "NOT_COMPARABLE": 0,
+    }
     assert comparison.items[0]["baseline_trace_url"].endswith(f"trace-{baseline_launch}")
     assert comparison.items[0]["candidate_trace_url"].endswith(f"trace-{candidate_launch}")
+
+
+def test_comparison_zero_regression_classification_counts(setup_runtime, monkeypatch):
+    db_mgr, _, _, _, _, _ = setup_runtime
+    baseline_launch, baseline_snapshot = _launch(db_mgr, "pass", 1.0)
+    candidate_launch, _ = _launch(db_mgr, "pass", 1.0, baseline_snapshot)
+    monkeypatch.setattr(api_results, "_db_manager", lambda: db_mgr)
+
+    comparison = api_results.get_launch_comparison(candidate_launch, classification=None, limit=50, cursor=0)
+    assert "REGRESSION" in comparison.classification_counts
+    assert comparison.classification_counts["REGRESSION"] == 0
+    assert comparison.classification_counts["UNCHANGED"] == 1
+    assert comparison.classification_counts["IMPROVEMENT"] == 0
+    assert comparison.classification_counts["NOT_COMPARABLE"] == 0
+    assert comparison.summary.classification_counts["REGRESSION"] == 0
+    assert comparison.diagnostic.classification_counts["REGRESSION"] == 0
+
 
 
 def test_baseline_http_api_uses_revision_cas(setup_runtime, monkeypatch):

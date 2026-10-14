@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from scripts.ci.ci_constants import CANDIDATE_ENVIRONMENT, CANDIDATE_WORKFLOW, POLICY_CONTEXT, REQUIRED_CI_CHECKS
+from scripts.ci.ci_constants import CANDIDATE_WORKFLOW, POLICY_CONTEXT, REQUIRED_CI_CHECKS
 from scripts.ci.cloud_e2e_receipt import build_candidate_receipt
 from scripts.ci.github_api import GitHubApiError
 from scripts.ci.publish_cloud_policy import (

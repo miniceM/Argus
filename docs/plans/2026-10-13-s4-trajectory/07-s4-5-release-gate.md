@@ -1,6 +1,6 @@
 # S4.5 Trajectory Release Gate 实施方案
 
-状态：**PR #136 已批准方案；T7 正在 PR #181 实施。T4 已交付 required evidence、Snapshot/Baseline 资格和比较合同基础；本期继续完成 Snapshot 级投影、门禁增量及整期验收，不表示 T7 已完成。**
+状态：**PR #136 已批准方案；PR #181 已汇入 T7 确定性门禁、比较与 Snapshot 级投影实现，整期尚未验收。** 阶段结果见[T7 记录](../../validation/s4-5/t7-acceptance.md)与[当前归档](../../validation/s4-final/884b181/README.md)；Judge 阶段 B、后续数据和发布验收交维护者/管理员，见[交接说明](../../validation/s4-final/administrator-validation-handoff.md)。
 核验基线：2026-10-13，`main@4b043739c63357ecc10131e1ba54bc1bc53d862a`。
 关联：[Issue #5](https://github.com/miniceM/Argus/issues/5)、[#132](https://github.com/miniceM/Argus/issues/132)。
 共同契约：[01 技术设计](01-technical-design.md)；总阶段见[完整实施计划](08-implementation-plan.md)，ID 对照见[验收矩阵](09-acceptance-matrix.md)。

@@ -1,6 +1,6 @@
 # Issue #5：S4 轨迹评测完整实施方案
 
-**状态：提议 / 待方案评审，尚未实施。** 本文档集服务于 [#5](https://github.com/miniceM/Argus/issues/5) 及 [#127](https://github.com/miniceM/Argus/issues/127)、[#128](https://github.com/miniceM/Argus/issues/128)、[#129](https://github.com/miniceM/Argus/issues/129)、[#130](https://github.com/miniceM/Argus/issues/130)、[#131](https://github.com/miniceM/Argus/issues/131)、[#132](https://github.com/miniceM/Argus/issues/132)。文档 PR 只关联这些 issue；不使用关闭关键字，也不代表产品验收完成。
+**状态：PR #136 已合并为设计基线，实施汇总在 PR #181；完整 S4 尚未验收。** 本文档集服务于 [#5](https://github.com/miniceM/Argus/issues/5) 及 [#127](https://github.com/miniceM/Argus/issues/127)、[#128](https://github.com/miniceM/Argus/issues/128)、[#129](https://github.com/miniceM/Argus/issues/129)、[#130](https://github.com/miniceM/Argus/issues/130)、[#131](https://github.com/miniceM/Argus/issues/131)、[#132](https://github.com/miniceM/Argus/issues/132)。已有代码和证据保留，后续需要数据的测试交管理员，详见[交接说明](../../validation/s4-final/administrator-validation-handoff.md)与[固定版本证据](../../validation/s4-final/884b181/README.md)。原始 79+10 标准与关闭条件不变，交接或跳过不计通过。
 
 ## 1. 如何阅读和执行
 

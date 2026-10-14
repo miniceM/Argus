@@ -1,6 +1,6 @@
 # S4 轨迹评测总体技术契约
 
-状态：**提议，待方案 PR 评审；本文件描述目标实现，不表示功能已交付。** 核验基线：2026-10-13，`main@4b043739c63357ecc10131e1ba54bc1bc53d862a`。范围：[Issue #5](https://github.com/miniceM/Argus/issues/5)、[#127](https://github.com/miniceM/Argus/issues/127)–[#132](https://github.com/miniceM/Argus/issues/132)。入口：[方案目录](README.md)。
+状态：**PR #136 已合并的技术契约；实施汇总在 PR #181，完整验收仍待完成。** 本文保留目标实现与原始约束，实际证据与后续数据责任见[管理员交接](../../validation/s4-final/administrator-validation-handoff.md)。原设计核验基线：2026-10-13，`main@4b043739c63357ecc10131e1ba54bc1bc53d862a`。范围：[Issue #5](https://github.com/miniceM/Argus/issues/5)、[#127](https://github.com/miniceM/Argus/issues/127)–[#132](https://github.com/miniceM/Argus/issues/132)。入口：[方案目录](README.md)。
 
 ## 1. 目标、现状与方案选择
 

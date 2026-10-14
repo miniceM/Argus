@@ -1,6 +1,6 @@
 # S4.2：首批轨迹规则与逐用例诊断
 
-状态：**提议，待方案 PR 评审；本文是待实施方案，不表示功能已交付。**
+状态：**PR #136 已合并设计；规则、资格链与固定 Snapshot 诊断已汇入 PR #181。** 已有证据见[当前版本归档](../../validation/s4-final/884b181/README.md)；后续实际数据与真实 Trace 验收交管理员，见[交接说明](../../validation/s4-final/administrator-validation-handoff.md)。原始验收标准保留，不以受控浏览器测试替代真实链路。
 
 关联：[父 Issue #5](https://github.com/miniceM/Argus/issues/5)、[Issue #129](https://github.com/miniceM/Argus/issues/129)。共同契约见 [01-technical-design.md](01-technical-design.md) §3–§7。
 

@@ -1,6 +1,6 @@
 # S4.1 Acquisition、StandardTrajectory 与只读 Assembler：#128
 
-状态：提议，待方案 PR 评审；本文件是实现蓝图，不表示功能已经交付。核验基线：2026-10-13，main@4b043739c63357ecc10131e1ba54bc1bc53d862a。字段、枚举、函数签名和 digest 语义统一服从 [01 技术契约](01-technical-design.md)；不得在本文件另起接口或枚举。
+状态：PR #136 已合并设计；采集、冻结制品与恢复实现已汇入 PR #181，最终数据验收交管理员，见[交接说明](../../validation/s4-final/administrator-validation-handoff.md)。原设计核验基线：2026-10-13，main@4b043739c63357ecc10131e1ba54bc1bc53d862a。字段、枚举、函数签名和 digest 语义统一服从 [01 技术契约](01-technical-design.md)；不得在本文件另起接口或枚举。
 
 ## 目标、现状与 Issue 修订
 

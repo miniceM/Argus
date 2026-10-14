@@ -1,6 +1,6 @@
 # S4.3：轨迹参数规则、重复调用与脱敏
 
-状态：**T6 本地实施与阶段门禁通过，PR #181 发布 CI 待核验。参数治理、可信因果子序列、重复调用和签名 HUMAN 已完成整期真实来源、正式消费者、安全出口验证及独立审阅修复复核；不代表完整 S4 验收。**
+状态：**T6 本地实施与阶段门禁通过，既有证据保留在 PR #181；不代表完整 S4 验收。** 参数治理、可信因果子序列、重复调用、签名 HUMAN、真实来源消费者和安全出口的既有实测与独立复核按原版本解释。后续生产数据与发布验收交管理员，见[交接说明](../../validation/s4-final/administrator-validation-handoff.md)，不等待 GitHub Actions 才交付材料。
 
 最新证据：[T6 逐项验收记录](../../validation/s4-3/t6-acceptance.md)、[最终稳定回执](../../validation/s4-3/final-stable-receipt.json)。两种来源共 60 份治理校准及四类扩展规则的正式 Worker/Snapshot/API/重评通过；完整真实门禁 86 passed / 0 skipped，隔离 PostgreSQL 下 `make validate` 为 2186 passed / 0 skipped，Console 单测 858 passed、E2E 128 passed。下文保留各次历史结果，最新回执以稳定源码 SHA-256 为准；发布 CI 尚待核验。
 

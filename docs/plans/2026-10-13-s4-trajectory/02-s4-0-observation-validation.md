@@ -1,6 +1,6 @@
 # S4.0 观测链路验证：#127
 
-状态：提议，待方案 PR 评审；以下为实施和验收设计，不表示测试或修复已经完成。核验基线：2026-10-13，main@4b043739c63357ecc10131e1ba54bc1bc53d862a。共同契约见 [01 技术契约](01-technical-design.md)。
+状态：PR #136 已合并设计，真实链路实现与阶段证据已汇入 PR #181；最终数据验收交管理员，不据此宣布 S40 全部通过。见[固定版本证据](../../validation/s4-final/884b181/README.md)及[交接说明](../../validation/s4-final/administrator-validation-handoff.md)。原设计核验基线：2026-10-13，main@4b043739c63357ecc10131e1ba54bc1bc53d862a。共同契约见 [01 技术契约](01-technical-design.md)。
 
 ## 目标、现状与 Issue 修订
 

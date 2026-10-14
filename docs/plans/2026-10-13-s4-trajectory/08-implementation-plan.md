@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12 / FastAPI / Pydantic / SQLAlchemy / PostgreSQL；Langfuse当前锁定SDK `4.16.0`、服务 `4.38.0`；OTel；测试Agent `pydantic-ai-slim==2.55.0`（无extras、FunctionModel），与Runner分离环境；React / TypeScript / Vite / Vitest / Playwright；Node 22、pnpm。
 
-**Spec:** [01-technical-design.md](01-technical-design.md)。分期细节见 [02](02-s4-0-observation-validation.md)、[03](03-s4-1-acquisition-and-schema.md)、[04](04-s4-2-rules-and-diagnosis.md)、[05](05-s4-3-arguments-and-redaction.md)、[06](06-s4-4-judge.md)、[07](07-s4-5-release-gate.md)。状态：提议 / 待实施。
+**Spec:** [01-technical-design.md](01-technical-design.md)。分期细节见 [02](02-s4-0-observation-validation.md)、[03](03-s4-1-acquisition-and-schema.md)、[04](04-s4-2-rules-and-diagnosis.md)、[05](05-s4-3-arguments-and-redaction.md)、[06](06-s4-4-judge.md)、[07](07-s4-5-release-gate.md)。状态：PR #136 已合并设计，实施汇总 PR #181；后续数据测试交管理员，原计划与验收依赖保留。
 
 ## 1. Global Constraints
 

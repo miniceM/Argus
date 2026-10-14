@@ -1,6 +1,6 @@
 # S4.4 Trajectory Judge 实施方案
 
-状态：**PR #136 已批准方案；T8 正在 PR #181 实施。输出、统计、定义、安全准备、异步传输、预算账本与冻结执行器桥接已实现；正式 Worker/recovery、真实校准与准入尚未交付。**
+状态：**PR #136 已批准方案；PR #181 保留已实现的 T8 基础，剩余实施交维护者。** 输出、统计、定义、安全准备、异步传输、预算账本与冻结执行器桥接已实现；正式 Worker/recovery、真实校准与准入尚未交付。边界见[#131 交接](../../validation/s4-4/maintainer-handoff.md)；后续数据测试交管理员，不计为通过。
 核验基线：2026-10-13，`main@4b043739c63357ecc10131e1ba54bc1bc53d862a`。
 关联：[Issue #5](https://github.com/miniceM/Argus/issues/5)、[#131](https://github.com/miniceM/Argus/issues/131)。
 共同契约：[01 技术设计](01-technical-design.md)；阶段顺序见[完整实施计划](08-implementation-plan.md)，验收追踪见[验收矩阵](09-acceptance-matrix.md)。

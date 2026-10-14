@@ -10,11 +10,11 @@ on:
         required: true
         type: string
       expected_head_sha:
-        description: Exact 40-character PR head SHA reviewed for Cloud validation
+        description: Exact 40-character PR head SHA recorded by trusted CI
         required: true
         type: string
       expected_base_sha:
-        description: Exact 40-character current main/base SHA reviewed for Cloud validation
+        description: Exact 40-character current main/base SHA recorded by trusted CI
         required: true
         type: string
 
@@ -60,6 +60,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ inputs.pr_number }}
+          GITHUB_ACTOR: ${{ github.actor }}
           EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
           EXPECTED_BASE_SHA: ${{ inputs.expected_base_sha }}
         run: python -m scripts.ci.cloud_e2e_receipt prepare

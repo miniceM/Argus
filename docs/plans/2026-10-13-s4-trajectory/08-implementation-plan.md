@@ -64,6 +64,12 @@
 
 交付方式更新（2026-10-14）：按用户要求，#160–#180 的全部实现汇入 [PR #181](https://github.com/miniceM/Argus/pull/181)，19 个未合并源 PR 已关闭，#162/#165 已合并并继承；源分支与历史保留。后续任务继续向该汇总 PR 追加可独立验证、单一目的的提交。PR 用 `Refs` 关联当前 issue；只有对应 issue 的全部验收完成后才使用关闭引用。
 
+实施责任更新（2026-10-14）：用户将 #131 剩余工作交给维护者，已开发成果保留；
+当前代理继续 T0–T7 确定性部分及不依赖 Judge 完成的最终验证。
+T8、S45-08 阶段 B 和母 issue 的 Judge 验收要求保持原定义，
+标记交接/待验，不计通过、不提前关闭 #131、#132 或 #5。
+当前实现、剩余事项和安全边界见[维护者交接](../../validation/s4-4/maintainer-handoff.md)。
+
 ## 4. T0：证明真实 Observation 链路
 
 **Files:** 拟新增 `tests/test_trajectory_observation_integration.py`、`tests/fixtures/trajectory_agents/`；复用或补齐 PR #133 的 `observation_link.py`；必要时最小修改 `execution.py/worker.py`。详细技术方案：[02](02-s4-0-observation-validation.md)。

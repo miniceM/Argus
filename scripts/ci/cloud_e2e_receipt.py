@@ -792,6 +792,14 @@ def _verify_cli() -> int:
             + f"ARGUS_LANGFUSE_DASHBOARD_URL={values['LANGFUSE_BASE_URL']}\n",
             encoding="utf-8",
         )
+        # The following workflow step runs the existing Cloud E2E script, which
+        # reads the credentials from its process environment as well as from
+        # Compose's --env-file. Keep secret expressions confined to this
+        # trusted, approval-gated step and hand values to later steps using the
+        # runner-provided environment file.
+        with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as handle:
+            for name in REQUIRED_SECRETS:
+                handle.write(f"{name}={values[name]}\n")
     except (GitHubApiError, CandidateReceiptError, KeyError, ValueError, OSError) as exc:
         print(f"Trusted candidate revalidation failed closed ({type(exc).__name__})", file=sys.stderr)
         return 1

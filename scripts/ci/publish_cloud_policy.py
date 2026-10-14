@@ -286,7 +286,7 @@ def find_trusted_candidate_validation(
         )
     except CandidateReceiptError as exc:
         message = str(exc)
-        if any(token in message for token in ("changed after approval", "no longer matches current main", "current regular CI run changed")):
+        if any(token in message for token in ("changed after CI", "no longer matches current main", "current regular CI run changed")):
             return _candidate_result("pending", "candidate identity or regular CI changed during validation", target_url=target_url)
         return _candidate_result("failure", "invalid_trusted_receipt", cloud_state="failed", target_url=target_url)
 

@@ -18,12 +18,37 @@
 | 五项常规检查尚未全部完成 | `pending` | `skipped_by_policy` | 否 |
 | 任一常规检查失败、取消、skip、缺失或身份不匹配 | `failure` / `error` | `skipped_by_policy` | 否 |
 | 窄白名单低风险变更且五项当前身份检查全绿 | `success` | `skipped_by_policy` | 是，但仅当该 context 已由 Ruleset 要求且 provider 正确 |
+| 受限中风险：已有普通 Python 测试或 Console 展示组件变更，五项当前身份检查全绿 | `success` | `skipped_by_policy` | 是；无需 Cloud Secret，但必须有常规 CI 证据 |
 | 高风险变更、五项全绿、没有匹配的可信 candidate | `pending` | `skipped_by_policy` | 否 |
 | 高风险 candidate 失败、错身份、缺审批 / Job / step / evidence / receipt | `failure` / `error` | `failed` | 否 |
 | 高风险 candidate 的 head、base、merge SHA、CI attempt、main revision 与当前 PR 完全匹配，审批 / 实际 Cloud / artifact 重算全部成功 | `success` | `passed` | 是，但仅当该 context 已由 Ruleset 要求且 provider 正确 |
 | main 的 Cloud 实际步骤未执行或 Main Cloud Acceptance receipt 不存在 | Main Cloud Acceptance 不成功 | `blocked_*` / `not_run_*` | 否；正式 i18n 发布也阻断 |
 
-Unknown、API 限流/超时、分页错误、解析错误、未支持文件格式一律不能分类成低风险或沿用旧成功状态。Commit status 绑定 head SHA；publisher 同时比对 base SHA 与当前 main，main 更新时必须重算 open PR。
+Unknown、API 限流/超时、分页错误、解析错误、未支持文件格式一律不能分类成低/中风险或沿用旧成功状态。Commit status 绑定 head SHA；publisher 同时比对 base SHA 与当前 main，main 更新时必须重算 open PR。
+
+## 风险分类与自动完成条件
+
+普通 PR 始终运行五项常规检查，PR Job 不获取 Langfuse Secrets。策略风险等级只决定是否**额外**要求人工审批的可信 Cloud E2E，不意味着绕过其他 Required Checks：
+
+- **Low**：纯 `docs/**/*.md` 修改（普通文件，非 symlink），以及经过 manifest + pnpm lockfile 闭包验证的 Console 开发依赖更新。
+- **Medium**：仅修改已有的、非可执行 `100644` 普通文件，且全部属于 `tests/test_*.py` 普通测试（排除 CI、Cloud、Langfuse、轨迹、发布、认证、凭证、策略、安全与通过率基线测试），或 `services/console/src/components/**` / `pages/**` 的普通 `.tsx` / `.css` 展示文件（排除路径中涉及 auth、Cloud、Credential、Policy、Release、Gate、Secret、Security、Token、Session 等敏感词）。允许混合正常文档，但任何不符合条件的文件会将整个 PR 升级为 High。Medium 仍要求五项全绿，并不代表代码未经审查可直接合并。
+- **High**：所有其他情况，包括运行时/backend、Langfuse 连接、凭证、Release Gate、安全、Actions/workflow、`scripts/ci`、Cloud 测试和策略自身、未知或不完整变更。必须取得与当前 PR head/base/main/CI run attempt 精确匹配、人工批准的可信 Cloud receipt。
+
+中风险是逐步放开“无需 Cloud 真实访问仍可完整验证”的严格路径白名单，**不是**把所有业务代码无条件降级为 Medium；扩展白名单需要实际调用影响分析、测试证据及安全评审。普通 UI/测试日常修改可自动得到 `Cloud Integration Policy` Success；其他仍需要人工 Cloud 授权。
+
+在 PR 检查列表中，`Cloud Integration Policy` 是独立 Commit Status，不是 `Langfuse Cloud E2E` Job。高风险状态 Pending 且没有候选运行链接时，其 target URL 会指向 `Trusted Cloud Candidate` 的手动派发页面。点击 `Run workflow`，选择可信 `main`，填入 PR 编号及审核过的完整 head/base SHA，然后通过 `langfuse-e2e-candidate` 的审批，等待 receipt 和 Policy 两个工作流完成。不要把 `skipped_by_policy` 的绿色 job 作为真实 Cloud 覆盖。
+
+### 可信控制器的受控应急修复（非正常合并捷径）
+
+当可信控制器自身存在缺陷，导致正常候选收据**无法被生成**，且修复 PR 因同一控制器无法获得要求的 status 时，采用一次性的管理员灾难恢复流程，而非在代码中放宽 `high`/receipt 判断：
+
+1. 冻结修复 PR 的完整 Head SHA 与当前 Main SHA；独立双人核对差异仅修复控制器缺陷，无扩大 Secrets、Token 或工作流写权限范围。
+2. 要求五项常规 CI 在该精确修复 HEAD 全绿，记录 PR、CI run、失败的旧收据 run/job 以及审查结论。
+3. 由有权限的仓库管理员按组织批准的例外变更流程执行**一次**受控合并并登记审计记录；不持久加入 Ruleset bypass、不从 Required Checks 移除 Cloud Context，不将此流程用于正常高风险功能变更。
+4. 立刻验证修复后的 main CI、真实 Main Cloud Acceptance 与 Policy publisher；在最新 main 上重新对受影响的高风险 PR 派发 Trusted Cloud Candidate，检验三段 Job（prepare / candidate-cloud / receipt）全部成功，以及当前 SHA 的 Policy Status 更新。
+5. 恢复常规严格门禁并复查 Ruleset、Environment 审批和专用测试凭证配置。main 或 PR head/base 变动后旧 receipt 不再有效。
+
+历史实例：[PR #188](https://github.com/miniceM/Argus/pull/188) 修复 Actions API workflow path 误判。2026-10-14 经五项常规 CI 全绿后，采用受控恢复合并（main `b7933f8ae6abf7124992ce7b8863136659ce31b4`）；此前候选 run `38531335635` 的 Cloud job SUCCESS、receipt job FAILURE。此记录只说明控制器源码恢复，不能代替后续 Main Cloud / Environment / Ruleset 的真实远端验收。
 
 ## 管理员配置清单
 

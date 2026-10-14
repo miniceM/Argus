@@ -316,7 +316,6 @@ def test_low_risk_policy_passes_without_cloud_and_keeps_cloud_skipped() -> None:
     assert decision["cloud_state"] == "skipped_by_policy"
 
 
-
 def test_scoped_medium_risk_passes_without_candidate_after_five_ci_checks() -> None:
     client = _PolicyClient()
     client.file_changes = [{"filename": "tests/test_agent_registry.py", "status": "modified"}]
@@ -345,7 +344,7 @@ def test_pending_high_risk_links_to_manual_trusted_cloud_workflow() -> None:
 
 
 def test_medium_decision_rejects_forged_cloud_success() -> None:
-    from scripts.ci.publish_cloud_policy import PolicyPublisherError, _validate_decision
+    from scripts.ci.publish_cloud_policy import _validate_decision
 
     decision = {
         "schema_version": 1,

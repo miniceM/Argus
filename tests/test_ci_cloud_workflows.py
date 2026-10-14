@@ -179,6 +179,7 @@ def test_trusted_candidate_builds_without_secrets_then_runs_existing_cloud_suite
     script = (ROOT / "scripts/ci-e2e-cloud.sh").read_text()
     assert 'source "$ROOT/scripts/ci/load-cloud-env.sh"' in script
     assert 'load_cloud_environment_file "$COMPOSE_ENV_FILE"' in script
+    assert "scripts.ci.cloud_error_summary" in script
     assert "ARGUS_CLOUD_BUILD_IMAGES" in script
     assert 'false) "${COMPOSE[@]}" up -d ;;' in script
 

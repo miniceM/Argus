@@ -13,12 +13,16 @@ COMPOSE=(docker compose --env-file "$COMPOSE_ENV_FILE" -f docker-compose.cloud.y
 source "$ROOT/scripts/ci/load-cloud-env.sh"
 load_cloud_environment_file "$COMPOSE_ENV_FILE"
 STATUS=0
+BOOTSTRAP_RESPONSE_FILE=""
 
 cleanup() {
   STATUS=$?
   if [ "$STATUS" -ne 0 ]; then
     "${COMPOSE[@]}" ps >"$ARTIFACT_DIR/docker-compose-ps.txt" 2>&1 || true
     "${COMPOSE[@]}" logs --no-color >"$ARTIFACT_DIR/docker-compose.log" 2>&1 || true
+  fi
+  if [[ -n "$BOOTSTRAP_RESPONSE_FILE" ]]; then
+    rm -f "$BOOTSTRAP_RESPONSE_FILE"
   fi
   "${COMPOSE[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
   exit "$STATUS"
@@ -43,7 +47,22 @@ esac
 "$ROOT/scripts/wait-http.sh" http://localhost:18080/health 180
 
 echo "== Bootstrap Dataset =="
-curl -fsS -X POST http://localhost:18080/admin/bootstrap   | tee "$ARTIFACT_DIR/bootstrap.json"   | python3 -m json.tool
+BOOTSTRAP_RESPONSE_FILE=$(mktemp)
+bootstrap_status="000"
+if ! bootstrap_status=$(curl -sS -X POST http://localhost:18080/admin/bootstrap \
+  -o "$BOOTSTRAP_RESPONSE_FILE" -w '%{http_code}'); then
+  python3 -m scripts.ci.cloud_error_summary \
+    --status "${bootstrap_status:-000}" "$BOOTSTRAP_RESPONSE_FILE"
+  exit 1
+fi
+if [[ ! "$bootstrap_status" =~ ^2[0-9][0-9]$ ]]; then
+  python3 -m scripts.ci.cloud_error_summary \
+    --status "$bootstrap_status" "$BOOTSTRAP_RESPONSE_FILE"
+  exit 1
+fi
+tee "$ARTIFACT_DIR/bootstrap.json" < "$BOOTSTRAP_RESPONSE_FILE" | python3 -m json.tool
+rm -f "$BOOTSTRAP_RESPONSE_FILE"
+BOOTSTRAP_RESPONSE_FILE=""
 
 echo "== Run baseline Agent v1 =="
 curl -fsS -X POST http://localhost:18080/experiments/run   -H 'content-type: application/json'   -d "$(python3 - "$V1_NAME" <<'PY'

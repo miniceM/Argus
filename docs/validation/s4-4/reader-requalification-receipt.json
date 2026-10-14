@@ -1,0 +1,28 @@
+{
+  "schema_version": "s4-reader-requalification-receipt-v1",
+  "runtime_head": "e01bbf335320e68d5925a986ba63a39d79c684c7",
+  "reader_artifact_digest": "sha256:8e17811ca31ab2fd85640e7369cb0a327cfecb530070847fc636860bb071b5d3",
+  "previous_approval_report_sha256": "935cfa9104495b6389182e20b5969b6e8f176e95c8ec85d8030af639df8f4a7c",
+  "source_clean_after_run": true,
+  "groups": 9,
+  "independent_samples": 90,
+  "pytest": {
+    "passed": 9,
+    "deselected": 58,
+    "skipped": 0,
+    "failed": 0,
+    "errors": 0,
+    "wall_seconds": 452.5
+  },
+  "raw_metadata_sha256": "ae3b07d2bf7ac43b35cfe28743d88435ce7fe8ad1f62e997d399679caa4f4ad3",
+  "compressed_metadata_sha256": "409c2ed3bb7adb233ff57f315546d55110a1f2106c406ec581e5ae6c28d35748",
+  "compressed_metadata_bytes": 68177,
+  "raw_metadata_bytes": 2307595,
+  "evidence": {
+    "summary": "reader-requalification-summary.json",
+    "metadata": "reader-requalification-field-matrix.json.gz"
+  },
+  "command": "python -u -m pytest -vv -x tests/test_trajectory_observation_integration.py -k test_reader_qualification_repeated_real_samples -m trajectory_local --basetemp=/tmp/argus-s4-reader-e01bbf3-20261014 --junitxml=/tmp/argus-s4-reader-e01bbf3-20261014.xml --tb=short",
+  "full_real_gate": "pending",
+  "real_judge_inference": "not_completed"
+}

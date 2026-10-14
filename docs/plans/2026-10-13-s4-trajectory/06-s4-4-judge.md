@@ -63,6 +63,7 @@ Provider 无法报告 Resolved Model 或不支持冻结的 JSON Schema/预算时
 
 Judge 接收固定 EvaluationContext，但只读取 trajectory 内的脱敏 input/output、获准的 expected criteria 和 evidence ref；不得把为旧规则保留的原始 context.output/input_payload/expected_output 直接出站。expected criteria 在请求构造前通过同一 allowlist、内容与长度检查，安全摘要参加调用身份。Step 的因果/scope 字段只作为冻结上下文。
 实际准备入口须先验证 Manifest、Checkpoint 原 Dataset 输入和 Artifact 归属，再在短事务内预裁定经过验证的 `expected_output`。外部预裁定 criteria 必须与该安全投影的 scope、policy 和摘要一致；同 Case 替换条件也须拒绝。纯请求构造函数不得读取任意业务 Context 字段，不能用调用者自报的摘要代替来源校验。
+离线 `PreparedJudgeRequest` 仅在同一 Runner 进程内使用；只有 `prepare_judge_request` 完成 DB 归属与权威 criteria 校验后才以进程随机 HMAC seal 绑定完整消息摘要、scope/ref、定义、criteria 与 Step 集，纯 builder 不签发，Provider 出站前重验。可复现 `input_digest` 不包含 seal；公开 SHA-256 不能充当准备来源证明。seal 不落库、不跨进程复用，恢复须重新从原 Checkpoint/Artifact 准备；它证明本进程已完成来源准备，不代替最终 generation/lease CAS 或真实 Provider 准入。
 Adapter 的入口与规则输入保持同构，并显式接收 Runner 已验证的 Binding 与 Manifest schema：
 
 ```python

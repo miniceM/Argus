@@ -39,6 +39,8 @@ T8 已实施严格输出验证与校准统计，见[初始契约证据](contract
 
 安全请求切片见[固定证据与安全请求](input-progress.md)：已增加实际 Checkpoint/Artifact 准备入口、来自经过验证的冻结 Dataset 的 criteria 来源匹配、最小脱敏数据区、冻结能力要求和整份消息预算；尚未接 Provider、Worker 或恢复执行器。
 
+已增加[单次有界异步传输](provider-progress.md)，落实实际准备入口 seal、HTTP 生命周期、精确解码参数、响应身份与严格解析。真实 Provider/模型能力准入、持久预算与正式 Worker/recovery 仍未完成；上述安全输入切片的历史状态保持原版本解释。
+
 ## 本地 Provider 只读探针
 
 2026-10-14 已按本机环境与 oMLX 手册，使用官方配置链在请求内取得凭据，仅探测回环服务的模型目录和状态，未打印凭据、修改配置或发送推理请求。

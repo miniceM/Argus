@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import select
@@ -7,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from .db import DatabaseManager
 from .db_models import BaselineBindingRecord, ExperimentLaunchRecord, RunResultSnapshotRecord
-from .environment_contracts import normalize_environment, require_snapshot_environment
+from .environment_contracts import environment_match_reasons, normalize_environment, require_snapshot_environment
 
 
 class BaselineConflictError(ValueError):
@@ -133,3 +134,32 @@ def get_baseline(db_manager: DatabaseManager, agent_id: str, environment: str) -
             raise RuntimeError("Baseline binding points to a missing result snapshot")
         # Detach-safe response requires scalar JSON fields, which are already loaded.
         return binding, snapshot
+
+
+@dataclass(frozen=True)
+class ActiveBaselineState:
+    is_active_baseline: bool = False
+    baseline_revision: int | None = None
+
+
+def active_baseline_states(db_manager: DatabaseManager, launches: list[ExperimentLaunchRecord]) -> dict[str, ActiveBaselineState]:
+    """仅查当前页，固定一次 SQL；管理列不能替代 Snapshot 的冻结证据。"""
+    states = {launch.id: ActiveBaselineState() for launch in launches}
+    if not states:
+        return states
+    with db_manager.get_session() as session:
+        rows = session.execute(select(
+            ExperimentLaunchRecord.id, BaselineBindingRecord.revision,
+            BaselineBindingRecord.environment, RunResultSnapshotRecord.manifest,
+        ).join(BaselineBindingRecord, (
+            (BaselineBindingRecord.agent_id == ExperimentLaunchRecord.agent_id)
+            & (BaselineBindingRecord.environment == ExperimentLaunchRecord.environment)
+        )).join(RunResultSnapshotRecord, (
+            (RunResultSnapshotRecord.id == BaselineBindingRecord.result_snapshot_id)
+            & (RunResultSnapshotRecord.launch_id == ExperimentLaunchRecord.id)
+            & (RunResultSnapshotRecord.agent_id == ExperimentLaunchRecord.agent_id)
+        )).where(ExperimentLaunchRecord.id.in_(states))).all()
+        for launch_id, revision, environment, manifest in rows:
+            if not environment_match_reasons(manifest, environment):
+                states[launch_id] = ActiveBaselineState(True, revision)
+    return states

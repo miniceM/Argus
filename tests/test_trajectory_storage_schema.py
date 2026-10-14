@@ -297,7 +297,7 @@ def assert_upgrade_preserves_history(engine, tmp_path):
             )
         )
     runner = MigrationRunner(engine, ROOT / "migrations")
-    assert runner.apply_all() == [MIGRATION]
+    assert runner.apply_all() == sorted(path.name for path in (ROOT / "migrations").glob("*.sql") if path.name >= MIGRATION)
     assert runner.apply_all() == []
     runner.check_schema_compatibility()
     with engine.connect() as conn:

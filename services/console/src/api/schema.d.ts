@@ -1842,6 +1842,12 @@ export interface components {
         };
         /** ExperimentLaunchResponse */
         ExperimentLaunchResponse: {
+            /** Environment */
+            environment: string;
+            /** Is Active Baseline */
+            is_active_baseline: boolean;
+            /** Baseline Revision */
+            baseline_revision: number | null;
             /** Id */
             id: string;
             /** Name */
@@ -3068,6 +3074,8 @@ export interface operations {
                 limit?: number | null;
                 /** @description Optional offset */
                 offset?: number;
+                /** @description Launch execution environment; omitted means all. ID reads ignore list filters. */
+                environment?: string | null;
             };
             header?: never;
             path?: never;

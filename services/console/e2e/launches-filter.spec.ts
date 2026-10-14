@@ -19,6 +19,7 @@ const launches: Launch[] = [
   ["fraud-unknown", "fraud-agent", "COMPLETED", "unknown"],
 ].map(([id, agent_id, status, quality_conclusion]) => ({
   id, name: id, agent_id, status, quality_conclusion,
+  environment: "production", is_active_baseline: false, baseline_revision: null,
   agent_version: "1.0.0", agent_version_id: `version-${agent_id}`,
   dataset_name: "filter-regression", dataset_version: createdAt,
   manifest: {}, langfuse_sync_status: "SYNCED", created_at: createdAt,

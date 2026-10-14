@@ -31,7 +31,7 @@ def _launch(db_mgr, quality, score, *, baseline_snapshot_id=None, observation_id
         "agent": {"agent_id": "test-agent", "version": "v1", "spec_digest": "digest"},
         "evaluators": [{"id": "correctness", "version": "1.0.0", "threshold": 0.8, "direction": "higher_is_better"}],
         "runner": {"runner_version": "0.1.0", "build_id": "test-build-001", "mapping_engine_version": "mapping-v1"},
-        "comparison": {"baseline_snapshot_id": baseline_snapshot_id},
+        "comparison": {"environment": "production", "baseline_snapshot_id": baseline_snapshot_id},
     }
     with db_mgr.get_session() as session:
         launch = ExperimentLaunchRecord(

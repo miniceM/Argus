@@ -992,6 +992,24 @@
               "title": "Offset"
             },
             "description": "Optional offset"
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Launch execution environment; omitted means all. ID reads ignore list filters.",
+              "title": "Environment"
+            },
+            "description": "Launch execution environment; omitted means all. ID reads ignore list filters."
           }
         ],
         "responses": {
@@ -5232,6 +5250,25 @@
       },
       "ExperimentLaunchResponse": {
         "properties": {
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "is_active_baseline": {
+            "type": "boolean",
+            "title": "Is Active Baseline"
+          },
+          "baseline_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Revision"
+          },
           "id": {
             "type": "string",
             "title": "Id"
@@ -5443,6 +5480,9 @@
         },
         "type": "object",
         "required": [
+          "environment",
+          "is_active_baseline",
+          "baseline_revision",
           "id",
           "name",
           "status",

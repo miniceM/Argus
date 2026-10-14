@@ -767,6 +767,10 @@ class ExperimentLaunchProgressResponse(BaseModel):
 class ExperimentLaunchResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    environment: str
+    is_active_baseline: bool
+    baseline_revision: int | None
+
     id: str
     name: str
     status: str

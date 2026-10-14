@@ -6,8 +6,18 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, WithJsonSchema, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    WithJsonSchema,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
+from .release_gates import RequiredCaseCounts
 from .security import validate_credential_ref, validate_endpoint_url
 from .trajectory.codec import validate_json_value
 from .trajectory.schema import (
@@ -606,6 +616,13 @@ class RunCostSummaryResponse(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+    decided_pass_rate: float | None = None
+    decision_coverage: float | None = None
+    quality_pass_count: int | None = None
+    quality_fail_count: int | None = None
+    quality_unknown_count: int | None = None
+    critical_failure_count: int | None = None
+
     required_evidence_status: Literal["COMPLETE", "INCOMPLETE"] | None = None
     evidence_contract_version: Literal["trajectory-1.0"] | None = None
     required_evidence_complete_cases: int | None = None
@@ -621,6 +638,16 @@ class RunCostSummaryResponse(BaseModel):
     cost_policy_version: str | None = None
     cost_partial: bool | None = None
     cost_unavailable_reason: RunCostUnavailableReason | None = None
+
+
+    @model_serializer(mode="wrap")
+    def preserve_missing_frozen_metrics(self, handler):
+        payload = handler(self)
+        for key in ("decided_pass_rate", "decision_coverage", "quality_pass_count",
+                    "quality_fail_count", "quality_unknown_count", "critical_failure_count"):
+            if key not in self.model_fields_set:
+                payload.pop(key, None)
+        return payload
 
 
 class CostComparisonResponse(BaseModel):
@@ -659,6 +686,8 @@ class ComparisonSummaryResponse(BaseModel):
     score_mean_deltas: dict[str, float]
 
 
+
+
 class RunSummaryResponse(BaseModel):
     launch_id: str
     snapshot_id: str
@@ -675,6 +704,8 @@ class RunSummaryResponse(BaseModel):
     evidence_reasons: list[str] = Field(default_factory=list)
     versions: dict[str, Any]
     summary: RunCostSummaryResponse
+    required_case_counts: RequiredCaseCounts | None = None
+    trajectory_coverage: float | None = None
     langfuse_score_sync_status: str = "PENDING"
     # Issue #87: quality results and sync state are separate facts. A Langfuse
     # outage never changes the Snapshot, its digest or the quality conclusion,

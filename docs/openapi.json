@@ -6215,6 +6215,82 @@
             "type": "array",
             "title": "Rules"
           },
+          "decided_pass_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided Pass Rate"
+          },
+          "decision_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Coverage"
+          },
+          "unknown_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unknown Count"
+          },
+          "critical_failure_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Critical Failure Count"
+          },
+          "required_case_counts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RequiredCaseCounts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidence_contract_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Contract Version"
+          },
+          "trajectory_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trajectory Coverage"
+          },
           "id": {
             "type": "string",
             "title": "Id"
@@ -6458,6 +6534,38 @@
           "threshold"
         ],
         "title": "ReleaseRule"
+      },
+      "RequiredCaseCounts": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total"
+          },
+          "passed": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Passed"
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Failed"
+          },
+          "unknown": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Unknown"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "passed",
+          "failed",
+          "unknown"
+        ],
+        "title": "RequiredCaseCounts"
       },
       "ResultSnapshotDetailResponse": {
         "properties": {
@@ -6725,6 +6833,72 @@
       },
       "RunCostSummaryResponse": {
         "properties": {
+          "decided_pass_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided Pass Rate"
+          },
+          "decision_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Coverage"
+          },
+          "quality_pass_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Pass Count"
+          },
+          "quality_fail_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Fail Count"
+          },
+          "quality_unknown_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Unknown Count"
+          },
+          "critical_failure_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Critical Failure Count"
+          },
           "required_evidence_status": {
             "anyOf": [
               {
@@ -6950,6 +7124,27 @@
           },
           "summary": {
             "$ref": "#/components/schemas/RunCostSummaryResponse"
+          },
+          "required_case_counts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RequiredCaseCounts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trajectory_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trajectory Coverage"
           },
           "langfuse_score_sync_status": {
             "type": "string",

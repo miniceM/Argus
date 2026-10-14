@@ -225,6 +225,7 @@ class LaunchService:
                     )
 
         if frozen_trajectory is not None:
+            _validate_trajectory_critical_policy(policy)
             from .trajectory.manifest import TrajectoryManifestError, parse_launch_contract
             # 新建入口必须治理所有轨迹；相同幂等请求返回既有历史，不回写其合同。
             new_contract = parse_launch_contract(frozen_trajectory["contract_json"])
@@ -487,3 +488,9 @@ class LaunchService:
             if limit is not None:
                 stmt = stmt.limit(limit)
             return list(session.scalars(stmt).all())
+
+
+def _validate_trajectory_critical_policy(policy):
+    if any(rule.critical and not rule.required for rule in policy.rules):
+        from .quality_policy import QualityPolicyError
+        raise QualityPolicyError("轨迹 critical 规则必须声明为 required。", code="TRAJECTORY_OPTIONAL_CRITICAL_INVALID")

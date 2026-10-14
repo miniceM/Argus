@@ -385,6 +385,10 @@ def test_malformed_snapshot_is_finite_conflict_and_unknown(runtime, monkeypatch,
 
 @pytest.fixture(params=["sqlite", "postgres"])
 def required_trajectory_snapshot(request, tmp_path):
+    yield from _required_trajectory_snapshot(request, tmp_path)
+
+
+def _required_trajectory_snapshot(request, tmp_path, *, complete_identity=False):
     from app.comparison_contracts import aggregation_comparison_digest
     from app.db_models import ExecutionCheckpointRecord
     from app.evaluation_result_store import persist_typed_results
@@ -403,6 +407,10 @@ def required_trajectory_snapshot(request, tmp_path):
         with db.get_session() as session:
             launch = session.get(ExperimentLaunchRecord, scope.launch_id)
             manifest = deepcopy(launch.manifest)
+            if complete_identity:
+                # 比较夹具在冻结前补全身份；原夹具继续验证缺身份的 UNKNOWN。
+                manifest["agent"].update(agent_id=launch.agent_id, version=launch.agent_version)
+                manifest["dataset"].update(source="seed", dataset_id="trajectory-golden", dataset_version="v1")
             registry = default_evaluator_registry
             binding = freeze_binding(registry.definition("trajectory.max_tool_calls"), registry.version("trajectory.max_tool_calls", "1.0.0"),
                 runner_identity=manifest["runner"], params={"rule": "max_tool_calls", "tool_identity": B, "max_count": 10})

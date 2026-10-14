@@ -19,7 +19,7 @@ const metrics = { total_cases: 1, evaluated_cases: 1, passed_cases: 0, pass_rate
   quality_pass_count: 0, quality_fail_count: 1, quality_unknown_count: 0, p95_latency_ms: 12, critical_failure_count: 1,
   execution_error_count: 0, evaluator_error_count: 1, required_evidence_status: "COMPLETE" };
 
-async function mock(page: Page, historical = false) {
+async function mock(page: Page, historical = false, summaryOverride: (id: string) => Record<string, unknown> = () => ({})) {
   const requested: string[] = [];
   await page.route("**/api/v1/agents/*/baselines**", route => route.fulfill({ status: 404, json: { detail: "No baseline" } }));
   await page.route("**/api/v1/experiment-launches/launch-1**", async route => {
@@ -37,7 +37,7 @@ async function mock(page: Page, historical = false) {
     } else if (url.pathname.includes("/result-snapshots/")) {
       data = { ...revision, launch_id: "launch-1", manifest, versions: {}, summary: metrics, items: [item], releasable: true };
     } else if (url.pathname.endsWith("/summary")) {
-      data = { ...revision, launch_id: "launch-1", summary: metrics, versions: {}, langfuse_score_sync_status: "SYNCED" };
+      data = { ...revision, launch_id: "launch-1", summary: metrics, versions: {}, langfuse_score_sync_status: "SYNCED", ...summaryOverride(id) };
     } else if (url.pathname.endsWith("/comparison/case")) {
       data = { launch_id: "launch-1", candidate_snapshot_id: id, dataset_item_id: "case-1",
         baseline: { output_status: "NO_REFERENCE" }, candidate: { output_status: "NO_REFERENCE" } };
@@ -133,4 +133,36 @@ test("旧 Snapshot 显示有限缺证据原因", async ({ page }) => {
   await expect(diagnosis.getByText("HISTORICAL_TRAJECTORY_UNAVAILABLE", { exact: true })).toBeVisible();
   await expect(diagnosis.getByText("通过 PASS", { exact: true })).toHaveCount(0);
   await expect(page.getByTestId("trajectory-step-exec-a")).toHaveCount(0);
+});
+
+
+test("冻结门禁观测区分未知、真实零和可选轨迹缺失，并随 Snapshot 隔离", async ({ page }, info) => {
+  await mock(page, false, id => id === "snapshot-1" ? {
+    summary: { ...metrics, decided_pass_rate: null, decision_coverage: 0, quality_unknown_count: 1 },
+    required_case_counts: { total: 1, passed: 0, failed: 0, unknown: 1 }, trajectory_coverage: null,
+  } : {
+    summary: { ...metrics, decided_pass_rate: 0, decision_coverage: 1, quality_unknown_count: 0 },
+    required_case_counts: { total: 1, passed: 0, failed: 1, unknown: 0 }, trajectory_coverage: 0,
+  });
+  await page.goto("/launches/launch-1?snapshot_id=snapshot-1");
+  await page.getByRole("tab", { name: /门禁与版本对比/ }).click();
+  const panel = page.getByTestId("frozen-gate-observations");
+  await expect(panel.getByTestId("frozen-decided-pass-rate")).toHaveText("—");
+  await expect(panel.getByTestId("frozen-decision-coverage")).toHaveText("0.0%");
+  await expect(panel.getByTestId("frozen-trajectory-coverage")).toHaveText("—");
+  await expect(panel.getByTestId("frozen-unknown-count")).toHaveText("1");
+  await expect(panel.getByTestId("frozen-critical-count")).toHaveText("1");
+  await page.getByTestId("snapshot-revision-2").focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/snapshot_id=snapshot-2/);
+  await expect(panel.getByTestId("frozen-decided-pass-rate")).toHaveText("0.0%");
+  await expect(panel.getByTestId("frozen-decision-coverage")).toHaveText("100.0%");
+  await expect(panel.getByTestId("frozen-trajectory-coverage")).toHaveText("0.0%");
+  await expect(panel.getByTestId("frozen-case-counts")).toHaveText("Dataset Case：1 / PASS 0 / FAIL 1 / UNKNOWN 0");
+  await expect(panel).toContainText("必要 UNKNOWN 或 critical 违规会阻断发布");
+  const audit = await new AxeBuilder({ page }).include('[data-testid="frozen-gate-observations"]').analyze();
+  expect(audit.violations).toEqual([]);
+  await panel.screenshot({ path: info.outputPath("frozen-gate-observations.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await panel.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 });

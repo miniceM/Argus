@@ -2217,6 +2217,19 @@ export interface components {
             reason_codes: string[];
             /** Rules */
             rules: components["schemas"]["GateRuleResult"][];
+            /** Decided Pass Rate */
+            decided_pass_rate?: number | null;
+            /** Decision Coverage */
+            decision_coverage?: number | null;
+            /** Unknown Count */
+            unknown_count?: number | null;
+            /** Critical Failure Count */
+            critical_failure_count?: number | null;
+            required_case_counts?: components["schemas"]["RequiredCaseCounts"] | null;
+            /** Evidence Contract Version */
+            evidence_contract_version?: string | null;
+            /** Trajectory Coverage */
+            trajectory_coverage?: number | null;
             /** Id */
             id: string;
             /**
@@ -2305,6 +2318,17 @@ export interface components {
             operator: ">=" | "<=";
             /** Threshold */
             threshold: number;
+        };
+        /** RequiredCaseCounts */
+        RequiredCaseCounts: {
+            /** Total */
+            total: number;
+            /** Passed */
+            passed: number;
+            /** Failed */
+            failed: number;
+            /** Unknown */
+            unknown: number;
         };
         /**
          * ResultSnapshotDetailResponse
@@ -2431,6 +2455,18 @@ export interface components {
          * @description Typed cost portion of a frozen run summary; retain other metrics for compatibility.
          */
         RunCostSummaryResponse: {
+            /** Decided Pass Rate */
+            decided_pass_rate?: number | null;
+            /** Decision Coverage */
+            decision_coverage?: number | null;
+            /** Quality Pass Count */
+            quality_pass_count?: number | null;
+            /** Quality Fail Count */
+            quality_fail_count?: number | null;
+            /** Quality Unknown Count */
+            quality_unknown_count?: number | null;
+            /** Critical Failure Count */
+            critical_failure_count?: number | null;
             /** Required Evidence Status */
             required_evidence_status?: ("COMPLETE" | "INCOMPLETE") | null;
             /** Evidence Contract Version */
@@ -2498,6 +2534,9 @@ export interface components {
                 [key: string]: unknown;
             };
             summary: components["schemas"]["RunCostSummaryResponse"];
+            required_case_counts?: components["schemas"]["RequiredCaseCounts"] | null;
+            /** Trajectory Coverage */
+            trajectory_coverage?: number | null;
             /**
              * Langfuse Score Sync Status
              * @default PENDING

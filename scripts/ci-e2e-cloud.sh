@@ -10,6 +10,8 @@ mkdir -p "$ARTIFACT_DIR"
 
 COMPOSE_ENV_FILE="${ARGUS_CLOUD_ENV_FILE:-.env.cloud}"
 COMPOSE=(docker compose --env-file "$COMPOSE_ENV_FILE" -f docker-compose.cloud.yml)
+source "$ROOT/scripts/ci/load-cloud-env.sh"
+load_cloud_environment_file "$COMPOSE_ENV_FILE"
 STATUS=0
 
 cleanup() {

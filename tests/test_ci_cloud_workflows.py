@@ -173,6 +173,7 @@ def test_trusted_candidate_builds_without_secrets_then_runs_existing_cloud_suite
     verify = names.index("Revalidate candidate and write test credentials")
     run_e2e = names.index("Run cloud end-to-end tests")
     assert install < build < verify < run_e2e
+    assert steps[build]["env"]["ARGUS_BUILD_ID"] == "${{ needs.prepare.outputs.tested_sha }}"
     assert "scripts/ci-e2e-cloud.sh" in str(steps[run_e2e])
     assert steps[run_e2e]["env"]["ARGUS_CLOUD_BUILD_IMAGES"] == "false"
 

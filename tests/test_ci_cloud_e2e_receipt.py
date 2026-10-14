@@ -6,11 +6,10 @@ import sys
 import zipfile
 from io import BytesIO
 from pathlib import Path
-
-import yaml
 from typing import Any
 
 import pytest
+import yaml
 
 from scripts.ci import cloud_e2e_receipt as receipt_cli
 from scripts.ci.ci_constants import (

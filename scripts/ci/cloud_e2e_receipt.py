@@ -22,6 +22,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from scripts.ci.ci_constants import (
+    AUTOMATION_ACTOR,
     CANDIDATE_ENVIRONMENT,
     CANDIDATE_WORKFLOW,
     MAIN_REF,
@@ -504,39 +505,6 @@ def verify_candidate_unchanged(client: GitHubClient, manifest: Mapping[str, Any]
         raise CandidateReceiptError("current regular CI run changed after candidate preparation")
 
 
-def _approved_candidate_environment(approvals: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
-    for record in approvals:
-        if record.get("state") != "approved":
-            continue
-        user = record.get("user") if isinstance(record.get("user"), dict) else {}
-        for environment in record.get("environments", []):
-            if not isinstance(environment, dict) or environment.get("name") != CANDIDATE_ENVIRONMENT:
-                continue
-            login = user.get("login")
-            user_id = user.get("id")
-            if (
-                not isinstance(login, str)
-                or not login
-                or isinstance(user_id, bool)
-                or not isinstance(user_id, int)
-                or user_id <= 0
-            ):
-                continue
-            environment_id = environment.get("id")
-            if isinstance(environment_id, bool) or not isinstance(environment_id, int) or environment_id <= 0:
-                continue
-            return {
-                "state": "approved",
-                "environment": CANDIDATE_ENVIRONMENT,
-                "environment_id": environment_id,
-                "environment_url": str(environment.get("html_url") or environment.get("url") or ""),
-                "login": login,
-                "user_id": user_id,
-                "source": "actions-run-approvals",
-            }
-    return None
-
-
 def _candidate_job(jobs: Sequence[Mapping[str, Any]], name: str) -> dict[str, Any] | None:
     matches = [job for job in jobs if job.get("name") == name]
     return dict(matches[0]) if len(matches) == 1 else None
@@ -560,7 +528,6 @@ def build_candidate_receipt(
     *,
     workflow_run: Mapping[str, Any],
     current_pr: Mapping[str, Any],
-    approvals: Sequence[Mapping[str, Any]],
     jobs: Sequence[Mapping[str, Any]],
     cloud_evidence_zip: bytes | None,
 ) -> dict[str, Any]:
@@ -585,7 +552,8 @@ def build_candidate_receipt(
         and workflow_run.get("event") == "workflow_dispatch"
         and workflow_run.get("head_branch") == "main"
         and workflow_run.get("head_sha") == manifest.get("workflow_revision")
-        and (workflow_run.get("actor") or {}).get("login") == manifest.get("requested_by")
+        and (workflow_run.get("actor") or {}).get("login") == AUTOMATION_ACTOR
+        and manifest.get("requested_by") == AUTOMATION_ACTOR
         # The Actions API's workflow-run `path` contains only the workflow file
         # path, not the branch-qualified workflow_ref used by the manifest.
         and run_path == CANDIDATE_WORKFLOW
@@ -603,7 +571,6 @@ def build_candidate_receipt(
         and current_base == manifest.get("base_sha")
         and current_pr.get("merge_commit_sha") == manifest.get("tested_sha")
     )
-    approval = _approved_candidate_environment(approvals)
     prepare_job = _candidate_job(jobs, CANDIDATE_PREPARE_JOB_NAME)
     prepare_job_id = int(prepare_job.get("id", 0)) if prepare_job else 0
     prepare_job_passed = bool(
@@ -628,16 +595,10 @@ def build_candidate_receipt(
             evidence = summarize_cloud_evidence(cloud_evidence_zip)
         except CandidateReceiptError:
             evidence = None
-    passed = bool(current and approval and prepare_job_passed and cloud_job_passed and evidence)
+    passed = bool(current and prepare_job_passed and cloud_job_passed and evidence)
     if workflow_run.get("status") == "completed" and workflow_run.get("conclusion") != "success":
         passed = False
 
-    fallback_approval = approval or {
-        "state": "not_approved",
-        "environment": CANDIDATE_ENVIRONMENT,
-        "login": "",
-        "source": "actions-run-approvals",
-    }
     suite_results = evidence["suite_results"] if evidence else {suite: "failed" for suite in REQUIRED_SUITES}
     baseline = evidence["baseline"] if evidence else {
         "v1": {"passed": 0, "total": 0},
@@ -645,7 +606,7 @@ def build_candidate_receipt(
     }
     run_url = str(workflow_run.get("html_url", ""))
     receipt = {
-        "schema_version": 1,
+        "schema_version": 2,
         "repository": REPOSITORY,
         "pr_number": manifest["pr_number"],
         "head_sha": manifest["head_sha"],
@@ -666,8 +627,12 @@ def build_candidate_receipt(
         "cloud_job_url": str(cloud_job.get("html_url", "")) if cloud_job else "",
         "environment": CANDIDATE_ENVIRONMENT,
         "cloud_state": "passed" if passed else "failed",
-        "failure_reason": "" if passed else "identity, approval, Cloud steps, or suite evidence did not pass",
-        "approval": fallback_approval,
+        "failure_reason": "" if passed else "identity, automated CI, Cloud steps, or suite evidence did not pass",
+        "authorization": {
+            "mode": "trusted_ci_automatic",
+            "ci_run_id": manifest["ci_run_id"],
+            "ci_run_attempt": manifest["ci_run_attempt"],
+        },
         "ci_run_id": manifest["ci_run_id"],
         "ci_run_attempt": manifest["ci_run_attempt"],
         "ci_run_url": manifest["ci_run_url"],
@@ -726,6 +691,8 @@ def _write_summary(text: str) -> None:
 def _prepare_cli() -> int:
     client = _client_from_environment()
     try:
+        if os.environ.get("GITHUB_ACTOR") != AUTOMATION_ACTOR:
+            raise CandidateReceiptError("candidate validation must be automatically dispatched by trusted CI")
         manifest = prepare_candidate_manifest(
             client,
             repository=os.environ["GITHUB_REPOSITORY"],
@@ -823,13 +790,11 @@ def _record_cli() -> int:
         evidence_zip = _artifact_bytes(client, run_id, evidence_name)
         workflow_run = client.get_run(run_id)
         current_pr = client.get_pull_request(int(manifest["pr_number"]))
-        approvals = client.list_run_approvals(run_id)
         jobs = client.list_jobs(run_id, attempt)
         receipt = build_candidate_receipt(
             manifest,
             workflow_run=workflow_run,
             current_pr=current_pr,
-            approvals=approvals,
             jobs=jobs,
             cloud_evidence_zip=evidence_zip,
         )
@@ -849,7 +814,7 @@ def _record_cli() -> int:
         f"- PR/head/base/tested SHA: `{receipt['pr_number']}` / `{receipt['head_sha']}` / `{receipt['base_sha']}` / `{receipt['tested_sha']}`\n"
         f"- Workflow/run/attempt: `{receipt['workflow_revision']}` / `{receipt['run_id']}` / `{receipt['run_attempt']}`\n"
         f"- Prepare job: [{receipt['prepare_job_id']}]({receipt['prepare_job_url']})\n"
-        f"- Environment approval: `{receipt['approval']['state']}` by `{receipt['approval'].get('login', 'unknown')}`\n"
+        f"- Authorization: `{receipt['authorization']['mode']}` from CI `{receipt['ci_run_id']}/{receipt['ci_run_attempt']}`\n"
         f"- Suites: managed-cloud `{receipt['suite_results']['managed-cloud']}`, async-link `{receipt['suite_results']['async-link']}`\n"
         f"- Baseline: v1 `{receipt['baseline']['v1']['passed']}/{receipt['baseline']['v1']['total']}`, v2 `{receipt['baseline']['v2']['passed']}/{receipt['baseline']['v2']['total']}`\n"
         f"- Evidence: {receipt['run_url']}\n"

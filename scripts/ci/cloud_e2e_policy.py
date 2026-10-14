@@ -11,6 +11,7 @@ from typing import Any
 import yaml
 
 from scripts.ci.ci_constants import (
+    AUTOMATION_ACTOR,
     CANDIDATE_ENVIRONMENT,
     CANDIDATE_WORKFLOW,
     LOW_RISK_DEV_DEPENDENCIES,
@@ -390,7 +391,7 @@ def classify_change_set(
 def validate_trusted_receipt(receipt: Any, expected: Mapping[str, Any]) -> bool:
     if not isinstance(receipt, dict):
         return False
-    if receipt.get("schema_version") != 1 or receipt.get("repository") != REPOSITORY:
+    if receipt.get("schema_version") != 2 or receipt.get("repository") != REPOSITORY:
         return False
     for name in ("pr_number", "run_id", "run_attempt", "prepare_job_id", "cloud_job_id", "ci_run_id", "ci_run_attempt"):
         if isinstance(receipt.get(name), bool) or not isinstance(receipt.get(name), int) or receipt[name] <= 0:
@@ -416,20 +417,18 @@ def validate_trusted_receipt(receipt: Any, expected: Mapping[str, Any]) -> bool:
         return False
     if receipt.get("workflow_ref") != f"{REPOSITORY}/{CANDIDATE_WORKFLOW}@{MAIN_REF}":
         return False
-    if not isinstance(receipt.get("dispatch_actor"), str) or not receipt["dispatch_actor"].strip():
+    if receipt.get("dispatch_actor") != AUTOMATION_ACTOR:
         return False
     if receipt.get("risk") != "high":
         return False
     if receipt.get("environment") != CANDIDATE_ENVIRONMENT or receipt.get("cloud_state") != "passed":
         return False
-    approval = receipt.get("approval")
-    if not isinstance(approval, dict) or approval.get("state") != "approved":
+    if receipt.get("authorization") != {
+        "mode": "trusted_ci_automatic",
+        "ci_run_id": receipt["ci_run_id"],
+        "ci_run_attempt": receipt["ci_run_attempt"],
+    }:
         return False
-    if approval.get("environment") != CANDIDATE_ENVIRONMENT or not isinstance(approval.get("login"), str) or not approval["login"].strip():
-        return False
-    for key in ("user_id", "environment_id"):
-        if isinstance(approval.get(key), bool) or not isinstance(approval.get(key), int) or approval[key] <= 0:
-            return False
     if receipt.get("required_suites") != list(REQUIRED_SUITES):
         return False
     if receipt.get("suite_results") != {suite: "passed" for suite in REQUIRED_SUITES}:

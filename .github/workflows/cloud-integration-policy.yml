@@ -100,3 +100,34 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           POLICY_DECISIONS_PATH: artifacts/policy/decisions.json
         run: python -m scripts.ci.publish_cloud_policy publish
+
+  dispatch:
+    name: Automatically start required Cloud candidate
+    needs: evaluate
+    if: >-
+      needs.evaluate.result == 'success' &&
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.name == 'CI' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Only this trusted-main job may dispatch another workflow. It never checks
+    # out PR code and receives no Langfuse secrets.
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      - name: Automatically dispatch high-risk PR Cloud validation
+        env:
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m scripts.ci.auto_dispatch_cloud_candidate

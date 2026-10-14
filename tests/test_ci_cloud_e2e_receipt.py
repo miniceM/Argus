@@ -13,7 +13,6 @@ import yaml
 
 from scripts.ci import cloud_e2e_receipt as receipt_cli
 from scripts.ci.ci_constants import (
-    CANDIDATE_ENVIRONMENT,
     CANDIDATE_WORKFLOW,
     REQUIRED_CI_CHECKS,
     REQUIRED_SECRETS,
@@ -96,7 +95,7 @@ def _manifest() -> dict[str, Any]:
         "workflow_ref": f"{REPOSITORY}/{CANDIDATE_WORKFLOW}@refs/heads/main",
         "run_id": RUN_ID,
         "run_attempt": ATTEMPT,
-        "requested_by": "maintainer",
+        "requested_by": "github-actions[bot]",
         "ci_run_id": 8001,
         "ci_run_attempt": 1,
         "ci_run_url": "https://github.com/miniceM/Argus/actions/runs/8001",
@@ -115,8 +114,8 @@ def _workflow_run(**overrides: Any) -> dict[str, Any]:
         # trusted-main identity is separately bound by event, branch, and SHA.
         "path": CANDIDATE_WORKFLOW,
         "status": "in_progress",
-        "actor": {"login": "maintainer"},
-        "triggering_actor": {"login": "maintainer"},
+        "actor": {"login": "github-actions[bot]"},
+        "triggering_actor": {"login": "github-actions[bot]"},
         "html_url": "https://github.com/miniceM/Argus/actions/runs/9001",
         **overrides,
     }
@@ -131,16 +130,6 @@ def _pr(**overrides: Any) -> dict[str, Any]:
         "merge_commit_sha": MERGE,
         **overrides,
     }
-
-
-def _approvals() -> list[dict[str, Any]]:
-    return [
-        {
-            "state": "approved",
-            "user": {"id": 17, "login": "reviewer"},
-            "environments": [{"id": 31, "name": CANDIDATE_ENVIRONMENT}],
-        }
-    ]
 
 
 def _jobs(**overrides: Any) -> list[dict[str, Any]]:
@@ -181,7 +170,6 @@ def _build(**overrides: Any) -> dict[str, Any]:
         "manifest": _manifest(),
         "workflow_run": _workflow_run(),
         "current_pr": _pr(),
-        "approvals": _approvals(),
         "jobs": _jobs(),
         "cloud_evidence_zip": _cloud_evidence(),
     }
@@ -211,12 +199,14 @@ def test_real_candidate_cloud_step_names_generate_passed_receipt() -> None:
     }
 
 
-def test_approved_exact_candidate_with_real_cloud_evidence_builds_valid_receipt() -> None:
+def test_automated_exact_candidate_with_real_cloud_evidence_builds_valid_receipt() -> None:
     manifest = _manifest()
     receipt = _build(manifest=manifest)
 
     assert receipt["cloud_state"] == "passed"
-    assert receipt["approval"]["login"] == "reviewer"
+    assert receipt["authorization"] == {
+        "mode": "trusted_ci_automatic", "ci_run_id": 8001, "ci_run_attempt": 1,
+    }
     assert receipt["prepare_job_id"] == 7000
     assert receipt["baseline"] == {
         "v1": {"passed": 2, "total": 6},
@@ -228,7 +218,6 @@ def test_approved_exact_candidate_with_real_cloud_evidence_builds_valid_receipt(
 @pytest.mark.parametrize(
     ("overrides", "evidence"),
     [
-        ({"approvals": []}, _cloud_evidence()),
         ({"current_pr": _pr(head={"sha": "5" * 40, "repo": {"full_name": REPOSITORY}})}, _cloud_evidence()),
         ({"current_pr": _pr(base={"sha": "6" * 40, "ref": "main"})}, _cloud_evidence()),
         ({"current_pr": _pr(head={"sha": HEAD, "repo": {"full_name": "external/fork"}})}, _cloud_evidence()),
@@ -252,7 +241,7 @@ def test_approved_exact_candidate_with_real_cloud_evidence_builds_valid_receipt(
             "async-langfuse-link.json": {"api_state": {"status": "COMPLETED", "langfuse_sync_status": "SYNCED", "langfuse_experiment_url": "forged"}, "api_detail_url": "forged", "remote_identity": {"persisted_run_id": "x", "url_run_id": "x", "url_project_id": "p", "url_dataset_id": "d", "remote_run_lookup": {"status": "CONFIRMED"}}},
         })),
     ],
-    ids=["no approval", "stale head", "stale base", "fork", "wrong workflow", "wrong workflow sha", "wrong run attempt", "wrong actor", "failed workflow", "cancelled workflow", "failed job", "cancelled job", "missing prepare job", "failed prepare job", "skipped E2E step", "missing evidence", "wrong bootstrap", "forged baseline"],
+    ids=["stale head", "stale base", "fork", "wrong workflow", "wrong workflow sha", "wrong run attempt", "wrong actor", "failed workflow", "cancelled workflow", "failed job", "cancelled job", "missing prepare job", "failed prepare job", "skipped E2E step", "missing evidence", "wrong bootstrap", "forged baseline"],
 )
 def test_missing_or_untrusted_candidate_conditions_never_create_passed_receipt(
     overrides: dict[str, Any], evidence: bytes | None
@@ -343,7 +332,7 @@ def test_manifest_binds_current_same_repo_high_risk_pr_and_successful_current_ci
         workflow_revision=WORKFLOW,
         run_id=RUN_ID,
         run_attempt=ATTEMPT,
-        requested_by="maintainer",
+        requested_by="github-actions[bot]",
     )
 
     assert manifest["tested_sha"] == MERGE
@@ -372,7 +361,7 @@ def test_manifest_preparation_rejects_untrusted_identity(kwargs: dict[str, Any],
         "workflow_revision": WORKFLOW,
         "run_id": RUN_ID,
         "run_attempt": ATTEMPT,
-        "requested_by": "maintainer",
+        "requested_by": "github-actions[bot]",
     }
     args.update(kwargs)
     with pytest.raises(CandidateReceiptError, match=message):
@@ -426,7 +415,7 @@ def test_archive_rejects_path_traversal_symlinks_duplicates_and_unexpected_membe
     ],
     ids=["updated PR", "advanced main", "newer CI identity"],
 )
-def test_candidate_is_revalidated_after_environment_approval(client: _PreparationClient, message: str) -> None:
+def test_candidate_is_revalidated_before_credential_use(client: _PreparationClient, message: str) -> None:
     with pytest.raises(CandidateReceiptError, match=message):
         verify_candidate_unchanged(client, _manifest())
 

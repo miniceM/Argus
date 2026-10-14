@@ -143,8 +143,8 @@ make validate
 CI 与 Cloud E2E 由四条工作流协作：
 
 - `.github/workflows/ci.yml`：PR 常规门禁包括 `Code Quality`、`Full Python Tests`、`Docker / Compose Validation`、`Console Quality & E2E`、`S4 Local Langfuse Integration`。PR 的 `Langfuse Cloud E2E` 为 `skipped_by_policy` 且不读取 Langfuse secrets；main push/dispatch 必须实际运行 Cloud，并由 `Main Cloud Acceptance` 核验实际 Cloud 步骤与 receipt。
-- `.github/workflows/cloud-e2e-trusted.yml`：main 上手动 dispatch 精确 head/base SHA；候选只能使用人工批准的测试 project Environment。
-- `.github/workflows/cloud-integration-policy.yml`：可信默认分支控制器发布 `Cloud Integration Policy`；低风险及受限中风险在五项当前身份检查全绿时通过，高风险还要求匹配的可信 Cloud receipt。分类采用 fail-closed 路径白名单（见 `docs/ci/cloud-e2e-policy.md`），不可仅通过增加文件名或改变风险标记绕开可信 Cloud。
+- `.github/workflows/cloud-e2e-trusted.yml`：由可信 main 的 CI 控制器自动派发精确 head/base SHA；候选使用无需人工审批、仅限测试 project 的 Environment。可信 receipt v2 校验 GitHub Actions bot 发起身份及完整 Cloud 实测证据。
+- `.github/workflows/cloud-integration-policy.yml`：可信默认分支控制器自动发布 `Cloud Integration Policy` 并在成功的当前 PR CI 后派发高风险 Cloud candidate；低风险仅在五项当前身份检查全绿时通过，高风险还要求匹配的可信 Cloud receipt，不要求人工操作。
 - `.github/workflows/langfuse-i18n.yml`：正式 GHCR 发布必须通过同一当前 main SHA 的 `Main Cloud Acceptance` 与 receipt gate；PR 构建不发布。
 
 main Ruleset 的目标 required checks 是五项常规 CI 加 `Cloud Integration Policy`；只有新 context 在真实 PR 上可见并完成存量 PR 初始化后，管理员才可移除旧 PR Cloud context，期间保留 strict 与无 bypass。Ruleset / Environment 属于远端配置，需按 [`docs/ci/cloud-e2e-policy.md`](docs/ci/cloud-e2e-policy.md) 独立核验，不以仓库 YAML 或本地测试推断已部署。涉及 S4 观测链路时，另执行 `make trajectory-prepare` 与 `make trajectory-test`；Managed Cloud 不替代自托管 Langfuse 镜像、migration、SDK、消息 / 持久化等专项验收。

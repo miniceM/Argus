@@ -4,6 +4,7 @@ REPOSITORY = "miniceM/Argus"
 MAIN_REF = "refs/heads/main"
 CANDIDATE_ENVIRONMENT = "langfuse-e2e-candidate"
 CANDIDATE_WORKFLOW = ".github/workflows/cloud-e2e-trusted.yml"
+AUTOMATION_ACTOR = "github-actions[bot]"
 POLICY_CONTEXT = "Cloud Integration Policy"
 REQUIRED_CI_CHECKS = (
     "Code Quality",

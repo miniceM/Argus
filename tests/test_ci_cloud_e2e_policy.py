@@ -46,7 +46,7 @@ def _lock(version: str = "6.0.0", specifier: str = "^6.0.0") -> dict:
 
 def _receipt() -> dict:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "repository": "miniceM/Argus",
         "pr_number": 110,
         "head_sha": SHA_HEAD,
@@ -55,7 +55,7 @@ def _receipt() -> dict:
         "workflow_path": ".github/workflows/cloud-e2e-trusted.yml",
         "workflow_revision": SHA_WORKFLOW,
         "workflow_ref": "miniceM/Argus/.github/workflows/cloud-e2e-trusted.yml@refs/heads/main",
-        "dispatch_actor": "maintainer",
+        "dispatch_actor": "github-actions[bot]",
         "risk": "high",
         "run_id": 9001,
         "run_attempt": 2,
@@ -65,7 +65,7 @@ def _receipt() -> dict:
         "ci_run_attempt": 1,
         "environment": "langfuse-e2e-candidate",
         "cloud_state": "passed",
-        "approval": {"state": "approved", "environment": "langfuse-e2e-candidate", "environment_id": 31, "login": "maintainer", "user_id": 17},
+        "authorization": {"mode": "trusted_ci_automatic", "ci_run_id": 8999, "ci_run_attempt": 1},
         "required_suites": ["managed-cloud", "async-link"],
         "suite_results": {"managed-cloud": "passed", "async-link": "passed"},
         "baseline": {"v1": {"passed": 2, "total": 6}, "v2": {"passed": 6, "total": 6}},
@@ -393,6 +393,6 @@ def test_receipt_is_bound_to_exact_pr_base_head_and_run() -> None:
         ("workflow_ref", "external/workflow"),
         ("dispatch_actor", ""),
         ("evidence_summary", {"async_link_verified": False}),
-        ("approval", {"state": "approved", "environment": "langfuse-e2e-candidate", "login": "maintainer", "user_id": 17}),
+        ("authorization", {"mode": "trusted_ci_automatic", "ci_run_id": 8999, "ci_run_attempt": 2}),
     ):
         assert not validate_trusted_receipt({**receipt, key: value}, expected)

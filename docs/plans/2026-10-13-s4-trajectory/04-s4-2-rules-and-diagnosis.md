@@ -6,7 +6,7 @@
 
 核验基线：2026-10-13，`main@4b043739c63357ecc10131e1ba54bc1bc53d862a`。
 
-实施跟踪（2026-10-14）：四规则纯测量核心与严格冻结参数见 [工具规则核心记录](../../validation/s4-2/tool-rules.md)，正式 Evaluator 注册、TypedResult Adapter 与冻结输入见下述 T3 记录。required evidence/资格契约见 [T4 验证记录](../../validation/s4-2/required-evidence.md)；Console 诊断继续按下文实施，本记录不宣称 S4.2 全部交付。
+实施跟踪（2026-10-14）：四规则纯测量核心与严格冻结参数见 [工具规则核心记录](../../validation/s4-2/tool-rules.md)，正式 Evaluator 注册、TypedResult Adapter 与冻结输入见下述 T3 记录。required evidence/资格契约见 [T4 验证记录](../../validation/s4-2/required-evidence.md)，固定 Snapshot 的 API/Console 诊断见 [T5 记录](../../validation/s4-2/frozen-diagnosis.md)。完整 issue 关闭仍需统一验收矩阵审计。
 
 T3 增量见[正式冻结与执行记录](../../validation/s4-2/frozen-rule-execution.md)：独立版本、参数/制品身份、公开 opt-in 创建入口及真实正常/恢复消费者。实施提交汇总至 PR #181，保留各阶段单一目的 commit。
 
@@ -197,11 +197,11 @@ UI 只消费脱敏 Step 摘要和后端结论，不在浏览器重算 QualityPol
 
 `RED`：`pytest -q tests/test_trajectory_api.py`；预期失败于 Snapshot 绑定校验、历史无证据响应和 evidence Step 映射。
 
-`RED`：`pnpm --dir services/console test -- src/features/launches/__tests__/CasesTraceTab.trajectory.test.tsx`；预期失败于诊断懒加载、三态和 Step 跳转。
+`RED`：`pnpm --dir services/console exec vitest run src/features/launches/__tests__/CasesTraceTab.trajectory.test.tsx`；预期失败于诊断懒加载、三态和 Step 跳转。
 
 `GREEN`：运行上述 Python 与 Vitest 命令；同时运行 `pnpm --dir services/console typecheck`、`pnpm --dir services/console lint:tokens`。
 
-E2E 在完成最小 API fixture 后执行：`pnpm --dir services/console test:e2e -- e2e/trajectory-diagnosis.spec.ts`。
+E2E 在完成最小 API fixture 后执行：`pnpm --dir services/console exec playwright test e2e/trajectory-diagnosis.spec.ts`。
 
 最终门禁：`make validate`；涉及真实 Langfuse Observation 形态的集成验收按 #127 的本地集成环境执行，不能以 Mock 代替真实采集协议。
 
@@ -212,9 +212,9 @@ E2E 在完成最小 API fixture 后执行：`pnpm --dir services/console test:e2
 - [ ] **S42-03**：每次 B 都有成功完成且可信因果先行 A 才 PASS；完整 `B → A → B` 必须 FAIL；先 UNKNOWN 后确证违规仍 FAIL；PARTIAL 中仅见较晚 A 不冒充完整负证据；时间/数组/parent 单独不足时 UNKNOWN。
 - [ ] **S42-04**：PARTIAL 中已观察到的 forbid/order 违规逐规则仍为 FAIL；未见违规但覆盖不足为 UNKNOWN；HTTP-only 不伪造过程结论。
 - [x] **S42-05**：optional failed/skipped/no_result保持诊断且不降低required完整度；required缺Binding、failed/skipped/no_result、无值或provenance不符为INCOMPLETE/DIAGNOSTIC；required false为完整FAIL，Snapshot可COMPLETE、Gate仍拒绝；覆盖DB→Snapshot→Baseline/Gate；Writer序列化/提交故障整体回滚、无半契约Snapshot，Reader缺字段fail closed，旧Snapshot语义不变。
-- [ ] **S42-06**：新API只返回选定Snapshot的冻结证据；历史缺证据、跨Case身份和Snapshot错配都有稳定响应；大于2^53的整数/高精度小数在artifact/API与Console参数显示不舍入，显示字符串与同artifact一致。
-- [ ] **S42-07**：CaseDetail 懒加载、三态、并行/阶段、规则↔Step 定位及历史/在线标签通过 Vitest 与 Playwright。
-- [ ] **S42-08**：规则变化进入 Measurement identity；Console OpenAPI 类型同步；`make validate` 通过，Demo 原有预期基线未改。
+- [x] **S42-06**：新API只返回选定Snapshot的冻结证据；历史缺证据、跨Case身份和Snapshot错配都有稳定响应；大于2^53的整数/高精度小数在artifact/API与Console参数显示不舍入，显示字符串与同artifact一致。
+- [x] **S42-07**：CaseDetail 懒加载、三态、并行/阶段、规则↔Step 定位及历史/在线标签通过 Vitest 与 Playwright。
+- [x] **S42-08**：规则变化进入 Measurement identity；Console OpenAPI 类型同步；`make validate` 通过，Demo 原有预期基线未改。
 
 ## 10. 依赖、风险与回退
 

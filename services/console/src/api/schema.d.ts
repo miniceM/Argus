@@ -434,6 +434,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/experiment-launches/{launch_id}/trajectory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read frozen trajectory diagnosis for one Snapshot Case */
+        get: operations["get_trajectory_diagnosis_api_v1_experiment_launches__launch_id__trajectory_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/experiment-launches/{launch_id}/summary": {
         parameters: {
             query?: never;
@@ -2504,6 +2521,215 @@ export interface components {
             /** Langfuse Dashboard Url */
             langfuse_dashboard_url?: string | null;
         };
+        /** TrajectoryCompleteness */
+        TrajectoryCompleteness: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "OBSERVED_COMPLETE" | "PARTIAL" | "ROOT_ONLY";
+            /** Capabilities */
+            capabilities: {
+                [key: string]: "COMPLETE" | "PARTIAL" | "NONE";
+            };
+            /** Warnings */
+            warnings: string[];
+        };
+        /** TrajectoryDiagnosisResponse */
+        TrajectoryDiagnosisResponse: {
+            /** Launch Id */
+            launch_id: string;
+            /** Snapshot Id */
+            snapshot_id: string;
+            /** Dataset Item Id */
+            dataset_item_id: string;
+            /**
+             * Acquisition State
+             * @enum {string}
+             */
+            acquisition_state: "PENDING" | "READY" | "UNAVAILABLE";
+            completeness: components["schemas"]["TrajectoryCompleteness"] | null;
+            trajectory: components["schemas"]["TrajectoryDisplayResponse"] | null;
+            /** Rule Results */
+            rule_results: components["schemas"]["TrajectoryRuleDiagnosisResponse"][];
+            /** Reason Code */
+            reason_code: string | null;
+            evidence_ref: components["schemas"]["TrajectoryEvidenceRef"] | null;
+            /** Step Argument Display Json */
+            step_argument_display_json: {
+                [key: string]: string;
+            };
+            /** Langfuse Trace Url */
+            langfuse_trace_url: string | null;
+            /** Execution Status */
+            execution_status: string;
+            /**
+             * Quality Conclusion
+             * @enum {string}
+             */
+            quality_conclusion: "pass" | "fail" | "unknown";
+            /** Required Evidence Status */
+            required_evidence_status: ("COMPLETE" | "INCOMPLETE") | null;
+        };
+        TrajectoryDisplayJson: boolean | number | string | components["schemas"]["TrajectoryDisplayJson"][] | {
+            [key: string]: components["schemas"]["TrajectoryDisplayJson"];
+        } | null;
+        /** TrajectoryDisplayResponse */
+        TrajectoryDisplayResponse: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "1.0";
+            scope: components["schemas"]["TrajectoryScope"];
+            input_redacted: components["schemas"]["TrajectoryDisplayJson"];
+            output_redacted: components["schemas"]["TrajectoryDisplayJson"];
+            completeness: components["schemas"]["TrajectoryCompleteness"];
+            /** Steps */
+            steps: components["schemas"]["TrajectoryStepDiagnosisResponse"][];
+            provenance: components["schemas"]["TrajectoryProvenance"];
+        };
+        /** TrajectoryEvidenceRef */
+        TrajectoryEvidenceRef: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Trajectory Digest */
+            trajectory_digest: string;
+            /** Trajectory Contract Digest */
+            trajectory_contract_digest: string;
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "1.0";
+        };
+        /** TrajectoryProvenance */
+        TrajectoryProvenance: {
+            /** Provider */
+            provider: string;
+            /** Source Profile Id */
+            source_profile_id: string;
+            /** Source Profile Version */
+            source_profile_version: string;
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "1.0";
+            /** Assembler Version */
+            assembler_version: string;
+            /** Tool Mapping Version */
+            tool_mapping_version: string;
+            /** Tool Mapping Digest */
+            tool_mapping_digest: string;
+            /** Redaction Policy Version */
+            redaction_policy_version: string;
+            /** Redaction Policy Digest */
+            redaction_policy_digest: string;
+            /** Trajectory Contract Digest */
+            trajectory_contract_digest: string;
+            /** Trajectory Digest */
+            trajectory_digest: string;
+        };
+        /** TrajectoryRuleDiagnosisResponse */
+        TrajectoryRuleDiagnosisResponse: {
+            /** Evaluator Id */
+            evaluator_id: string;
+            /** Evaluator Version */
+            evaluator_version: string;
+            /** Binding Id */
+            binding_id: string | null;
+            /**
+             * Typed Status
+             * @enum {string}
+             */
+            typed_status: "succeeded" | "failed" | "skipped" | "no_result";
+            /** Value */
+            value: boolean | null;
+            /**
+             * Conclusion
+             * @enum {string}
+             */
+            conclusion: "pass" | "fail" | "unknown";
+            /**
+             * Frozen Conclusion
+             * @enum {string}
+             */
+            frozen_conclusion: "pass" | "fail" | "unknown";
+            /** Required */
+            required: boolean;
+            /** Critical */
+            critical: boolean;
+            /** Reason Code */
+            reason_code: string | null;
+            /** Evidence Step Ids */
+            evidence_step_ids: string[];
+        };
+        /** TrajectoryScope */
+        TrajectoryScope: {
+            /** Launch Id */
+            launch_id: string;
+            /** Item Execution Id */
+            item_execution_id: string;
+            /** Dataset Item Id */
+            dataset_item_id: string;
+            /** Attempt Id */
+            attempt_id: string;
+            /** Dispatch Generation */
+            dispatch_generation: number;
+            /** Trace Id */
+            trace_id: string;
+            /** Root Observation Id */
+            root_observation_id: string;
+        };
+        /** TrajectoryStepDiagnosisResponse */
+        TrajectoryStepDiagnosisResponse: {
+            /** Step Id */
+            step_id: string;
+            /** Observation Id */
+            observation_id: string;
+            /** Parent Step Id */
+            parent_step_id: string | null;
+            /** Index */
+            index: number;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "AGENT" | "LLM" | "TOOL" | "RETRIEVER" | "GUARDRAIL" | "HUMAN" | "CUSTOM";
+            /** Raw Name */
+            raw_name: string;
+            /** Tool Identity */
+            tool_identity: string | null;
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "REQUESTED" | "EXECUTED" | "BLOCKED" | "EVENT";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "SUCCEEDED" | "FAILED" | "CANCELLED" | "UNKNOWN";
+            /** Started At */
+            started_at: string | null;
+            /** Ended At */
+            ended_at: string | null;
+            /** Duration Ms */
+            duration_ms: number | null;
+            arguments_redacted: components["schemas"]["TrajectoryDisplayJson"];
+            /** Argument Visibility */
+            argument_visibility: {
+                [key: string]: "AVAILABLE" | "REDACTED" | "MISSING" | "INVALID";
+            };
+            result_summary: components["schemas"]["TrajectoryDisplayJson"];
+            /** Error Code */
+            error_code: string | null;
+            /** Causal Predecessor Ids */
+            causal_predecessor_ids?: string[];
+            /** Workflow Scope Id */
+            workflow_scope_id?: string | null;
+        };
         /**
          * UsageCostMapping
          * @description Explicit dot-path mapping for usage and invocation-total cost in a JSON response.
@@ -3587,6 +3813,54 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["BaselineResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_trajectory_diagnosis_api_v1_experiment_launches__launch_id__trajectory_get: {
+        parameters: {
+            query: {
+                snapshot_id: string;
+                dataset_item_id: string;
+            };
+            header?: never;
+            path: {
+                launch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrajectoryDiagnosisResponse"];
+                };
+            };
+            /** @description Snapshot 或 Case 不属于所选身份 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description EVIDENCE_CONTRACT_INVALID：冻结证据合同不一致 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

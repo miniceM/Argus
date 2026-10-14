@@ -2,13 +2,22 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, WithJsonSchema, field_validator, model_validator
 
 from .security import validate_credential_ref, validate_endpoint_url
-from .trajectory.schema import Identity
+from .trajectory.codec import validate_json_value
+from .trajectory.schema import (
+    Duration,
+    Identity,
+    StandardTrajectory,
+    TrajectoryCompleteness,
+    TrajectoryEvidenceRef,
+    TrajectoryStep,
+)
 
 
 # ---------------------------------------------------------
@@ -25,6 +34,58 @@ class ExperimentRequest(BaseModel):
         le=50,
         description="Optional concurrency override; if omitted, inherits from AgentVersion",
     )
+
+
+# 仅诊断 DTO 声明 JSON number；domain artifact 的类型、encoder 与摘要不变。
+TrajectoryNumber = Annotated[Decimal, WithJsonSchema({"type": "number"})]
+type TrajectoryDisplayJson = None | bool | int | TrajectoryNumber | str | list[TrajectoryDisplayJson] | dict[str, TrajectoryDisplayJson]
+TrajectoryDisplayValue = Annotated[TrajectoryDisplayJson, BeforeValidator(validate_json_value)]
+
+
+class TrajectoryStepDiagnosisResponse(TrajectoryStep):
+    duration_ms: Annotated[Duration, WithJsonSchema({"type": "number"})] | None
+    arguments_redacted: TrajectoryDisplayValue
+    result_summary: TrajectoryDisplayValue
+
+
+class TrajectoryDisplayResponse(StandardTrajectory):
+    input_redacted: TrajectoryDisplayValue
+    output_redacted: TrajectoryDisplayValue
+    steps: list[TrajectoryStepDiagnosisResponse] = Field(min_length=1, max_length=1000)
+
+
+class TrajectoryRuleDiagnosisResponse(BaseModel):
+    evaluator_id: str
+    evaluator_version: str
+    binding_id: str | None
+    typed_status: Literal["succeeded", "failed", "skipped", "no_result"]
+    value: bool | None
+    conclusion: Literal["pass", "fail", "unknown"]
+    frozen_conclusion: Literal["pass", "fail", "unknown"]
+    required: bool
+    critical: bool
+    reason_code: str | None
+    evidence_step_ids: list[str]
+
+
+class TrajectoryDiagnosisResponse(BaseModel):
+    # 本端点局部 canonical encoder 以 JSON number 输出 Decimal。
+    model_config = ConfigDict(extra="forbid")
+
+    launch_id: str
+    snapshot_id: str
+    dataset_item_id: str
+    acquisition_state: Literal["PENDING", "READY", "UNAVAILABLE"]
+    completeness: TrajectoryCompleteness | None
+    trajectory: TrajectoryDisplayResponse | None
+    rule_results: list[TrajectoryRuleDiagnosisResponse]
+    reason_code: str | None
+    evidence_ref: TrajectoryEvidenceRef | None
+    step_argument_display_json: dict[str, str]
+    langfuse_trace_url: str | None
+    execution_status: str
+    quality_conclusion: Literal["pass", "fail", "unknown"]
+    required_evidence_status: Literal["COMPLETE", "INCOMPLETE"] | None
 
 
 

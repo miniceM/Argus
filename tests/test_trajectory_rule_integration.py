@@ -36,6 +36,29 @@ PARAMS = [
 ]
 
 
+def assert_frozen_diagnosis(runtime, monkeypatch, snapshot, case_id):
+    from app.api_results import router
+    from app.trajectory.codec import canonical_dumps, canonical_loads
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    app = FastAPI()
+    app.include_router(router)
+    monkeypatch.setattr("app.api_results._db_manager", lambda: runtime[0])
+    with TestClient(app) as client:
+        response = client.get(f"/api/v1/experiment-launches/{snapshot.launch_id}/trajectory",
+            params={"snapshot_id": snapshot.id, "dataset_item_id": case_id})
+    assert response.status_code == 200
+    body = canonical_loads(response.text)
+    with runtime[0].get_session() as session:
+        loaded = load_snapshot_input(session, snapshot_id=snapshot.id, dataset_item_id=case_id)
+        assert canonical_dumps(body["trajectory"]) == canonical_dumps(loaded.trajectory)
+        if loaded.trajectory is not None:
+            assert body["step_argument_display_json"] == {step.step_id: canonical_dumps(step.arguments_redacted) for step in loaded.trajectory.steps}
+    assert body["snapshot_id"] == snapshot.id and body["dataset_item_id"] == case_id
+    return body
+
+
 @pytest.mark.parametrize("profile,mode,approved", [("native_otel", "immediate", True),
     ("pydantic_ai", "immediate", True), ("http_only", "immediate", True),
     ("native_otel", "late_all", True), ("native_otel", "immediate", False)])
@@ -104,10 +127,13 @@ def test_real_frozen_rule_consumers(local_langfuse, s40_runtime, monkeypatch, tm
         assert (loaded.trajectory_evidence_ref.model_dump(mode="json") if loaded.trajectory_evidence_ref is not None else None) == expected_ref
         from app.db_models import RunResultSnapshotRecord
         assert session.get(RunResultSnapshotRecord, original.id).items == old_items
+    diagnosis = assert_frozen_diagnosis(s40_runtime, monkeypatch, original, identity["dataset_item_id"])
+    assert len(diagnosis["rule_results"]) == 4
+    assert {rule["conclusion"] for rule in diagnosis["rule_results"]} == ({"pass", "fail"} if observed else {"unknown"})
     rows = local_langfuse.wait_observations(identity["trace_id"], minimum=2 if profile == "http_only" else 8)
     local_langfuse.record(profile, "formal-rules-" + mode + ("-unqualified" if not approved else "") + str(recovery_stage or ""), identity, rows,
         normalization={"formal_rules": True, "original_ref_preserved": True, "eval_only_zero_agent_reader": True,
-            "quality_conclusion": quality, "recovery_stage": recovery_stage})
+            "quality_conclusion": quality, "recovery_stage": recovery_stage, "diagnosis_api_frozen_roundtrip": True})
 
 
 @pytest.mark.parametrize("profile,profile_id", [("native_otel", "native-otel-v1"), ("pydantic_ai", "pydantic-ai-v1")])
@@ -152,6 +178,9 @@ def test_real_optional_no_result_keeps_required_complete_through_eval_only(local
         assert item.eval_status == "partial" and item.quality_evaluation["required_evidence_status"] == "COMPLETE"
         refreshed = create_result_snapshot(session, session.get(ExperimentLaunchRecord, identity["launch_id"]))
         assert refreshed.evidence_state == "COMPLETE" and evaluate_gate(policy(), refreshed).decision == "PASS"
+    diagnosis = assert_frozen_diagnosis(s40_runtime, monkeypatch, refreshed, identity["dataset_item_id"])
+    assert {rule["conclusion"] for rule in diagnosis["rule_results"]} == {"pass", "unknown"}
     rows = local_langfuse.wait_observations(identity["trace_id"], minimum=8)
     local_langfuse.record(profile, "required-complete-optional-no-result", identity, rows, normalization={
-        "required_evidence_status": "COMPLETE", "optional_status": "no_result", "eval_status": "partial", "gate": "PASS", "eval_only": True})
+        "required_evidence_status": "COMPLETE", "optional_status": "no_result", "eval_status": "partial", "gate": "PASS", "eval_only": True,
+        "diagnosis_api_frozen_roundtrip": True})

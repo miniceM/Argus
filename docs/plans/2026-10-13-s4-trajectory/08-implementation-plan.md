@@ -62,7 +62,7 @@
 | T8 | 4–6 | Async Judge/恢复桥接、校准与准入 / #131 |
 | T9 | 2–3 | Judge Gate 和母 issue Demo / #132-B、#5 |
 
-实施 PR 按 T0、T1+T2、T3+T4+T5、T6、T7、T8、T9 形成可验收交付；若一个交付过大，按可独立否决的纵向结果拆分。每个 PR 用 `Refs` 关联当前 issue；只有该 issue 全部验收完成的最终实现 PR 才使用关闭引用。每个任务中间提交保持单一目的。
+交付方式更新（2026-10-14）：按用户要求，#160–#180 的全部实现汇入 [PR #181](https://github.com/miniceM/Argus/pull/181)，19 个未合并源 PR 已关闭，#162/#165 已合并并继承；源分支与历史保留。后续任务继续向该汇总 PR 追加可独立验证、单一目的的提交。PR 用 `Refs` 关联当前 issue；只有对应 issue 的全部验收完成后才使用关闭引用。
 
 ## 4. T0：证明真实 Observation 链路
 
@@ -178,10 +178,10 @@ assert required_false_gate.releasable is False
 
 **Interfaces:** GET trajectory 的 snapshot_id/dataset_item_id 必填；消费冻结 artifact、规则结果和 Policy conclusion；UI 只展示获准内容。
 
-- [ ] RED：跨 Launch/Snapshot/Case 返回404；旧无轨迹历史200并有原因；no_result不能显示绿PASS；快照切换不能复用上一 Case 数据。
-- [ ] 运行 `python -m pytest -q tests/test_trajectory_api.py` 与 Console 对应 Vitest；记录 RED。
-- [ ] 实现只读路由和获准DTO，step_argument_display_json从同artifact派生；在现有CaseDetailPanel懒加载，使用该字符串精确显示大整数/小数；点击规则定位Step，键盘可操作，声明原始链接指向在线观测。
-- [ ] GREEN：同步契约并执行用户交互验证。
+- [x] RED：跨 Launch/Snapshot/Case 返回404；旧无轨迹历史200并有原因；no_result不能显示绿PASS；快照切换不能复用上一 Case 数据。
+- [x] 运行 `python -m pytest -q tests/test_trajectory_api.py` 与 Console 对应 Vitest；记录 RED。
+- [x] 实现只读路由和获准DTO，step_argument_display_json从同artifact派生；在现有CaseDetailPanel懒加载，使用该字符串精确显示大整数/小数；点击规则定位Step，键盘可操作，声明原始链接指向在线观测。
+- [x] GREEN：同步契约并执行用户交互验证。
 
 ```bash
 python scripts/export_openapi.py
@@ -191,7 +191,9 @@ make console-test
 ARGUS_E2E_API_PORT=28080 ARGUS_E2E_CONSOLE_PORT=28083 make console-e2e
 ```
 
-- [ ] 提交 `feat: diagnose frozen trajectory rules per case`；#129 只有 T3/T4/T5 全部证据齐全才能关闭。
+- [x] 提交 `feat: diagnose frozen trajectory rules per case`，追加至汇总 PR #181。#129 在统一验收审计后关闭。
+
+实施记录（2026-10-14）：[T5 固定诊断与截图](../../validation/s4-2/frozen-diagnosis.md)及[版本/命令/断言/制品摘要](../../validation/s4-2/frozen-diagnosis-receipt.json)。一次独立审阅、Required 一轮修复后，PG 1240、Python 1944、Console 858、E2E 128、真实诊断消费者 17 项全部通过，无正式 skip；完整 S4 目标继续 T6–T9。
 
 ## 10. T6：安全参数规则与其余确定性能力
 

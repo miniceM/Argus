@@ -19,6 +19,7 @@ import { JsonViewer } from "../../../components/JsonViewer";
 import { AttemptDrawer } from "../AttemptDrawer";
 import { caseOutputQueryOptions } from "../launchComparisonQueries";
 import { EvaluationResultList } from "../EvaluationResultList";
+import { TrajectoryDiagnosis } from "../TrajectoryDiagnosis";
 import { frozenFailureRecovery, isFrozenIdentityFailure } from "../frozenIdentity";
 import { EvaluationRecoveryBadge, recoveryExplanation } from "../evaluationRecovery";
 import type { QualityEvaluation } from "../qualityDecision";
@@ -330,16 +331,20 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
                   {(() => {
                     const trace = (item as any).trace_url || item.langfuse_trace_url;
                     return trace ? (
-                      <a
-                        href={trace}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline inline-flex items-center gap-1 font-medium"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <span>Trace</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
+                      <span className="inline-flex items-center gap-1">
+                        <a
+                          href={trace}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline inline-flex items-center gap-1 font-medium"
+                          onClick={(e) => e.stopPropagation()}
+                          title="Langfuse 在线观测内容可能变化，不参与冻结 Snapshot 结论"
+                        >
+                          <span>Trace</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                        <span className="text-muted-foreground text-micro">在线</span>
+                      </span>
                     ) : (
                       <span className="text-muted-foreground text-micro">无 Trace</span>
                     );
@@ -397,6 +402,9 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
                     type="button"
                     className="text-muted-foreground hover:text-foreground p-1 rounded-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-focus"
                     aria-label={isExpanded ? "收起" : "展开"}
+                    aria-expanded={isExpanded}
+                    aria-controls={`case-detail-${launchId}-${item.dataset_item_id}`}
+                    onClick={event => { event.stopPropagation(); toggleExpand(item.dataset_item_id); }}
                   >
                     {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </button>
@@ -476,7 +484,8 @@ const CaseDetailPanel: React.FC<{
   const baselineOutputStatus = baselineOutput?.output_status;
 
   return (
-    <div className="mt-4 pt-4 border-t border-border space-y-4 text-muted-foreground">
+    <div id={`case-detail-${launchId}-${item.dataset_item_id}`} className="mt-4 pt-4 border-t border-border space-y-4 text-muted-foreground">
+      <TrajectoryDiagnosis key={`${launchId}:${snapshotId}:${item.dataset_item_id}`} launchId={launchId} snapshotId={snapshotId} datasetItemId={item.dataset_item_id} />
       {/* 冻结输入面板 */}
       <div className="p-3 bg-surface-subtle rounded-lg border border-border space-y-2">
         <div className="flex items-center justify-between">

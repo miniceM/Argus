@@ -1,0 +1,391 @@
+{
+  "schema_version": "1.0",
+  "verified_at": "2026-10-14T00:18:35.539126+00:00",
+  "scope": "T5 frozen Snapshot Case diagnosis",
+  "pull_request": "https://github.com/miniceM/Argus/pull/181",
+  "source_base": "4ef94df599f1ee70952822f33e582f4a9e34e1d1",
+  "source_sha256": {
+    "docs/openapi.json": "ae7f260bddea9e9eaaf6621806ffa37a6f8b5e472b63010db057497960ced1ff",
+    "services/console/e2e/trajectory-diagnosis.spec.ts": "3f793f3c9ab5677d24e3db31db625a2575335fec6e4bd52539158ec56947cffb",
+    "services/console/src/api/query-keys.ts": "b11f281fee43ded0698516d125895a04e9f9784c29243750b476aeeb8330170a",
+    "services/console/src/api/schema.d.ts": "a86a3492239591d854138b0c5de20db386390bf74787f8c23c1ace9d825d02e2",
+    "services/console/src/features/launches/TrajectoryDiagnosis.tsx": "facb28e25374add2a80e2abb8839587c3af947a8e9a278f08e10843fec32bc4c",
+    "services/console/src/features/launches/TrajectoryStepList.tsx": "3d95ad686279c73ac10c9027b082375e6d9651018ab100dd11e7300da11201b5",
+    "services/console/src/features/launches/__tests__/CasesTraceTab.trajectory.test.tsx": "536ac00fa96b813f19ed022e74f0437e53a68e7ebe215587b138b3cb70a179ed",
+    "services/console/src/features/launches/__tests__/Pr126FourthReview.test.tsx": "bcbbec463f42e47af7e1a51b9a9d36f1beb19e7b5f18c859a8f51c63c5d7f837",
+    "services/console/src/features/launches/__tests__/Pr126ThirdReview.test.tsx": "6c3cf259b801503723ba9fd1855fbe6d6814b40253d8fb47cffa2912b1e17cd1",
+    "services/console/src/features/launches/__tests__/trajectoryFixtures.ts": "bb2d8138395072e3c576eb67d53371d5ecb3a442fbcdcaeb5040ada81e9b8b27",
+    "services/console/src/features/launches/tabs/CasesTraceTab.tsx": "6c42a1c9e1ff6ce94492fc627afcf27aa7ba42958d97c5c860ad5b0fba1677ac",
+    "services/console/src/features/launches/trajectoryQueries.ts": "fc9f40a307c2bf5ed8bbcb52ee7be15888d51e327f7d828347b5de97d13ab437",
+    "services/eval-runner/app/api_results.py": "d3c0da1ed8db52b3ab3b5681e8ce70a26c2043867c2ebfb922a162440748b92c",
+    "services/eval-runner/app/models.py": "98fa737f4e7e8ec3b9b70e92a797b2dbf09910ae5fec797ef87902964f89f8b9",
+    "services/eval-runner/app/trajectory/diagnosis.py": "5f098db7fdce777c956f6a0a6f02fc86bf47a16c63133eb14a059319b0e8ff48",
+    "tests/test_trajectory_api.py": "76486070966013a77ba5dcaaad6be9656bc9188519def200844c0a171a104e36",
+    "tests/test_trajectory_rule_integration.py": "295e38bb12b258af77a2c2ca6f9e9f6ea83fa9e25c259511d3668a0f14cab275"
+  },
+  "contracts": {
+    "manifest": "1.3",
+    "trajectory": "1.0",
+    "evidence": "trajectory-1.0",
+    "comparison": "comparison-v2-required-evidence"
+  },
+  "reproduction_commands": [
+    "python -m pytest -q tests/test_trajectory_api.py tests/test_trajectory_required_evidence.py tests/test_trajectory_rule_execution.py tests/test_trajectory_rules.py tests/test_issue_80_evaluator_versioning.py tests/test_issue_82_typed_results.py tests/test_trajectory_inputs.py tests/test_trajectory_execution_recovery.py tests/test_trajectory_worker.py tests/test_issue_84_eval_only_retry.py tests/test_orchestrator_and_worker_s2.py tests/test_trajectory_reader_factory.py tests/test_trajectory_reader.py tests/test_trajectory_manifest.py tests/test_launch_manifest_freeze.py tests/test_issue_81_frozen_execution_identity.py tests/test_issue_83_quality_policy.py tests/test_issue_85_snapshot_revision.py tests/test_issue_86_comparability.py tests/test_trajectory_coordinator.py tests/test_trajectory_checkpoint.py tests/test_trajectory_acquisition.py tests/test_trajectory_evidence.py tests/test_trajectory_storage_schema.py tests/test_trajectory_assembler.py tests/test_trajectory_causal_links.py tests/test_trajectory_root_graph.py tests/test_trajectory_normalized_batches.py tests/test_trajectory_structural_roles.py tests/test_trajectory_contract.py tests/test_trajectory_schema.py tests/test_trajectory_normalizer_context.py tests/test_trajectory_normalizer.py tests/test_trajectory_redaction.py tests/test_migration_and_schema.py tests/test_idempotency_and_atomic_lock.py tests/test_pr17_review_regressions.py tests/test_issue_7_release_gates.py -k 'trajectory_api or trajectory_required_evidence or trajectory_rule_execution or trajectory_rules or issue_80 or issue_82 or trajectory_inputs or postgres or trajectory_execution_recovery or trajectory_worker or issue_84 or orchestrator_and_worker or trajectory_reader or trajectory_manifest or launch_manifest or issue_81 or issue_83 or issue_85 or issue_86 or trajectory_coordinator or trajectory_checkpoint or trajectory_acquisition or trajectory_evidence or trajectory_storage_schema or trajectory_assembler or trajectory_causal_links or trajectory_root_graph or trajectory_normalized_batches or trajectory_normalizer or trajectory_redaction or trajectory_structural_roles or trajectory_contract or trajectory_schema'",
+    "python -m pytest -q tests/test_trajectory_api.py",
+    "pnpm --dir services/console exec vitest run src/features/launches/__tests__/CasesTraceTab.trajectory.test.tsx",
+    "python scripts/export_openapi.py",
+    "pnpm --dir services/console api:generate",
+    "make validate",
+    "make console-e2e",
+    "python -m pytest -q tests/test_trajectory_rule_integration.py -m trajectory_local"
+  ],
+  "assertions": [
+    "required Snapshot/Case queries and exact Launch ownership",
+    "local immutable Artifact scope and digest, no online/Agent/checkpoint/latest read or history repair",
+    "all measured or Step-bearing trajectory results including optional use the same frozen Artifact reference",
+    "false is measured FAIL, no_result has no green PASS",
+    "exact JSON numbers and canonical per-Step strings from the same Artifact",
+    "cache verifies identity, renderable fields and digests; late old responses never replace a new Case",
+    "repeated keyboard rule/Step focus, explicit causal layers and phases, semantic tokens and online labels",
+    "real API/Artifact canonical roundtrips after execution/recovery/eval-only with two Agent sources and degraded variants"
+  ],
+  "review": {
+    "rounds": 1,
+    "critical": 0,
+    "required": 3,
+    "optional": 2,
+    "required_fix_passes": 1,
+    "required_behavior_red_failed": 8,
+    "additional_quality_and_error_schema_red_failed": 2,
+    "required_fixed": true,
+    "optional_fixed": true
+  },
+  "verification": {
+    "postgresql_targeted": {
+      "passed": 1240,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 82.312,
+      "junit_sha256": "61b85328337dcac02997c80920cf2c6c1d37fa56bf438f2eb2de3b348b5ab6c8",
+      "api_db_cases": {
+        "sqlite": 24,
+        "postgresql": 24
+      },
+      "api_openapi_cases": 2,
+      "log_sha256": "0ebd6441d063ed2e7f5894f7cbe2342a53ccd4bd0b98b65770edc99f670345ba"
+    },
+    "make_validate": {
+      "status": "PASS",
+      "steps": 8,
+      "python_passed": 1944,
+      "python_skipped": 0,
+      "real_deselected": 84,
+      "console_files": 53,
+      "console_passed": 858,
+      "token_lint": "PASS",
+      "typecheck": "PASS",
+      "build": "PASS",
+      "openapi_types_sync": "PASS",
+      "compose": "PASS",
+      "log_sha256": "8ec6be8fb0c8e15fe3d311e59f603529a3131b9a02bce5a9ca131913a309e1ec",
+      "owned_postgresql_cleanup": "verified"
+    },
+    "console_e2e": {
+      "passed": 128,
+      "failed": 0,
+      "skipped": 0,
+      "log_sha256": "54c033bb224e81feed541bf0224b6c501b5f87c3d2f45a0316a05d5900d4545f",
+      "isolated_ports_released": true,
+      "axe_violations": 0,
+      "geometry_viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "capture_viewports": {
+        "desktop": {
+          "width": 1280,
+          "height": 2000
+        },
+        "mobile": {
+          "width": 390,
+          "height": 3200
+        }
+      },
+      "images": {
+        "frozen-diagnosis-desktop.png": "6708cd4b38bd364c4cfe657f9c696120dd591621433be672e3e8f83f71f2a91c",
+        "frozen-diagnosis-mobile.png": "1b28b92098b484c769f079e20f935ba27344bcfa2b005b69f887dc4912f54641"
+      },
+      "visual_inspection": "full diagnosis including statuses, identity, Step groups, exact parameters and online label"
+    },
+    "real_frozen_diagnosis": {
+      "passed": 17,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 107.427,
+      "junit_sha256": "597fec7748ec3297f581871cfc826eb8b13da244027e106bde588cdbbe8b034d",
+      "log_sha256": "8e7b2192eebb002fff2b76d6d2d017036a72ab5dcc86358c227f4834c796a4de",
+      "matrix_sha256": "bfafcd007bb4e26cdbf50fd2b9b88d965b152ef643e0a5c8b7fe522b75f20d9f",
+      "profiles": {
+        "native_otel": 10,
+        "pydantic_ai": 4,
+        "http_only": 3
+      },
+      "server": "4.38.0",
+      "runner_sdk": "4.16.0",
+      "agent_packages": {
+        "genai-prices": "0.1.11",
+        "opentelemetry-sdk": "1.45.1",
+        "protobuf": "7.36.2",
+        "requests": "2.34.2",
+        "opentelemetry-proto": "1.45.1",
+        "opentelemetry-api": "1.45.1",
+        "logfire-api": "5.1.1",
+        "pydantic-ai-slim": "2.55.0",
+        "googleapis-common-protos": "1.75.5",
+        "pip": "25.0.1",
+        "urllib3": "2.8.0",
+        "h11": "0.16.0",
+        "pydantic-core": "2.50.1",
+        "pydantic-graph": "2.55.0",
+        "truststore": "0.10.5",
+        "griffelib": "2.3.2",
+        "certifi": "2026.7.22",
+        "opentelemetry-exporter-http-transport": "0.66b1",
+        "opentelemetry-semantic-conventions": "0.66b1",
+        "annotated-types": "0.8.0",
+        "opentelemetry-exporter-otlp-proto-http": "1.45.1",
+        "typing-inspection": "0.4.4",
+        "opentelemetry-exporter-otlp-common": "0.66b1",
+        "typing-extensions": "4.16.0",
+        "httpx2": "2.13.1",
+        "pydantic": "2.14.1",
+        "opentelemetry-exporter-otlp-proto-common": "1.45.1",
+        "charset-normalizer": "3.5.2",
+        "httpcore2": "2.13.1",
+        "anyio": "4.15.1",
+        "idna": "3.20"
+      },
+      "cases": [
+        {
+          "profile": "native_otel",
+          "scenario": "formal-rules-immediate",
+          "normalization": {
+            "formal_rules": true,
+            "original_ref_preserved": true,
+            "eval_only_zero_agent_reader": true,
+            "quality_conclusion": "fail",
+            "recovery_stage": null,
+            "diagnosis_api_frozen_roundtrip": true
+          }
+        },
+        {
+          "profile": "pydantic_ai",
+          "scenario": "formal-rules-immediate",
+          "normalization": {
+            "formal_rules": true,
+            "original_ref_preserved": true,
+            "eval_only_zero_agent_reader": true,
+            "quality_conclusion": "fail",
+            "recovery_stage": null,
+            "diagnosis_api_frozen_roundtrip": true
+          }
+        },
+        {
+          "profile": "http_only",
+          "scenario": "formal-rules-immediate",
+          "normalization": {
+            "formal_rules": true,
+            "original_ref_preserved": true,
+            "eval_only_zero_agent_reader": true,
+            "quality_conclusion": "unknown",
+            "recovery_stage": null,
+            "diagnosis_api_frozen_roundtrip": true
+          }
+        },
+        {
+          "profile": "native_otel",
+          "scenario": "formal-rules-late_all",
+          "normalization": {
+            "formal_rules": true,
+            "original_ref_preserved": true,
+            "eval_only_zero_agent_reader": true,
+            "quality_conclusion": "fail",
+            "recovery_stage": null,
+            "diagnosis_api_frozen_roundtrip": true
+          }
+        },
+        {
+          "profile": "native_otel",
+          "scenario": "formal-rules-immediate-unqualified",
+          "normalization": {
+            "formal_rules": true,
+            "original_ref_preserved": true,
+            "eval_only_zero_agent_reader": true,
+            "quality_conclusion": "unknown",
+            "recovery_stage": null,
+            "diagnosis_api_frozen_roundtrip": true
+          }
+        },
+        {
+          "profile": "native_otel",
+          "scenario": "formal-rules-immediatebefore_acquisition",
+          "normalization": {
+            "formal_rules": true,
+            "original_ref_preserved": true,
+            "eval_only_zero_agent_reader": true,
+            "quality_conclusion": "fail",
+            "recovery_stage": "before_acquisition",
+            "diagnosis_api_frozen_roundtrip": true
+          }
+        },
+        {
+          "profile": "pydantic_ai",
+          "scenario": "formal-rules-immediatebefore_acquisition",
+          "normalization": {
+            "formal_rules": true,
+            "original_ref_preserved": true,
+            "eval_only_zero_agent_reader": true,
+            "quality_conclusion": "fail",
+            "recovery_stage": "before_acquisition",
+            "diagnosis_api_frozen_roundtrip": true
+          }
+        },
+        {
+          "profile": "http_only",
+          "scenario": "formal-rules-immediatebefore_acquisition",
+          "normalization": {
+            "formal_rules": true,
+            "original_ref_preserved": true,
+            "eval_only_zero_agent_reader": true,
+            "quality_conclusion": "unknown",
+            "recovery_stage": "before_acquisition",
+            "diagnosis_api_frozen_roundtrip": true
+          }
+        },
+        {
+          "profile": "native_otel",
+          "scenario": "formal-rules-late_allbefore_acquisition",
+          "normalization": {
+            "formal_rules": true,
+            "original_ref_preserved": true,
+            "eval_only_zero_agent_reader": true,
+            "quality_conclusion": "fail",
+            "recovery_stage": "before_acquisition",
+            "diagnosis_api_frozen_roundtrip": true
+          }
+        },
+        {
+          "profile": "native_otel",
+          "scenario": "formal-rules-immediate-unqualifiedbefore_acquisition",
+          "normalization": {
+            "formal_rules": true,
+            "original_ref_preserved": true,
+            "eval_only_zero_agent_reader": true,
+            "quality_conclusion": "unknown",
+            "recovery_stage": "before_acquisition",
+            "diagnosis_api_frozen_roundtrip": true
+          }
+        },
+        {
+          "profile": "native_otel",
+          "scenario": "formal-rules-immediateready",
+          "normalization": {
+            "formal_rules": true,
+            "original_ref_preserved": true,
+            "eval_only_zero_agent_reader": true,
+            "quality_conclusion": "fail",
+            "recovery_stage": "ready",
+            "diagnosis_api_frozen_roundtrip": true
+          }
+        },
+        {
+          "profile": "pydantic_ai",
+          "scenario": "formal-rules-immediateready",
+          "normalization": {
+            "formal_rules": true,
+            "original_ref_preserved": true,
+            "eval_only_zero_agent_reader": true,
+            "quality_conclusion": "fail",
+            "recovery_stage": "ready",
+            "diagnosis_api_frozen_roundtrip": true
+          }
+        },
+        {
+          "profile": "http_only",
+          "scenario": "formal-rules-immediateready",
+          "normalization": {
+            "formal_rules": true,
+            "original_ref_preserved": true,
+            "eval_only_zero_agent_reader": true,
+            "quality_conclusion": "unknown",
+            "recovery_stage": "ready",
+            "diagnosis_api_frozen_roundtrip": true
+          }
+        },
+        {
+          "profile": "native_otel",
+          "scenario": "formal-rules-late_allready",
+          "normalization": {
+            "formal_rules": true,
+            "original_ref_preserved": true,
+            "eval_only_zero_agent_reader": true,
+            "quality_conclusion": "fail",
+            "recovery_stage": "ready",
+            "diagnosis_api_frozen_roundtrip": true
+          }
+        },
+        {
+          "profile": "native_otel",
+          "scenario": "formal-rules-immediate-unqualifiedready",
+          "normalization": {
+            "formal_rules": true,
+            "original_ref_preserved": true,
+            "eval_only_zero_agent_reader": true,
+            "quality_conclusion": "unknown",
+            "recovery_stage": "ready",
+            "diagnosis_api_frozen_roundtrip": true
+          }
+        },
+        {
+          "profile": "native_otel",
+          "scenario": "required-complete-optional-no-result",
+          "normalization": {
+            "required_evidence_status": "COMPLETE",
+            "optional_status": "no_result",
+            "eval_status": "partial",
+            "gate": "PASS",
+            "eval_only": true,
+            "diagnosis_api_frozen_roundtrip": true
+          }
+        },
+        {
+          "profile": "pydantic_ai",
+          "scenario": "required-complete-optional-no-result",
+          "normalization": {
+            "required_evidence_status": "COMPLETE",
+            "optional_status": "no_result",
+            "eval_status": "partial",
+            "gate": "PASS",
+            "eval_only": true,
+            "diagnosis_api_frozen_roundtrip": true
+          }
+        }
+      ]
+    },
+    "existing_full_real_gate": {
+      "source_commit": "4ef94df599f1ee70952822f33e582f4a9e34e1d1",
+      "receipt": "required-evidence-receipt.json",
+      "passed": 84,
+      "calibration_samples": 90,
+      "reuse_scope": "unchanged domain/Reader/codec/storage/acquisition; current 17 consumers independently revalidated diagnosis"
+    }
+  },
+  "remaining": [
+    "T6 four additional deterministic rules",
+    "T7 trajectory Gate and projection",
+    "T8 Judge admission and calibration",
+    "T9 79 staged + 10 overall acceptance audit"
+  ]
+}

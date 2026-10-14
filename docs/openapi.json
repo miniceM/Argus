@@ -1774,6 +1774,74 @@
         }
       }
     },
+    "/api/v1/experiment-launches/{launch_id}/trajectory": {
+      "get": {
+        "tags": [
+          "Evaluation Results"
+        ],
+        "summary": "Read frozen trajectory diagnosis for one Snapshot Case",
+        "operationId": "get_trajectory_diagnosis_api_v1_experiment_launches__launch_id__trajectory_get",
+        "parameters": [
+          {
+            "name": "launch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Launch Id"
+            }
+          },
+          {
+            "name": "snapshot_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Snapshot Id"
+            }
+          },
+          {
+            "name": "dataset_item_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Dataset Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrajectoryDiagnosisResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Snapshot 或 Case 不属于所选身份"
+          },
+          "409": {
+            "description": "EVIDENCE_CONTRACT_INVALID：冻结证据合同不一致"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/experiment-launches/{launch_id}/summary": {
       "get": {
         "tags": [
@@ -6949,6 +7017,756 @@
           "environment"
         ],
         "title": "SystemInfoResponse"
+      },
+      "TrajectoryCompleteness": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "OBSERVED_COMPLETE",
+              "PARTIAL",
+              "ROOT_ONLY"
+            ],
+            "title": "Status"
+          },
+          "capabilities": {
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "COMPLETE",
+                "PARTIAL",
+                "NONE"
+              ]
+            },
+            "propertyNames": {
+              "enum": [
+                "tool_executions",
+                "tool_requests",
+                "tool_arguments",
+                "human_events",
+                "ordering",
+                "timing"
+              ]
+            },
+            "type": "object",
+            "title": "Capabilities"
+          },
+          "warnings": {
+            "items": {
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "title": "Warnings"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "capabilities",
+          "warnings"
+        ],
+        "title": "TrajectoryCompleteness"
+      },
+      "TrajectoryDiagnosisResponse": {
+        "properties": {
+          "launch_id": {
+            "type": "string",
+            "title": "Launch Id"
+          },
+          "snapshot_id": {
+            "type": "string",
+            "title": "Snapshot Id"
+          },
+          "dataset_item_id": {
+            "type": "string",
+            "title": "Dataset Item Id"
+          },
+          "acquisition_state": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "READY",
+              "UNAVAILABLE"
+            ],
+            "title": "Acquisition State"
+          },
+          "completeness": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrajectoryCompleteness"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trajectory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrajectoryDisplayResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rule_results": {
+            "items": {
+              "$ref": "#/components/schemas/TrajectoryRuleDiagnosisResponse"
+            },
+            "type": "array",
+            "title": "Rule Results"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "evidence_ref": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrajectoryEvidenceRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "step_argument_display_json": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Step Argument Display Json"
+          },
+          "langfuse_trace_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Langfuse Trace Url"
+          },
+          "execution_status": {
+            "type": "string",
+            "title": "Execution Status"
+          },
+          "quality_conclusion": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "unknown"
+            ],
+            "title": "Quality Conclusion"
+          },
+          "required_evidence_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "COMPLETE",
+                  "INCOMPLETE"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Evidence Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "launch_id",
+          "snapshot_id",
+          "dataset_item_id",
+          "acquisition_state",
+          "completeness",
+          "trajectory",
+          "rule_results",
+          "reason_code",
+          "evidence_ref",
+          "step_argument_display_json",
+          "langfuse_trace_url",
+          "execution_status",
+          "quality_conclusion",
+          "required_evidence_status"
+        ],
+        "title": "TrajectoryDiagnosisResponse"
+      },
+      "TrajectoryDisplayJson": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/TrajectoryDisplayJson"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TrajectoryDisplayJson"
+            },
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "TrajectoryDisplayResponse": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "1.0",
+            "title": "Schema Version"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/TrajectoryScope"
+          },
+          "input_redacted": {
+            "$ref": "#/components/schemas/TrajectoryDisplayJson"
+          },
+          "output_redacted": {
+            "$ref": "#/components/schemas/TrajectoryDisplayJson"
+          },
+          "completeness": {
+            "$ref": "#/components/schemas/TrajectoryCompleteness"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/TrajectoryStepDiagnosisResponse"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Steps"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/TrajectoryProvenance"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schema_version",
+          "scope",
+          "input_redacted",
+          "output_redacted",
+          "completeness",
+          "steps",
+          "provenance"
+        ],
+        "title": "TrajectoryDisplayResponse"
+      },
+      "TrajectoryEvidenceRef": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[\\x21-\\x7e]{1,64}$",
+            "title": "Artifact Id"
+          },
+          "trajectory_digest": {
+            "type": "string",
+            "maxLength": 71,
+            "minLength": 71,
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Trajectory Digest"
+          },
+          "trajectory_contract_digest": {
+            "type": "string",
+            "maxLength": 71,
+            "minLength": 71,
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Trajectory Contract Digest"
+          },
+          "schema_version": {
+            "type": "string",
+            "const": "1.0",
+            "title": "Schema Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "artifact_id",
+          "trajectory_digest",
+          "trajectory_contract_digest",
+          "schema_version"
+        ],
+        "title": "TrajectoryEvidenceRef"
+      },
+      "TrajectoryProvenance": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[\\x21-\\x7e]{1,64}$",
+            "title": "Provider"
+          },
+          "source_profile_id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[\\x21-\\x7e]{1,64}$",
+            "title": "Source Profile Id"
+          },
+          "source_profile_version": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[\\x21-\\x7e]{1,64}$",
+            "title": "Source Profile Version"
+          },
+          "schema_version": {
+            "type": "string",
+            "const": "1.0",
+            "title": "Schema Version"
+          },
+          "assembler_version": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[\\x21-\\x7e]{1,64}$",
+            "title": "Assembler Version"
+          },
+          "tool_mapping_version": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[\\x21-\\x7e]{1,64}$",
+            "title": "Tool Mapping Version"
+          },
+          "tool_mapping_digest": {
+            "type": "string",
+            "maxLength": 71,
+            "minLength": 71,
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Tool Mapping Digest"
+          },
+          "redaction_policy_version": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[\\x21-\\x7e]{1,64}$",
+            "title": "Redaction Policy Version"
+          },
+          "redaction_policy_digest": {
+            "type": "string",
+            "maxLength": 71,
+            "minLength": 71,
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Redaction Policy Digest"
+          },
+          "trajectory_contract_digest": {
+            "type": "string",
+            "maxLength": 71,
+            "minLength": 71,
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Trajectory Contract Digest"
+          },
+          "trajectory_digest": {
+            "type": "string",
+            "maxLength": 71,
+            "minLength": 71,
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Trajectory Digest"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "provider",
+          "source_profile_id",
+          "source_profile_version",
+          "schema_version",
+          "assembler_version",
+          "tool_mapping_version",
+          "tool_mapping_digest",
+          "redaction_policy_version",
+          "redaction_policy_digest",
+          "trajectory_contract_digest",
+          "trajectory_digest"
+        ],
+        "title": "TrajectoryProvenance"
+      },
+      "TrajectoryRuleDiagnosisResponse": {
+        "properties": {
+          "evaluator_id": {
+            "type": "string",
+            "title": "Evaluator Id"
+          },
+          "evaluator_version": {
+            "type": "string",
+            "title": "Evaluator Version"
+          },
+          "binding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Binding Id"
+          },
+          "typed_status": {
+            "type": "string",
+            "enum": [
+              "succeeded",
+              "failed",
+              "skipped",
+              "no_result"
+            ],
+            "title": "Typed Status"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "conclusion": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "unknown"
+            ],
+            "title": "Conclusion"
+          },
+          "frozen_conclusion": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "unknown"
+            ],
+            "title": "Frozen Conclusion"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required"
+          },
+          "critical": {
+            "type": "boolean",
+            "title": "Critical"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "evidence_step_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Step Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evaluator_id",
+          "evaluator_version",
+          "binding_id",
+          "typed_status",
+          "value",
+          "conclusion",
+          "frozen_conclusion",
+          "required",
+          "critical",
+          "reason_code",
+          "evidence_step_ids"
+        ],
+        "title": "TrajectoryRuleDiagnosisResponse"
+      },
+      "TrajectoryScope": {
+        "properties": {
+          "launch_id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[\\x21-\\x7e]{1,64}$",
+            "title": "Launch Id"
+          },
+          "item_execution_id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[\\x21-\\x7e]{1,64}$",
+            "title": "Item Execution Id"
+          },
+          "dataset_item_id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[\\x21-\\x7e]{1,64}$",
+            "title": "Dataset Item Id"
+          },
+          "attempt_id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[\\x21-\\x7e]{1,64}$",
+            "title": "Attempt Id"
+          },
+          "dispatch_generation": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Dispatch Generation"
+          },
+          "trace_id": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 32,
+            "pattern": "^[0-9a-f]{32}$",
+            "title": "Trace Id"
+          },
+          "root_observation_id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[\\x21-\\x7e]{1,64}$",
+            "title": "Root Observation Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "launch_id",
+          "item_execution_id",
+          "dataset_item_id",
+          "attempt_id",
+          "dispatch_generation",
+          "trace_id",
+          "root_observation_id"
+        ],
+        "title": "TrajectoryScope"
+      },
+      "TrajectoryStepDiagnosisResponse": {
+        "properties": {
+          "step_id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[\\x21-\\x7e]{1,64}$",
+            "title": "Step Id"
+          },
+          "observation_id": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[\\x21-\\x7e]{1,64}$",
+            "title": "Observation Id"
+          },
+          "parent_step_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[\\x21-\\x7e]{1,64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Step Id"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Index"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "AGENT",
+              "LLM",
+              "TOOL",
+              "RETRIEVER",
+              "GUARDRAIL",
+              "HUMAN",
+              "CUSTOM"
+            ],
+            "title": "Type"
+          },
+          "raw_name": {
+            "type": "string",
+            "maxLength": 4096,
+            "title": "Raw Name"
+          },
+          "tool_identity": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[\\x21-\\x7e]{1,64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Identity"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "REQUESTED",
+              "EXECUTED",
+              "BLOCKED",
+              "EVENT"
+            ],
+            "title": "Phase"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUCCEEDED",
+              "FAILED",
+              "CANCELLED",
+              "UNKNOWN"
+            ],
+            "title": "Status"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "arguments_redacted": {
+            "$ref": "#/components/schemas/TrajectoryDisplayJson"
+          },
+          "argument_visibility": {
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "AVAILABLE",
+                "REDACTED",
+                "MISSING",
+                "INVALID"
+              ]
+            },
+            "type": "object",
+            "title": "Argument Visibility"
+          },
+          "result_summary": {
+            "$ref": "#/components/schemas/TrajectoryDisplayJson"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "causal_predecessor_ids": {
+            "items": {
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^[\\x21-\\x7e]{1,64}$"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "title": "Causal Predecessor Ids"
+          },
+          "workflow_scope_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Scope Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "step_id",
+          "observation_id",
+          "parent_step_id",
+          "index",
+          "type",
+          "raw_name",
+          "tool_identity",
+          "phase",
+          "status",
+          "started_at",
+          "ended_at",
+          "duration_ms",
+          "arguments_redacted",
+          "argument_visibility",
+          "result_summary",
+          "error_code"
+        ],
+        "title": "TrajectoryStepDiagnosisResponse"
       },
       "UsageCostMapping": {
         "properties": {

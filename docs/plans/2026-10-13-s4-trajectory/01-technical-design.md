@@ -171,6 +171,8 @@ Executor outcome 扩展为旧 Evaluation 或 TypedEvaluationResult，不复制�
 
 T4 的版本标记、聚合/比较口径、原子冻结和兼容验证见 [required 证据验收记录](../../validation/s4-2/required-evidence.md)。诊断状态与证据完整度分别暴露，不以 Snapshot 的正式证据资格代替 Release Gate 的发布决策。
 
+T5 的固定 Snapshot/Case API、精确参数显示和只读诊断边界见 [冻结诊断记录](../../validation/s4-2/frozen-diagnosis.md)。在线 Trace 内容变化不改变冻结结论。
+
 ## 6. Digest、持久化与恢复
 
 | 身份 | 内容 | 比较要求 |

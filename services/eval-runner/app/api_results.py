@@ -22,6 +22,7 @@ from .models import (
     ResultSnapshotListResponse,
     ResultSnapshotRevisionResponse,
     RunSummaryResponse,
+    TrajectoryDiagnosisResponse,
 )
 from .result_outputs import ComparisonCaseOutputResponse, fetch_observation_output
 from .result_snapshots import (
@@ -38,6 +39,29 @@ def _db_manager():
     from .main import db_manager
 
     return db_manager
+
+
+@router.get("/{launch_id}/trajectory", response_model=TrajectoryDiagnosisResponse,
+    summary="Read frozen trajectory diagnosis for one Snapshot Case",
+    responses={404: {"description": "Snapshot 或 Case 不属于所选身份"},
+        409: {"description": "EVIDENCE_CONTRACT_INVALID：冻结证据合同不一致"}})
+def get_trajectory_diagnosis(launch_id: str, snapshot_id: str = Query(..., min_length=1),
+    dataset_item_id: str = Query(..., min_length=1)):
+    from .trajectory.diagnosis import build_diagnosis, diagnosis_response
+
+    with _db_manager().get_session() as session:
+        snapshot = session.scalar(select(RunResultSnapshotRecord).where(
+            RunResultSnapshotRecord.id == snapshot_id, RunResultSnapshotRecord.launch_id == launch_id))
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="Result snapshot not found")
+        if not isinstance(snapshot.items, list) or any(not isinstance(i, dict) for i in snapshot.items):
+            raise HTTPException(status_code=409, detail="EVIDENCE_CONTRACT_INVALID")
+        matches = [i for i in snapshot.items if i.get("dataset_item_id") == dataset_item_id]
+        if not matches:
+            raise HTTPException(status_code=404, detail="Snapshot Case not found")
+        if len(matches) != 1:
+            raise HTTPException(status_code=409, detail="EVIDENCE_CONTRACT_INVALID")
+        return diagnosis_response(build_diagnosis(session, snapshot, matches[0]))
 
 
 

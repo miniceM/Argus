@@ -186,7 +186,6 @@ def test_docs_only_is_low_but_unknown_or_sensitive_changes_are_high() -> None:
         assert classify_change_set(files=[file], contents={})["risk"] == "high"
 
 
-
 def test_medium_scoped_tests_and_console_presentation_only() -> None:
     approved = (
         "tests/test_agent_registry.py",
@@ -219,6 +218,8 @@ def test_medium_scoped_tests_and_console_presentation_only() -> None:
 def test_medium_never_covers_sensitive_ambiguous_or_unsafe_paths() -> None:
     forbidden = (
         "tests/test_ci_cloud_e2e_policy.py",
+        "tests/test_ci.py",
+        "tests/test_cloud.py",
         "tests/test_cloud_e2e.py",
         "tests/test_langfuse_trace.py",
         "tests/test_release_gate.py",

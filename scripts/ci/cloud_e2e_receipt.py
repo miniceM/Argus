@@ -850,9 +850,8 @@ def _record_cli() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_subparsers(dest="command", required=True)
-    parser.parse_args()
-    command = sys.argv[1]
+    parser.add_argument("command", choices=("prepare", "verify", "record"))
+    command = parser.parse_args().command
     if command == "prepare":
         return _prepare_cli()
     if command == "verify":

@@ -14,7 +14,7 @@ from langfuse import Evaluation
 
 RESULT_TYPES: tuple[str, ...] = ("numeric", "boolean", "categorical", "text")
 
-EXECUTOR_TYPES: tuple[str, ...] = ("builtin_python",)
+EXECUTOR_TYPES: tuple[str, ...] = ("builtin_python", "trajectory_judge")
 
 DEFINITION_SOURCES: tuple[str, ...] = (
     "ARGUS_BUILTIN",
@@ -32,6 +32,7 @@ SCOPES: tuple[str, ...] = ("item", "run")
 # human-facing `definition_source` label, so relabelling provenance can never
 # grant or revoke release eligibility.
 ELIGIBILITY_REASON_MESSAGES: dict[str, str] = {
+    "JUDGE_ADMISSION_UNAVAILABLE": "Judge 尚缺实际 Provider、Token 上界与校准准入，不能作为正式发布证据。",
     "EXECUTION_OWNER_NOT_ARGUS": "该版本由 Langfuse 在线执行，不由 Argus 冻结执行，无法作为发布评测证据。",
     "EXECUTOR_UNSUPPORTED": "当前 Runner 不支持该执行器类型，无法解析并校验实现制品。",
     "IMPLEMENTATION_REF_MISSING": "该版本没有可校验的实现引用，无法冻结执行身份。",
@@ -316,6 +317,9 @@ def evaluate_release_eligibility(
     change the answer (Issue #80 acceptance criterion).
     """
     reasons: list[str] = []
+
+    if version.executor_type == "trajectory_judge":
+        reasons.append("JUDGE_ADMISSION_UNAVAILABLE")
 
     if execution_owner != "ARGUS":
         reasons.append("EXECUTION_OWNER_NOT_ARGUS")

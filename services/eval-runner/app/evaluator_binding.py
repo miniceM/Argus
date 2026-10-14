@@ -44,7 +44,7 @@ LEGACY_MANIFEST_SCHEMAS = ("1.0", "1.1")
 FROZEN_CONTRACT_STATUS = "FROZEN_VERIFIED"
 LEGACY_CONTRACT_STATUS = "HISTORICAL_CONTRACT_UNRECORDED"
 
-SUPPORTED_EXECUTOR_TYPES = ("builtin_python",)
+SUPPORTED_EXECUTOR_TYPES = ("builtin_python", "trajectory_judge")
 
 _DIGEST_PREFIX_RE = r"^sha256:[0-9a-f]{64}$"
 
@@ -447,10 +447,14 @@ def freeze_binding(
 
     from .trajectory.bindings import is_tool_rule
     trajectory_rule = is_tool_rule(version)
+    trajectory_judge = version.executor_type == "trajectory_judge"
     frozen_params, frozen_input = {}, dict(version.input_contract)
     if trajectory_rule:
         from .trajectory.bindings import freeze_rule_config
         frozen_params, frozen_input = freeze_rule_config(version, params)
+    elif trajectory_judge:
+        from .trajectory.judge_execution import freeze_judge_config
+        frozen_params, frozen_input = freeze_judge_config(version, params)
     elif params:
         raise EvaluatorBindingError("EVALUATOR_PARAMS_UNSUPPORTED", code="EVALUATOR_PARAMS_UNSUPPORTED")
     reasons = evaluate_release_eligibility(version, execution_owner=definition.execution_owner)
@@ -475,7 +479,7 @@ def freeze_binding(
         "artifact": artifact.payload(),
         "runner": runner_identity,
     }
-    if trajectory_rule:
+    if trajectory_rule or trajectory_judge:
         binding_seed.update(params=frozen_params, input_contract=frozen_input)
     binding = EvaluatorBinding(
         binding_id=f"bind_{canonical_digest(binding_seed).split(':', 1)[1][:16]}",
@@ -622,7 +626,9 @@ class BuiltinPythonExecutor(EvaluatorExecutor):
 
 def build_executor_registry(registry: Any) -> dict[str, EvaluatorExecutor]:
     """Executors available in this Runner, keyed by their frozen executor type."""
-    return {BuiltinPythonExecutor.executor_type: BuiltinPythonExecutor(registry)}
+    from .trajectory.judge_execution import TrajectoryJudgeExecutor
+    return {BuiltinPythonExecutor.executor_type: BuiltinPythonExecutor(registry),
+        TrajectoryJudgeExecutor.executor_type: TrajectoryJudgeExecutor(registry)}
 
 
 def executor_for(
@@ -790,8 +796,10 @@ def _verify_trajectory_manifest(manifest):
                 or declared.get("digest") != measured or declared.get("version") != "1.3"):
                 raise TrajectoryManifestError("MEASUREMENT_MISMATCH")
         from .trajectory.bindings import validate_rule_contract
+        from .trajectory.judge_execution import validate_judge_contract
         for binding in bindings_from_manifest(manifest):
             validate_rule_contract(binding, trajectory)
+            validate_judge_contract(binding, trajectory, (manifest or {}).get("schema_version"))
     except TrajectoryManifestError as error:
         raise EvaluatorBindingError(error.reason_code, code=error.reason_code) from None
     from .required_evidence import frozen_required_policy, uses_required_contract
@@ -880,6 +888,8 @@ def evaluate_frozen_item(
     quality_policy: dict[str, Any] | None = None,
     only_binding_ids: set[str] | None = None,
     context: EvaluationContext | None = None,
+    prepared_results: dict[str, Any] | None = None,
+    evaluation_generation: int | None = None,
 ) -> FrozenItemEvaluation:
     """The single evaluation entry point for Worker, run and resume paths.
 
@@ -959,11 +969,17 @@ def evaluate_frozen_item(
         )
         executor = executor_for(binding, executors)
         started = time.perf_counter()
+        trajectory_judge = binding.executor_type == "trajectory_judge"
         try:
             # 旧 Output Executor 仍只收到原有两个参数；轨迹声明由后续规则版本冻结。
             inputs = {"context": context} if binding.input_contract.get("input_kind") == "trajectory" else {}
             from .trajectory.bindings import is_tool_rule
             tool_rule = is_tool_rule(binding) and isinstance(executor, BuiltinPythonExecutor)
+            if trajectory_judge:
+                from .trajectory.manifest import load_trajectory_contract
+                inputs.update(binding=binding, trajectory_contract=load_trajectory_contract(manifest),
+                    prepared_result=prepared_results.get(binding.binding_id) if type(prepared_results) is dict else None,
+                    evaluation_generation=evaluation_generation)
             if tool_rule:
                 inputs.update(binding=binding, manifest_schema_version=manifest_schema_version,
                     trajectory_contract_digest=manifest.get("trajectory", {}).get("trajectory_contract_digest"))
@@ -974,19 +990,25 @@ def evaluate_frozen_item(
             raw = executor.execute(
                 resolved.implementation, output=output, expected_output=expected_output, **inputs
             )
+            if trajectory_judge:
+                from .trajectory.judge_execution import adapt_prepared_judge_result
+                raw = adapt_prepared_judge_result(raw, **inputs)
         except Exception as exc:  # noqa: BLE001 - one Binding must not kill the rest
             duration_ms = round((time.perf_counter() - started) * 1000, 3)
             typed_results.append(
                 failed_result(
                     binding,
-                    error_code="EVALUATION_FAILED",
-                    error_message=str(exc),
+                    error_code="JUDGE_PREPARED_RESULT_INVALID" if trajectory_judge else "EVALUATION_FAILED",
+                    error_message="JUDGE_PREPARED_RESULT_INVALID" if trajectory_judge else str(exc),
                     duration_ms=duration_ms,
                     manifest_schema_version=manifest_schema_version,
                 )
             )
             continue
         duration_ms = round((time.perf_counter() - started) * 1000, 3)
+        if trajectory_judge:
+            typed_results.append(raw)
+            continue
         if tool_rule:
             from .trajectory.bindings import adapt_result
             typed_results.append(adapt_result(raw, binding=binding, context=context, schema=manifest_schema_version, duration_ms=duration_ms))

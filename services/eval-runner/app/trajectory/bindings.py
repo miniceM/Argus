@@ -119,6 +119,18 @@ def validate_rule_contract(binding, contract):
 
 
 def implementation_dependencies(fn):
+    from .judge_execution import execute_prepared_judge_result
+    if fn is execute_prepared_judge_result:
+        modules = ("app.trajectory.judge_execution", "app.trajectory.judge", "app.trajectory.judge_input",
+            "app.trajectory.judge_provider", "app.trajectory.judge_budget", "app.trajectory.codec",
+            "app.trajectory.inputs", "app.trajectory.schema", "app.trajectory.contract", "app.trajectory.manifest",
+            "app.trajectory.privacy", "app.trajectory.redaction", "app.trajectory.paths", "app.trajectory.bindings",
+            "app.trajectory.evidence", "app.trajectory.checkpoint", "app.trajectory.acquisition",
+            "app.trajectory.assembler", "app.trajectory.causal", "app.trajectory.graph", "app.trajectory.normalizer",
+            "app.trajectory.human", "app.trajectory.arguments", "app.trajectory.reader",
+            "app.evaluator_results", "app.evaluator_binding", "app.evaluators", "app.runner_identity",
+            "app.execution_checkpoint", "app.db_models", "app.db", "app.config")
+        return tuple("sha256:" + hashlib.sha256(inspect.getsource(importlib.import_module(name)).encode()).hexdigest() for name in modules)
     if fn is not rules.evaluate_trajectory_rule:
         return ()
     # dispatcher 外的参数模型、因果算法、digest 和结果 helper 也属于可执行身份。

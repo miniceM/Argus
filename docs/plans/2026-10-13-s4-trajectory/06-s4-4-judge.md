@@ -1,6 +1,6 @@
 # S4.4 Trajectory Judge 实施方案
 
-状态：**PR #136 已批准方案；T8 正在 PR #181 实施。输出、统计、定义、安全准备、异步传输与预算账本已实现；正式 Worker/recovery、真实校准与准入尚未交付。**
+状态：**PR #136 已批准方案；T8 正在 PR #181 实施。输出、统计、定义、安全准备、异步传输、预算账本与冻结执行器桥接已实现；正式 Worker/recovery、真实校准与准入尚未交付。**
 核验基线：2026-10-13，`main@4b043739c63357ecc10131e1ba54bc1bc53d862a`。
 关联：[Issue #5](https://github.com/miniceM/Argus/issues/5)、[#131](https://github.com/miniceM/Argus/issues/131)。
 共同契约：[01 技术设计](01-technical-design.md)；阶段顺序见[完整实施计划](08-implementation-plan.md)，验收追踪见[验收矩阵](09-acceptance-matrix.md)。
@@ -12,10 +12,10 @@ Judge 只补足确定性规则无法判断的语义问题，并把每次调用�
 能由工具身份、状态、顺序、参数等确定性事实判定的条件应由规则处理。
 
 当前已有冻结 Evaluator Binding：包含 `params`、`definition_digest`、实现制品摘要、执行器类型和 `binding_digest`。
-2026-10-14 当前 `BuiltinPythonExecutor` 仍是唯一注册执行器；执行入口已有 keyword-only `context`，轨迹规则在受控 builtin 路径消费冻结制品，但尚无 Judge 异步准备与执行器。[实现](../../../services/eval-runner/app/evaluator_binding.py)
+2026-10-14 当前注册 `BuiltinPythonExecutor` 与 `TrajectoryJudgeExecutor`；执行入口有 keyword-only `context`、`prepared_results` 和 `evaluation_generation`。轨迹规则消费冻结制品，Judge 执行器只消费受预算异步准备阶段签发、与当前固定输入匹配的结果，不自行调用 Provider；正式 Worker 尚未接线。[实现](../../../services/eval-runner/app/evaluator_binding.py)
 当前 typed result 支持 numeric、boolean、categorical、text；值缺失会成为 `no_result`，不会补零。
 当前 QualityPolicy 已有 required/optional、critical、三态结论和 `unknown_not_releasable`。[策略实现](../../../services/eval-runner/app/quality_policy.py)
-当前 evaluator 绑定可冻结实现制品；新增 Judge 输出验证器与留出集统计，但尚未接入 LLM Provider、Resolved Model 和正式执行器。[初始契约证据](../../validation/s4-4/contract-progress.md)
+当前 evaluator 绑定可冻结实现制品；Judge 输出验证、留出集统计、异步 HTTP、预算与执行器桥接已有阶段实现。真实 Provider/Resolved Model/Token 上界和校准准入未完成，Judge 版本仍不具备正式发布资格。[初始契约证据](../../validation/s4-4/contract-progress.md)、[执行器桥接记录](../../validation/s4-4/executor-progress.md)
 当前 optional 评测异常保留在 `eval_status`；T4 已独立计算 required 证据与 Snapshot 资格，T7 已在此基础上接通确定性门禁和 Snapshot 投影，Judge 阶段 B 仍待本期补验。当前接入点与 RED 顺序见 [T8 集成预检](../../validation/s4-4/preflight.md)。
 
 Issue #131 当前只要求模型、Prompt、参数摘要冻结，校准报告和低置信分流，并在全量通过时不调用 Judge。
@@ -26,6 +26,7 @@ Issue 所称“自动进人审队列”在本方案中落为 `UNKNOWN` 和原因
 
 新增路径 `services/eval-runner/app/trajectory/judge.py`，只负责 Judge 契约、调用适配、结构验证和校准统计。
 新增 `services/eval-runner/app/trajectory/judge_provider.py`，只定义 Provider 协议和首个获准 Provider Adapter。
+新增 `services/eval-runner/app/trajectory/judge_execution.py`，注册冻结 Judge 版本并桥接异步准备结果与同步 typed 汇总。实现边界、版本与证据见[执行器记录](../../validation/s4-4/executor-progress.md)。
 沿用现有 Evaluator Registry、Binding、Typed Result、QualityPolicy、Snapshot 与 Release Gate。
 轨迹采集和规范化由 #127/#128 提供；Judge 不自行查询 Langfuse，也不重复组装 Observation。
 Judge 对同一 Item/Attempt 复用冻结 `TrajectoryEvidenceRef`；同一制品可供多个 Judge 规则共享。
@@ -107,7 +108,7 @@ Prompt 明确声明轨迹文本、工具输出和参数值都是数据，不可�
 
 保留现有同步 EvaluatorExecutor 和 evaluate_frozen_item，异步网络调用放在 Worker 的受控准备阶段，不在同步函数里 asyncio.run。新增冻结 executor_type=trajectory_judge：resolve/validate 复用绑定和制品校验，execute 只消费已验证 prepared_results，缺失则 failed，不能自行发请求或回退模型。T3 已使 executor outcome 可保留 TypedEvaluationResult；本期增加 keyword-only prepared_results，按 binding_id 查找并再次校验 scope、input/criteria digest、provenance 和 evidence_ref，随后仍由同一 summarize_typed_results/QualityPolicy 汇总。
 
-Worker 先 resolve_execution_plan，再 await Judge Adapter 得到绑定到当前 Item 的 Mapping[binding_id, TypedEvaluationResult]，然后沿既有 to_thread 执行同步汇总/持久化。Recovery 将现有流程拆成同步 prepare_recovery（claim lease、验证 checkpoint、选 needed bindings）、异步 Judge、同步 finalize_recovery（合并既有成功值并 CAS）三段；全程复用现有 EvaluationAttempt，Provider await 期间不持有 DB transaction/锁。旧 recover_evaluation 保持无 Judge 路径兼容，新 recover_evaluation_async 用于含 Judge 的队列 Worker；所有调用方逐一测试，历史 /experiments/run 继续固定旧 Binding，不自动启用 Judge。
+Worker 先 resolve_execution_plan，再 await Judge Adapter 得到绑定到当前 Item 的 Mapping[binding_id, PreparedJudgeEvaluation]，然后沿既有 to_thread 执行同步汇总/持久化。封套包含 TypedEvaluationResult、Binding/输入/criteria 摘要、scope/evidence ref、evaluation generation 及进程内签发凭证；同步入口重建当前固定请求并再次验证，不直接信任裸 TypedResult。该细化依据执行器替换结果、跨 scope/criteria/generation 与异常原文的回归证据；不会跨进程持久化凭证。Recovery 将现有流程拆成同步 prepare_recovery（claim lease、验证 checkpoint、选 needed bindings）、异步 Judge、同步 finalize_recovery（合并既有成功值并 CAS）三段；全程复用现有 EvaluationAttempt，Provider await 期间不持有 DB transaction/锁。旧 recover_evaluation 保持无 Judge 路径兼容，新 recover_evaluation_async 用于含 Judge 的队列 Worker；所有调用方逐一测试，历史 /experiments/run 继续固定旧 Binding，不自动启用 Judge。
 
 Provider 用异步 HTTP client，在 asyncio.timeout 的冻结总预算内执行非流式单次请求，connect/read/write/pool 也分别限时；限制响应字节与 JSON 深度。首版并发 semaphore 为 2，配置、总预算及输入/输出限制随 Judge execution profile 冻结。CancelledError 必须向上传播并关闭 response、释放 semaphore；超时转换为 failed。任务取消/lease 丢失后即使 Provider 迟到也不能写结果，所有持久化继续 CAS。测试同时证明 event loop 心跳不中断、取消实际关闭请求、超时和恢复不重调 Agent。
 

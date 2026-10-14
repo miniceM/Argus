@@ -503,4 +503,65 @@ describe("LaunchesList Status Filter Contract and Behavior (Issue #24)", () => {
       );
     });
   });
+
+  it("renders active baseline badge for bound baseline launch and filters by baseline", async () => {
+    const baselineMockLaunches = [
+      {
+        id: "launch-001",
+        name: "run-1",
+        status: "COMPLETED",
+        quality_conclusion: "pass",
+        dataset_name: "ds-1",
+        agent_id: "agent-1",
+        agent_version: "v1",
+        created_at: "2026-09-24T10:00:00Z",
+        langfuse_sync_status: "SYNCED",
+      },
+      {
+        id: "launch-002",
+        name: "run-2",
+        status: "COMPLETED",
+        quality_conclusion: "fail",
+        dataset_name: "ds-1",
+        agent_id: "agent-1",
+        agent_version: "v2",
+        created_at: "2026-09-24T11:00:00Z",
+        langfuse_sync_status: "SYNCED",
+      },
+    ];
+
+    (api.GET as any).mockImplementation((path: string, options: any) => {
+      if (path === "/api/v1/experiment-launches") {
+        return Promise.resolve({ data: baselineMockLaunches });
+      }
+      if (path === "/api/v1/agents") {
+        return Promise.resolve({ data: [{ id: "agent-1", name: "Agent One" }] });
+      }
+      if (path === "/api/v1/agents/{agent_id}/baselines") {
+        if (options?.params?.path?.agent_id === "agent-1") {
+          return Promise.resolve({ data: { agent_id: "agent-1", launch_id: "launch-001" } });
+        }
+        return Promise.resolve({ data: null });
+      }
+      return Promise.resolve({ data: null });
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <LaunchesList />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("active-baseline-badge")).toBeInTheDocument();
+    });
+    expect(screen.getByText("当前基线")).toBeInTheDocument();
+
+    const checkbox = screen.getByLabelText("仅看当前基线");
+    fireEvent.click(checkbox);
+    expect(screen.getByText("launch-001")).toBeInTheDocument();
+    expect(screen.queryByText("launch-002")).not.toBeInTheDocument();
+  });
 });

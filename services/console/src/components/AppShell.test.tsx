@@ -92,7 +92,7 @@ describe("AppShell Langfuse Dashboard link", () => {
 
     fireEvent.click(opener);
     const dialog = screen.getByRole("dialog", { name: "主导航" });
-    const credentialsLink = within(dialog).getByRole("link", { name: "Credentials" });
+    const credentialsLink = within(dialog).getByRole("link", { name: "凭证" });
     const dashboardLink = await within(dialog).findByRole("link", { name: /Langfuse Dashboard/ });
     expect(document.activeElement).toBe(credentialsLink);
 
@@ -133,7 +133,7 @@ describe("AppShell Langfuse Dashboard link", () => {
     const opener = screen.getByRole("button", { name: "打开导航" });
 
     fireEvent.click(opener);
-    fireEvent.click(within(screen.getByRole("dialog", { name: "主导航" })).getByRole("link", { name: "Launches" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "主导航" })).getByRole("link", { name: "评测" }));
 
     await screen.findByText("Launches page");
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "主导航" })).not.toBeInTheDocument());
@@ -145,7 +145,7 @@ describe("AppShell Langfuse Dashboard link", () => {
     try {
       renderAppShell(success(systemInfo()));
 
-      const credentialsLink = await screen.findByRole("link", { name: "Credentials" });
+      const credentialsLink = await screen.findByRole("link", { name: "凭证" });
       expect(credentialsLink).toHaveAttribute("href", "/credentials");
       fireEvent.click(credentialsLink);
       expect(await screen.findByText("Credentials page")).toBeInTheDocument();
@@ -162,7 +162,7 @@ describe("AppShell Langfuse Dashboard link", () => {
 
       fireEvent.click(opener);
       const dialog = screen.getByRole("dialog", { name: "主导航" });
-      fireEvent.click(within(dialog).getByRole("link", { name: "Credentials" }));
+      fireEvent.click(within(dialog).getByRole("link", { name: "凭证" }));
 
       expect(await screen.findByText("Credentials page")).toBeInTheDocument();
       await waitFor(() => expect(screen.queryByRole("dialog", { name: "主导航" })).not.toBeInTheDocument());

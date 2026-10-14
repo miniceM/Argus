@@ -138,7 +138,18 @@ def test_case_output_api_uses_only_frozen_observation_refs_and_sides_fail_indepe
     assert "attacker-controlled-id" not in requested_refs
     assert "attacker-controlled-trace" not in requested_refs
     assert all(call["fields"] == "core,io" and call["limit"] == 2 for call in observations.calls)
-    assert all(call["request_options"] == {"timeout_in_seconds": 5, "max_retries": 0} for call in observations.calls)
+    assert all(call["request_options"] == {"timeout_in_seconds": 15, "max_retries": 2} for call in observations.calls)
+
+
+def test_cached_output_bypasses_langfuse_call():
+    observations = FakeObservations()
+    client = SimpleNamespace(api=SimpleNamespace(observations=observations))
+    cached = result_outputs.fetch_observation_output(
+        {"observation_id": "obs", "trace_id": "trace", "cached_output": {"hello": "world"}}, client=client
+    )
+    assert cached.output_status == "AVAILABLE"
+    assert cached.output == {"hello": "world"}
+    assert len(observations.calls) == 0
 
 
 def test_output_reference_and_returned_observation_ids_are_verified():

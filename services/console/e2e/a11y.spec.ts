@@ -187,6 +187,9 @@ async function mockApi(page: Page): Promise<void> {
   );
 
   await page.route("**/api/v1/agents*", (route) => route.fulfill({ json: [agent] }));
+  await page.route("**/api/v1/agents/*/baselines*", (route) =>
+    route.fulfill({ status: 404, json: { detail: "no baseline bound" } }),
+  );
   await page.route("**/api/v1/agent-versions*", (route) =>
     route.fulfill({ json: versions }),
   );
@@ -326,9 +329,9 @@ test.describe("WCAG 2.2 AA: overlay surfaces", () => {
     await page.keyboard.press("Space");
     const dialog = page.getByRole("dialog", { name: "主导航" });
     await expect(dialog).toBeVisible();
-    const credentials = dialog.getByRole("link", { name: "Credentials" });
+    const credentials = dialog.getByRole("link", { name: "凭证" });
     const agents = dialog.getByRole("link", { name: "Agents" });
-    const launches = dialog.getByRole("link", { name: "Launches" });
+    const launches = dialog.getByRole("link", { name: "评测" });
     const close = dialog.getByRole("button", { name: "关闭" });
     await expect(credentials).toBeFocused();
 

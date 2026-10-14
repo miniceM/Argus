@@ -65,6 +65,12 @@ def fetch_observation_output(
     if not isinstance(observation_id, str) or not observation_id.strip() or not isinstance(trace_id, str) or not trace_id.strip():
         return OutputSideResponse(output_status="NO_REFERENCE", reason="NO_OUTPUT_REFERENCE", **base)
 
+    if "cached_output" in output_ref and output_ref["cached_output"] is not None:
+        output, truncated = _safe_output(output_ref["cached_output"])
+        return OutputSideResponse(
+            output_status="AVAILABLE", output=output, truncated=truncated, **base
+        )
+
     langfuse = client if client is not None else get_langfuse_client_safe()
     observations = getattr(getattr(getattr(langfuse, "api", None), "observations", None), "get_many", None)
     if not callable(observations):
@@ -81,7 +87,7 @@ def fetch_observation_output(
             fields="core,io",
             filter=json.dumps(filters),
             limit=2,
-            request_options={"timeout_in_seconds": 5, "max_retries": 0},
+            request_options={"timeout_in_seconds": 15, "max_retries": 2},
         )
     except Exception as exc:
         if getattr(exc, "status_code", None) == 404:

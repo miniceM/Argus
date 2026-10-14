@@ -60,7 +60,18 @@ export function CredentialsPage() {
       }
       if (!response || response.error) {
         // 不渲染服务端原始请求内容，避免代理错误回显 Secret。
-        setError(response?.response.status === 409 ? "凭据仍被版本引用或已被并发修改。请查看使用关系；停用需明确确认，删除被引用凭据不被允许。" : "操作失败，请检查管理授权、主密钥配置和输入。");
+        const status = response?.response?.status;
+        if (status === 503) {
+          setError("当前服务环境未挂载或未启用 Managed Secret 主密钥，暂不支持凭据新增与修改。");
+        } else if (status === 401 || status === 403) {
+          setError("管理授权 Token 无效或无权操作，请检查部署管理授权凭据。");
+        } else if (status === 409) {
+          setError("凭据仍被版本引用或已被并发修改。请查看使用关系；停用需明确确认，删除被引用凭据不被允许。");
+        } else if (status === 422) {
+          setError("输入参数不符合要求，请检查凭据名称与各字段格式。");
+        } else {
+          setError("操作失败，请检查管理授权、主密钥配置和输入。");
+        }
         return;
       }
       close(); setUsage(null);
@@ -70,8 +81,15 @@ export function CredentialsPage() {
   };
   return <div className="space-y-5">
     <div className="flex items-start justify-between gap-4">
-      <div><h1 className="text-xl font-semibold text-foreground">Credentials</h1><p className="mt-1 text-sm text-foreground-secondary">创建凭据后，在 Agent 版本中选择名称。轮换保持同一 ID，新调用读取当前修订。</p></div>
+      <div>
+        <h1 className="text-xl font-semibold text-foreground">凭据管理</h1>
+        <p className="mt-1 text-sm text-foreground-secondary">创建凭据后，在 Agent 版本中按名称引用。轮换保持同一 ID，新调用自动读取当前修订。</p>
+      </div>
       <Button onClick={() => open("create")}>创建凭据</Button>
+    </div>
+    <div className="rounded-lg border border-border bg-surface-subtle p-3 text-xs text-muted-foreground flex items-center gap-2">
+      <span className="font-semibold text-foreground">环境说明：</span>
+      <span>托管凭据采用 Argus 主密钥加密存储；若后端未挂载 Managed Secret 主密钥，新增凭据将返回 503。</span>
     </div>
     {error && !operation && <p role="alert" className="text-sm text-fail">{error}</p>}
     {list.isPending && <p role="status">正在加载凭据…</p>}

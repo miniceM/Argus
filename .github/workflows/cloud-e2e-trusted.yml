@@ -193,3 +193,34 @@ jobs:
           path: trusted-control/artifacts/candidate-receipt/receipt.json
           if-no-files-found: warn
           retention-days: 90
+
+  refresh-policy:
+    name: Reconcile Cloud Integration Policy after candidate
+    needs: [prepare, receipt]
+    # Run after a completed candidate even if receipt failed, so failures get
+    # published as failures rather than leaving an obsolete pending status.
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Deliberately separate from candidate-cloud: never execute PR code or
+    # expose Cloud secrets in a job with Actions write permission.
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: trusted-control
+          persist-credentials: false
+
+      - name: Dispatch trusted current-PR policy reconciliation
+        working-directory: trusted-control
+        env:
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          CANDIDATE_RUN_ID: ${{ github.run_id }}
+          CANDIDATE_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: python -m scripts.ci.refresh_cloud_policy

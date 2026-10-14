@@ -190,6 +190,47 @@ def test_receipt_required_steps_match_trusted_workflow_contract() -> None:
     assert receipt_cli.CANDIDATE_E2E_STEP in cloud_steps
 
 
+
+def test_trusted_candidate_explicitly_reconciles_policy_without_manual_approval() -> None:
+    """A bot-dispatched candidate cannot rely on workflow_run to clear pending."""
+    workflow_path = Path(__file__).resolve().parents[1] / CANDIDATE_WORKFLOW
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    jobs = workflow["jobs"]
+    refresh = jobs["refresh-policy"]
+
+    # Even a failed receipt must refresh the policy to clear stale pending.
+    assert set(refresh["needs"]) == {"prepare", "receipt"}
+    assert "always()" in refresh["if"]
+    assert refresh["permissions"]["actions"] == "write"
+    assert refresh["permissions"].get("statuses") is None
+    assert "candidate-cloud" not in refresh["needs"]
+
+    checkout, dispatch = refresh["steps"]
+    assert checkout["with"]["ref"] == "${{ github.workflow_sha }}"
+    assert checkout["with"]["persist-credentials"] is False
+    assert dispatch["working-directory"] == "trusted-control"
+    assert dispatch["env"]["PR_NUMBER"] == "${{ inputs.pr_number }}"
+    assert dispatch["env"]["CANDIDATE_RUN_ID"] == "${{ github.run_id }}"
+    assert dispatch["env"]["CANDIDATE_RUN_ATTEMPT"] == "${{ github.run_attempt }}"
+    assert dispatch["run"] == "python -m scripts.ci.refresh_cloud_policy"
+    assert not any("LANGFUSE_" in str(value) for value in dispatch["env"].values())
+
+    policy_path = Path(__file__).resolve().parents[1] / ".github/workflows/cloud-integration-policy.yml"
+    policy = yaml.safe_load(policy_path.read_text(encoding="utf-8"))
+    triggers = policy.get("on", policy.get(True, {}))
+    assert "workflow_dispatch" in triggers
+    assert "pr_number" in triggers["workflow_dispatch"]["inputs"]
+    assert "candidate_run_id" in triggers["workflow_dispatch"]["inputs"]
+    assert "candidate_run_attempt" in triggers["workflow_dispatch"]["inputs"]
+    wait_steps = [
+        step for step in policy["jobs"]["evaluate"]["steps"]
+        if step.get("name") == "Wait for the exact dispatched candidate to finish"
+    ]
+    assert len(wait_steps) == 1
+    assert "workflow_dispatch" in wait_steps[0]["if"]
+    assert "wait-candidate" in wait_steps[0]["run"]
+
+
 def test_real_candidate_cloud_step_names_generate_passed_receipt() -> None:
     receipt = _build()
     assert receipt["cloud_state"] == "passed"

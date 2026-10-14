@@ -8,7 +8,7 @@
 2. `.github/workflows/cloud-integration-policy.yml` 在**可信 main** 上通过 `workflow_run: CI completed` 运行。只读 Evaluate/Publish 负责刷新所有当前 PR 的 `Cloud Integration Policy`。只有专用 Dispatch Job 持有 `actions:write`（无 Langfuse Secrets），在上游 CI 成功且属于当前 main/base、same-repository PR、风险分类为 `high` 后，使用 `GITHUB_TOKEN` 自动 `workflow_dispatch` 候选验证。低风险跳过真实 Cloud；失败、fork、旧 SHA 和不完整身份一律不会派发。
 3. `.github/workflows/cloud-e2e-trusted.yml` **只接受由 GitHub Actions bot 触发的候选**；冻结 PR/head/base、测试 merge SHA、CI run/attempt、可信 main workflow revision；再次从 GitHub API 检查。候选 Cloud Job 在单独测试 Environment 中运行真实 Cloud；Environment **不要求人工审批**。候选流程内只授予 API 读权限，并在先完成候选镜像构建后才导入测试凭证。
 4. `scripts/ci/cloud_e2e_receipt.py` 由 main 的可信控制代码生成 schema v2 receipt，要求 bot 自动派发身份、当前 PR identity、Prepare/Cloud Job + 必需 Steps success、真实 Cloud artifact（managed-cloud + async-link，v1 2/6，v2 6/6），并记录 `authorization.mode=trusted_ci_automatic` 与 CI run/attempt。**不再读取 GitHub Environment approvals API**；缺少或不匹配任何其他证据仍 fail-closed。
-5. `publish_cloud_policy.py` 在候选 Run 完成的 `workflow_run` 回调中重新核对当前 main、PR head/base/merge、CI attempt、candidate artifact 与经过 GitHub API 重算的 receipt，一致才向当前 head 写 `Cloud Integration Policy=success`。旧人工触发收据（v1 或 actor 非 bot）不能绕过新策略。
+5. 候选工作流在 `receipt` Job 完成后，额外执行隔离的 `refresh-policy` Job，通过 `GITHUB_TOKEN` 发出显式 `workflow_dispatch`，要求可信 `cloud-integration-policy.yml` 重新评估当前 PR。这个回调在收据成功或失败时都执行，避免停留在旧的 Pending。GitHub 对 `GITHUB_TOKEN` 引发的普通事件有限制，不能依赖自动派发候选的 `workflow_run` 事件继续链式触发；`workflow_dispatch` 是受支持的例外。Callback 只持有 `actions:write`，不运行 PR 代码、不接收 Langfuse Secrets。为避免 callback 自身尚未退出时 Policy 抢先读取到候选 `in_progress` 导致再次 Pending，刷新请求携带 `candidate_run_id` 和 `candidate_run_attempt`，Policy 的只读 Evaluate Job 最多等待 240 秒确认精确候选 Run 已 `completed`，然后才重新评估，超时 fail-closed。`publish_cloud_policy.py` 在回调的 `workflow_dispatch` 中重新核对当前 main、PR head/base/merge、CI attempt、candidate artifact 与经过 GitHub API 重算的 receipt，一致才向当前 head 写 `Cloud Integration Policy=success`。旧人工触发收据（v1 或 actor 非 bot）不能绕过新策略。
 6. `.github/workflows/langfuse-i18n.yml` 仍独立验证当前 main 的 `Main Cloud Acceptance` 与真实 Cloud 证据；它不接受 PR 的跳过记录代替正式发布测试。
 
 ## 策略行为
@@ -35,7 +35,7 @@
 ## 验收标准
 
 - [ ] 同仓库低风险 PR：常规 CI 通过后 Policy 自动成功，无候选 Cloud run。
-- [ ] 同仓库高风险 PR：不需要手动 dispatch/审批；CI 成功后自动出现 bot 发起的候选 Run，三个 Job 全成功；v2 receipt 的 `authorization.mode=trusted_ci_automatic`，当前 PR 的 Policy 自动成功。
+- [ ] 同仓库高风险 PR：不需要手动 dispatch/审批；CI 成功后自动出现 bot 发起的候选 Run；Prepare、Cloud、Receipt、Refresh 四个 Job 全成功；v2 receipt 的 `authorization.mode=trusted_ci_automatic`，独立 `Cloud Integration Policy (workflow_dispatch)` 回调完成后当前 PR 的 Policy 自动成功。
 - [ ] 无 Required reviewers 时 `GET /actions/runs/{id}/approvals` 为 `[]` **不影响** Cloud 结果。
 - [ ] CI 失败、旧 base/head、fork、伪造 actor、修改工作流路径、错 CI attempt、缺 Cloud 步骤或 evidence 均不能产生成功的 Policy。
 - [ ] 管理员在 GitHub 实际确认 Workflow permissions 支持 Dispatch Job 的 `actions:write`，`GITHUB_TOKEN` 的新工作流派发已触发事件；若被组织策略限制，必须在组织权限侧解决，不采用 PAT 硬编码。

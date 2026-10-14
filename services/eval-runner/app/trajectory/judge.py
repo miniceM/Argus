@@ -1,7 +1,9 @@
 """冻结 Judge 输出与独立留出集统计；统计合格不代替 Provider/制品准入。"""
 
+import json
 from dataclasses import dataclass
 from decimal import Decimal
+from hashlib import sha256
 from math import sqrt
 from typing import Annotated, Literal
 
@@ -109,6 +111,116 @@ class CalibrationPolicy(_ContractModel):
         if self.confidence_level != Decimal("0.95") or len(set(self.risk_ids)) != len(self.risk_ids):
             raise ValueError("JUDGE_CALIBRATION_POLICY_INVALID")
         return self
+
+
+class FrozenJudgeDefinition(_ContractModel):
+    """声明身份与冻结预算；Provider 必须另外证明实际模型/能力，Schema 不构成准入。"""
+
+    judge_kind: Literal["task_completion", "plan_reasonableness", "wasted_stage", "complex_policy"]
+    risk_id: Identity
+    version: Identity
+    provider_id: Identity
+    provider_api_version: Identity
+    resolved_model_id: Identity
+    resolved_model_artifact_digest: Digest
+    prompt_text: Annotated[str, Field(min_length=1, max_length=4096)]
+    prompt_digest: Digest
+    rubric_text: Annotated[str, Field(min_length=1, max_length=4096)]
+    rubric_digest: Digest
+    implementation_ref: Identity
+    implementation_artifact_digest: Digest
+    dependency_lock_digest: Digest
+    temperature: Annotated[Decimal, Field(ge=0, le=2, allow_inf_nan=False)]
+    top_p: Annotated[Decimal, Field(gt=0, le=1, allow_inf_nan=False)]
+    max_output_tokens: Annotated[int, Field(ge=1, le=16384)]
+    request_timeout_seconds: Annotated[Decimal, Field(gt=0, le=300, allow_inf_nan=False)]
+    max_attempts: Literal[1]
+    max_steps: Annotated[int, Field(ge=1, le=1024)]
+    max_input_bytes: Annotated[int, Field(ge=1, le=2 * 1024 * 1024)]
+    max_total_calls: Annotated[int, Field(ge=1, le=100000)]
+    max_total_input_tokens: Annotated[int, Field(ge=1, le=1000000000)]
+    max_total_output_tokens: Annotated[int, Field(ge=1, le=1000000000)]
+    mode: Literal["diagnostic", "release"]
+    eligible_when: Literal["DETERMINISTIC_FAIL_OR_UNKNOWN"]
+    trigger_confidence_threshold: Probability
+    sample_rate: Probability
+    sampling_seed: Identity
+    required_case_policy: Literal["ALL_DATASET_CASES"]
+    required_case_ids_digest: Digest
+    calibration_set_id: Identity
+    calibration_set_version: Identity
+    calibration_set_digest: Digest
+    calibration_policy: CalibrationPolicy
+    output_policy: JudgeOutputPolicy
+
+    @field_validator("max_attempts", mode="before")
+    @classmethod
+    def single_integer_attempt(cls, value):
+        if type(value) is not int:
+            raise ValueError("JUDGE_ATTEMPTS_INVALID")
+        return value
+
+    @model_validator(mode="after")
+    def verified_texts_and_risk(self):
+        for text, digest in ((self.prompt_text, self.prompt_digest), (self.rubric_text, self.rubric_digest)):
+            if len(text.encode("utf-8")) > 4096 or "sha256:" + sha256(text.encode("utf-8")).hexdigest() != digest:
+                raise ValueError("JUDGE_INSTRUCTION_DIGEST_INVALID")
+        model = self.resolved_model_id.casefold()
+        if model in {"latest", "default", "auto", "alias"} or model.endswith((":latest", "@latest", "/latest")):
+            raise ValueError("JUDGE_MODEL_IDENTITY_UNRESOLVED")
+        if self.risk_id not in self.calibration_policy.risk_ids:
+            raise ValueError("JUDGE_CALIBRATION_RISK_MISMATCH")
+        return self
+
+    @property
+    def definition_digest(self) -> str:
+        # 输出 Schema 与策略一并固定，修改解析契约必须创建新 Definition。
+        value = FrozenJudgeDefinition.model_validate(self.model_dump())
+        return canonical_digest({"definition_schema_version": "trajectory-judge-definition-v1",
+            "configuration": value.model_dump(), "output_schema": judge_output_schema(value.output_policy)})
+
+
+def judge_output_schema(policy: JudgeOutputPolicy) -> dict:
+    policy = JudgeOutputPolicy.model_validate(policy.model_dump())
+    # Decimal 的通用 Pydantic Schema 还允许字符串；Provider 合同明确只允许 JSON number。
+    schema = canonical_loads(json.dumps(JudgeOutput.model_json_schema(), allow_nan=False))
+    schema["properties"]["confidence"] = {"type": "number", "minimum": 0, "maximum": 1}
+    schema["properties"]["reason_code"]["enum"] = list(policy.reason_codes)
+    refs = schema["properties"]["evidence_step_ids"]
+    refs.update(minItems=0 if policy.allow_empty_evidence else 1, maxItems=policy.max_evidence_refs)
+    return schema
+
+
+def judge_should_run(definition: FrozenJudgeDefinition, *, case_id: str, deterministic_verdicts: list[str],
+    deterministic_confidences: list[Decimal] | None = None) -> bool:
+    definition = FrozenJudgeDefinition.model_validate(definition.model_dump())
+    if (type(case_id) is not str or not case_id or type(deterministic_verdicts) is not list
+        or any(type(value) is not str or value not in {"PASS", "FAIL", "UNKNOWN"} for value in deterministic_verdicts)):
+        raise ValueError("JUDGE_TRIGGER_INPUT_INVALID")
+    if deterministic_confidences is not None and (type(deterministic_confidences) is not list
+        or len(deterministic_confidences) != len(deterministic_verdicts)
+        or any(type(value) is not Decimal or not value.is_finite() or not 0 <= value <= 1 for value in deterministic_confidences)):
+        raise ValueError("JUDGE_TRIGGER_INPUT_INVALID")
+    if definition.mode == "release":
+        return True  # required cohort 校验是启动前置条件，不应用诊断触发/采样。
+    low_confidence = deterministic_confidences is not None and any(value < definition.trigger_confidence_threshold
+        for value in deterministic_confidences)
+    if not low_confidence and not any(value in {"FAIL", "UNKNOWN"} for value in deterministic_verdicts):
+        return False
+    # canonical 分隔防止 seed/Case 拼接碰撞；同一冻结配置重跑得到相同抽样。
+    digest = canonical_digest([definition.sampling_seed, case_id, definition.definition_digest])
+    numerator = int(digest.removeprefix("sha256:"), 16)
+    rate_numerator, rate_denominator = definition.sample_rate.as_integer_ratio()
+    return numerator * rate_denominator < rate_numerator * 2 ** 256
+
+
+def validate_required_judge_coverage(definition: FrozenJudgeDefinition, *, dataset_case_ids: list[str]) -> None:
+    definition = FrozenJudgeDefinition.model_validate(definition.model_dump())
+    if (type(dataset_case_ids) is not list or not dataset_case_ids
+        or any(type(value) is not str or not value for value in dataset_case_ids)
+        or len(set(dataset_case_ids)) != len(dataset_case_ids)
+        or canonical_digest(sorted(dataset_case_ids)) != definition.required_case_ids_digest):
+        raise ValueError("JUDGE_REQUIRED_COHORT_INVALID")
 
 
 @dataclass(frozen=True)

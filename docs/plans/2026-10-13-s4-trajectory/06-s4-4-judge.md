@@ -41,13 +41,13 @@ Judge 对同一 Item/Attempt 复用冻结 `TrajectoryEvidenceRef`；同一制品
 | 配置组 | 冻结字段 | 验证要求 |
 |---|---|---|
 | 任务身份 | `judge_kind`、`risk_id`、`version` | kind 仅允许四类；`risk_id` 非空且区分业务风险 |
-| Provider | `provider_id`、`provider_api_version`、`resolved_model_id` | 记录实际解析后的不可变模型身份；禁止用 `latest`、别名或静默 fallback |
+| Provider | `provider_id`、`provider_api_version`、`resolved_model_id`、`resolved_model_artifact_digest` | ID 与模型制品摘要共同冻结；Provider 准入仍须证明实际解析身份，Schema 不证明目录名不可变。禁止 `latest`、别名或静默 fallback |
 | 指令 | `prompt_text`、`rubric_text`、各自 SHA-256 | 原文进入版本制品；改任一文本即新 `definition_digest` 和新 Binding |
 | 执行制品 | `implementation_ref`、`implementation_artifact.digest`、依赖锁摘要 | 运行时必须验证制品；制品不匹配时拒绝执行 |
 | 解码预算 | `temperature`、`top_p`、`max_output_tokens`、`request_timeout_seconds`、`max_attempts` | 数值有限且在 Provider 支持范围；首版 `max_attempts=1` |
 | 输入预算 | `max_steps`、`max_input_bytes`、`max_evidence_refs` | 超限产出 UNKNOWN 与原因码，不截断成可通过结论 |
 | Launch预算 | max_total_calls、max_total_input_tokens、max_total_output_tokens | 固定Case×required Binding最坏预算先校验；不足时拒绝启动或UNKNOWN，不缩小覆盖分母 |
-| 触发 | `mode`、`eligible_when`、`min_confidence`、`sample_rate`、`sampling_seed` | 表达式受限且确定；触发配置参加 digest |
+| 触发 | `mode`、`eligible_when`、`trigger_confidence_threshold`、`output_policy.min_confidence`、`sample_rate`、`sampling_seed` | 确定性触发阈值与 Judge 输出置信阈值分开冻结；表达式受限且确定，配置参加 digest |
 | 覆盖 | `required_case_policy`、`required_case_ids_digest` | diagnostic 可采样；release 对必需 Case 全量覆盖 |
 | 校准 | `calibration_set_id/version/digest`、`calibration_policy` | 标签、切分和阈值均绑定不可变版本 |
 

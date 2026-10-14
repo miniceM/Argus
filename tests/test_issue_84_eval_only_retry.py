@@ -487,6 +487,56 @@ def test_retry_evaluation_reruns_only_the_failed_binding(setup_runtime):
 # AC4: missing / expired / corrupt checkpoint blocks the retry
 # ---------------------------------------------------------------------------
 
+def test_recovery_with_no_missing_bindings_reuses_all_results_without_evaluator_calls(setup_runtime):
+    """收尾失败但结果已齐全时，空重评集合不得变成全量执行。"""
+    from app.evaluation_result_store import result_to_payload
+
+    manifest = _manifest(_frozen_binding("intent_match"), _frozen_binding("pii_safe"))
+    db_mgr, _queue, orchestrator, _worker, launch_id, item_id, calls, _ok = _run_item(
+        setup_runtime, manifest, "issue84-empty-targets", {"intent": "refund"}
+    )
+    assert calls == 1
+
+    def payloads(session):
+        rows = session.query(EvaluationResultRecord).filter(
+            EvaluationResultRecord.item_execution_id == item_id
+        ).all()
+        return {row.binding_id: result_to_payload(row) for row in rows}
+
+    with db_mgr.get_session() as session:
+        original = payloads(session)
+        assert len(original) == 2 and all(row["status"] == "succeeded" for row in original.values())
+        item = session.get(Item, item_id)
+        item.eval_status = "failed"
+        item.quality_conclusion = QUALITY_CONCLUSION_UNKNOWN
+        item.evaluation_status = EVALUATION_IDLE
+        session.commit()
+
+    orchestrator.retry_failed_evaluations(launch_id)
+    with db_mgr.get_session() as session:
+        generation = session.get(Item, item_id).evaluation_generation
+    with patch("app.evaluator_binding.BuiltinPythonExecutor.execute",
+        side_effect=AssertionError("完整旧结果不得重评")) as execute, patch(
+        "app.executor.RemoteAgentExecutor.invoke_once", new_callable=AsyncMock
+    ) as invoke:
+        outcome = recover_evaluation(
+            db_mgr, item_id=item_id, evaluation_generation=generation, worker_id="w-empty-targets"
+        )
+    execute.assert_not_called()
+    invoke.assert_not_awaited()
+    assert outcome["finalized"] is True
+    assert outcome["eval_status"] == "succeeded"
+    assert outcome["quality_conclusion"] == QUALITY_CONCLUSION_PASS
+    assert _count_execution_attempts(db_mgr, item_id) == 1
+    with db_mgr.get_session() as session:
+        assert payloads(session) == original
+        attempt = session.query(EvaluationAttemptRecord).filter(
+            EvaluationAttemptRecord.item_execution_id == item_id
+        ).one()
+        assert attempt.target_bindings == []
+        assert attempt.status == "succeeded"
+
+
 def test_missing_checkpoint_blocks_retry_and_stays_unknown(setup_runtime):
     binding = _frozen_binding("intent_match")
     manifest = _manifest(binding)

@@ -454,7 +454,8 @@ def recover_evaluation(
         manifest,
         output=output,
         expected_output=expected_output,
-        only_binding_ids=needed_ids or None,
+        # 空集合表示所有成功结果均可复用；None 才表示执行全部 Binding。
+        only_binding_ids=needed_ids,
         context=context,
     )
     new_by_key: dict[str, Any] = {}

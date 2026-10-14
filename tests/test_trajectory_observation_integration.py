@@ -478,7 +478,7 @@ async def acquire_real_trajectory(runtime, db, scope, contract, *, started_at=No
                 assert result.deadline_at == first.deadline_at
                 if result.state != "PENDING":
                     return result, acquisition_runtime._wire_bytes, first
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(min(0.05, acquisition_runtime.remaining()))
 
 
 def calibrated_banking_payload():

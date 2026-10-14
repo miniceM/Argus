@@ -1,6 +1,7 @@
 """冻结轨迹输入与 Snapshot 引用；不提前启用轨迹规则或资格。"""
 
 import asyncio
+import time
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
@@ -17,6 +18,7 @@ from app.db_models import (
     TrajectoryEvidenceArtifactRecord,
 )
 from app.result_snapshots import create_result_snapshot
+from app.trajectory.coordinator import TrajectoryCoordinator
 from app.trajectory.inputs import (
     freeze_trajectory_input,
     load_checkpoint_input,
@@ -24,6 +26,7 @@ from app.trajectory.inputs import (
     make_evaluation_context,
 )
 from app.trajectory.worker_acquisition import WorkerTrajectoryCollector
+from test_trajectory_acquisition import Clock
 from test_trajectory_evidence import anchor, artifact
 from test_trajectory_evidence import postgres_engine as evidence_postgres_engine
 from test_trajectory_worker import context as worker_context
@@ -81,20 +84,40 @@ def context(request, tmp_path):
 
 @pytest.fixture
 def ready(context):
-    manager, scope, _, _ = context
+    manager, scope, _, started_at = context
     with manager.get_session() as session:
         manifest = session.get(ExperimentLaunchRecord, scope.launch_id).manifest
     requests = []
     collector = WorkerTrajectoryCollector(manager.get_session, factory_provider=lambda: factory_for(context, requests))
-    acquired = asyncio.run(collector.collect(manifest, item_id=scope.item_execution_id,
-        generation=scope.dispatch_generation, lease_token="lease-1"))
-    assert acquired.state == "READY"
+    # 这里只准备冻结输入；真实 deadline/timeout 行为由采集专项测试覆盖。
+    # 保留原 checkpoint 时间和 2 秒合同，仅让 quiet window 使用确定性时钟。
+    clock = Clock()
+    clock.base = started_at
+
+    async def sleep(seconds):
+        clock.advance(seconds)
+        await asyncio.sleep(0)
+
+    with patch("app.trajectory.worker_acquisition.TrajectoryCoordinator",
+        side_effect=lambda sessions: TrajectoryCoordinator(sessions, clock=clock, sleep=sleep)):
+        acquired = asyncio.run(collector.collect(manifest, item_id=scope.item_execution_id,
+            generation=scope.dispatch_generation, lease_token="lease-1"))
+    assert acquired.state == "READY" and acquired.completeness.status == "OBSERVED_COMPLETE"
     return acquired
 
 
 def checkpoint(manager):
     with manager.get_session() as session:
         return session.get(ExecutionCheckpointRecord, "checkpoint")
+
+
+def test_ready_input_fixture_is_independent_of_test_preparation_wall_time(context):
+    # 模拟 CI 调度/冻结合同耗时，不改变生产采集预算或完整度要求。
+    time.sleep(2.1)
+    acquired = ready.__wrapped__(context)
+    assert acquired.state == "READY"
+    assert acquired.completeness.status == "OBSERVED_COMPLETE"
+    assert acquired.deadline_at == context[3] + timedelta(seconds=2)
 
 
 def freeze(context):

@@ -186,6 +186,95 @@ def test_docs_only_is_low_but_unknown_or_sensitive_changes_are_high() -> None:
         assert classify_change_set(files=[file], contents={})["risk"] == "high"
 
 
+
+def test_medium_scoped_tests_and_console_presentation_only() -> None:
+    approved = (
+        "tests/test_agent_registry.py",
+        "services/console/src/components/AgentVersionCard.tsx",
+        "services/console/src/pages/ExperimentLaunchList.tsx",
+        "services/console/src/components/StatusBadge.css",
+        "services/console/src/components/AgentCard.test.tsx",
+    )
+    for path in approved:
+        assert classify_change_set(
+            files=[{"filename": path, "status": "modified"}],
+            contents={},
+            file_modes={path: {"base": "100644", "head": "100644"}},
+        )["risk"] == "medium", path
+
+    mixed = classify_change_set(
+        files=[
+            {"filename": "docs/guide.md", "status": "modified"},
+            {"filename": "tests/test_agent_registry.py", "status": "modified"},
+        ],
+        contents={},
+        file_modes={
+            "docs/guide.md": {"base": "100644", "head": "100644"},
+            "tests/test_agent_registry.py": {"base": "100644", "head": "100644"},
+        },
+    )
+    assert mixed["risk"] == "medium"
+
+
+def test_medium_never_covers_sensitive_ambiguous_or_unsafe_paths() -> None:
+    forbidden = (
+        "tests/test_ci_cloud_e2e_policy.py",
+        "tests/test_cloud_e2e.py",
+        "tests/test_langfuse_trace.py",
+        "tests/test_release_gate.py",
+        "services/console/src/components/CredentialField.tsx",
+        "services/console/src/pages/ReleaseGate.tsx",
+        "services/console/src/pages/CloudPolicy.tsx",
+        "services/console/src/api/client.ts",
+        "services/eval-runner/app/evaluators.py",
+        ".github/workflows/ci.yml",
+        "scripts/ci/publish_cloud_policy.py",
+    )
+    for path in forbidden:
+        assert classify_change_set(
+            files=[{"filename": path, "status": "modified"}],
+            contents={},
+            file_modes={path: {"base": "100644", "head": "100644"}},
+        )["risk"] == "high", path
+
+    path = "services/console/src/components/AgentVersionCard.tsx"
+    for status, base, head in (
+        ("renamed", "100644", "100644"),
+        ("modified", "120000", "120000"),
+        ("modified", "100644", "100755"),
+        ("modified", None, "100644"),
+        ("added", None, "100644"),
+        ("modified", "100644", None),
+    ):
+        assert classify_change_set(
+            files=[{"filename": path, "status": status}],
+            contents={},
+            file_modes={path: {"base": base, "head": head}},
+        )["risk"] == "high", (status, base, head)
+
+    assert classify_change_set(
+        files=[
+            {"filename": "services/console/src/components/AgentVersionCard.tsx", "status": "modified"},
+            {"filename": "services/eval-runner/app/main.py", "status": "modified"},
+        ],
+        contents={},
+        file_modes={
+            "services/console/src/components/AgentVersionCard.tsx": {"base": "100644", "head": "100644"},
+            "services/eval-runner/app/main.py": {"base": "100644", "head": "100644"},
+        },
+    )["risk"] == "high"
+
+
+def test_medium_requires_all_five_ci_checks_but_no_cloud_receipt() -> None:
+    green = {name: "success" for name in REQUIRED_CI_CHECKS}
+    assert evaluate_integration_policy(risk="medium", checks=green, receipt=None) == {
+        "status": "success", "state": "passed", "cloud_state": "skipped_by_policy",
+    }
+    assert evaluate_integration_policy(
+        risk="medium", checks={**green, "S4 Local Langfuse Integration": "skipped"}, receipt=None
+    )["status"] == "failure"
+
+
 def test_manifest_scripts_runtime_and_lock_only_changes_are_high() -> None:
     files = [
         {"filename": "services/console/package.json", "status": "modified"},

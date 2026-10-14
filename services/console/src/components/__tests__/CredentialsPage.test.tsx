@@ -24,6 +24,21 @@ describe("Credentials 管理", () => {
     expect(screen.queryByDisplayValue("example-agent-token")).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue("example-admin-token")).not.toBeInTheDocument();
   });
+
+  it("displays precise error message when server returns 503 master key unavailable", async () => {
+    vi.mocked(api.GET).mockResolvedValue({ data: [], response: new Response() } as any);
+    vi.mocked(api.POST).mockResolvedValue({
+      error: { detail: "secret manager not initialized" },
+      response: { status: 503 } as any,
+    } as any);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><CredentialsPage /></QueryClientProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "创建凭据" }));
+    fireEvent.change(screen.getByLabelText("凭据名称"), { target: { value: "生产 Token" } });
+    fireEvent.change(screen.getByLabelText("Agent Token（仅输入一次）"), { target: { value: "example-agent-token" } });
+    fireEvent.change(screen.getByLabelText("管理授权 Token"), { target: { value: "example-admin-token" } });
+    fireEvent.submit(screen.getByLabelText("创建凭据表单"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("当前服务环境未挂载或未启用 Managed Secret 主密钥");
+  });
 });
 
 it("names each Credential action and its Modal target even for duplicate names", async () => {

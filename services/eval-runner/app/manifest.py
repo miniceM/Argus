@@ -304,6 +304,7 @@ class LaunchService:
                 "spec_digest": ver_rec.spec_digest,
                 "artifact_ref": ver_rec.artifact_ref,
                 "is_idempotent": ver_rec.is_idempotent,
+                "environment": ver_rec.environment,
             },
             "evaluators": eval_specs,
             # Issue #83: the real, digested policy replaces the old placeholder.

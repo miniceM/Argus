@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import stat
+import sys
 import zipfile
 from io import BytesIO
 from typing import Any
 
 import pytest
 
+from scripts.ci import cloud_e2e_receipt as receipt_cli
 from scripts.ci.ci_constants import CANDIDATE_ENVIRONMENT, CANDIDATE_WORKFLOW, REQUIRED_CI_CHECKS
 from scripts.ci.cloud_e2e_policy import validate_trusted_receipt
 from scripts.ci.cloud_e2e_receipt import (
@@ -400,3 +402,20 @@ def test_candidate_is_revalidated_after_environment_approval(client: _Preparatio
 
 def test_candidate_revalidation_accepts_only_the_frozen_manifest_identity() -> None:
     verify_candidate_unchanged(_PreparationClient(), _manifest())
+
+
+@pytest.mark.parametrize(
+    ("command", "handler_name"),
+    [
+        ("prepare", "_prepare_cli"),
+        ("verify", "_verify_cli"),
+        ("record", "_record_cli"),
+    ],
+)
+def test_cli_dispatches_supported_commands(
+    command: str, handler_name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["cloud_e2e_receipt", command])
+    monkeypatch.setattr(receipt_cli, handler_name, lambda: 0)
+
+    assert receipt_cli.main() == 0

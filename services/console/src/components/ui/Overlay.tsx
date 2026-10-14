@@ -163,7 +163,7 @@ const Overlay: React.FC<ShellProps> = ({
   return (
     <div
       className={clsx(
-        "fixed inset-0 z-modal bg-overlay/50 backdrop-blur-xs",
+        "fixed inset-0 z-50 bg-overlay/50 backdrop-blur-xs",
         overlayClassName,
         isDrawer
           ? drawerSide === "left" ? "flex justify-start" : "flex justify-end"

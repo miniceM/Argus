@@ -166,7 +166,7 @@ test.describe("E2E-01: Agent Registry & Immutable Version UX Flow", () => {
     // 5. Inspect Version Details
     await page.getByRole("link", { name: "查看配置" }).first().click();
     await expect(page.getByRole("heading", { level: 1 }).filter({ hasText: dynamicId })).toBeVisible();
-    await expect(page.getByText("不可变快照保证")).toBeVisible();
+    await expect(page.getByText("规格指纹 (Spec Digest)")).toBeVisible();
 
     // Verify SecretRef is masked by default
     const secretRef = page.getByTestId("secret-ref");

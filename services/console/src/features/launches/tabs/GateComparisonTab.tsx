@@ -150,7 +150,7 @@ const costReasonText: Record<CostReason, string> = {
   BASELINE_NOT_BOUND: "尚未绑定 Baseline，暂不能计算成本差值。",
   COST_NOT_RECORDED: "未记录成本的 Case 不按 0 计入。",
   INVALID_COST_EVIDENCE: "存在无效成本证据，成本暂不可比较。",
-  INCOMPLETE_ATTEMPT_COST: "至少一个 Retry Attempt 缺少成本证据，完整 Case 成本不可用。",
+  INCOMPLETE_ATTEMPT_COST: "部分调用未采集到成本数据，单例成本暂不可用。",
   MIXED_CURRENCIES: "存在多种币种，不会直接相加。",
   COST_CURRENCY_MISMATCH: "Baseline 与 Candidate 币种不同，不会直接比较。",
   COST_SCOPE_MISMATCH: "Baseline 与 Candidate 成本测量范围不同。",
@@ -456,19 +456,27 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
   }, [cohort, evaluatorIds, rulesMap, qualityPolicyRules, manifestEvaluators]);
 
   // Aggregate and Health rows
+  const hasCohortCost = Boolean(
+    cohort?.baseline.cost_per_case != null ||
+    cohort?.candidate.cost_per_case != null ||
+    (cohort?.baseline.cost_case_count ?? 0) > 0 ||
+    (cohort?.candidate.cost_case_count ?? 0) > 0
+  );
   const aggregateRows = cohort ? [
     { label: "质量通过率 (Quality Pass Rate)", baseline: percent(cohort.baseline.pass_rate), candidate: percent(cohort.candidate.pass_rate), delta: percentagePointDelta(cohort.baseline.pass_rate, cohort.candidate.pass_rate) },
     { label: "Critical Failure Cases", baseline: number(cohort.baseline.critical_failure_count), candidate: number(cohort.candidate.critical_failure_count), delta: signedDelta(cohort.baseline.critical_failure_count, cohort.candidate.critical_failure_count) },
     { label: "P95 Latency", baseline: number(cohort.baseline.p95_latency_ms, " ms"), candidate: number(cohort.candidate.p95_latency_ms, " ms"), delta: signedDelta(cohort.baseline.p95_latency_ms, cohort.candidate.p95_latency_ms, 2, " ms") },
-    {
-      label: "Cost / Case",
-      baseline: money(cohort.baseline.cost_per_case, cohort.baseline.cost_currency),
-      candidate: money(cohort.candidate.cost_per_case, cohort.candidate.cost_currency),
-      delta: comparisonSummary?.cost_comparison?.status === "COMPARABLE"
-        ? signedMoney(comparisonSummary.cost_comparison.delta, comparisonSummary.cost_comparison.currency)
-        : "—",
-    },
-    { label: "Cost Coverage", baseline: costCoverage(cohort.baseline), candidate: costCoverage(cohort.candidate), delta: percentagePointDelta(cohort.baseline.cost_coverage, cohort.candidate.cost_coverage) },
+    ...(hasCohortCost ? [
+      {
+        label: "Cost / Case",
+        baseline: money(cohort.baseline.cost_per_case, cohort.baseline.cost_currency),
+        candidate: money(cohort.candidate.cost_per_case, cohort.candidate.cost_currency),
+        delta: comparisonSummary?.cost_comparison?.status === "COMPARABLE"
+          ? signedMoney(comparisonSummary.cost_comparison.delta, comparisonSummary.cost_comparison.currency)
+          : "—",
+      },
+      { label: "Cost Coverage", baseline: costCoverage(cohort.baseline), candidate: costCoverage(cohort.candidate), delta: percentagePointDelta(cohort.baseline.cost_coverage, cohort.candidate.cost_coverage) },
+    ] : []),
     ...evaluatorIds.map((id) => ({
       label: `Score · ${id}`,
       baseline: number(cohort.baseline.score_means?.[id]),
@@ -477,6 +485,12 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
     })),
   ] : [];
 
+  const hasHealthCost = Boolean(
+    fullRunBaseline?.cost_per_case != null ||
+    fullRunCandidate?.cost_per_case != null ||
+    (fullRunBaseline?.cost_case_count ?? 0) > 0 ||
+    (fullRunCandidate?.cost_case_count ?? 0) > 0
+  );
   const healthRows = fullRunCandidate ? [
     { label: "Total Cases", baseline: count(fullRunBaseline?.total_cases), candidate: count(fullRunCandidate.total_cases), delta: signedDelta(fullRunBaseline?.total_cases, fullRunCandidate.total_cases, 0) },
     { label: "Evaluated Cases", baseline: count(fullRunBaseline?.evaluated_cases), candidate: count(fullRunCandidate.evaluated_cases), delta: signedDelta(fullRunBaseline?.evaluated_cases, fullRunCandidate.evaluated_cases, 0) },
@@ -484,17 +498,25 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
     { label: "Execution Errors", baseline: number(fullRunBaseline?.execution_error_count), candidate: number(fullRunCandidate.execution_error_count), delta: signedDelta(fullRunBaseline?.execution_error_count, fullRunCandidate.execution_error_count) },
     { label: "Execution Error Rate", baseline: percent(fullRunBaseline?.execution_error_rate), candidate: percent(fullRunCandidate.execution_error_rate), delta: percentagePointDelta(fullRunBaseline?.execution_error_rate, fullRunCandidate.execution_error_rate) },
     { label: "Evaluator Errors", baseline: number(fullRunBaseline?.evaluator_error_count), candidate: number(fullRunCandidate.evaluator_error_count), delta: signedDelta(fullRunBaseline?.evaluator_error_count, fullRunCandidate.evaluator_error_count) },
-    { label: "Run Cost / Case", baseline: money(fullRunBaseline?.cost_per_case, fullRunBaseline?.cost_currency), candidate: money(fullRunCandidate.cost_per_case, fullRunCandidate.cost_currency), delta: "—" },
-    { label: "Run Cost Coverage", baseline: costCoverage(fullRunBaseline), candidate: costCoverage(fullRunCandidate), delta: "—" },
+    ...(hasHealthCost ? [
+      { label: "Run Cost / Case", baseline: money(fullRunBaseline?.cost_per_case, fullRunBaseline?.cost_currency), candidate: money(fullRunCandidate.cost_per_case, fullRunCandidate.cost_currency), delta: "—" },
+      { label: "Run Cost Coverage", baseline: costCoverage(fullRunBaseline), candidate: costCoverage(fullRunCandidate), delta: "—" },
+    ] : []),
   ] : [];
 
   const comparability = comparison?.comparability;
   const formal = comparison?.formal;
-  const costExplanations = [
+  const hasAnyCostRecorded = (fullRunBaseline?.cost_case_count ?? 0) > 0
+    || (fullRunCandidate?.cost_case_count ?? 0) > 0
+    || (comparisonSummary?.baseline?.cost_case_count ?? 0) > 0
+    || (comparisonSummary?.candidate?.cost_case_count ?? 0) > 0
+    || (comparisonSummary?.cost_comparison?.baseline_cost_per_case != null)
+    || (comparisonSummary?.cost_comparison?.candidate_cost_per_case != null);
+  const costExplanations = hasAnyCostRecorded ? [
     { label: "全量 Baseline", reason: fullRunBaseline?.cost_unavailable_reason },
     { label: "全量 Candidate", reason: fullRunCandidate?.cost_unavailable_reason },
     { label: "共同可比 Case", reason: comparisonSummary?.cost_comparison?.reason },
-  ].filter((entry): entry is { label: string; reason: CostReason } => entry.reason != null);
+  ].filter((entry): entry is { label: string; reason: CostReason } => entry.reason != null) : [];
 
   const candidateQualityState = candidateQualityConclusion?.toLowerCase();
   const candidateQualityLabel = candidateQualityState === "pass"
@@ -530,6 +552,11 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
     : cohort.candidate.pass_rate < cohort.baseline.pass_rate
     ? "declined"
     : "unchanged";
+  const criticalFailures = typeof cohort?.candidate.critical_failure_count === "number"
+    ? cohort.candidate.critical_failure_count
+    : typeof summary?.summary?.critical_failure_count === "number"
+    ? (summary.summary.critical_failure_count as number)
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -627,51 +654,70 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
               </p>
             </div>
             {(evaluatorIds.length > 0 || candidateQualityConclusion != null) && (
-              <div className="bg-surface-subtle border border-border rounded-lg p-3 space-y-1">
-                <span
-                  className={`font-semibold flex items-center gap-1.5 ${candidateQualityTone}`}
-                  data-testid="candidate-quality-gate-verdict"
-                >
-                  <span className={`w-2 h-2 rounded-full ${
-                    candidateQualityState === "pass"
-                      ? "bg-pass"
+              <div className="bg-surface-subtle border border-border rounded-lg p-3 space-y-2">
+                <div>
+                  <span
+                    className={`font-semibold flex items-center gap-1.5 ${candidateQualityTone}`}
+                    data-testid="candidate-quality-gate-verdict"
+                  >
+                    <span className={`w-2 h-2 rounded-full ${
+                      candidateQualityState === "pass"
+                        ? "bg-pass"
+                        : candidateQualityState === "fail"
+                        ? "bg-fail"
+                        : "bg-timeout"
+                    }`} />
+                    Candidate 冻结门禁：{candidateQualityLabel}
+                  </span>
+                  <p className="mt-0.5 text-muted-foreground leading-relaxed">
+                    {candidateQualityState === "pass"
+                      ? "所有必要评测规则判定均已达标。"
                       : candidateQualityState === "fail"
-                      ? "bg-fail"
-                      : "bg-timeout"
-                  }`} />
-                  Candidate 冻结门禁：{candidateQualityLabel}
-                </span>
-                <p className="text-muted-foreground leading-relaxed">
-                  该门禁状态仅依据当前选中 Revision 的冻结质量结论；Baseline 比较结果不会替代 Candidate 自身的准入判断。
-                </p>
-                <span
-                  className={`font-semibold flex items-center gap-1.5 ${relativeVerdictTone}`}
-                  data-testid="formal-comparison-verdict"
-                >
-                  <span className={`w-2 h-2 rounded-full ${
-                    !formal?.available || !formal.verdict
-                      ? "bg-timeout"
+                      ? criticalFailures > 0
+                        ? `存在未达标规则或严重失败用例（${criticalFailures} 项严重失败）。`
+                        : "存在未达标评测规则，请查看下方指标详情。"
+                      : "部分用例缺少有效评分或执行未完成，证据不足。"}
+                  </p>
+                </div>
+                <div>
+                  <span
+                    className={`font-semibold flex items-center gap-1.5 ${relativeVerdictTone}`}
+                    data-testid="formal-comparison-verdict"
+                  >
+                    <span className={`w-2 h-2 rounded-full ${
+                      !formal?.available || !formal.verdict
+                        ? "bg-timeout"
+                        : formal.verdict === "REGRESSION"
+                        ? "bg-fail"
+                        : formal.verdict === "IMPROVEMENT"
+                        ? "bg-pass"
+                        : "bg-surface-muted"
+                    }`} />
+                    Baseline 相对变化：{relativeVerdictLabel}
+                  </span>
+                  <p className="mt-0.5 text-muted-foreground leading-relaxed">
+                    {!formal?.available
+                      ? "比较证据不足或未绑定基线，暂无法得出相对变化结论。"
                       : formal.verdict === "REGRESSION"
-                      ? "bg-fail"
+                      ? regressionCountState.kind === "value"
+                        ? `相比基线发现 ${regressionCountState.value} 个用例发生质量退化。`
+                        : "正式比较判定存在回归，但回归计数暂不可用。"
                       : formal.verdict === "IMPROVEMENT"
-                      ? "bg-pass"
-                      : "bg-surface-muted"
-                  }`} />
-                  Baseline 相对变化：{relativeVerdictLabel}
-                </span>
-                <p className="text-muted-foreground leading-relaxed">
-                  {!formal?.available
-                    ? "由于比较证据不足或 Baseline 未绑定，暂无法给出相对变化结论。"
-                    : formal.verdict === "REGRESSION"
-                    ? regressionCountState.kind === "value"
-                      ? `正式比较发现 ${regressionCountState.value} 个回归 Case；此结论只描述相对变化。`
-                      : "正式比较判定存在回归，但回归计数未返回或不可用；此结论只描述相对变化。"
-                    : formal.verdict === "IMPROVEMENT"
-                    ? "正式比较显示相对基线有所改善；Candidate 是否达到门禁仍以其冻结质量结论为准。"
-                    : formal.verdict === "UNCHANGED"
-                    ? "正式比较显示相对基线无变化；未进一步退化不等于 Candidate 达到发布门禁。"
-                    : "正式比较 verdict 缺失或未知，暂不能说明相对变化。"}
-                </p>
+                      ? "相比基线有所改善，未发现退化用例。"
+                      : formal.verdict === "UNCHANGED"
+                      ? "与基线质量保持一致，未发生规则退化。"
+                      : "相对变化暂不可用。"}
+                  </p>
+                  {formal?.verdict === "REGRESSION" && regressionCountState.kind === "value" && (
+                    <button
+                      type="button"
+                      onClick={() => setFilter("REGRESSION")}
+                      className="mt-1 inline-flex items-center text-micro text-fail hover:underline font-medium"
+                    >
+                      查看这 {regressionCountState.value} 个退化用例 →
+                    </button>
+                  )}
+                </div>
               </div>
             )}
             <div className="bg-surface-subtle border border-border rounded-lg p-3 space-y-1">

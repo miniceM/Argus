@@ -193,7 +193,6 @@ export const AgentDetail: React.FC = () => {
                     <th className="px-6 py-3.5">状态</th>
                     <th className="px-6 py-3.5">运行环境</th>
                     <th className="px-6 py-3.5">HTTP 调用端点</th>
-                    <th className="px-6 py-3.5">规格指纹 (Spec Digest)</th>
                     <th className="px-6 py-3.5">创建时间</th>
                     <th className="px-6 py-3.5 text-right">操作</th>
                   </tr>
@@ -223,12 +222,6 @@ export const AgentDetail: React.FC = () => {
 
                       <td className="px-6 py-4 font-mono text-xs text-foreground-secondary max-w-xs truncate" title={ver.endpoint}>
                         {ver.endpoint}
-                      </td>
-
-                      <td className="px-6 py-4 font-mono text-xs text-muted-foreground">
-                        <span title={ver.spec_digest}>
-                          {ver.spec_digest.slice(0, 10)}...
-                        </span>
                       </td>
 
                       <td className="px-6 py-4 text-xs text-muted-foreground">

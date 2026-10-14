@@ -408,7 +408,7 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
                 </a>
               ) : (
                 <span
-                  className="text-xs text-muted-foreground px-2"
+                  className="sr-only"
                   title={langfuseLink.title}
                   data-testid="langfuse-link-reason"
                 >
@@ -425,7 +425,7 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
               <LaunchActionMenu items={menuItems} open={menuOpen} onOpenChange={setMenuOpen} />
               {langfuseLink.kind !== "link" && (
                 <span
-                  className="text-xs text-muted-foreground px-2"
+                  className="sr-only"
                   title={langfuseLink.title}
                   data-testid="langfuse-link-reason"
                 >

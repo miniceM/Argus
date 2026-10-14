@@ -5,7 +5,6 @@ import {
   Archive,
   ArrowLeft,
   Calendar,
-  CheckCircle2,
   Clock,
   Cpu,
   FileCode,
@@ -121,16 +120,6 @@ export const AgentVersionDetail: React.FC = () => {
         </div>
       )}
 
-      {/* Snapshot Alert */}
-      <div className="p-3.5 bg-running-subtle/70 border border-running-border rounded-xl flex items-center gap-3 text-xs text-running-strong">
-        <CheckCircle2 className="w-4 h-4 text-running shrink-0" />
-        <div>
-          <span className="font-semibold">不可变快照保证 (Immutable Specification Snapshot)：</span>
-          <span className="ml-1 text-running-strong">
-            该版本已固定规格指纹。未来任何配置变更必须注册为新版本号，历史评测将永久锁定此规格。
-          </span>
-        </div>
-      </div>
 
       {/* Metadata Grid */}
       <Panel className="grid grid-cols-1 gap-4 p-5 shadow-xs md:grid-cols-3">

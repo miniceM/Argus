@@ -226,8 +226,9 @@ class _PolicyClient:
     def get_tree_modes(self, sha: str) -> tuple[dict[str, str], bool]:
         assert sha in {HEAD, BASE}
         modes = {"services/eval-runner/app/main.py": "100644"}
-        if any(item.get("filename") == "docs/guide.md" for item in self.file_changes):
-            modes["docs/guide.md"] = "100644"
+        for item in self.file_changes:
+            if item.get("filename") in {"docs/guide.md", "tests/test_agent_registry.py"}:
+                modes[item["filename"]] = "100644"
         return modes, True
 
     def list_jobs(self, run_id: int, attempt: int) -> list[dict[str, Any]]:
@@ -361,6 +362,52 @@ def test_low_risk_policy_passes_without_cloud_and_keeps_cloud_skipped() -> None:
     assert decision["risk"] == "low"
     assert decision["status"] == "success"
     assert decision["cloud_state"] == "skipped_by_policy"
+
+
+def test_scoped_medium_risk_passes_without_candidate_after_five_ci_checks() -> None:
+    client = _PolicyClient()
+    client.file_changes = [{"filename": "tests/test_agent_registry.py", "status": "modified"}]
+    client.candidate_runs = []
+
+    decision = evaluate_pull_request_policy(client, PR_NUMBER)
+
+    assert decision["risk"] == "medium"
+    assert decision["status"] == "success"
+    assert decision["policy_state"] == "passed"
+    assert decision["cloud_state"] == "skipped_by_policy"
+    assert "medium-risk" in decision["description"]
+
+
+def test_pending_high_risk_links_to_manual_trusted_cloud_workflow() -> None:
+    client = _PolicyClient()
+    client.candidate_runs = []
+
+    decision = evaluate_pull_request_policy(client, PR_NUMBER)
+
+    assert decision["risk"] == "high"
+    assert decision["status"] == "pending"
+    assert decision["target_url"] == (
+        "https://github.com/miniceM/Argus/actions/workflows/cloud-e2e-trusted.yml"
+    )
+
+
+def test_medium_decision_rejects_forged_cloud_success() -> None:
+    from scripts.ci.publish_cloud_policy import _validate_decision
+
+    decision = {
+        "schema_version": 1,
+        "repository": REPOSITORY,
+        "pr_number": PR_NUMBER,
+        "head_sha": HEAD,
+        "base_sha": BASE,
+        "status": "success",
+        "policy_state": "passed",
+        "cloud_state": "passed",
+        "risk": "medium",
+        "description": "forged Cloud success",
+    }
+    with pytest.raises(PolicyPublisherError):
+        _validate_decision(decision, repository=REPOSITORY)
 
 
 def test_high_risk_policy_waits_without_receipt_and_fails_on_invalid_receipt() -> None:

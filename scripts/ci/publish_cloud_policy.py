@@ -39,6 +39,7 @@ from scripts.ci.github_api import GitHubApiError, GitHubClient
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 CANDIDATE_RUN_PATH = CANDIDATE_WORKFLOW
+CANDIDATE_DISPATCH_URL = f"https://github.com/{REPOSITORY}/actions/workflows/cloud-e2e-trusted.yml"
 MANIFEST_PREFIX = "candidate-manifest"
 EVIDENCE_PREFIX = "candidate-cloud-evidence"
 RECEIPT_PREFIX = "trusted-cloud-receipt"
@@ -378,7 +379,7 @@ def evaluate_pull_request_policy(client: Any, pr_number: int) -> dict[str, Any]:
         risk_result = classify_pr_risk(client, pr)
         risk = risk_result.get("risk")
         reason = risk_result.get("reason")
-        if risk not in {"low", "high"} or not isinstance(reason, str):
+        if risk not in {"low", "medium", "high"} or not isinstance(reason, str):
             raise CandidateReceiptError("risk classifier returned an invalid result")
         if base_sha != current_main_sha:
             return _decision(
@@ -409,7 +410,7 @@ def evaluate_pull_request_policy(client: Any, pr_number: int) -> dict[str, Any]:
                 cloud_state=initial["cloud_state"],
                 risk=risk,
                 reason=(
-                    "all five current-identity CI checks passed; Cloud is not required for this low-risk change"
+                    f"all five current-identity CI checks passed; Cloud is not required for this {risk}-risk change"
                     if initial["status"] == "success"
                     else f"regular CI policy: {initial['state']}"
                 ),
@@ -436,7 +437,7 @@ def evaluate_pull_request_policy(client: Any, pr_number: int) -> dict[str, Any]:
                 cloud_state=candidate.get("cloud_state", "skipped_by_policy"),
                 risk=risk,
                 reason=str(candidate.get("reason", "awaiting trusted Cloud validation")),
-                target_url=candidate.get("target_url"),
+                target_url=candidate.get("target_url") or (CANDIDATE_DISPATCH_URL if state == "pending" else None),
             )
 
         receipt = candidate.get("receipt")
@@ -502,13 +503,13 @@ def _validate_decision(item: Any, *, repository: str) -> dict[str, Any]:
         raise PolicyPublisherError("policy artifact decision has an invalid policy state")
     if item.get("cloud_state") not in {"passed", "skipped_by_policy", "failed"}:
         raise PolicyPublisherError("policy artifact decision has an invalid Cloud coverage state")
-    if item.get("risk") not in {"low", "high"}:
+    if item.get("risk") not in {"low", "medium", "high"}:
         raise PolicyPublisherError("policy artifact decision has an invalid risk class")
     description = item.get("description")
     if not isinstance(description, str) or not description.strip() or len(description) > 140 or any(ord(char) < 32 for char in description):
         raise PolicyPublisherError("policy artifact decision has an invalid description")
-    if item["risk"] == "low" and item["cloud_state"] != "skipped_by_policy":
-        raise PolicyPublisherError("low-risk decisions must keep Cloud skipped_by_policy")
+    if item["risk"] in {"low", "medium"} and item["cloud_state"] != "skipped_by_policy":
+        raise PolicyPublisherError("low/medium-risk decisions must keep Cloud skipped_by_policy")
     if item["policy_state"] == "passed" and item["status"] != "success":
         raise PolicyPublisherError("passed policy decisions must have success status")
     if item["status"] == "success" and item["policy_state"] != "passed":

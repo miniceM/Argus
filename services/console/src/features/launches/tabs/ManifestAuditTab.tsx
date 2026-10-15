@@ -94,8 +94,11 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
   const schemaVersion = typeof schemaVersionValue === "string" || typeof schemaVersionValue === "number"
     ? String(schemaVersionValue)
     : "";
-  const manifestField = (frozenValue: string | number | null | undefined, liveValue?: string | number | null) =>
-    frozenValue ?? (effectiveSnapshotId ? "未记录" : liveValue ?? "未记录");
+  const manifestField = (
+    frozenValue: string | number | null | undefined,
+    liveValue?: string | number | null,
+    fallbackLabel: string = "未记录",
+  ) => frozenValue ?? (effectiveSnapshotId ? fallbackLabel : liveValue ?? fallbackLabel);
   const activeQualityCounts = snapshotQualityCounts(
     activeSnapshot,
     selectedDetail,
@@ -240,7 +243,7 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
               </div>
               <div>
                 <span>Environment: </span>
-                <strong className="text-foreground">{manifestField(manifestAgent.environment, (launch as any).environment ?? "默认 (Default)")}</strong>
+                <strong className="text-foreground">{manifestField(manifestAgent.environment, (launch as any).environment, "未指定 (Default)")}</strong>
               </div>
               <div className="truncate" title={manifestAgent.endpoint || ""}>
                 <span>Endpoint: </span>

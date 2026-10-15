@@ -11,6 +11,7 @@ import inspect
 import logging
 import os
 import re
+import secrets
 import time
 import urllib.parse
 from collections.abc import Callable
@@ -224,24 +225,51 @@ def _parse_completion(completion: Any) -> InvokeResponse:
     return InvokeResponse(answer=content, model=model, usage=usage, request_id=request_id)
 
 
-async def _call_model(client: Any, settings: Settings, messages: list[dict[str, str]]) -> Any:
+async def _call_model(
+    client: Any,
+    settings: Settings,
+    messages: list[dict[str, str]],
+    session_id: str,
+) -> Any:
+    # x-opencode-session 是 OpenCode Go 等网关的路由/缓存提示；不使用业务数据生成。
     return await asyncio.wait_for(
         client.chat.completions.create(
             model=settings.model_name,
             messages=messages,
             stream=False,
+            extra_headers={"x-opencode-session": session_id},
         ),
         timeout=settings.deadline_seconds,
     )
 
 
+_TRACEPARENT_TRACE_ID_PATTERN = re.compile(r"^[0-9a-fA-F]{32}$")
+
+
+def _session_id_from_request(request: Request) -> str:
+    """从 W3C traceparent 取 trace-id 作为会话标识；缺失时生成一次性会话。
+
+    会话标识不是业务字段：既有 trace 优先，缺省用随机 hex；不使用 customer_id
+    或消息内容，避免把业务数据外泄到模型网关的路由/缓存提示上。
+    """
+    traceparent = request.headers.get("traceparent")
+    if traceparent:
+        parts = traceparent.split("-")
+        if len(parts) >= 3 and _TRACEPARENT_TRACE_ID_PATTERN.match(parts[1]):
+            return parts[1]
+    return secrets.token_hex(16)
+
+
 async def invoke_model(
-    client: Any, settings: Settings, messages: list[dict[str, str]]
+    client: Any,
+    settings: Settings,
+    messages: list[dict[str, str]],
+    session_id: str,
 ) -> InvokeResponse:
     """调用上游模型并把 SDK 异常映射为稳定的 Agent 错误。不吞掉 CancelledError。"""
     started = time.monotonic()
     try:
-        completion = await _call_model(client, settings, messages)
+        completion = await _call_model(client, settings, messages, session_id)
     except TimeoutError:
         raise AgentError(504, "MODEL_TIMEOUT") from None
     except openai.APITimeoutError:
@@ -349,7 +377,7 @@ def create_app(
         return {"status": "ok"}
 
     @app.post("/invoke", response_model=InvokeResponse)
-    async def invoke(request: InvokeRequest) -> InvokeResponse:
+    async def invoke(request: InvokeRequest, http_request: Request) -> InvokeResponse:
         client = getattr(app.state, "client", None)
         if client is None:
             raise AgentError(503, "MODEL_CLIENT_UNAVAILABLE")
@@ -357,7 +385,8 @@ def create_app(
         messages = [
             {"role": message.role, "content": message.content} for message in request.messages
         ]
-        return await invoke_model(client, app.state.settings, messages)
+        session_id = _session_id_from_request(http_request)
+        return await invoke_model(client, app.state.settings, messages, session_id)
 
     return app
 

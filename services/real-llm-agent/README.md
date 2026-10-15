@@ -51,6 +51,12 @@ curl -fsS http://127.0.0.1:18084/health
 
 `/health` 只证明本服务进程存活，不探测上游模型服务，也不产生任何模型费用。
 
+**会话头说明**：本服务每次 `/invoke` 都会随 Chat Completions 请求发送
+`x-opencode-session` 供网关做路由/缓存提示（OpenCode Go 等网关缺它会直接返回
+4xx `MissingSessionID`）。取值只来自传入 `traceparent` 的 W3C trace-id，缺省时
+生成本次会话专用随机 hex；不读 `customer_id` 或消息内容，不写日志，也不外传
+业务字段。网关若忽略该 header 无副作用。
+
 ## 4. 注册 AgentDefinition 与不可变 AgentVersion
 
 ```bash
@@ -105,10 +111,23 @@ LAUNCH_JSON=$(curl -fsS http://localhost:18080/api/v1/experiment-launches \
     "dataset_name":"banking-agent-regression",
     "environment":"poc",
     "max_concurrency":1,
-    "evaluator_selections":[{"id":"answer_present","version":"1.0.0"}]
+    "evaluator_selections":[{"id":"answer_present","version":"1.0.0"}],
+    "quality_policy":{
+      "rules":[
+        {
+          "evaluator_id":"answer_present",
+          "operator":"==",
+          "expected_value":true,
+          "result_type":"boolean",
+          "required":true
+        }
+      ]
+    }
   }')
 LAUNCH_ID=$(printf '%s' "$LAUNCH_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
 
+# boolean 指标必须显式声明 `operator=="=="; expected_value=true`；
+# 缺省策略对 boolean 会生成 operator=None，被服务器以 400 拒绝而不是静默放行。
 # 先核对 Manifest：确认 Dataset/version、Agent/Version、Evaluator/version 与 Runner 四类身份已冻结。
 curl -fsS "http://localhost:18080/api/v1/experiment-launches/$LAUNCH_ID"
 ```

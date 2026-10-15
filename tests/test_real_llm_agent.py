@@ -604,6 +604,13 @@ def test_cancelled_call_propagates_and_not_mapped_success(svc, settings):
         def __init__(self):
             self.chat = _Chat()
 
+    class _EmptyHeaders:
+        def get(self, _name, default=None):
+            return default
+
+    class _FakeHttpRequest:
+        headers = _EmptyHeaders()
+
     app = svc.create_app(settings=settings, client_factory=lambda s: _Stub())
     app.state.client = _Stub()
 
@@ -611,4 +618,64 @@ def test_cancelled_call_propagates_and_not_mapped_success(svc, settings):
     endpoint = route.endpoint
     req = svc.InvokeRequest(messages=[{"role": "user", "content": "hi"}], customer_id="c1")
     with pytest.raises(asyncio.CancelledError):
-        asyncio.run(endpoint(req))
+        asyncio.run(endpoint(req, _FakeHttpRequest()))
+
+
+# --- x-opencode-session 会话头（Issue #198 网关要求）---------------------
+
+
+def test_invoke_forwards_traceparent_as_session_header(svc):
+    """使用 W3C traceparent 的 trace-id 作为 x-opencode-session 的会话标识。"""
+    calls: dict[str, Any] = {"count": 0}
+    settings = svc.Settings(**DEFAULTS)
+    app = svc.create_app(
+        settings=settings,
+        client_factory=lambda s: _default_sdk_client(_recording_ok_transport(calls)),
+    )
+    traceparent = "00-1a2b3c4d5e6f708192a3b4c5d6e7f809-bdad6b7169203331-01"
+    with TestClient(app) as client:
+        resp = client.post(
+            "/invoke", json={"messages": BOT_MESSAGES}, headers={"traceparent": traceparent}
+        )
+    assert resp.status_code == 200
+    request: httpx.Request = calls["last_request"]
+    session_header = request.headers.get("x-opencode-session")
+    assert session_header == "1a2b3c4d5e6f708192a3b4c5d6e7f809"
+
+
+def test_invoke_generates_session_header_without_traceparent(svc):
+    """无 traceparent 时也必须发送 x-opencode-session（每会话稳定，不取自业务数据）。"""
+    calls: dict[str, Any] = {"count": 0}
+    settings = svc.Settings(**DEFAULTS)
+    app = svc.create_app(
+        settings=settings,
+        client_factory=lambda s: _default_sdk_client(_recording_ok_transport(calls)),
+    )
+    with TestClient(app) as client:
+        resp = client.post("/invoke", json={"messages": BOT_MESSAGES})
+    assert resp.status_code == 200
+    request: httpx.Request = calls["last_request"]
+    session = request.headers.get("x-opencode-session")
+    assert isinstance(session, str) and len(session) >= 16
+    expected_chars = set("0123456789abcdef")
+    assert set(session) <= expected_chars
+
+
+def test_invoke_logs_do_not_contain_session_id(svc, caplog):
+    """日志不应该回显 x-opencode-session 的取值（共同 #198 安全要求）。"""
+    import logging as _logging
+
+    calls: dict[str, Any] = {"count": 0}
+    settings = svc.Settings(**DEFAULTS)
+    app = svc.create_app(
+        settings=settings,
+        client_factory=lambda s: _default_sdk_client(_recording_ok_transport(calls)),
+    )
+    traceparent = "00-1a2b3c4d5e6f708192a3b4c5d6e7f809-bdad6b7169203331-01"
+    with caplog.at_level(_logging.DEBUG, logger="real_llm_agent"):
+        with TestClient(app) as client:
+            resp = client.post(
+                "/invoke", json={"messages": BOT_MESSAGES}, headers={"traceparent": traceparent}
+            )
+    assert resp.status_code == 200
+    assert "1a2b3c4d5e6f708192a3b4c5d6e7f809" not in caplog.text

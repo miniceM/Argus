@@ -1,4 +1,4 @@
-fastapi>=0.142.2,<0.143
+fastapi>=0.143.0,<0.144
 uvicorn[standard]>=0.54.0,<0.55
 httpx>=0.28.1,<0.29
 cryptography>=50.0.2,<51

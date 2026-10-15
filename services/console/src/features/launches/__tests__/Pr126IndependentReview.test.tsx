@@ -24,6 +24,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   let queryClient: QueryClient;
 
   const mockLaunch = {
+    environment: "production", is_active_baseline: false, baseline_revision: null,
     id: "ff04d66b-3d00-4d67-8cf4-d36772fff708",
     name: "banking-agent-v2",
     status: "COMPLETED",
@@ -595,7 +596,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
         : Promise.resolve({ data: {} }),
     );
     render(<QueryClientProvider client={queryClient}>
-      <SetBaselineModal open onClose={() => {}} agentId="banking-agent" environment="production"
+      <SetBaselineModal open onClose={() => {}} agentId="banking-agent" environment="production" snapshotEnvironment="production"
         activeSnapshot={mockSnapshotList.revisions[0] as any}
         activeBaseline={{ revision: 1, result_snapshot_id: "base-snap-001" } as any} />
     </QueryClientProvider>);
@@ -877,6 +878,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
           onClose={() => {}}
           agentId="banking-agent"
           environment="production"
+          snapshotEnvironment="production"
           activeSnapshot={mockSnapshotList.revisions[0] as any}
           activeBaseline={{ revision: 1, result_snapshot_id: "base-snap-001" } as any}
         />

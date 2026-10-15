@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   Check,
   Copy,
@@ -14,6 +14,7 @@ import { api } from "../../api/client";
 import { queryKeys } from "../../api/query-keys";
 import { formatApiError } from "../../api/errors";
 import { StatusBadge } from "../../components/StatusBadge";
+import { Badge } from "../../components/Badge";
 import { QualityBadge } from "../../components/QualityBadge";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { SyncStatusBadge } from "../../components/SyncStatusBadge";
@@ -36,6 +37,7 @@ export const LaunchesList: React.FC = () => {
   const [filterAgent, setFilterAgent] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("");
   const [filterQuality, setFilterQuality] = useState<string>("");
+  const [filterEnvironment, setFilterEnvironment] = useState<string>("");
   const [filterOnlyBaseline, setFilterOnlyBaseline] = useState<boolean>(false);
   const [copiedLaunchId, setCopiedLaunchId] = useState<string | null>(null);
 
@@ -65,6 +67,7 @@ export const LaunchesList: React.FC = () => {
       agent_id: filterAgent || undefined,
       status: filterStatus || undefined,
       quality_conclusion: filterQuality || undefined,
+      environment: filterEnvironment || undefined,
     }),
     queryFn: async () => {
       const res = await api.GET("/api/v1/experiment-launches", {
@@ -73,6 +76,7 @@ export const LaunchesList: React.FC = () => {
             agent_id: filterAgent || undefined,
             status: (filterStatus as any) || undefined,
             quality_conclusion: (filterQuality as any) || undefined,
+            environment: filterEnvironment || undefined,
           },
         },
       });
@@ -85,58 +89,10 @@ export const LaunchesList: React.FC = () => {
     refetchInterval: (query) => launchPollingInterval(query.state.data as LaunchResponse[] | undefined),
   });
 
-  // Fetch active baselines for visible agents across comparison and standard environments
-  const agentEnvPairs = useMemo(() => {
-    const pairs = new Map<string, { agentId: string; environment: string }>();
-    for (const l of launches || []) {
-      const manifestEnv = ((l.manifest as any)?.comparison?.environment as string);
-      if (manifestEnv) {
-        pairs.set(`${l.agent_id}::${manifestEnv}`, { agentId: l.agent_id, environment: manifestEnv });
-      }
-      const agentEnv = ((l.manifest as any)?.agent?.environment as string);
-      if (agentEnv) {
-        pairs.set(`${l.agent_id}::${agentEnv}`, { agentId: l.agent_id, environment: agentEnv });
-      }
-      pairs.set(`${l.agent_id}::production`, { agentId: l.agent_id, environment: "production" });
-      pairs.set(`${l.agent_id}::staging`, { agentId: l.agent_id, environment: "staging" });
-      pairs.set(`${l.agent_id}::test`, { agentId: l.agent_id, environment: "test" });
-    }
-    return Array.from(pairs.values());
-  }, [launches]);
-
-  const baselineQueries = useQueries({
-    queries: agentEnvPairs.map(({ agentId, environment }) => ({
-      queryKey: queryKeys.baselines.detail(agentId, environment),
-      retry: false,
-      queryFn: async (): Promise<{ agentId: string; environment: string; launchId: string } | null> => {
-        try {
-          const res = await api.GET("/api/v1/agents/{agent_id}/baselines", {
-            params: { path: { agent_id: agentId }, query: { environment } },
-          });
-          if (res.data?.launch_id) {
-            return { agentId, environment, launchId: res.data.launch_id };
-          }
-          return null;
-        } catch {
-          return null;
-        }
-      },
-    })),
-  });
-
-  const activeBaselineLaunchIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const q of baselineQueries) {
-      if (q.data?.launchId) ids.add(q.data.launchId);
-    }
-    return ids;
-  }, [baselineQueries]);
-
   const displayedLaunches = useMemo(() => {
     if (!launches) return [];
-    if (!filterOnlyBaseline) return launches;
-    return launches.filter((l) => activeBaselineLaunchIds.has(l.id));
-  }, [launches, filterOnlyBaseline, activeBaselineLaunchIds]);
+    return filterOnlyBaseline ? launches.filter((launch) => launch.is_active_baseline) : launches;
+  }, [launches, filterOnlyBaseline]);
 
   const handleCopyId = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -192,6 +148,13 @@ export const LaunchesList: React.FC = () => {
           />
         </div>
 
+        <SelectInput aria-label="按环境过滤" value={filterEnvironment}
+          onChange={(event) => setFilterEnvironment(event.target.value)} className="w-auto min-w-col-lg text-xs">
+          <option value="">全部环境 (Environment)</option>
+          {[...new Set(["production", "test", "staging", filterEnvironment, ...(launches ?? []).map(launch => launch.environment)])]
+            .filter(Boolean).map(environment => <option key={environment} value={environment}>{environment}</option>)}
+        </SelectInput>
+
         {/* Status Filter */}
         <SelectInput
           aria-label="按执行状态过滤"
@@ -231,7 +194,7 @@ export const LaunchesList: React.FC = () => {
           <span>仅看当前基线</span>
         </label>
 
-        {(filterAgent || filterStatus || filterQuality || filterOnlyBaseline) && (
+        {(filterAgent || filterStatus || filterQuality || filterEnvironment || filterOnlyBaseline) && (
           <Button
             type="button"
             variant="quiet"
@@ -239,6 +202,7 @@ export const LaunchesList: React.FC = () => {
               setFilterAgent("");
               setFilterStatus("");
               setFilterQuality("");
+              setFilterEnvironment("");
               setFilterOnlyBaseline(false);
             }}
             className="ml-auto min-h-7 px-2 text-xs underline underline-offset-2"
@@ -256,7 +220,7 @@ export const LaunchesList: React.FC = () => {
         <EmptyState
           title="暂无评测记录"
           description={
-            filterAgent || filterStatus || filterQuality
+            filterAgent || filterStatus || filterQuality || filterEnvironment
               ? "未匹配到符合当前过滤条件的评测任务，请尝试重置筛选。"
               : "尚未发起过任何评测任务。点击上方按钮发起第一次评测吧！"
           }
@@ -310,7 +274,7 @@ export const LaunchesList: React.FC = () => {
                   const agentName = agentNameById.get(launch.agent_id);
                   const isCopied = copiedLaunchId === launch.id;
                   const langfuseLink = getLangfuseLinkView(launch);
-                  const isActiveBaseline = activeBaselineLaunchIds.has(launch.id);
+                  const isActiveBaseline = launch.is_active_baseline;
 
                   return (
                     <tr
@@ -335,9 +299,9 @@ export const LaunchesList: React.FC = () => {
                             <span
                               data-testid="active-baseline-badge"
                               className="shrink-0 px-1.5 py-0.5 rounded text-2xs font-semibold bg-pass-subtle text-pass border border-pass-border"
-                              title="当前生效质量基准 (Active Baseline)"
+                              title={`${launch.environment} 环境当前基线 · Binding Revision ${launch.baseline_revision}`}
                             >
-                              当前基线
+                              当前环境基线
                             </span>
                           )}
                           <button
@@ -366,6 +330,7 @@ export const LaunchesList: React.FC = () => {
                             >
                               {agentName || launch.agent_id}
                             </span>
+                            <Badge tone="neutral">{launch.environment}</Badge>
                             <span className="shrink-0 px-1.5 py-0.5 rounded bg-surface-muted text-foreground-secondary font-mono text-2xs whitespace-nowrap">
                               {launch.agent_version}
                             </span>

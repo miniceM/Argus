@@ -94,3 +94,27 @@ test.describe("Real API Acceptance E2E (Zero Mock)", () => {
     await expect(page.getByRole("button", { name: /启动评测|立即执行评测/ })).toBeVisible();
   });
 });
+
+
+test("Issue183: 真实 API 固化环境、四条件筛选与非法环境拒绝", async ({ request }) => {
+  const port = process.env.ARGUS_E2E_API_PORT ?? "18080";
+  const root = `http://127.0.0.1:${port}/api/v1/experiment-launches`;
+  for (const environment of ["test", "qa-blue"]) {
+    const response = await request.post(root, { data: {
+      agent_id: "banking-agent", agent_version: "v1", dataset_name: "banking-agent-regression",
+      environment, name: `issue183-${environment}`,
+    } });
+    expect(response.status()).toBe(201);
+    const launch = await response.json();
+    expect(launch.environment).toBe(environment);
+    expect(launch.manifest.comparison.environment).toBe(environment);
+    expect(launch.is_active_baseline).toBe(false);
+    expect(launch.baseline_revision).toBeNull();
+    const filtered = await request.get(root, { params: { environment, agent_id: "banking-agent", status: "PENDING", quality_conclusion: "unknown" } });
+    expect(filtered.ok()).toBeTruthy();
+    const rows = await filtered.json();
+    expect(rows.map((row: { id: string }) => row.id)).toContain(launch.id);
+    expect(rows.every((row: { environment: string }) => row.environment === environment)).toBeTruthy();
+  }
+  expect((await request.get(root, { params: { environment: "bad/env" } })).status()).toBe(400);
+});

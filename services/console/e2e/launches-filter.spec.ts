@@ -19,7 +19,7 @@ const launches: Launch[] = [
   ["fraud-unknown", "fraud-agent", "COMPLETED", "unknown"],
 ].map(([id, agent_id, status, quality_conclusion]) => ({
   id, name: id, agent_id, status, quality_conclusion,
-  environment: "production", is_active_baseline: false, baseline_revision: null,
+  environment: ({ "bank-fail": "test", "bank-unknown": "staging", "fraud-fail": "custom-env" } as Record<string, string>)[id] ?? "production", is_active_baseline: id === "bank-pass", baseline_revision: null,
   agent_version: "1.0.0", agent_version_id: `version-${agent_id}`,
   dataset_name: "filter-regression", dataset_version: createdAt,
   manifest: {}, langfuse_sync_status: "SYNCED", created_at: createdAt,
@@ -55,6 +55,7 @@ test.describe("Issue #46: Launch 筛选结果集", () => {
     await page.route("**/api/v1/experiment-launches*", (route) => {
       const url = new URL(route.request().url());
       const result = launches.filter((launch) =>
+        (!url.searchParams.has("environment") || launch.environment === url.searchParams.get("environment")) &&
         (!url.searchParams.has("agent_id") || launch.agent_id === url.searchParams.get("agent_id")) &&
         (!url.searchParams.has("status") || launch.status === url.searchParams.get("status")) &&
         (!url.searchParams.has("quality_conclusion") || launch.quality_conclusion === url.searchParams.get("quality_conclusion")),
@@ -111,4 +112,29 @@ test.describe("Issue #46: Launch 筛选结果集", () => {
     await expect(page.getByText("暂无评测记录", { exact: true })).toHaveCount(0);
     await expectResults(page, launches.map((launch) => launch.id));
   });
+});
+
+
+test("Issue183: 环境四条件交集、重置与刷新不探测 Baseline", async ({ page }) => {
+  const probes: string[] = [];
+  page.on("request", request => { if (request.url().includes("/baselines")) probes.push(request.url()); });
+  await page.route("**/api/v1/system/info", route => route.fulfill({ json: { service: "argus", version: "test", build_id: "issue183", environment: "test" } }));
+  await page.route("**/api/v1/agents", route => route.fulfill({ json: agents }));
+  await page.route("**/api/v1/experiment-launches*", route => {
+    const params = new URL(route.request().url()).searchParams;
+    return route.fulfill({ json: launches.filter(launch => ["environment", "agent_id", "status", "quality_conclusion"].every(key => !params.has(key) || launch[key as keyof Launch] === params.get(key))) });
+  });
+  await page.goto("/launches");
+  await expectResults(page, launches.map(launch => launch.id));
+  await expect(page.getByText("当前环境基线", { exact: true })).toHaveCount(1);
+  await page.getByRole("combobox", { name: "按环境过滤" }).selectOption("production");
+  await page.getByRole("textbox", { name: "按 Agent ID 过滤" }).fill("banking-agent");
+  await page.getByRole("combobox", { name: "按执行状态过滤" }).selectOption("COMPLETED");
+  await page.getByRole("combobox", { name: "按质量结论过滤" }).selectOption("pass");
+  await expectResults(page, ["bank-pass"]);
+  await page.getByRole("button", { name: /重置/ }).click();
+  await expectResults(page, launches.map(launch => launch.id));
+  await page.reload();
+  await expectResults(page, launches.map(launch => launch.id));
+  expect(probes).toEqual([]);
 });

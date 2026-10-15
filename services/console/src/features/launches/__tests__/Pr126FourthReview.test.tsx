@@ -27,6 +27,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   let queryClient: QueryClient;
 
   const mockLaunch = {
+    environment: "production", is_active_baseline: false, baseline_revision: null,
     id: "ff04d66b-3d00-4d67-8cf4-d36772fff708",
     name: "banking-agent-v2",
     status: "COMPLETED",
@@ -662,7 +663,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
         : Promise.resolve({ data: {} }),
     );
     render(<QueryClientProvider client={queryClient}>
-      <SetBaselineModal open onClose={() => {}} agentId="banking-agent" environment="production"
+      <SetBaselineModal open onClose={() => {}} agentId="banking-agent" environment="production" snapshotEnvironment="production"
         activeSnapshot={mockSnapshotList.revisions[0] as any}
         activeBaseline={{ revision: 1, result_snapshot_id: "base-snap-001" } as any} />
     </QueryClientProvider>);
@@ -1376,7 +1377,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   it("EXTRA: CAS conflict refresh retains non-production environment query",async()=>{
     renderComponent();await screen.findByText("banking-agent-v2");
     (api.GET as any).mockClear();(api.POST as any).mockResolvedValue({error:{detail:"conflict"},response:{status:409}});
-    render(<QueryClientProvider client={queryClient}><SetBaselineModal open onClose={vi.fn()} agentId="banking-agent" environment="staging" activeSnapshot={{snapshot_id:"snap-v2-001",revision:1,evidence_state:"COMPLETE"} as any} activeBaseline={{revision:4,result_snapshot_id:"staging-base"} as any}/></QueryClientProvider>);
+    render(<QueryClientProvider client={queryClient}><SetBaselineModal open onClose={vi.fn()} agentId="banking-agent" environment="staging" snapshotEnvironment="staging" activeSnapshot={{snapshot_id:"snap-v2-001",revision:1,evidence_state:"COMPLETE"} as any} activeBaseline={{revision:4,result_snapshot_id:"staging-base"} as any}/></QueryClientProvider>);
     fireEvent.click(screen.getByRole("button",{name:"确认设为 Baseline"}));
     await waitFor(()=>expect((api.GET as any).mock.calls.some((c:any)=>c[0]==="/api/v1/agents/{agent_id}/baselines")).toBe(true));
     const refresh=(api.GET as any).mock.calls.filter((c:any)=>c[0]==="/api/v1/agents/{agent_id}/baselines").at(-1);
@@ -1468,7 +1469,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     (api.GET as any).mockImplementation(()=>new Promise(r=>{resolveRefresh=r;}));
     (api.POST as any).mockResolvedValue({error:{detail:"conflict"},response:{status:409}});
     const onClose=vi.fn();const props={onClose,agentId:"banking-agent",environment:"production",activeSnapshot:{snapshot_id:"snap-v2-001",revision:1,evidence_state:"COMPLETE"} as any,activeBaseline:{agent_id:"banking-agent",environment:"production",revision:4,result_snapshot_id:"base"} as any};
-    const ui=(open:boolean)=><QueryClientProvider client={queryClient}><SetBaselineModal open={open} {...props}/></QueryClientProvider>;
+    const ui=(open:boolean)=><QueryClientProvider client={queryClient}><SetBaselineModal open={open} snapshotEnvironment={props.environment} {...props}/></QueryClientProvider>;
     const view=render(ui(true));fireEvent.click(screen.getByRole("button",{name:"确认设为 Baseline"}));await screen.findByText(/HTTP 409/);
     expect(resolveRefresh).toBeTypeOf("function");view.rerender(ui(false));view.rerender(ui(true));
     await waitFor(()=>expect(screen.getByRole("button",{name:"确认设为 Baseline"})).toBeEnabled());
@@ -1480,7 +1481,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   it("FOURTH: Baseline refresh rejects a different Agent even when environment matches",async()=>{
     (api.GET as any).mockResolvedValue({data:{agent_id:"OTHER-AGENT",environment:"production",revision:99,result_snapshot_id:"foreign-base"}});
     (api.POST as any).mockResolvedValue({error:{detail:"conflict"},response:{status:409}});
-    render(<QueryClientProvider client={queryClient}><SetBaselineModal open onClose={vi.fn()} agentId="banking-agent" environment="production" activeSnapshot={{snapshot_id:"snap-v2-001",revision:1,evidence_state:"COMPLETE"} as any} activeBaseline={{agent_id:"banking-agent",environment:"production",revision:4,result_snapshot_id:"base"} as any}/></QueryClientProvider>);
+    render(<QueryClientProvider client={queryClient}><SetBaselineModal open onClose={vi.fn()} agentId="banking-agent" environment="production" snapshotEnvironment="production" activeSnapshot={{snapshot_id:"snap-v2-001",revision:1,evidence_state:"COMPLETE"} as any} activeBaseline={{agent_id:"banking-agent",environment:"production",revision:4,result_snapshot_id:"base"} as any}/></QueryClientProvider>);
     fireEvent.click(screen.getByRole("button",{name:"确认设为 Baseline"}));await screen.findByText(/HTTP 409/);
     await waitFor(()=>expect((api.GET as any)).toHaveBeenCalled());
     expect(queryClient.getQueryData<any>(queryKeys.baselines.detail("banking-agent","production"))?.agent_id).not.toBe("OTHER-AGENT");

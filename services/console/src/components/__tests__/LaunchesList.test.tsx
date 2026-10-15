@@ -11,17 +11,7 @@ vi.mock("../../api/client", () => ({
   },
 }));
 
-describe("LaunchesList High-Density Table & Information Hierarchy (Issue #26)", () => {
-  let queryClient: QueryClient;
-
-  beforeEach(() => {
-    queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    vi.clearAllMocks();
-  });
-
-  const mockLaunches = [
+const mockLaunches: import("../../api/schema").components["schemas"]["ExperimentLaunchResponse"][] = [
     {
       id: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
       name: "run-fraud-regression",
@@ -33,9 +23,12 @@ describe("LaunchesList High-Density Table & Information Hierarchy (Issue #26)", 
       agent_version: "v2.1.0",
       agent_version_id: "ver-1",
       manifest: {},
+      environment: "production", is_active_baseline: false, baseline_revision: null,
       langfuse_sync_status: "PENDING",
       created_at: "2026-09-24T10:00:00Z",
       progress: {
+        pending: 0, queued: 0, running: 5, retry_wait: 0, succeeded: 15, failed: 0, timed_out: 0, cancelled: 0,
+        attempts: 15, retries: 0, allowed_actions: [], action_reasons: {}, recoverable_evaluation_count: 0, evaluating: 0,
         total: 20,
         completed: 15,
         percentage: 75.0,
@@ -52,10 +45,21 @@ describe("LaunchesList High-Density Table & Information Hierarchy (Issue #26)", 
       agent_version: "1.0.0",
       agent_version_id: "ver-2",
       manifest: {},
+      environment: "production", is_active_baseline: false, baseline_revision: null,
       langfuse_sync_status: "SYNCED",
       created_at: "2026-09-24T09:00:00Z",
     },
   ];
+
+describe("LaunchesList High-Density Table & Information Hierarchy (Issue #26)", () => {
+  let queryClient: QueryClient;
+
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    vi.clearAllMocks();
+  });
 
   const mockAgents = [
     {
@@ -419,8 +423,7 @@ describe("LaunchesList Status Filter Contract and Behavior (Issue #24)", () => {
   it("status filter options must exactly match the 8 canonical LaunchStatus enum values", () => {
     renderComponent();
 
-    const selectElements = screen.getAllByRole("combobox");
-    const statusSelect = selectElements[0] as HTMLSelectElement;
+    const statusSelect = screen.getByRole("combobox", { name: "按执行状态过滤" }) as HTMLSelectElement;
     expect(statusSelect).toBeInTheDocument();
 
     const options = Array.from(statusSelect.options);
@@ -444,7 +447,7 @@ describe("LaunchesList Status Filter Contract and Behavior (Issue #24)", () => {
   it("must include COMPLETED option and must NOT include RETRY_WAIT or SUCCEEDED", () => {
     renderComponent();
 
-    const statusSelect = screen.getAllByRole("combobox")[0] as HTMLSelectElement;
+    const statusSelect = screen.getByRole("combobox", { name: "按执行状态过滤" }) as HTMLSelectElement;
     const optionValues = Array.from(statusSelect.options).map((opt) => opt.value);
 
     expect(optionValues).toContain("COMPLETED");
@@ -461,7 +464,7 @@ describe("LaunchesList Status Filter Contract and Behavior (Issue #24)", () => {
   it("triggers query with status=COMPLETED when COMPLETED is selected", async () => {
     renderComponent();
 
-    const statusSelect = screen.getAllByRole("combobox")[0] as HTMLSelectElement;
+    const statusSelect = screen.getByRole("combobox", { name: "按执行状态过滤" }) as HTMLSelectElement;
     fireEvent.change(statusSelect, { target: { value: "COMPLETED" } });
 
     await waitFor(() => {
@@ -481,7 +484,7 @@ describe("LaunchesList Status Filter Contract and Behavior (Issue #24)", () => {
   it("clears status filter and resets API query when reset button is clicked", async () => {
     renderComponent();
 
-    const statusSelect = screen.getAllByRole("combobox")[0] as HTMLSelectElement;
+    const statusSelect = screen.getByRole("combobox", { name: "按执行状态过滤" }) as HTMLSelectElement;
     fireEvent.change(statusSelect, { target: { value: "COMPLETED" } });
 
     const resetButton = await screen.findByRole("button", { name: "重置筛选" });
@@ -507,6 +510,8 @@ describe("LaunchesList Status Filter Contract and Behavior (Issue #24)", () => {
   it("renders active baseline badge for bound baseline launch and filters by baseline", async () => {
     const baselineMockLaunches = [
       {
+        ...mockLaunches[0],
+        environment: "test", is_active_baseline: true, baseline_revision: 3,
         id: "launch-001",
         name: "run-1",
         status: "COMPLETED",
@@ -518,6 +523,8 @@ describe("LaunchesList Status Filter Contract and Behavior (Issue #24)", () => {
         langfuse_sync_status: "SYNCED",
       },
       {
+        ...mockLaunches[1],
+        environment: "test", is_active_baseline: false, baseline_revision: null,
         id: "launch-002",
         name: "run-2",
         status: "COMPLETED",
@@ -557,11 +564,32 @@ describe("LaunchesList Status Filter Contract and Behavior (Issue #24)", () => {
     await waitFor(() => {
       expect(screen.getByTestId("active-baseline-badge")).toBeInTheDocument();
     });
-    expect(screen.getByText("当前基线")).toBeInTheDocument();
+    expect(screen.getByText("当前环境基线")).toBeInTheDocument();
 
     const checkbox = screen.getByLabelText("仅看当前基线");
     fireEvent.click(checkbox);
     expect(screen.getByText("launch-001")).toBeInTheDocument();
     expect(screen.queryByText("launch-002")).not.toBeInTheDocument();
   });
+  it("uses server baseline state without probing any environment", async () => {
+    vi.mocked(api.GET).mockImplementation(async (path) => ({ data: path === "/api/v1/experiment-launches"
+      ? [{ ...mockLaunches[1], environment: "test", is_active_baseline: true, baseline_revision: 3 }] : [] }) as never);
+    render(<QueryClientProvider client={queryClient}><MemoryRouter><LaunchesList /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByTestId("active-baseline-badge")).toBeInTheDocument();
+    expect(api.GET).not.toHaveBeenCalledWith("/api/v1/agents/{agent_id}/baselines", expect.anything());
+  });
+
+  it("includes environment in requests and resets the environment scope", async () => {
+    vi.mocked(api.GET).mockImplementation(async (path) => ({ data: path === "/api/v1/experiment-launches" ? mockLaunches : [] }) as never);
+    render(<QueryClientProvider client={queryClient}><MemoryRouter><LaunchesList /></MemoryRouter></QueryClientProvider>);
+    await screen.findByRole("table");
+    const select = screen.getByRole("combobox", { name: "按环境过滤" });
+    fireEvent.change(select, { target: { value: "test" } });
+    await waitFor(() => expect(api.GET).toHaveBeenCalledWith("/api/v1/experiment-launches",
+      expect.objectContaining({ params: { query: expect.objectContaining({ environment: "test" }) } })));
+    fireEvent.click(screen.getByRole("button", { name: "重置筛选" }));
+    expect(select).toHaveValue("");
+    expect(api.GET).not.toHaveBeenCalledWith("/api/v1/agents/{agent_id}/baselines", expect.anything());
+  });
+
 });

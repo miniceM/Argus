@@ -71,6 +71,7 @@ const versions: Version[] = [
 ];
 
 const launch = {
+  environment: "production", is_active_baseline: true, baseline_revision: 3,
   id: LAUNCH_ID,
   name: "run-regression-suite",
   status: "COMPLETED",
@@ -969,3 +970,25 @@ test.describe("Issue #47: 核心页面布局与操作闭环", () => {
     });
   }
 });
+
+
+for (const width of [360, 390, 1280]) {
+  test(`Issue183: ${width}px 环境筛选完整可见且支持键盘`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await mockApi(page);
+    await page.goto("/launches");
+    const environment = page.getByRole("combobox", { name: "按环境过滤" });
+    await expect(environment).toBeVisible();
+    const box = await environment.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+    await environment.focus();
+    await expect(environment).toBeFocused();
+    await page.keyboard.press("p");
+    await page.keyboard.press("Tab");
+    await expect(environment).toHaveValue("production");
+    await page.getByRole("button", { name: /重置/ }).click();
+    await expect(environment).toHaveValue("");
+  });
+}

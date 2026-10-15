@@ -22,6 +22,7 @@ import { LaunchHeader } from "./LaunchHeader";
 import { LaunchKpiOverview } from "./LaunchKpiOverview";
 import { ExecutionProgressPanel } from "./ExecutionProgressPanel";
 import { SetBaselineModal } from "./SetBaselineModal";
+import { readFrozenEnvironment } from "./environmentScope";
 import { ResultSnapshotPanel } from "./resultSnapshot";
 import { GateComparisonTab } from "./tabs/GateComparisonTab";
 import { CasesTraceTab } from "./tabs/CasesTraceTab";
@@ -542,7 +543,7 @@ export const LaunchDetail: React.FC = () => {
   const manifest = (launch?.manifest || {}) as any;
   const manifestAgent = manifest.agent || {};
   const agentId = manifestAgent.id || launch?.agent_id || "";
-  const environment = manifest.comparison?.environment || "production";
+  const environment = launch?.environment || "";
   const canReadResults = TERMINAL.has(launch?.status || "") || Boolean(effectiveSnapshotId);
 
   const summaryQuery = useQuery({
@@ -1066,6 +1067,7 @@ export const LaunchDetail: React.FC = () => {
         agentId={agentId}
         environment={environment}
         activeSnapshot={snapshotForActions}
+        snapshotEnvironment={detailSnapshot?.snapshot_id === snapshotForActions?.snapshot_id ? readFrozenEnvironment(detailSnapshot?.manifest) : null}
         activeBaseline={activeBaselineQuery.data ?? null}
         onSuccess={() => {
           activeBaselineQuery.refetch();

@@ -36,6 +36,7 @@ def test_root_requirements_include_both_runtime_manifests() -> None:
     expected = {
         "services/eval-runner/requirements.txt",
         "services/demo-agent/requirements.txt",
+        "services/real-llm-agent/requirements.txt",
     }
     assert references == expected
     for reference in references:
@@ -54,6 +55,7 @@ def test_non_pip_update_sources_are_preserved() -> None:
         ("docker", "/services/eval-runner"): ("build", ["dependencies"]),
         ("docker", "/services/console"): ("build", ["dependencies"]),
         ("docker", "/services/demo-agent"): ("build", ["dependencies"]),
+        ("docker", "/services/real-llm-agent"): ("build", ["dependencies"]),
         ("docker", "/deploy/langfuse"): ("build", ["dependencies"]),
     }
 
@@ -154,4 +156,5 @@ def test_console_pip_cache_covers_aggregate_inputs() -> None:
         "requirements-dev.txt",
         "services/eval-runner/requirements.txt",
         "services/demo-agent/requirements.txt",
+        "services/real-llm-agent/requirements.txt",
     }

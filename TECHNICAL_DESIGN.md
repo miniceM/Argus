@@ -558,6 +558,32 @@ Issue #84 的"仅重试评测"让 Launch 在重评期间仍处于终态，因此
 Candidate 在创建时冻结 `baseline_snapshot_id` 与 `baseline_binding_revision`，
 之后切换 Baseline 不影响既有 Candidate。
 
+#### 同环境正式基线与动态列表投影（Issue #183）
+
+- 正式 Baseline 的作用域是 `(agent_id, environment)`。绑定、Candidate 自动选择和显式
+  `baseline_snapshot_id` 均要求同 Agent、同冻结环境，不提供跨环境旁路。
+- 正式环境证据只读取 Result Snapshot 的 `manifest.comparison.environment`，必须是规范字符串。
+  缺失、非法或不匹配分别报告 `SNAPSHOT_ENVIRONMENT_MISSING`、
+  `SNAPSHOT_ENVIRONMENT_INVALID`、`BASELINE_ENVIRONMENT_MISMATCH`。
+  管理列、当前 AgentVersion、默认 production 都不能补造旧 Snapshot 证据。
+- 总览与单 Case 对不兼容环境给出 `NOT_COMPARABLE`，不得生成正式 Regression 结论；
+  Release Gate 使用 `release-gate-v4`，不复用旧引擎 PASS 缓存。历史 Gate GET 仍用于审计，
+  不代表通过新规则。真正无 Baseline 的 absolute-only 策略保持原契约。
+- 迁移 `018` 新增 Launch 的 `environment` 管理列与 `(agent_id, environment)` 索引；
+  按冻结 comparison 环境、冻结 agent 环境、production 的顺序回填并规范化。
+  非法非空来源中止事务，不登记迁移成功；不改写任何历史 Manifest、Snapshot、digest 或引用。
+- Launch 列表支持服务端 environment 与 Agent/状态/质量的交集过滤、排序分页。
+  `environment`、`is_active_baseline`、`baseline_revision` 必须出现在 Launch 响应。
+  当前基线从 Binding 精确指向的 Snapshot→Launch 动态聚合，且校验冻结环境；
+  Binding revision 不等于 Snapshot result revision，列表不逐行探测 Baseline API。
+  重评产生新 Snapshot 或恢复 Launch 不移除旧绑定的徽标；切换 Binding 才更新当前投影。
+- 历史无效 Binding 仍返回真实 revision 与环境诊断（`INVALID`），不伪装成 404、
+  不显示有效徽标。管理员须在目标环境重新评测，用合格快照和真实 revision CAS 替换；
+  不删除绑定来重置 revision，不重写旧快照环境。Console 禁用不合格/跨环境快照确认，
+  展示当前无效绑定原因，400 资格错误与 409 并发冲突分开处理。
+
+迁移验收与发布前审计边界见 [Issue #183 本地验收记录](docs/validation/issue183-environment-baseline.md)。
+
 #### API
 
 ```text
@@ -573,7 +599,7 @@ GET /experiment-launches/{launch_id}/summary?snapshot_id=...   # 按修订读取
 Console：Launch 详情新增「结果报告 (Result Snapshot)」面板，显示当前修订号、Snapshot id、
 冻结时间、结果摘要、证据徽标与原因，并提供历史修订切换；所选修订写入 URL 查询参数
 `snapshot_id`，因此分享链接固定。查看历史修订时会提示"已有更新的 Revision N"。
-「设为当前环境 Baseline」按钮的可用性改由**该修订的证据状态**决定，
+「设为当前环境 Baseline」确认资格由**该修订的证据状态及冻结环境匹配**共同决定，
 诊断版本显示"当前版本证据不足，不可设为 Baseline"并说明原因。
 
 #### 8.3.6 比较契约分层与不可比较原因（Issue #86）

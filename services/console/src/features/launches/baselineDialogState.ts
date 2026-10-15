@@ -17,6 +17,7 @@ export type BaselineDialogStage =
 
 export interface BaselineDialogState {
   stage: BaselineDialogStage;
+  environmentWarning: string | null;
   errorMessage: string | null;
   conflictRevision: number | null;
   conflictNotice: string | null;
@@ -30,14 +31,14 @@ export type BaselineDialogAction =
   | { type: "SUBMIT_START" }
   | { type: "CONFLICT_409"; currentRevision?: number }
   | { type: "REFRESH_RETRY" }
-  | { type: "REFRESH_SUCCESS"; newRevision: number; snapshotId: string | null }
+  | { type: "REFRESH_SUCCESS"; newRevision: number; snapshotId: string | null; environmentWarning?: string | null }
   | { type: "REFRESH_FAILURE"; error: string }
   | { type: "SUBMIT_FAILURE"; error: string }
   | { type: "RESET" };
 
 export const initialBaselineDialogState: BaselineDialogState = {
   stage: "ready",
-  errorMessage: null,
+  environmentWarning: null,  errorMessage: null,
   conflictRevision: null,
   conflictNotice: null,
   displayedRevision: null,
@@ -80,6 +81,7 @@ export function baselineDialogReducer(
         conflictRevision: action.newRevision,
         displayedRevision: action.newRevision,
         displayedSnapshotId: action.snapshotId,
+        environmentWarning: action.environmentWarning ?? null,
       };
 
     case "REFRESH_FAILURE":

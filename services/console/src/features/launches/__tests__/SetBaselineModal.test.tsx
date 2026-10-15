@@ -35,6 +35,7 @@ const activeSnapshot = {
 const boundBaseline = (revision: number, snapshotId = "base-snap-001") => ({
   agent_id: AGENT_ID,
   environment: ENVIRONMENT,
+  environment_validation_status: "VALID", snapshot_environment: ENVIRONMENT, environment_reason_codes: [],
   revision,
   result_snapshot_id: snapshotId,
   updated_by: "tester",
@@ -58,7 +59,7 @@ function renderModal(overrides: Partial<Parameters<typeof SetBaselineModal>[0]> 
         open
         onClose={onClose}
         agentId={AGENT_ID}
-        environment={ENVIRONMENT}
+        environment={ENVIRONMENT} snapshotEnvironment={ENVIRONMENT}
         activeSnapshot={activeSnapshot}
         activeBaseline={boundBaseline(4)}
         onSuccess={onSuccess}
@@ -113,7 +114,7 @@ describe("SetBaselineModal session isolation (F03)", () => {
           open={open}
           onClose={onClose}
           agentId={AGENT_ID}
-          environment={ENVIRONMENT}
+          environment={ENVIRONMENT} snapshotEnvironment={ENVIRONMENT}
           activeSnapshot={activeSnapshot}
           activeBaseline={boundBaseline(4)}
         />
@@ -154,7 +155,7 @@ describe("SetBaselineModal session isolation (F03)", () => {
           open={open}
           onClose={onClose}
           agentId={AGENT_ID}
-          environment={ENVIRONMENT}
+          environment={ENVIRONMENT} snapshotEnvironment={ENVIRONMENT}
           activeSnapshot={activeSnapshot}
           activeBaseline={boundBaseline(4)}
         />
@@ -225,7 +226,7 @@ describe("SetBaselineModal session isolation (F03)", () => {
           open
           onClose={vi.fn()}
           agentId={AGENT_ID}
-          environment={ENVIRONMENT}
+          environment={ENVIRONMENT} snapshotEnvironment={ENVIRONMENT}
           activeSnapshot={activeSnapshot}
           activeBaseline={boundBaseline(4)}
         />
@@ -239,12 +240,12 @@ describe("SetBaselineModal session isolation (F03)", () => {
     // Reopen with a new session; its refresh resolves first (revision 6).
     view.rerender(
       <QueryClientProvider client={queryClient}>
-        <SetBaselineModal open={false} onClose={vi.fn()} agentId={AGENT_ID} environment={ENVIRONMENT} activeSnapshot={activeSnapshot} activeBaseline={boundBaseline(4)} />
+        <SetBaselineModal open={false} onClose={vi.fn()} agentId={AGENT_ID} environment={ENVIRONMENT} snapshotEnvironment={ENVIRONMENT} activeSnapshot={activeSnapshot} activeBaseline={boundBaseline(4)} />
       </QueryClientProvider>,
     );
     view.rerender(
       <QueryClientProvider client={queryClient}>
-        <SetBaselineModal open onClose={vi.fn()} agentId={AGENT_ID} environment={ENVIRONMENT} activeSnapshot={activeSnapshot} activeBaseline={boundBaseline(4)} />
+        <SetBaselineModal open onClose={vi.fn()} agentId={AGENT_ID} environment={ENVIRONMENT} snapshotEnvironment={ENVIRONMENT} activeSnapshot={activeSnapshot} activeBaseline={boundBaseline(4)} />
       </QueryClientProvider>,
     );
     fireEvent.click(screen.getByRole("button", { name: CONFIRM }));
@@ -362,7 +363,7 @@ describe("SetBaselineModal session isolation (F03)", () => {
           open={open}
           onClose={onClose}
           agentId={AGENT_ID}
-          environment={ENVIRONMENT}
+          environment={ENVIRONMENT} snapshotEnvironment={ENVIRONMENT}
           activeSnapshot={activeSnapshot}
           activeBaseline={boundBaseline(4)}
           onSuccess={onSuccess}
@@ -390,7 +391,7 @@ describe("SetBaselineModal session isolation (F03)", () => {
   it("keeps the declared environment on the happy path (staging)", async () => {
     (api.GET as any).mockImplementation(() => Promise.resolve({ data: {} }));
     (api.POST as any).mockResolvedValue({ data: boundBaseline(9, "base-snap-009") });
-    const { onClose, onSuccess } = renderModal({ environment: "staging", activeBaseline: null });
+    const { onClose, onSuccess } = renderModal({ environment: "staging", snapshotEnvironment: "staging", activeBaseline: null });
     fireEvent.click(screen.getByRole("button", { name: CONFIRM }));
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -410,4 +411,20 @@ describe("SetBaselineModal session isolation (F03)", () => {
     expect(screen.getByRole("button", { name: CONFIRM })).toBeEnabled();
     expect(baselineGetCalls()).toHaveLength(0);
   });
+  it("blocks a snapshot from another or unknown frozen environment", () => {
+    renderModal({ snapshotEnvironment: "test" });
+    expect(screen.getByRole("button", { name: CONFIRM })).toBeDisabled();
+    expect(screen.getByText(/快照冻结环境与目标环境不一致/)).toBeInTheDocument();
+  });
+
+  it("repairs an invalid legacy binding with its real CAS revision", async () => {
+    const invalid = { ...boundBaseline(7), environment_validation_status: "INVALID", environment_reason_codes: ["BASELINE_ENVIRONMENT_MISMATCH"] };
+    vi.mocked(api.POST).mockResolvedValue({ data: boundBaseline(8) } as never);
+    renderModal({ activeBaseline: invalid });
+    expect(screen.getByText(/当前绑定环境不兼容/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: CONFIRM }));
+    await waitFor(() => expect(api.POST).toHaveBeenCalledWith(BASELINES_PATH,
+      expect.objectContaining({ body: expect.objectContaining({ expected_revision: 7 }) })));
+  });
+
 });

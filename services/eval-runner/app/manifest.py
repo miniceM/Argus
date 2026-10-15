@@ -317,6 +317,7 @@ class LaunchService:
             agent_id=agent_id,
             agent_version=agent_version,
             agent_version_id=ver_rec.id,
+            environment=normalized_environment,
             manifest=manifest,
             langfuse_sync_status="PENDING",
             created_by=created_by,
@@ -346,7 +347,7 @@ class LaunchService:
                     selected_launch = session.get(ExperimentLaunchRecord, selected_snapshot.launch_id)
                     if not selected_launch:
                         raise ValueError("Requested baseline Launch was not found")
-                    validate_baseline_snapshot(selected_snapshot, selected_launch, agent_id)
+                    validate_baseline_snapshot(selected_snapshot, selected_launch, agent_id, normalized_environment)
                     comparison.update(
                         baseline_snapshot_id=selected_snapshot.id,
                         baseline_binding_revision=None,
@@ -361,6 +362,13 @@ class LaunchService:
                         binding_stmt = binding_stmt.with_for_update()
                     binding = session.scalars(binding_stmt).first()
                     if binding and binding.result_snapshot_id:
+                        selected_snapshot = session.get(RunResultSnapshotRecord, binding.result_snapshot_id)
+                        if not selected_snapshot:
+                            raise ValueError("Current baseline result snapshot not found")
+                        selected_launch = session.get(ExperimentLaunchRecord, selected_snapshot.launch_id)
+                        if not selected_launch:
+                            raise ValueError("Current baseline Launch not found")
+                        validate_baseline_snapshot(selected_snapshot, selected_launch, agent_id, normalized_environment)
                         comparison.update(
                             baseline_snapshot_id=binding.result_snapshot_id,
                             baseline_binding_revision=binding.revision,
@@ -425,9 +433,13 @@ class LaunchService:
         quality_conclusion: str | None = None,
         limit: int | None = None,
         offset: int = 0,
+        environment: str | None = None,
     ) -> list[ExperimentLaunchRecord]:
         with self.db_manager.get_session() as session:
             stmt = select(ExperimentLaunchRecord)
+            if environment is not None:
+                from .environment_contracts import normalize_environment
+                stmt = stmt.where(ExperimentLaunchRecord.environment == normalize_environment(environment))
             if agent_id:
                 stmt = stmt.where(ExperimentLaunchRecord.agent_id == agent_id)
             if status:
@@ -438,9 +450,13 @@ class LaunchService:
                     stmt = stmt.where(ExperimentLaunchRecord.status == normalized_status)
             if quality_conclusion:
                 stmt = stmt.where(ExperimentLaunchRecord.quality_conclusion == quality_conclusion.lower())
-            stmt = stmt.order_by(ExperimentLaunchRecord.created_at.desc())
+            stmt = stmt.order_by(ExperimentLaunchRecord.created_at.desc(), ExperimentLaunchRecord.id.desc())
             if offset > 0:
                 stmt = stmt.offset(offset)
             if limit is not None:
                 stmt = stmt.limit(limit)
             return list(session.scalars(stmt).all())
+
+    def active_baseline_states(self, launches: list[ExperimentLaunchRecord]):
+        from .baselines import active_baseline_states
+        return active_baseline_states(self.db_manager, launches)

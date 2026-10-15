@@ -109,6 +109,9 @@ class AgentVersionRecord(Base):
 
 class ExperimentLaunchRecord(Base):
     __tablename__ = "experiment_launches"
+    __table_args__ = (Index("idx_experiment_launches_agent_environment", "agent_id", "environment"),)
+
+    environment: Mapped[str] = mapped_column(String(64), nullable=False, default="production", server_default="production")
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)

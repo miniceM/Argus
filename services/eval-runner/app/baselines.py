@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import re
+from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import select
@@ -8,23 +8,18 @@ from sqlalchemy.exc import IntegrityError
 
 from .db import DatabaseManager
 from .db_models import BaselineBindingRecord, ExperimentLaunchRecord, RunResultSnapshotRecord
+from .environment_contracts import environment_match_reasons, normalize_environment, require_snapshot_environment
 
 
 class BaselineConflictError(ValueError):
     pass
 
 
-def normalize_environment(value: str) -> str:
-    normalized = value.strip().lower()
-    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}", normalized):
-        raise ValueError("environment must be 1-64 lowercase letters, digits, dots, underscores, or hyphens")
-    return normalized
-
-
 def validate_baseline_snapshot(
     snapshot: RunResultSnapshotRecord,
     launch: ExperimentLaunchRecord,
     agent_id: str,
+    environment: str,
 ) -> None:
     """Decide Baseline eligibility from the snapshot's own frozen evidence.
 
@@ -62,6 +57,8 @@ def validate_baseline_snapshot(
             f"Baseline cannot contain UNKNOWN (insufficient evidence) cases: {unknown_count} case(s) are UNKNOWN"
         )
 
+    require_snapshot_environment(snapshot, environment)
+
 
 def set_baseline(
     db_manager: DatabaseManager,
@@ -89,7 +86,7 @@ def set_baseline(
             launch = session.get(ExperimentLaunchRecord, snapshot.launch_id)
             if not launch:
                 raise KeyError(f"Launch for result snapshot '{result_snapshot_id}' not found")
-            validate_baseline_snapshot(snapshot, launch, agent_id)
+            validate_baseline_snapshot(snapshot, launch, agent_id, environment)
 
             statement = select(BaselineBindingRecord).where(
                 BaselineBindingRecord.agent_id == agent_id,
@@ -137,3 +134,32 @@ def get_baseline(db_manager: DatabaseManager, agent_id: str, environment: str) -
             raise RuntimeError("Baseline binding points to a missing result snapshot")
         # Detach-safe response requires scalar JSON fields, which are already loaded.
         return binding, snapshot
+
+
+@dataclass(frozen=True)
+class ActiveBaselineState:
+    is_active_baseline: bool = False
+    baseline_revision: int | None = None
+
+
+def active_baseline_states(db_manager: DatabaseManager, launches: list[ExperimentLaunchRecord]) -> dict[str, ActiveBaselineState]:
+    """仅查当前页，固定一次 SQL；管理列不能替代 Snapshot 的冻结证据。"""
+    states = {launch.id: ActiveBaselineState() for launch in launches}
+    if not states:
+        return states
+    with db_manager.get_session() as session:
+        rows = session.execute(select(
+            ExperimentLaunchRecord.id, BaselineBindingRecord.revision,
+            BaselineBindingRecord.environment, RunResultSnapshotRecord.manifest,
+        ).join(BaselineBindingRecord, (
+            (BaselineBindingRecord.agent_id == ExperimentLaunchRecord.agent_id)
+            & (BaselineBindingRecord.environment == ExperimentLaunchRecord.environment)
+        )).join(RunResultSnapshotRecord, (
+            (RunResultSnapshotRecord.id == BaselineBindingRecord.result_snapshot_id)
+            & (RunResultSnapshotRecord.launch_id == ExperimentLaunchRecord.id)
+            & (RunResultSnapshotRecord.agent_id == ExperimentLaunchRecord.agent_id)
+        )).where(ExperimentLaunchRecord.id.in_(states))).all()
+        for launch_id, revision, environment, manifest in rows:
+            if not environment_match_reasons(manifest, environment):
+                states[launch_id] = ActiveBaselineState(True, revision)
+    return states

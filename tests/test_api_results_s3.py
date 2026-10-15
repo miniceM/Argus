@@ -312,7 +312,7 @@ def test_comparison_health_uses_full_snapshots_and_quality_uses_common_cases(set
             "agent": {"agent_id": "test-agent", "version": "v1", "spec_digest": "digest"},
             "evaluators": [{"id": "correctness", "version": "1.0.0", "critical": True, "threshold": 0.8}],
             "runner": {"runner_version": "0.2.0", "build_id": "test"},
-            "comparison": {"baseline_snapshot_id": baseline_snapshot_id},
+            "comparison": {"environment": "production", "baseline_snapshot_id": baseline_snapshot_id},
         }
         with db_mgr.get_session() as session:
             launch = ExperimentLaunchRecord(

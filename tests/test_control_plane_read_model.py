@@ -426,6 +426,7 @@ def test_populate_links_overrides_stale_caller_links():
     from app.models import ExperimentLaunchResponse
 
     response = ExperimentLaunchResponse(
+        environment="production", is_active_baseline=False, baseline_revision=None,
         id="l1",
         name="n",
         status="COMPLETED",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 from collections.abc import Generator
@@ -45,6 +46,9 @@ class MigrationRunner:
         applied_now: list[str] = []
 
         with self.engine.begin() as conn:
+            # sqlite3 的传统事务模式不会为 DDL 启动事务，显式 BEGIN 保证迁移回滚。
+            if conn.dialect.name == "sqlite" and not conn.connection.driver_connection.in_transaction:
+                conn.exec_driver_sql("BEGIN")
             self._ensure_schema_migrations(conn)
             for file_path in migration_files:
                 version = file_path.name
@@ -86,6 +90,9 @@ class MigrationRunner:
                             continue
                         raise
 
+                if version == "018_launch_environment.sql":
+                    self._backfill_launch_environment(conn)
+
                 conn.execute(
                     text("INSERT INTO schema_migrations (version, checksum) VALUES (:version, :checksum)"),
                     {"version": version, "checksum": checksum},
@@ -93,6 +100,41 @@ class MigrationRunner:
                 applied_now.append(version)
 
         return applied_now
+
+    @staticmethod
+    def _backfill_launch_environment(conn: Any) -> None:
+        from .environment_contracts import normalize_environment
+
+        last_id = ""
+        while True:
+            rows = conn.execute(text(
+                "SELECT id, manifest FROM experiment_launches WHERE id > :last_id ORDER BY id LIMIT 500"
+            ), {"last_id": last_id}).all()
+            if not rows:
+                return
+            updates = []
+            for launch_id, payload in rows:
+                try:
+                    manifest = json.loads(payload) if isinstance(payload, str) else payload
+                    if not isinstance(manifest, dict):
+                        raise ValueError("invalid manifest")
+                    environment = "production"
+                    for section in ("comparison", "agent"):
+                        block = manifest.get(section)
+                        if block is None:
+                            continue
+                        if not isinstance(block, dict):
+                            raise ValueError("invalid environment source")
+                        value = block.get("environment")
+                        if value is None or isinstance(value, str) and not value.strip():
+                            continue
+                        environment = normalize_environment(value)
+                        break
+                except (ValueError, TypeError) as exc:
+                    raise ValueError(f"Launch {launch_id}: invalid frozen environment migration source") from exc
+                updates.append({"id": launch_id, "environment": environment})
+            conn.execute(text("UPDATE experiment_launches SET environment = :environment WHERE id = :id"), updates)
+            last_id = rows[-1][0]
 
     def check_schema_compatibility(self) -> None:
         if not self.migrations_dir.exists():

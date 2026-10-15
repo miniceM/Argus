@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi import status as http_status
 from sqlalchemy import func, select
 
+from .baselines import ActiveBaselineState, active_baseline_states
 from .db import DatabaseManager
 from .db_models import (
     EvaluationResultRecord,
@@ -17,6 +18,7 @@ from .db_models import (
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
 )
+from .environment_contracts import EnvironmentContractError, normalize_environment
 from .evaluation_result_store import persist_typed_results, result_to_payload
 from .evaluator_binding import evaluate_frozen_item
 from .evaluators import EvaluatorSelectionError
@@ -47,8 +49,13 @@ def get_services():
     return db_manager, registry, launch_service, orchestrator
 
 
-def _enrich_launch(launch: ExperimentLaunchRecord, orchestrator: LaunchOrchestrator) -> ExperimentLaunchResponse:
-    res = ExperimentLaunchResponse.model_validate(launch)
+def _enrich_launch(launch: ExperimentLaunchRecord, orchestrator: LaunchOrchestrator,
+                   baseline_state: ActiveBaselineState | None = None) -> ExperimentLaunchResponse:
+    if baseline_state is None:
+        baseline_state = active_baseline_states(orchestrator.db_mgr, [launch])[launch.id]
+    payload = {name: getattr(launch, name) for name in ExperimentLaunchResponse.model_fields if hasattr(launch, name)}
+    res = ExperimentLaunchResponse.model_validate({**payload, "environment": launch.environment,
+        "is_active_baseline": baseline_state.is_active_baseline, "baseline_revision": baseline_state.baseline_revision})
     try:
         progress_data = orchestrator.get_launch_progress(launch.id)
         res.progress = ExperimentLaunchProgressResponse.model_validate(progress_data)
@@ -95,6 +102,8 @@ def create_experiment_launch(
             ),
         )
         return _enrich_launch(launch, orchestrator)
+    except EnvironmentContractError as exc:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=exc.to_payload()) from exc
     except QualityPolicyError as exc:
         # Issue #83: an undecidable policy is rejected at creation, with the same
         # stable-code shape the evaluator gate already uses.
@@ -294,9 +303,15 @@ def get_or_list_launches(
     quality_conclusion: str | None = Query(default=None, description="Optional filter by quality conclusion"),
     limit: int | None = Query(default=None, ge=1, le=500, description="Optional limit"),
     offset: int = Query(default=0, ge=0, description="Optional offset"),
+    environment: str | None = Query(default=None, description="Launch execution environment; omitted means all. ID reads ignore list filters."),
     services=Depends(get_services),
 ) -> Any:
     _, _, launch_svc, orchestrator = services
+    if environment is not None:
+        try:
+            environment = normalize_environment(environment)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     if id:
         launch = launch_svc.get_launch(id)
         if not launch:
@@ -309,8 +324,10 @@ def get_or_list_launches(
             quality_conclusion=quality_conclusion,
             limit=limit,
             offset=offset,
+            environment=environment,
         )
-        return [_enrich_launch(item, orchestrator) for item in launches]
+        states = launch_svc.active_baseline_states(launches)
+        return [_enrich_launch(item, orchestrator, states[item.id]) for item in launches]
 
 
 def _query_launch_items(

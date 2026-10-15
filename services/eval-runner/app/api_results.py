@@ -10,6 +10,7 @@ from .aggregation import aggregate_run, compare_case_results
 from .comparison_contracts import assess_comparability
 from .costs import compare_costs
 from .db_models import ExperimentLaunchRecord, RunResultSnapshotRecord
+from .environment_contracts import comparison_environment_reasons
 from .models import (
     ComparisonComparability,
     ComparisonContractDimension,
@@ -341,6 +342,7 @@ def get_launch_comparison(
             baseline_snapshot.manifest if baseline_snapshot else None,
             candidate_snapshot.manifest,
         )
+        environment_errors = comparison_environment_reasons(baseline_snapshot.manifest, candidate_snapshot.manifest) if baseline_snapshot else []
         evaluator_specs = candidate_snapshot.manifest.get("evaluators", [])
         baseline_evaluators = baseline_snapshot.manifest.get("evaluators", []) if baseline_snapshot else []
         diffs: list[dict[str, Any]] = []
@@ -365,7 +367,9 @@ def get_launch_comparison(
                     evaluator_specs=evaluator_specs,
                     baseline_evaluators=baseline_evaluators,
                 )
-                if dataset_identity_error:
+                if environment_errors:
+                    diff.update(classification="NOT_COMPARABLE", reason=environment_errors[0])
+                elif dataset_identity_error:
                     diff.update(classification="NOT_COMPARABLE", reason=dataset_identity_error)
             diff["baseline_output_ref"] = base_case.get("output_ref") if base_case else None
             diff["candidate_output_ref"] = candidate_case.get("output_ref") if candidate_case else None
@@ -500,7 +504,10 @@ def get_comparison_case(
         else:
             baseline_identity = _dataset_identity(baseline_snapshot.manifest)
             candidate_identity = _dataset_identity(candidate_snapshot.manifest)
-            if baseline_identity is None or candidate_identity is None:
+            environment_errors = comparison_environment_reasons(baseline_snapshot.manifest, candidate_snapshot.manifest)
+            if environment_errors:
+                classification, reason = "NOT_COMPARABLE", environment_errors[0]
+            elif baseline_identity is None or candidate_identity is None:
                 classification, reason = "NOT_COMPARABLE", "DATASET_IDENTITY_UNKNOWN"
             elif baseline_identity != candidate_identity:
                 classification, reason = "NOT_COMPARABLE", "DATASET_IDENTITY_MISMATCH"

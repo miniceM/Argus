@@ -992,6 +992,24 @@
               "title": "Offset"
             },
             "description": "Optional offset"
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Launch execution environment; omitted means all. ID reads ignore list filters.",
+              "title": "Environment"
+            },
+            "description": "Launch execution environment; omitted means all. ID reads ignore list filters."
           }
         ],
         "responses": {
@@ -3125,6 +3143,32 @@
       },
       "BaselineResponse": {
         "properties": {
+          "environment_validation_status": {
+            "type": "string",
+            "enum": [
+              "VALID",
+              "INVALID"
+            ],
+            "title": "Environment Validation Status"
+          },
+          "snapshot_environment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Environment"
+          },
+          "environment_reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Environment Reason Codes"
+          },
           "agent_id": {
             "type": "string",
             "title": "Agent Id"
@@ -3198,6 +3242,9 @@
         },
         "type": "object",
         "required": [
+          "environment_validation_status",
+          "snapshot_environment",
+          "environment_reason_codes",
           "agent_id",
           "environment",
           "result_snapshot_id",
@@ -5203,6 +5250,25 @@
       },
       "ExperimentLaunchResponse": {
         "properties": {
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "is_active_baseline": {
+            "type": "boolean",
+            "title": "Is Active Baseline"
+          },
+          "baseline_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Revision"
+          },
           "id": {
             "type": "string",
             "title": "Id"
@@ -5414,6 +5480,9 @@
         },
         "type": "object",
         "required": [
+          "environment",
+          "is_active_baseline",
+          "baseline_revision",
           "id",
           "name",
           "status",
@@ -6054,7 +6123,7 @@
           "engine_version": {
             "type": "string",
             "title": "Engine Version",
-            "default": "release-gate-v3"
+            "default": "release-gate-v4"
           },
           "candidate_snapshot_id": {
             "type": "string",

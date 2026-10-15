@@ -10,10 +10,11 @@ from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator,
 from .aggregation import aggregate_run, compare_case_results
 from .baselines import normalize_environment
 from .comparison_contracts import aggregation_comparison_digest, assess_comparability
+from .environment_contracts import comparison_environment_reasons
 from .evaluator_binding import canonical_digest
 from .runner_identity import RunnerIdentity
 
-ENGINE_VERSION = "release-gate-v3"
+ENGINE_VERSION = "release-gate-v4"
 ABSOLUTE_METRICS = {"pass_rate", "evaluation_coverage", "execution_error_rate", "critical_failure_count", "p95_latency_ms"}
 RELATIVE_METRICS = {"regression_count", "pass_rate_delta", "p95_latency_regression_percent"}
 
@@ -96,14 +97,8 @@ def _finite(value: Any) -> float | None:
 
 def frozen_environment(snapshot) -> str | None:
     """缺失或未规范化的历史环境不能推定为 production。"""
-    comparison = snapshot.manifest.get("comparison") or {}
-    value = comparison.get("environment")
-    if not isinstance(value, str):
-        return None
-    try:
-        return value if normalize_environment(value) == value else None
-    except ValueError:
-        return None
+    from .environment_contracts import frozen_environment as read_environment
+    return read_environment(snapshot.manifest)
 
 
 def _summary(snapshot) -> dict[str, Any]:
@@ -163,9 +158,11 @@ def _comparison(candidate, baseline) -> tuple[dict[str, Any], list[str]]:
         return {}, ["BASELINE_NOT_BOUND"]
     if baseline.id != frozen_id or baseline.agent_id != candidate.agent_id:
         return {}, ["BASELINE_IDENTITY_MISMATCH"]
-    baseline_environment, candidate_environment = frozen_environment(baseline), frozen_environment(candidate)
-    if baseline_environment is not None and candidate_environment is not None and baseline_environment != candidate_environment:
-        return {}, ["BASELINE_ENVIRONMENT_MISMATCH"]
+    environment_errors = comparison_environment_reasons(baseline.manifest, candidate.manifest)
+    if environment_errors:
+        if frozen_environment(baseline) is None:
+            environment_errors.append("BASELINE_ENVIRONMENT_UNKNOWN")
+        return {}, environment_errors
     reasons = _evidence_reasons(baseline, "BASELINE")
     comparability = assess_comparability(baseline.manifest, candidate.manifest)
     reasons.extend(comparability.reason_codes)
@@ -198,6 +195,14 @@ def evaluate_gate(policy: ReleasePolicy, candidate, baseline=None) -> GateEvalua
     environment = frozen_environment(candidate)
     if environment is not None and environment != policy.environment:
         reasons.append("CANDIDATE_ENVIRONMENT_MISMATCH")
+    frozen_id = candidate.manifest.get("comparison", {}).get("baseline_snapshot_id")
+    if frozen_id:
+        if baseline is None:
+            reasons.append("BASELINE_NOT_BOUND")
+        elif baseline.id != frozen_id or baseline.agent_id != candidate.agent_id:
+            reasons.append("BASELINE_IDENTITY_MISMATCH")
+        else:
+            reasons.extend(comparison_environment_reasons(baseline.manifest, candidate.manifest))
     declared_critical = {
         rule["evaluator_id"] for rule in candidate.manifest.get("quality_policy", {}).get("rules", [])
         if rule.get("critical") and rule.get("evaluator_id")

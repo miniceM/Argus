@@ -16,6 +16,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from .environment_contracts import INVALID, MISMATCH, MISSING, comparison_environment_reasons
 from .evaluator_binding import canonical_digest
 
 COMPARISON_CONTRACT_SCHEMA_VERSION = "comparison-contract-1"
@@ -224,7 +225,7 @@ def assess_comparability(
     candidate = contract_digests_for(candidate_manifest)
 
     dimensions: list[ContractDimension] = []
-    reasons: list[str] = []
+    reasons: list[str] = comparison_environment_reasons(baseline_manifest, candidate_manifest)
     suggestions: list[str] = []
 
     for name in DIMENSIONS:
@@ -263,7 +264,9 @@ def assess_comparability(
 
     # Deterministic, de-duplicated ordering: dataset first, then the three
     # contract dimensions in their declared order.
-    ordered = [REASON_DATASET_CHANGED]
+    if any(code in reasons for code in (MISSING, INVALID, MISMATCH)):
+        suggestions.append("请在同一环境重新评测并冻结完整环境证据，跨环境结果不能作为正式回归结论。")
+    ordered = [MISSING, INVALID, MISMATCH, REASON_DATASET_CHANGED]
     ordered.extend(_DIMENSION_REASONS[name] for name in DIMENSIONS)
     ordered.append(REASON_CONTRACT_PROVENANCE_UNKNOWN)
     reason_codes = tuple(code for code in ordered if code in reasons)

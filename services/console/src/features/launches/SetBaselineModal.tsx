@@ -6,6 +6,7 @@ import { queryKeys } from "../../api/query-keys";
 import { formatApiError } from "../../api/errors";
 import { Button } from "../../components/ui/Primitives";
 import { Modal } from "../../components/ui/Overlay";
+import { environmentReasonMessage } from "./environmentScope";
 import {
   baselineDialogReducer,
   initialBaselineDialogState,
@@ -22,6 +23,7 @@ interface SetBaselineModalProps {
   agentId: string;
   environment: string;
   activeSnapshot: SnapshotRevision | null;
+  snapshotEnvironment: string | null;
   activeBaseline: Baseline | null;
   onSuccess?: () => void;
 }
@@ -31,6 +33,7 @@ interface BaselineSession {
   agentId: string;
   environment: string;
   snapshotId: string;
+  snapshotEnvironment: string | null;
 }
 
 const CONFLICT_MESSAGE =
@@ -49,6 +52,7 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
   agentId,
   environment,
   activeSnapshot,
+  snapshotEnvironment,
   activeBaseline,
   onSuccess,
 }) => {
@@ -68,12 +72,13 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
     agentId,
     environment,
     snapshotId: targetSnapshotId,
+    snapshotEnvironment,
   });
   const isCurrentSession = useCallback(
     (session: BaselineSession) => session.epoch === sessionRef.current.epoch,
     [],
   );
-  const sessionKey = `${open}|${agentId}|${environment}|${targetSnapshotId}`;
+  const sessionKey = `${open}|${agentId}|${environment}|${targetSnapshotId}|${snapshotEnvironment}`;
   const lastSessionKeyRef = useRef(sessionKey);
   if (lastSessionKeyRef.current !== sessionKey) {
     lastSessionKeyRef.current = sessionKey;
@@ -82,6 +87,7 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
       agentId,
       environment,
       snapshotId: targetSnapshotId,
+      snapshotEnvironment,
     };
     // The new session owns refreshing from here on: the old in-flight request is stale
     // bookkeeping, not a lock, and must not block this session's single fresh GET.
@@ -183,6 +189,7 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
         type: "REFRESH_SUCCESS",
         newRevision: data.revision,
         snapshotId: data.result_snapshot_id ?? null,
+        environmentWarning: data.environment_validation_status === "INVALID" ? environmentReasonMessage(data.environment_reason_codes) : null,
       });
     } catch (err) {
       if (staleSession(session, seq)) return;
@@ -200,6 +207,9 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
       const { session } = variables;
       if (!isCurrentSession(session)) {
         throw new Error("Baseline dialog session was superseded");
+      }
+      if (!session.snapshotEnvironment || session.snapshotEnvironment !== session.environment) {
+        throw new Error("快照冻结环境与目标环境不一致或缺失，不能设为正式 Baseline");
       }
       if (!session.snapshotId || !session.agentId) {
         throw new Error("快照或 Agent ID 不存在");
@@ -254,6 +264,7 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
   });
 
   const handleConfirm = () => {
+    if (!snapshotEnvironment || snapshotEnvironment !== environment || activeSnapshot?.evidence_state !== "COMPLETE") return;
     // Synchronous re-entry guard: two clicks inside one React batch must not POST twice.
     if (submitInFlightRef.current || setBaselineMutation.isPending) return;
     submitInFlightRef.current = true;
@@ -285,9 +296,11 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
       : (activeBaseline?.result_snapshot_id ?? null);
   const hasDisplayedBinding = displayedSnapshotId != null;
 
+  const environmentWarning = dialogState.displayedRevision != null ? dialogState.environmentWarning
+    : activeBaseline?.environment_validation_status === "INVALID" ? environmentReasonMessage(activeBaseline.environment_reason_codes) : null;
   const confirmDisabled = isConfirmDisabled(
     dialogState.stage,
-    Boolean(activeSnapshot),
+    Boolean(activeSnapshot) && activeSnapshot?.evidence_state === "COMPLETE" && Boolean(snapshotEnvironment) && snapshotEnvironment === environment,
     setBaselineMutation.isPending,
   );
 
@@ -350,12 +363,22 @@ export const SetBaselineModal: React.FC<SetBaselineModalProps> = ({
           </div>
         </div>
 
+        {(!snapshotEnvironment || snapshotEnvironment !== environment) && (
+          <div role="alert" className="p-3 bg-fail-subtle border border-fail-border rounded-xl text-fail">
+            快照冻结环境与目标环境不一致或缺失，请在 {environment} 环境重新评测。
+          </div>
+        )}
+        {environmentWarning && (
+          <div role="alert" className="p-3 bg-timeout-subtle border border-timeout-border rounded-xl text-timeout">
+            当前绑定环境不兼容：{environmentWarning}。保留当前 Revision {displayedRevision}，可用同环境合格快照替换。
+          </div>
+        )}
         {activeSnapshot?.evidence_state !== "COMPLETE" && (
           <div className="p-3 bg-timeout-subtle border border-timeout-border rounded-xl text-timeout flex items-start gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <div>
               <strong className="block">警告：当前快照证据不完整</strong>
-              <span>该版本的证据状态为 DIAGNOSTIC，设为正式 Baseline 可能会影响后续发布的对比严肃性。</span>
+              <span>该版本的证据不完整，不能设为正式 Baseline；请先完成评测或恢复。</span>
             </div>
           </div>
         )}

@@ -7,6 +7,7 @@ test.describe("UX-26: Launches List High-Density Table Layout and Row Height Ver
 
   const mockLaunches = [
     {
+      environment: "production", is_active_baseline: false, baseline_revision: null,
       id: longUuid,
       name: "run-fraud-regression-test-full",
       status: "RUNNING",
@@ -26,6 +27,7 @@ test.describe("UX-26: Launches List High-Density Table Layout and Row Height Ver
       },
     },
     {
+      environment: "test", is_active_baseline: true, baseline_revision: 4,
       id: "8a2df9aa-f370-4f52-8700-60b616782d49",
       name: "run-simple",
       status: "COMPLETED",

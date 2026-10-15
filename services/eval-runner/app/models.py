@@ -487,6 +487,9 @@ class BaselineCreateRequest(BaseModel):
 
 
 class BaselineResponse(BaseModel):
+    environment_validation_status: Literal["VALID", "INVALID"]
+    snapshot_environment: str | None
+    environment_reason_codes: list[str]
     agent_id: str
     environment: str
     result_snapshot_id: str
@@ -763,6 +766,10 @@ class ExperimentLaunchProgressResponse(BaseModel):
 
 class ExperimentLaunchResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
+    environment: str
+    is_active_baseline: bool
+    baseline_revision: int | None
 
     id: str
     name: str

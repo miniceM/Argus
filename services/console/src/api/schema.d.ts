@@ -1020,6 +1020,15 @@ export interface components {
         };
         /** BaselineResponse */
         BaselineResponse: {
+            /**
+             * Environment Validation Status
+             * @enum {string}
+             */
+            environment_validation_status: "VALID" | "INVALID";
+            /** Snapshot Environment */
+            snapshot_environment: string | null;
+            /** Environment Reason Codes */
+            environment_reason_codes: string[];
             /** Agent Id */
             agent_id: string;
             /** Environment */
@@ -1833,6 +1842,12 @@ export interface components {
         };
         /** ExperimentLaunchResponse */
         ExperimentLaunchResponse: {
+            /** Environment */
+            environment: string;
+            /** Is Active Baseline */
+            is_active_baseline: boolean;
+            /** Baseline Revision */
+            baseline_revision: number | null;
             /** Id */
             id: string;
             /** Name */
@@ -2171,7 +2186,7 @@ export interface components {
             releasable: boolean;
             /**
              * Engine Version
-             * @default release-gate-v3
+             * @default release-gate-v4
              */
             engine_version: string;
             /** Candidate Snapshot Id */
@@ -3059,6 +3074,8 @@ export interface operations {
                 limit?: number | null;
                 /** @description Optional offset */
                 offset?: number;
+                /** @description Launch execution environment; omitted means all. ID reads ignore list filters. */
+                environment?: string | null;
             };
             header?: never;
             path?: never;

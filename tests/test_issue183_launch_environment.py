@@ -73,3 +73,44 @@ def test_frozen_environment_is_not_normalized_or_inferred():
     for manifest in ({}, {"agent": {"environment": "test"}},
                      {"comparison": {"environment": " Test "}}):
         assert frozen_environment(manifest) is None
+
+
+@pytest.mark.parametrize("invalid", [False, True])
+def test_postgresql_backfill_and_failure_are_transactional(tmp_path, invalid):
+    import os
+    import uuid
+
+    from sqlalchemy import create_engine
+    url = os.getenv("TEST_POSTGRES_URL")
+    if not url:
+        pytest.skip("TEST_POSTGRES_URL absent; requires isolated PostgreSQL")
+    schema = f"issue183_{uuid.uuid4().hex}"
+    admin = create_engine(url)
+    with admin.begin() as conn:
+        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+    engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
+    folder = tmp_path / "pg_migrations"
+    folder.mkdir()
+    shutil.copy(ROOT / "migrations" / MIGRATION, folder / MIGRATION)
+    manifest = {"comparison": {"environment": "bad/env" if invalid else " Test "}}
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("CREATE TABLE experiment_launches (id VARCHAR(64) PRIMARY KEY, agent_id VARCHAR(128), manifest JSON NOT NULL)"))
+            conn.execute(text("INSERT INTO experiment_launches VALUES ('legacy', 'agent', :manifest)"), {"manifest": json.dumps(manifest)})
+        runner = MigrationRunner(engine, folder)
+        if invalid:
+            with pytest.raises(ValueError, match="legacy"):
+                runner.apply_all()
+            assert "environment" not in {c["name"] for c in inspect(engine).get_columns("experiment_launches")}
+            assert runner.get_applied_versions() == {}
+        else:
+            assert runner.apply_all() == [MIGRATION]
+            with engine.connect() as conn:
+                row = conn.execute(text("SELECT environment, manifest FROM experiment_launches")).one()
+                assert row.environment == "test" and row.manifest == manifest
+            assert runner.apply_all() == []
+    finally:
+        engine.dispose()
+        with admin.begin() as conn:
+            conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        admin.dispose()

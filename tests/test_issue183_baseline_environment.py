@@ -67,3 +67,29 @@ def test_candidate_cannot_bypass_environment_checks(setup_runtime, monkeypatch, 
     with pytest.raises(ValueError, match="environment"):
         service.create_launch(agent_id="test-agent", agent_version="v1", dataset_name="banking-agent-regression",
                               environment="test", baseline_snapshot_id=old.id if explicit else None)
+
+
+@pytest.mark.parametrize(("source", "code"), [
+    ("test", "BASELINE_ENVIRONMENT_MISMATCH"),
+    (None, "SNAPSHOT_ENVIRONMENT_MISSING"),
+    (" Test ", "SNAPSHOT_ENVIRONMENT_INVALID"),
+])
+def test_http_invalid_binding_diagnostics_and_structured_rejection(setup_runtime, monkeypatch, source, code):
+    from app import main
+    from fastapi.testclient import TestClient
+
+    db = setup_runtime[0]
+    old = snapshot(db, source)
+    monkeypatch.setattr(main, "db_manager", db)
+    client = TestClient(main.app)
+    path = "/api/v1/agents/test-agent/baselines"
+    rejected = client.post(path, json={"environment": "production", "result_snapshot_id": old.id, "expected_revision": 0})
+    assert rejected.status_code == 400
+    assert rejected.json()["detail"]["code"] == code
+    with db.get_session() as session:
+        session.add(BaselineBindingRecord(agent_id="test-agent", environment="production", result_snapshot_id=old.id, revision=9))
+    response = client.get(path, params={"environment": "production"})
+    assert response.status_code == 200
+    assert response.json()["revision"] == 9
+    assert response.json()["environment_validation_status"] == "INVALID"
+    assert response.json()["environment_reason_codes"] == [code]

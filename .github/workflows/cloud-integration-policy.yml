@@ -18,6 +18,14 @@ on:
         description: Open same-repository PR number targeting main
         required: true
         type: string
+      candidate_run_id:
+        description: Optional candidate Run ID to await before publishing current PR status
+        required: false
+        type: string
+      candidate_run_attempt:
+        description: Optional exact candidate attempt to await
+        required: false
+        type: string
 
 permissions: {}
 
@@ -49,6 +57,18 @@ jobs:
 
       - name: Install trusted policy parser
         run: python -m pip install PyYAML==6.0.3
+
+      - name: Wait for the exact dispatched candidate to finish
+        if: github.event_name == 'workflow_dispatch' && inputs.candidate_run_id != ''
+        env:
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          POLICY_PR_NUMBER: ${{ inputs.pr_number }}
+          POLICY_CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          POLICY_CANDIDATE_RUN_ATTEMPT: ${{ inputs.candidate_run_attempt }}
+        run: python -m scripts.ci.publish_cloud_policy wait-candidate
 
       - name: Evaluate exact current PR identities
         env:

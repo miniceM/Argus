@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from scripts.ci import publish_cloud_policy as policy_cli
 from scripts.ci.ci_constants import CANDIDATE_WORKFLOW, POLICY_CONTEXT, REQUIRED_CI_CHECKS
 from scripts.ci.cloud_e2e_receipt import build_candidate_receipt
 from scripts.ci.github_api import GitHubApiError
@@ -225,8 +226,9 @@ class _PolicyClient:
     def get_tree_modes(self, sha: str) -> tuple[dict[str, str], bool]:
         assert sha in {HEAD, BASE}
         modes = {"services/eval-runner/app/main.py": "100644"}
-        if any(item.get("filename") == "docs/guide.md" for item in self.file_changes):
-            modes["docs/guide.md"] = "100644"
+        for item in self.file_changes:
+            if item.get("filename") in {"docs/guide.md", "tests/test_agent_registry.py"}:
+                modes[item["filename"]] = "100644"
         return modes, True
 
     def list_jobs(self, run_id: int, attempt: int) -> list[dict[str, Any]]:
@@ -270,6 +272,66 @@ class _PolicyClient:
         return {"state": kwargs["state"], "context": kwargs["context"]}
 
 
+
+class _CandidateCompletionClient:
+    def __init__(self, states: list[dict[str, Any]]) -> None:
+        self.states = states
+        self.calls = 0
+
+    def get_run(self, run_id: int) -> dict[str, Any]:
+        assert run_id == CANDIDATE_RUN_ID
+        result = self.states[min(self.calls, len(self.states) - 1)]
+        self.calls += 1
+        return result
+
+
+@pytest.mark.parametrize("conclusion", ["success", "failure", "cancelled"])
+def test_explicit_policy_callback_waits_for_terminal_candidate(
+    monkeypatch: pytest.MonkeyPatch, conclusion: str
+) -> None:
+    monkeypatch.setattr(policy_cli.time, "sleep", lambda duration: None)
+    candidate = _candidate_run()
+    pending = {**candidate, "status": "in_progress", "conclusion": None}
+    finished = {**candidate, "status": "completed", "conclusion": conclusion}
+    client = _CandidateCompletionClient([pending, finished])
+    assert policy_cli.wait_for_candidate_completion(
+        client, pr_number=PR_NUMBER, run_id=CANDIDATE_RUN_ID, run_attempt=1,
+    ) == conclusion
+    assert client.calls == 2
+
+
+@pytest.mark.parametrize("override", [
+    {"actor": {"login": "untrusted"}},
+    {"event": "pull_request"},
+    {"path": ".github/workflows/untrusted.yml"},
+    {"run_attempt": 2},
+    {"id": 6002},
+    {"display_title": "Trusted Cloud Candidate PR #119"},
+    {"status": "unexpected"},
+])
+def test_explicit_policy_callback_never_trusts_wrong_run_identity(
+    override: dict[str, Any]
+) -> None:
+    candidate = {**_candidate_run(), **override}
+    if "status" not in override:
+        candidate["status"] = "completed"
+    with pytest.raises(PolicyPublisherError):
+        policy_cli.wait_for_candidate_completion(
+            _CandidateCompletionClient([candidate]),
+            pr_number=PR_NUMBER, run_id=CANDIDATE_RUN_ID, run_attempt=1,
+        )
+
+
+def test_explicit_policy_callback_times_out_closed() -> None:
+    candidate = {**_candidate_run(), "status": "in_progress", "conclusion": None}
+    with pytest.raises(PolicyPublisherError, match="timed out"):
+        policy_cli.wait_for_candidate_completion(
+            _CandidateCompletionClient([candidate]),
+            pr_number=PR_NUMBER, run_id=CANDIDATE_RUN_ID, run_attempt=1,
+            timeout_seconds=0,
+        )
+
+
 def test_high_risk_policy_passes_only_with_current_ci_and_recomputed_trusted_receipt() -> None:
     decision = evaluate_pull_request_policy(_PolicyClient(), PR_NUMBER)
 
@@ -300,6 +362,52 @@ def test_low_risk_policy_passes_without_cloud_and_keeps_cloud_skipped() -> None:
     assert decision["risk"] == "low"
     assert decision["status"] == "success"
     assert decision["cloud_state"] == "skipped_by_policy"
+
+
+def test_scoped_medium_risk_passes_without_candidate_after_five_ci_checks() -> None:
+    client = _PolicyClient()
+    client.file_changes = [{"filename": "tests/test_agent_registry.py", "status": "modified"}]
+    client.candidate_runs = []
+
+    decision = evaluate_pull_request_policy(client, PR_NUMBER)
+
+    assert decision["risk"] == "medium"
+    assert decision["status"] == "success"
+    assert decision["policy_state"] == "passed"
+    assert decision["cloud_state"] == "skipped_by_policy"
+    assert "medium-risk" in decision["description"]
+
+
+def test_pending_high_risk_links_to_manual_trusted_cloud_workflow() -> None:
+    client = _PolicyClient()
+    client.candidate_runs = []
+
+    decision = evaluate_pull_request_policy(client, PR_NUMBER)
+
+    assert decision["risk"] == "high"
+    assert decision["status"] == "pending"
+    assert decision["target_url"] == (
+        "https://github.com/miniceM/Argus/actions/workflows/cloud-e2e-trusted.yml"
+    )
+
+
+def test_medium_decision_rejects_forged_cloud_success() -> None:
+    from scripts.ci.publish_cloud_policy import _validate_decision
+
+    decision = {
+        "schema_version": 1,
+        "repository": REPOSITORY,
+        "pr_number": PR_NUMBER,
+        "head_sha": HEAD,
+        "base_sha": BASE,
+        "status": "success",
+        "policy_state": "passed",
+        "cloud_state": "passed",
+        "risk": "medium",
+        "description": "forged Cloud success",
+    }
+    with pytest.raises(PolicyPublisherError):
+        _validate_decision(decision, repository=REPOSITORY)
 
 
 def test_high_risk_policy_waits_without_receipt_and_fails_on_invalid_receipt() -> None:

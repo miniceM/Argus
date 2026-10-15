@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sys
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,7 @@ from scripts.ci.github_api import GitHubApiError, GitHubClient
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 CANDIDATE_RUN_PATH = CANDIDATE_WORKFLOW
+CANDIDATE_DISPATCH_URL = f"https://github.com/{REPOSITORY}/actions/workflows/cloud-e2e-trusted.yml"
 MANIFEST_PREFIX = "candidate-manifest"
 EVIDENCE_PREFIX = "candidate-cloud-evidence"
 RECEIPT_PREFIX = "trusted-cloud-receipt"
@@ -377,7 +379,7 @@ def evaluate_pull_request_policy(client: Any, pr_number: int) -> dict[str, Any]:
         risk_result = classify_pr_risk(client, pr)
         risk = risk_result.get("risk")
         reason = risk_result.get("reason")
-        if risk not in {"low", "high"} or not isinstance(reason, str):
+        if risk not in {"low", "medium", "high"} or not isinstance(reason, str):
             raise CandidateReceiptError("risk classifier returned an invalid result")
         if base_sha != current_main_sha:
             return _decision(
@@ -408,7 +410,7 @@ def evaluate_pull_request_policy(client: Any, pr_number: int) -> dict[str, Any]:
                 cloud_state=initial["cloud_state"],
                 risk=risk,
                 reason=(
-                    "all five current-identity CI checks passed; Cloud is not required for this low-risk change"
+                    f"all five current-identity CI checks passed; Cloud is not required for this {risk}-risk change"
                     if initial["status"] == "success"
                     else f"regular CI policy: {initial['state']}"
                 ),
@@ -435,7 +437,7 @@ def evaluate_pull_request_policy(client: Any, pr_number: int) -> dict[str, Any]:
                 cloud_state=candidate.get("cloud_state", "skipped_by_policy"),
                 risk=risk,
                 reason=str(candidate.get("reason", "awaiting trusted Cloud validation")),
-                target_url=candidate.get("target_url"),
+                target_url=candidate.get("target_url") or (CANDIDATE_DISPATCH_URL if state == "pending" else None),
             )
 
         receipt = candidate.get("receipt")
@@ -501,13 +503,13 @@ def _validate_decision(item: Any, *, repository: str) -> dict[str, Any]:
         raise PolicyPublisherError("policy artifact decision has an invalid policy state")
     if item.get("cloud_state") not in {"passed", "skipped_by_policy", "failed"}:
         raise PolicyPublisherError("policy artifact decision has an invalid Cloud coverage state")
-    if item.get("risk") not in {"low", "high"}:
+    if item.get("risk") not in {"low", "medium", "high"}:
         raise PolicyPublisherError("policy artifact decision has an invalid risk class")
     description = item.get("description")
     if not isinstance(description, str) or not description.strip() or len(description) > 140 or any(ord(char) < 32 for char in description):
         raise PolicyPublisherError("policy artifact decision has an invalid description")
-    if item["risk"] == "low" and item["cloud_state"] != "skipped_by_policy":
-        raise PolicyPublisherError("low-risk decisions must keep Cloud skipped_by_policy")
+    if item["risk"] in {"low", "medium"} and item["cloud_state"] != "skipped_by_policy":
+        raise PolicyPublisherError("low/medium-risk decisions must keep Cloud skipped_by_policy")
     if item["policy_state"] == "passed" and item["status"] != "success":
         raise PolicyPublisherError("passed policy decisions must have success status")
     if item["status"] == "success" and item["policy_state"] != "passed":
@@ -618,6 +620,70 @@ def _parse_event(path: str) -> dict[str, Any]:
     return event
 
 
+
+def wait_for_candidate_completion(
+    client: Any,
+    *,
+    pr_number: int,
+    run_id: int,
+    run_attempt: int,
+    timeout_seconds: float = 240.0,
+    poll_seconds: float = 3.0,
+) -> str:
+    """Wait for the bot-dispatched candidate to finish before recomputing policy.
+
+    The candidate explicitly workflow_dispatches this policy while its final
+    callback job is still running. Checking immediately would publish another
+    Pending status. Do not accept evidence from a different run or attempt.
+    """
+    if not all(_positive_int(value) for value in (pr_number, run_id, run_attempt)):
+        raise PolicyPublisherError("candidate wait identity contains invalid IDs")
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        run = client.get_run(run_id)
+        if not isinstance(run, dict) or not _candidate_run_matches_control_plane(run):
+            raise PolicyPublisherError("candidate completion wait received an untrusted workflow")
+        if (
+            run.get("id") != run_id
+            or run.get("run_attempt") != run_attempt
+            or not _run_mentions_pr(run, pr_number)
+        ):
+            raise PolicyPublisherError("candidate completion wait received a mismatched run or attempt")
+        status = run.get("status")
+        if status == "completed":
+            conclusion = run.get("conclusion")
+            print(f"Candidate run {run_id}/{run_attempt} completed: {conclusion}")
+            # Failure/cancellation should still refresh the PR's policy to
+            # failure; do not fail the polling step on a completed bad result.
+            return str(conclusion or "unknown")
+        if status not in {"queued", "in_progress", "waiting", "pending", "requested"}:
+            raise PolicyPublisherError(f"candidate completion wait received invalid state: {status}")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise PolicyPublisherError("timed out awaiting candidate workflow completion")
+        time.sleep(min(poll_seconds, remaining))
+
+
+def wait_candidate_cli() -> int:
+    if os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch":
+        raise PolicyPublisherError("candidate wait requires trusted workflow_dispatch")
+    values = (
+        os.environ.get("POLICY_PR_NUMBER", ""),
+        os.environ.get("POLICY_CANDIDATE_RUN_ID", ""),
+        os.environ.get("POLICY_CANDIDATE_RUN_ATTEMPT", ""),
+    )
+    if any(not value.isdecimal() or int(value) <= 0 for value in values):
+        raise PolicyPublisherError("candidate wait requires exact positive PR/run/attempt IDs")
+    client = _client_from_environment()
+    wait_for_candidate_completion(
+        client,
+        pr_number=int(values[0]),
+        run_id=int(values[1]),
+        run_attempt=int(values[2]),
+    )
+    return 0
+
+
 def evaluate_cli() -> int:
     client = _client_from_environment()
     repository = os.environ.get("GITHUB_REPOSITORY", "")
@@ -679,9 +745,11 @@ def publish_cli() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("evaluate", "publish"))
+    parser.add_argument("command", choices=("evaluate", "publish", "wait-candidate"))
     args = parser.parse_args()
     try:
+        if args.command == "wait-candidate":
+            return wait_candidate_cli()
         return evaluate_cli() if args.command == "evaluate" else publish_cli()
     except (PolicyPublisherError, GitHubApiError) as exc:
         print(f"Cloud integration policy failed closed: {exc}", file=sys.stderr)

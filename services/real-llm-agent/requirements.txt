@@ -1,0 +1,5 @@
+fastapi>=0.142.2,<0.143
+uvicorn[standard]>=0.54.0,<0.55
+pydantic>=2.13.5,<3
+openai>=2.11.0,<2.12
+httpx>=0.28.1,<0.29

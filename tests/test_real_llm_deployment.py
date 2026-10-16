@@ -114,3 +114,10 @@ def test_cloud_compose_runner_dataset_source_defaults_to_langfuse():
     assert (
         "ARGUS_DATASET_SOURCE: ${ARGUS_DATASET_SOURCE:-langfuse}" in yaml_text
     ), "云栈 runner 必须默认 langfuse dataset source，防止 seed 残留导致 run-item 永久缺失"
+
+def test_cloud_compose_runner_run_item_strategy_defaults_to_otel():
+    """Issue 198 S6.2 方向 A：云栈 run-item 写入默认走 v4 OTel 投影（不再隐式依赖 legacy REST）。"""
+    yaml_text = (ROOT / "docker-compose.cloud.yml").read_text()
+    assert (
+        "ARGUS_LANGFUSE_RUN_ITEM_STRATEGY: ${ARGUS_LANGFUSE_RUN_ITEM_STRATEGY:-otel}" in yaml_text
+    ), "云栈 runner 必须默认 OTel 投影，避免 v4 组织 dataset_run_items 返回 200 但不投影"

@@ -106,3 +106,11 @@ def test_validate_script_extends_guard_to_new_agent():
     validate_script = (ROOT / "scripts/validate.sh").read_text()
     assert "services/real-llm-agent" in validate_script
     assert "services/real-llm-agent/requirements.txt" in validate_script
+
+
+def test_cloud_compose_runner_dataset_source_defaults_to_langfuse():
+    """Issue #198 S6.1：云栈版本化 Launch 必须默认走 Langfuse dataset（run-item 可回填）。"""
+    yaml_text = (ROOT / "docker-compose.cloud.yml").read_text()
+    assert (
+        "ARGUS_DATASET_SOURCE: ${ARGUS_DATASET_SOURCE:-langfuse}" in yaml_text
+    ), "云栈 runner 必须默认 langfuse dataset source，防止 seed 残留导致 run-item 永久缺失"

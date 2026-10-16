@@ -54,6 +54,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-sqlite:////tmp/argus.db}
       ARGUS_DB_MODE: standalone
       ARGUS_DATASET_SOURCE: ${ARGUS_DATASET_SOURCE:-langfuse}
+      ARGUS_LANGFUSE_RUN_ITEM_STRATEGY: ${ARGUS_LANGFUSE_RUN_ITEM_STRATEGY:-otel}
       LANGFUSE_TRACING_ENVIRONMENT: poc-cloud
       AGENT_REGISTRY_PATH: /app/config/agents.yaml
       DATASET_SEED_PATH: /app/data/dataset.json

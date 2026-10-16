@@ -31,6 +31,7 @@ jobs:
             requirements-dev.txt
             services/eval-runner/requirements.txt
             services/demo-agent/requirements.txt
+            services/real-llm-agent/requirements.txt
 
       - name: Install development dependencies
         run: |
@@ -68,12 +69,12 @@ jobs:
 
       - name: Verify architecture invariants
         run: |
-          if grep -RinE '^[[:space:]]*(from|import)[[:space:]]+langfuse|Evaluation\(|run_experiment' services/demo-agent --include='*.py'; then
-            echo "Demo Agent must not contain evaluation-platform dependencies" >&2
+          if grep -RinE '^[[:space:]]*(from|import)[[:space:]]+langfuse|Evaluation\(|run_experiment' services/demo-agent services/real-llm-agent --include='*.py'; then
+            echo "Demo Agent and Real LLM Agent must not contain evaluation-platform dependencies" >&2
             exit 1
           fi
-          if grep -in 'langfuse' services/demo-agent/requirements.txt; then
-            echo "Demo Agent requirements must not contain Langfuse" >&2
+          if grep -in 'langfuse' services/demo-agent/requirements.txt services/real-llm-agent/requirements.txt; then
+            echo "Demo Agent and Real LLM Agent requirements must not contain Langfuse" >&2
             exit 1
           fi
           grep -q 'inject(headers)' services/eval-runner/app/main.py
@@ -114,6 +115,7 @@ jobs:
             requirements-dev.txt
             services/eval-runner/requirements.txt
             services/demo-agent/requirements.txt
+            services/real-llm-agent/requirements.txt
 
       - name: Install test dependencies
         run: |
@@ -231,6 +233,16 @@ jobs:
           cache-from: type=gha,scope=console
           cache-to: type=gha,mode=max,scope=console
 
+      - name: Build real-llm-agent image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: services/real-llm-agent
+          load: true
+          push: false
+          tags: argus-real-llm-agent:ci
+          cache-from: type=gha,scope=real-llm-agent
+          cache-to: type=gha,mode=max,scope=real-llm-agent
+
   console:
     name: Console Quality & E2E
     runs-on: ubuntu-latest
@@ -259,6 +271,7 @@ jobs:
             requirements-dev.txt
             services/eval-runner/requirements.txt
             services/demo-agent/requirements.txt
+            services/real-llm-agent/requirements.txt
 
       - name: Install backend dependencies
         run: |

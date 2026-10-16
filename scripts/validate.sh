@@ -26,9 +26,9 @@ echo "[2/7] Compile Python sources and check code quality"
 "$PYTHON_BIN" -m compileall -q services tests
 "$PYTHON_BIN" -m ruff check services tests
 
-echo "[3/7] Verify zero evaluation-SDK dependency in Demo Agent"
-if grep -RinE '^[[:space:]]*(from|import)[[:space:]]+langfuse|Evaluation\(|run_experiment' services/demo-agent --include='*.py' || grep -in 'langfuse' services/demo-agent/requirements.txt; then
-  echo "Demo Agent unexpectedly contains evaluation-platform dependencies" >&2
+echo "[3/7] Verify zero evaluation-SDK dependency in Demo Agent and Real LLM Agent"
+if grep -RinE '^[[:space:]]*(from|import)[[:space:]]+langfuse|Evaluation\(|run_experiment' services/demo-agent services/real-llm-agent --include='*.py' || grep -in 'langfuse' services/demo-agent/requirements.txt services/real-llm-agent/requirements.txt; then
+  echo "Demo Agent or Real LLM Agent unexpectedly contains evaluation-platform dependencies" >&2
   exit 1
 fi
 if ! grep -q 'traceparent' services/demo-agent/app.py; then

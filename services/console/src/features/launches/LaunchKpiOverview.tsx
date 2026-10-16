@@ -11,6 +11,14 @@ type RunMetrics = {
   cost_case_count?: number | null;
   cost_unavailable_reason?: string | null;
   total_cases?: number;
+  // Issue 198 S6.5（用户定稿）：token 是 KPI 主口径；钱金额不进入展示层。
+  usage_tokens_per_case?: number | null;
+  usage_input_tokens_per_case?: number | null;
+  usage_output_tokens_per_case?: number | null;
+  usage_case_count?: number | null;
+  usage_coverage?: number | null;
+  usage_partial?: boolean | null;
+  usage_unavailable_reason?: string | null;
 };
 
 type ComparisonSummary = {
@@ -40,18 +48,9 @@ interface LaunchKpiOverviewProps {
   onNavigateTab?: (tabId: string, filter?: string) => void;
 }
 
-const formatMoney = (value: number | null | undefined, currency: string | null | undefined = "USD") => {
-  if (value == null) return "—";
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currency || "USD",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 4,
-    }).format(value);
-  } catch {
-    return `${currency || "$"} ${value.toFixed(4)}`;
-  }
+const formatTokenRate = (value: number | null | undefined) => {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `${Math.round(value * 10) / 10}`;
 };
 
 
@@ -220,34 +219,38 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
     }
   }
 
-  // 4. Cost per case
-  const candidateCost = cohort?.candidate.cost_per_case ?? comparisonSummary?.candidate?.cost_per_case;
-  const costCurrency = cohort?.candidate.cost_currency ?? comparisonSummary?.candidate?.cost_currency ?? "USD";
-  const costReason = comparisonSummary?.candidate?.cost_unavailable_reason ?? comparisonSummary?.cost_comparison?.reason;
-  let costText = "—";
-  let costSubText = "暂无可比较的成本对比";
+  // 4. Token consumption (Issue 198 S6.5, 用户定稿口径)
+  // 分母 = total_cases（失败 / 重试 attempt 全计入），分母不因证据缺失而改变。
+  // Cohort 存在时不回退到全量 metrics，避免不同总体混算（与 P95 卡同一证据纪律）。
+  // Fail-closed：无 token 证据只呈现未知与原因，不补 0，也不换算成金额。
+  const candidateUsageTokens = cohort
+    ? cohort.candidate.usage_tokens_per_case
+    : comparisonSummary?.candidate?.usage_tokens_per_case;
+  const candidateUsageInput = cohort
+    ? cohort.candidate.usage_input_tokens_per_case
+    : comparisonSummary?.candidate?.usage_input_tokens_per_case;
+  const candidateUsageOutput = cohort
+    ? cohort.candidate.usage_output_tokens_per_case
+    : comparisonSummary?.candidate?.usage_output_tokens_per_case;
+  const candidateUsageFlags = cohort
+    ? cohort.candidate
+    : comparisonSummary?.candidate ?? {};
 
-  if (candidateCost != null) {
-    costText = formatMoney(candidateCost, costCurrency);
-    const costDelta = comparisonSummary?.cost_comparison?.delta;
-    if (
-      comparisonSummary?.cost_comparison?.status === "COMPARABLE" &&
-      typeof costDelta === "number" && Number.isFinite(costDelta)
-    ) {
-      const delta = costDelta;
-      if (delta > 0) {
-        costSubText = `较基线增加 ${formatMoney(delta, costCurrency)}`;
-      } else if (delta < 0) {
-        costSubText = `较基线节省 ${formatMoney(Math.abs(delta), costCurrency)}`;
-      } else {
-        costSubText = "单例成本与基线持平";
-      }
-    } else if (costReason) {
-      costSubText = "成本证据不足，无法比较";
-    }
-  } else if (costReason) {
-    costText = "—";
-    costSubText = "未采集到用例成本数据";
+  const hasUsageTokens = typeof candidateUsageTokens === "number" && Number.isFinite(candidateUsageTokens);
+  const usagePartial = candidateUsageFlags.usage_partial === true;
+  const usageCaseCount = candidateUsageFlags.usage_case_count;
+  const usageTotalCases = candidateUsageFlags.total_cases ?? total;
+  let usageTokenText = "—";
+  let usageSubText = "未采集到 token 消耗数据";
+  let usageBreakdownText = "—";
+
+  if (usagePartial || (typeof usageCaseCount === "number" && usageCaseCount < usageTotalCases && usageCaseCount > 0)) {
+    const shown = typeof usageCaseCount === "number" ? usageCaseCount : 0;
+    usageSubText = `部分用例缺少 token 证据 (${shown}/${usageTotalCases})`;
+  } else if (hasUsageTokens) {
+    usageTokenText = formatTokenRate(candidateUsageTokens);
+    usageBreakdownText = `输入 ${formatTokenRate(candidateUsageInput)} / 输出 ${formatTokenRate(candidateUsageOutput)} tokens`;
+    usageSubText = usageBreakdownText;
   }
 
   return (
@@ -400,16 +403,20 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
             </div>
           </div>
 
-          {/* KPI 4: 单用例平均成本 */}
+          {/* KPI 4: 单用例平均 token 消耗（Issue 198 S6.5：token 主口径，无 money 展示） */}
           <div className="bg-surface border border-border rounded-xl p-3.5 flex flex-col justify-between shadow-xs hover:border-border-strong transition">
             <div>
-              <div className="text-xs font-medium text-muted-foreground mb-2">单用例平均成本</div>
+              <div className="text-xs font-medium text-muted-foreground mb-2">单用例平均 token 消耗</div>
               <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold font-mono tracking-tight text-foreground">{costText}</span>
+                <span data-testid="usage-tokens-per-case" className="text-2xl font-bold font-mono tracking-tight text-foreground">{usageTokenText}</span>
+                {usageTokenText !== "—" && <span className="text-xs font-mono text-muted-foreground">tokens</span>}
               </div>
             </div>
             <div className="mt-3 pt-2.5 border-t border-border flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span>{costSubText}</span>
+              <span data-testid="usage-tokens-breakdown">{usageSubText}</span>
+              {usageTokenText === "—" && candidateUsageFlags.usage_unavailable_reason && (
+                <span data-testid="usage-unavailable-reason">{candidateUsageFlags.usage_unavailable_reason}</span>
+              )}
             </div>
           </div>
         </div>

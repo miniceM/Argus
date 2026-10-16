@@ -1,0 +1,22 @@
+# 按需追加的 real-llm-agent 服务。必须与 make up 同一 Compose project：
+#   docker compose --env-file .env.poc --env-file .env.local \
+#     -f docker-compose.yml -f docker-compose.real-llm.yml up -d --build --no-deps real-llm-agent
+# 仅在 MODEL_BASE_URL / MODEL_API_KEY / MODEL_NAME 齐备时才可显式启用；
+# 真实 MODEL_API_KEY 只能注入本服务环境，不允许出现在仓库任何文件里。
+services:
+  real-llm-agent:
+    build:
+      context: ./services/real-llm-agent
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      MODEL_BASE_URL: ${MODEL_BASE_URL:?required}
+      MODEL_API_KEY: ${MODEL_API_KEY:?required}
+      MODEL_NAME: ${MODEL_NAME:?required}
+    ports:
+      - "127.0.0.1:18084:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 3s
+      timeout: 3s
+      retries: 10

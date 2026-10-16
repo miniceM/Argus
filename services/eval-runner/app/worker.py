@@ -15,6 +15,7 @@ from app.db_models import (  # noqa: E402
 )
 from app.execution import get_langfuse_client_safe  # noqa: E402
 
+from .costs import aggregate_attempt_costs
 from .db import DatabaseManager
 from .evaluation_result_store import persist_typed_results
 from .evaluator_binding import EvaluatorBindingError, evaluate_frozen_item, resolve_execution_plan
@@ -415,6 +416,20 @@ class ExecutionWorker:
                 launch_row = session.get(ExperimentLaunchRecord, launch_id)
                 frozen_policy = (launch_row.manifest or {}).get("quality_policy") or {}
                 payload_scores["_policy_digest"] = frozen_policy.get("policy_digest")
+                # Issue 198 S6.6: the platform token metric travels with the
+                # projection. Only a usable case token total (sum over all
+                # attempts, incl. reasoning) is attached; partial or missing
+                # evidence stays fail-closed and is never reported as 0.
+                case_usage = aggregate_attempt_costs(list(session.scalars(
+                    select(ExecutionAttemptRecord).where(
+                        ExecutionAttemptRecord.item_execution_id == item_id,
+                    )
+                ).all()))
+                case_tokens = (case_usage.get("usage") or {})
+                if isinstance(case_tokens.get("total_tokens"), int) \
+                        and not isinstance(case_tokens["total_tokens"], bool) \
+                        and case_tokens["total_tokens"] >= 0:
+                    payload_scores["_usage_tokens"] = case_tokens
                 outbox_task = LangfuseSyncTaskRecord(
                     id=task_id,
                     launch_id=launch_id,

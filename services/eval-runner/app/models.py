@@ -553,6 +553,15 @@ class RunCostSummaryResponse(BaseModel):
     cost_policy_version: str | None = None
     cost_partial: bool | None = None
     cost_unavailable_reason: RunCostUnavailableReason | None = None
+    # Issue #198 S6.3（用户定稿）：token 消耗字段（主口径 `usage_tokens_per_case`）。
+    # 复用 cost 不可用词汇的 eplanation 字段，不新增枚举；无 token 证据时 fail-closed 为 None。
+    usage_tokens_per_case: float | None = None
+    usage_input_tokens_per_case: float | None = None
+    usage_output_tokens_per_case: float | None = None
+    usage_case_count: int | None = None
+    usage_coverage: float | None = None
+    usage_partial: bool | None = None
+    usage_unavailable_reason: RunCostUnavailableReason | None = None
 
 
 class CostComparisonResponse(BaseModel):

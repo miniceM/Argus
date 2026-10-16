@@ -68,6 +68,64 @@ def _item_result_types(item: dict[str, Any]) -> dict[str, str]:
     return types
 
 
+def _finite_token(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def _usage_summary(items: list[dict[str, Any]], total: int) -> dict[str, Any]:
+    """Issue #198 S6.3: token 消耗以 total_cases 为分母的失败安全聚合。
+
+    分母 = total_cases（用户定稿）：失败用例与重试 attempt 的 token 全部计入分子；
+    无证据时 fail-closed（返回 None / 记录原因），绝不写 0 或编造 evidence。
+    """
+    if total == 0:
+        return {
+            "usage_tokens_per_case": None,
+            "usage_input_tokens_per_case": None,
+            "usage_output_tokens_per_case": None,
+            # S6.6: run 级 token 总量，供 run score 上报（fail-closed）。
+            "usage_tokens_total": None,
+            "usage_case_count": 0,
+            "usage_coverage": None,
+            "usage_partial": False,
+            "usage_unavailable_reason": None,
+        }
+    sums = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    component_counts = {"input_tokens": 0, "output_tokens": 0}
+    case_states: list[str] = []
+    for item in items:
+        raw = item.get("usage") if isinstance(item, dict) else None
+        usage = raw if isinstance(raw, dict) else {}
+        total_tokens = _finite_token(usage.get("total_tokens"))
+        if total_tokens is not None:
+            sums["total_tokens"] += total_tokens
+            for key in ("input_tokens", "output_tokens"):
+                value = _finite_token(usage.get(key))
+                if value is not None:
+                    sums[key] += value
+                    component_counts[key] += 1
+        else:
+            partial = any(_finite_token(usage.get(k)) is not None for k in ("input_tokens", "output_tokens"))
+            case_states.append("INCOMPLETE_ATTEMPT_COST" if partial else "COST_NOT_RECORDED")
+    case_count = total - len(case_states)
+    reason = None
+    if case_count != total:
+        reason = "INCOMPLETE_ATTEMPT_COST" if "INCOMPLETE_ATTEMPT_COST" in case_states else "COST_NOT_RECORDED"
+    return {
+        "usage_tokens_per_case": (sums["total_tokens"] / total) if case_count else None,
+        "usage_input_tokens_per_case": (sums["input_tokens"] / total) if component_counts["input_tokens"] == total else None,
+        "usage_output_tokens_per_case": (sums["output_tokens"] / total) if component_counts["output_tokens"] == total else None,
+        # 已观测总量：partial 时仅为下界，正式 Run Score 必须另行核验完整 coverage。
+        "usage_tokens_total": sums["total_tokens"] if case_count else None,
+        "usage_case_count": case_count,
+        "usage_coverage": case_count / total,
+        "usage_partial": case_count < total,
+        "usage_unavailable_reason": reason,
+    }
+
+
 def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, Any]]) -> dict[str, Any]:
     """Build deterministic run-level metrics without conflating execution and quality failures."""
     evaluator_specs = _item_evaluator_specs(evaluator_specs)
@@ -246,6 +304,7 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
         "cost_policy_version": cost_policy_version,
         "cost_partial": bool(total and cost_case_count < total),
         "cost_unavailable_reason": cost_reason,
+        **_usage_summary(items, total),
     }
 
 

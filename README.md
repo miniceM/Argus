@@ -50,6 +50,7 @@ make demo      # 等待就绪 → 导入 Demo Registry → 跑 v1 / v2 回归
 | FastAPI / OpenAPI Docs | http://localhost:18080/docs |
 | Langfuse | http://localhost:3000 |
 | Demo Agent v1 / v2 | http://localhost:18081 / http://localhost:18082 |
+| Real LLM Agent（可选，需三项模型配置，见 [services/real-llm-agent/README.md](./services/real-llm-agent/README.md)） | http://127.0.0.1:18084 |
 
 Langfuse 演示账号：`admin@example.com` / `Poc-Admin-2026!`（仅本地 PoC 环境，凭据见 `.env.poc`）。
 

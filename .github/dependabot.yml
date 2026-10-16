@@ -47,6 +47,15 @@ updates:
     labels:
       - "dependencies"
   - package-ecosystem: "docker"
+    directory: "/services/real-llm-agent"
+    schedule:
+      interval: "cron"
+      cronjob: "0 0 1 */2 *"
+    commit-message:
+      prefix: "build"
+    labels:
+      - "dependencies"
+  - package-ecosystem: "docker"
     directory: "/services/demo-agent"
     schedule:
       interval: "cron"

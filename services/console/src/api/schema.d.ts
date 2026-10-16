@@ -2430,6 +2430,19 @@ export interface components {
             /** Cost Partial */
             cost_partial?: boolean | null;
             cost_unavailable_reason?: components["schemas"]["RunCostUnavailableReason"] | null;
+            /** Usage Tokens Per Case */
+            usage_tokens_per_case?: number | null;
+            /** Usage Input Tokens Per Case */
+            usage_input_tokens_per_case?: number | null;
+            /** Usage Output Tokens Per Case */
+            usage_output_tokens_per_case?: number | null;
+            /** Usage Case Count */
+            usage_case_count?: number | null;
+            /** Usage Coverage */
+            usage_coverage?: number | null;
+            /** Usage Partial */
+            usage_partial?: boolean | null;
+            usage_unavailable_reason?: components["schemas"]["RunCostUnavailableReason"] | null;
         } & {
             [key: string]: unknown;
         };

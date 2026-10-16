@@ -6772,6 +6772,82 @@
                 "type": "null"
               }
             ]
+          },
+          "usage_tokens_per_case": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage Tokens Per Case"
+          },
+          "usage_input_tokens_per_case": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage Input Tokens Per Case"
+          },
+          "usage_output_tokens_per_case": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage Output Tokens Per Case"
+          },
+          "usage_case_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage Case Count"
+          },
+          "usage_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage Coverage"
+          },
+          "usage_partial": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage Partial"
+          },
+          "usage_unavailable_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunCostUnavailableReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": true,

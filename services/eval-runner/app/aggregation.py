@@ -85,6 +85,8 @@ def _usage_summary(items: list[dict[str, Any]], total: int) -> dict[str, Any]:
             "usage_tokens_per_case": None,
             "usage_input_tokens_per_case": None,
             "usage_output_tokens_per_case": None,
+            # S6.6: run 级 token 总量，供 run score 上报（fail-closed）。
+            "usage_tokens_total": None,
             "usage_case_count": 0,
             "usage_coverage": None,
             "usage_partial": False,
@@ -113,6 +115,8 @@ def _usage_summary(items: list[dict[str, Any]], total: int) -> dict[str, Any]:
         "usage_tokens_per_case": (sums["total_tokens"] / total) if case_count else None,
         "usage_input_tokens_per_case": (sums["input_tokens"] / total) if case_count else None,
         "usage_output_tokens_per_case": (sums["output_tokens"] / total) if case_count else None,
+        # S6.6: run 级 token 总量，供 run score 上报；全部用例无证据时 fail-closed。
+        "usage_tokens_total": sums["total_tokens"] if case_count else None,
         "usage_case_count": case_count,
         "usage_coverage": case_count / total,
         "usage_partial": case_count < total,

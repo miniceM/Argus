@@ -20,10 +20,13 @@ from .db_models import (
 )
 from .langfuse_links import LangfuseLaunchLinkService, select_current_run_evidence
 from .langfuse_projection import (
+    PROJECTION_SOURCE,
     CombinedSyncState,
+    ProjectedScore,
     combine_scope_states,
     project_typed_result,
     scope_state_from_tasks,
+    stable_score_id,
 )
 from .state_machine import TERMINAL_LAUNCH_STATUSES
 
@@ -288,7 +291,13 @@ def _project_scores(
             )
             if score.applicable:
                 projected.append(score)
-        return projected
+        return _append_platform_usage_score(
+            projected,
+            payload,
+            scores=scores,
+            snapshot_id=snapshot_id,
+            revision=revision,
+        )
 
     projected = []
     for evaluator_id, value in scores.items():
@@ -309,7 +318,55 @@ def _project_scores(
                 policy_digest=policy_digest,
             )
         )
-    return [score for score in projected if score.applicable]
+    return _append_platform_usage_score(
+        [score for score in projected if score.applicable],
+        payload,
+        scores=scores,
+        snapshot_id=snapshot_id,
+        revision=revision,
+    )
+
+
+def _append_platform_usage_score(
+    projected: list[Any],
+    payload: dict[str, Any],
+    *,
+    scores: dict[str, Any],
+    snapshot_id: str | None,
+    revision: int | None,
+) -> list[Any]:
+    """Issue 198 S6.6: report the case token total as a dedicated platform score.
+
+    This is never an evaluator projection: the value is the frozen case token
+    total (sum over all attempts, incl. reasoning). Partial or missing evidence
+    stays fail-closed — no score is created and no 0 is invented.
+    """
+    usage_tokens = scores.get("_usage_tokens")
+    if not isinstance(usage_tokens, dict):
+        return projected
+    total = usage_tokens.get("total_tokens")
+    if isinstance(total, bool) or not isinstance(total, int) or total < 0:
+        return projected
+    item_id = str(payload.get("item_id") or "")
+    generation = int(payload.get("dispatch_generation") or 1)
+    projected.append(
+        ProjectedScore(
+            evaluator_id="tokens_total",
+            score_id=stable_score_id(item_id=item_id, generation=generation, evaluator_id="tokens_total"),
+            applicable=True,
+            value=float(total),
+            comment="Argus case token total (all attempts, incl. reasoning).",
+            evidence={
+                "source": PROJECTION_SOURCE,
+                "platform_metric": "tokens_total",
+                "input_tokens": usage_tokens.get("input_tokens"),
+                "output_tokens": usage_tokens.get("output_tokens"),
+                "snapshot_id": snapshot_id,
+                "revision": revision,
+            },
+        )
+    )
+    return projected
 
 
 class LangfuseOutboxSyncer:

@@ -23,6 +23,7 @@ item ↔ trace 归属，并以与 worker 相同的调用路径补绑 run items�
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import urllib.request
 from pathlib import Path
@@ -32,6 +33,10 @@ ROOT = Path(__file__).resolve().parents[1]
 EVAL_RUNNER = ROOT / "services" / "eval-runner"
 sys.path.insert(0, str(EVAL_RUNNER))
 
+from app.langfuse_otel_projection import replay_experiment_item  # noqa: E402
+from app.langfuse_run_items import self_assigned_run_id  # noqa: E402
+
+DEFAULT_ENV_PATH = ROOT / ".env.cloud"
 _LANGFUSE_PREFIX = "LANGFUSE_"
 _REQUIRED_LANGFUSE_KEYS = ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY")
 _DUPLICATE_MARKERS = ("duplicate", "conflict", "already exists", "unique constraint")
@@ -64,6 +69,32 @@ def load_langfuse_env(env_path: Path) -> dict[str, str]:
     return credentials
 
 
+def load_credentials(env_path: Path | None) -> Any:
+    """构建 OTel projection 凭据.
+
+    `--env-file` 存在则读文件（与 legacy 相同来源），否则读运行时环境变量。
+    二者都未提供则报错，不打印也不持久化任何值。
+    """
+    from types import SimpleNamespace
+
+    if env_path is not None and Path(env_path).exists():
+        values = load_langfuse_env(env_path)
+    else:
+        values = {name: os.environ.get(name) or "" for name in _REQUIRED_LANGFUSE_KEYS}
+    missing = [name for name in _REQUIRED_LANGFUSE_KEYS if not values.get(name)]
+    if missing:
+        raise SystemExit(
+            f"Missing required Langfuse credentials (env-file or环境): {', '.join(missing)} "
+            "(values are never printed)."
+        )
+    base_url = values.get("LANGFUSE_BASE_URL", "") or os.getenv("LANGFUSE_BASE_URL", "")
+    return SimpleNamespace(
+        base_url=base_url,
+        public_key=values.get("LANGFUSE_PUBLIC_KEY", ""),
+        secret_key=values.get("LANGFUSE_SECRET_KEY", ""),
+    )
+
+
 def _is_duplicate_error(exc: Exception) -> bool:
     status = getattr(getattr(exc, "response", None), "status_code", None)
     if status == 409:
@@ -91,7 +122,22 @@ def _frozen_dataset_version(manifest_dataset: dict[str, Any]) -> str:
     return raw_text
 
 
-def build_run_items(launch: dict[str, Any], items: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _launch_dataset_id(launch: dict[str, Any]) -> str | None:
+    """Langfuse dataset id for the v4 projection path (launch DB has it)."""
+    for key in ("dataset_id",):
+        value = launch.get(key)
+        if value:
+            return str(value)
+    dataset = launch.get("manifest", {}).get("dataset", {})
+    value = dataset.get("dataset_id")
+    return str(value) if value else None
+
+
+def build_run_items(
+    launch: dict[str, Any],
+    items: list[dict[str, Any]],
+    skip_dataset_item_ids: set[str] | frozenset[str] | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """把 Runner API 返回的 launch/item 归属组装成与 worker 相同的 `dataset_run_items.create` 载荷。
 
     Skips 在返回值中显式记录原因；载荷本身与 `langfuse_sync.py` 的 worker 路径一致。
@@ -105,11 +151,17 @@ def build_run_items(launch: dict[str, Any], items: list[dict[str, Any]]) -> tupl
         )
     run_name = manifest.get("name") or f"argus-{str(launch.get('id') or '')[:12]}"
     dataset_version = _frozen_dataset_version(manifest_dataset)
+    dataset_id = _launch_dataset_id(launch)
 
     payloads: list[dict[str, Any]] = []
     skips: list[dict[str, Any]] = []
+    skip_filter = {identifier.strip() for identifier in (skip_dataset_item_ids or set()) if identifier.strip()}
     for item in items:
         item_id = str(item.get("id") or "")
+        raw_ds_item = str(item.get("dataset_item_id") or "")
+        if raw_ds_item and raw_ds_item in skip_filter:
+            skips.append({"item_execution_id": item_id, "dataset_item_id": raw_ds_item, "reason": "SKIPPED_BY_FILTER"})
+            continue
         if str(item.get("execution_status") or "").lower() != "succeeded":
             skips.append({"item_execution_id": item_id, "dataset_item_id": item.get("dataset_item_id"), "reason": "EXECUTION_NOT_SUCCEEDED"})
             continue
@@ -119,6 +171,7 @@ def build_run_items(launch: dict[str, Any], items: list[dict[str, Any]]) -> tupl
             continue
         payloads.append({
             "run_name": run_name,
+            "dataset_id": dataset_id,
             "dataset_item_id": str(item.get("dataset_item_id") or ""),
             "trace_id": str(trace_id),
             "observation_id": item.get("observation_id"),
@@ -127,8 +180,18 @@ def build_run_items(launch: dict[str, Any], items: list[dict[str, Any]]) -> tupl
     return payloads, skips
 
 
-def apply_backfill(lf: Any, payloads: list[dict[str, Any]], *, dry_run: bool) -> list[dict[str, Any]]:
-    """逐条调用与 worker 相同的 `lf.api.dataset_run_items.create`。
+def apply_backfill(
+    lf: Any,
+    payloads: list[dict[str, Any]],
+    *,
+    dry_run: bool,
+    strategy: str = "legacy",
+    launch_id: str | None = None,
+    run_id_override: str | None = None,
+    env_path: Path | None = None,
+) -> list[dict[str, Any]]:
+    """逐条写入 run item。legacy 与 worker 相同的 `lf.api.dataset_run_items.create`；
+    otel 通过 OTel projection 直投（v4 新组织）.
 
     返回逐条 outcome：CREATED / SKIPPED_DUPLICATE / FAILED / DRY_RUN。
     """
@@ -140,19 +203,41 @@ def apply_backfill(lf: Any, payloads: list[dict[str, Any]], *, dry_run: bool) ->
             outcomes.append(entry)
             continue
         try:
-            lf.api.dataset_run_items.create(
-                run_name=payload["run_name"],
-                dataset_item_id=payload["dataset_item_id"],
-                trace_id=payload["trace_id"],
-                observation_id=payload.get("observation_id"),
-                dataset_version=payload["dataset_version"],
-            )
+            if strategy == "otel":
+                run_id = run_id_override or self_assigned_run_id(
+                    launch_id=str(launch_id or payload["dataset_item_id"]),
+                    run_name=payload["run_name"],
+                )
+                replay_experiment_item(
+                    trace_id=payload["trace_id"],
+                    span_id=payload.get("observation_id") or "",
+                    dataset_id=payload["dataset_id"],
+                    dataset_item_id=payload["dataset_item_id"],
+                    run_id=run_id,
+                    run_name=payload["run_name"],
+                    dataset_version=payload["dataset_version"],
+                    credentials=load_credentials(env_path or DEFAULT_ENV_PATH),
+                )
+            else:
+                lf.api.dataset_run_items.create(
+                    run_name=payload["run_name"],
+                    dataset_item_id=payload["dataset_item_id"],
+                    trace_id=payload["trace_id"],
+                    observation_id=payload.get("observation_id"),
+                    dataset_version=payload["dataset_version"],
+                )
         except Exception as exc:  # noqa: BLE001 — 逐条独立归类，不让单条失败跳过整批
             if _is_duplicate_error(exc):
                 entry["status"] = "SKIPPED_DUPLICATE"
             else:
                 entry["status"] = "FAILED"
                 entry["error"] = type(exc).__name__
+                detail = str(exc).strip()
+                # 截断诊断信息，绝不回显任何凭据值（错误消息本身也不含凭据）。
+                entry["detail"] = detail[:300] if detail else ""
+                status_code = getattr(exc, "status_code", None)
+                if isinstance(status_code, int):
+                    entry["status_code"] = status_code
         else:
             entry["status"] = "CREATED"
         outcomes.append(entry)
@@ -180,9 +265,17 @@ def backfill_launches(
     env_path: Path,
     dry_run: bool,
     lf: Any | None = None,
+    strategy: str = "legacy",
+    run_id_override: str | None = None,
+    skip_dataset_item_ids: set[str] | frozenset[str] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """对显式传入的 Launch ID 依次补绑；返回每个 launch 的 outcome 汇总。"""
-    if lf is None:
+    """对显式传入的 Launch ID 依次补绑；返回每个 launch 的 outcome 汇总。
+
+    - `legacy` 走 `lf.api.dataset_run_items.create`（与 worker 一致，仍走 langfuse SDK）。
+    - `otel` 不实例化 langfuse SDK：OTel projection 自己构建请求，绝对不触发
+      legacy `/dataset-run-items` 这条已退化的路径。
+    """
+    if lf is None and strategy == "legacy":
         credentials = load_langfuse_env(env_path)
         import os
 
@@ -197,8 +290,16 @@ def backfill_launches(
     report: dict[str, dict[str, Any]] = {}
     for launch_id in launch_ids:
         launch, items = fetch_launch_and_items(launch_id, base_url)
-        payloads, skips = build_run_items(launch, items)
-        outcomes = apply_backfill(lf, payloads, dry_run=dry_run)
+        payloads, skips = build_run_items(launch, items, skip_dataset_item_ids=skip_dataset_item_ids)
+        outcomes = apply_backfill(
+            lf,
+            payloads,
+            dry_run=dry_run,
+            strategy=strategy,
+            launch_id=launch_id,
+            run_id_override=run_id_override,
+            env_path=env_path,
+        )
         report[launch_id] = {"payloads": outcomes, "skips": skips}
         created = sum(1 for o in outcomes if o["status"] == "CREATED")
         duplicated = sum(1 for o in outcomes if o["status"] == "SKIPPED_DUPLICATE")
@@ -207,6 +308,22 @@ def backfill_launches(
             f"launch={launch_id} created={created} duplicated={duplicated} failed={failed} "
             f"skips={len(skips)} dry_run={dry_run}"
         )
+        if not dry_run:
+            for outcome in outcomes:
+                if outcome["status"] == "CREATED":
+                    continue
+                parts = [
+                    f"launch={launch_id}",
+                    f"dataset_item_id={outcome.get('dataset_item_id')}",
+                    f"status={outcome['status']}",
+                ]
+                if outcome.get("status_code"):
+                    parts.append(f"http={outcome['status_code']}")
+                if outcome.get("error"):
+                    parts.append(f"error={outcome['error']}")
+                if outcome.get("detail"):
+                    parts.append(f"detail={outcome['detail']}")
+                print(" ".join(parts), file=sys.stderr)
     return report
 
 
@@ -216,6 +333,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--launch-id", action="append", required=True, help="Explicit launch id (repeatable; no wildcards)")
     parser.add_argument("--env-file", type=Path, default=ROOT / ".env.cloud", help="Env file providing LANGFUSE_* credentials")
     parser.add_argument("--dry-run", action="store_true", help="Assemble payloads without touching the cloud")
+    parser.add_argument(
+        "--strategy",
+        default="legacy",
+        choices=["legacy", "otel"],
+        help="run-item write path: legacy REST (v3) or Langfuse v4 OTel projection",
+    )
+    parser.add_argument(
+        "--skip-ds-item",
+        dest="skip_ds_item_ids",
+        action="append",
+        default=None,
+        help="Langfuse dataset_item_id to skip (repeatable; used to exclude an already-materialized item)",
+    )
+    parser.add_argument(
+        "--run-id",
+        dest="run_id_override",
+        default=None,
+        help="Override the experiment id (otel only) so the run item re-joins an existing run",
+    )
     args = parser.parse_args(argv)
 
     report = backfill_launches(
@@ -223,6 +359,9 @@ def main(argv: list[str] | None = None) -> int:
         args.base_url,
         env_path=args.env_file,
         dry_run=args.dry_run,
+        strategy=args.strategy,
+        run_id_override=args.run_id_override,
+        skip_dataset_item_ids=set(args.skip_ds_item_ids or ()),
     )
     failed = sum(
         outcome["status"] == "FAILED"

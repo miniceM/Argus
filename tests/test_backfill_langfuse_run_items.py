@@ -135,3 +135,109 @@ def test_load_langfuse_env_requires_core_credentials(tmp_path):
 
     with pytest.raises(SystemExit):
         script.load_langfuse_env(env_file)
+
+
+# ---------------------------------------------------------------------------
+# OTel 投影路径（v4 云端，legacy `/dataset-run-items` 不可投影时的唯一合法写入）
+# ---------------------------------------------------------------------------
+
+
+def test_apply_backfill_otel_strategy_uses_projection_and_never_calls_legacy(monkeypatch, tmp_path):
+    script = _load_script()
+    payload_items = script.build_run_items(_LAUNCH, _ITEMS)[0]
+    payload_items = [{**payload, "dataset_id": "ds-test"} for payload in payload_items]
+
+    legacy_calls: list[dict] = []
+
+    class _LegacyApi:
+        class dataset_run_items:
+            def create(self, **kwargs):
+                legacy_calls.append(kwargs)
+
+    projection_calls: list[dict] = []
+
+    def _fake_replay(**kwargs):
+        projection_calls.append(kwargs)
+
+    monkeypatch.setattr(script, "replay_experiment_item", _fake_replay)
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-fake")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-fake")
+    monkeypatch.setenv("LANGFUSE_BASE_URL", "https://langfuse.example.test")
+
+    outcomes = script.apply_backfill(
+        SimpleNamespace(api=_LegacyApi()),
+        payload_items,
+        dry_run=False,
+        strategy="otel",
+        launch_id="launch-1",
+        env_path=tmp_path / ".env.cloud",
+    )
+    assert [o["status"] for o in outcomes] == ["CREATED", "CREATED"]
+    assert legacy_calls == []
+    assert len(projection_calls) == 2
+    call = projection_calls[0]
+    assert call["trace_id"]
+    assert call["span_id"] == call.get("span_id")  # observation id travels as span id
+    assert call["dataset_id"] == "ds-test"
+    assert call["credentials"].base_url == "https://langfuse.example.test"
+
+
+def test_apply_backfill_otel_dry_run_makes_no_calls(monkeypatch, tmp_path):
+    script = _load_script()
+    payload_items = script.build_run_items(_LAUNCH, _ITEMS)[0]
+    payload_items = [{**payload, "dataset_id": "ds-test"} for payload in payload_items]
+    legacy_calls: list[dict] = []
+    projection_calls: list[dict] = []
+
+    class _LegacyApi:
+        class dataset_run_items:
+            def create(self, **kwargs):
+                legacy_calls.append(kwargs)
+
+    monkeypatch.setattr(script, "replay_experiment_item", lambda **kwargs: projection_calls.append(kwargs))
+
+    outcomes = script.apply_backfill(
+        SimpleNamespace(api=_LegacyApi()),
+        payload_items,
+        dry_run=True,
+        strategy="otel",
+    )
+    assert [o["status"] for o in outcomes] == ["DRY_RUN", "DRY_RUN"]
+    assert legacy_calls == []
+    assert projection_calls == []
+
+
+def test_build_run_items_respects_skip_dataset_item_ids():
+    script = _load_script()
+    skip_filter = {"ds-item-1"}
+    payloads, skips = script.build_run_items(_LAUNCH, _ITEMS, skip_dataset_item_ids=skip_filter)
+    ids = {payload["dataset_item_id"] for payload in payloads}
+    assert ids == {"ds-item-3"}
+    assert any(s["reason"] == "SKIPPED_BY_FILTER" for s in skips)
+
+
+def test_apply_backfill_otel_run_id_override_reuses_existing_run(monkeypatch, tmp_path):
+    script = _load_script()
+    payload_items = script.build_run_items(_LAUNCH, _ITEMS)[0]
+    payload_items = [{**payload, "dataset_id": "ds-test"} for payload in payload_items]
+    projection_calls: list[dict] = []
+
+    def _fake_replay(**kwargs):
+        projection_calls.append(kwargs)
+
+    monkeypatch.setattr(script, "replay_experiment_item", _fake_replay)
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-fake")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-fake")
+
+    script.apply_backfill(
+        SimpleNamespace(api=SimpleNamespace(dataset_run_items=SimpleNamespace(create=lambda **kw: None))),
+        payload_items,
+        dry_run=False,
+        strategy="otel",
+        launch_id="launch-1",
+        run_id_override="fb7f61b8-761e-4ce7-b980-880c58fa51d4",
+        env_path=tmp_path / ".env.cloud",
+    )
+    assert projection_calls, "otel strategy must post at least one OTel payload"
+    run_ids = {call["run_id"] for call in projection_calls}
+    assert run_ids == {"fb7f61b8-761e-4ce7-b980-880c58fa51d4"}

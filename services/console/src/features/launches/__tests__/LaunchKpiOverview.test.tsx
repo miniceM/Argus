@@ -123,18 +123,18 @@ describe("LaunchKpiOverview comparison evidence", () => {
     expect(screen.getByText("较基线持平 (0.0 pp)")).toBeInTheDocument();
   });
 
-  it("does not call cost equal without a comparable cost delta", () => {
+  it("does not fabricate token usage when only legacy cost evidence exists (S6.5)", () => {
     renderKpis({
       candidate: { cost_per_case: 0.01 },
       cost_comparison: { status: "NOT_COMPARABLE", delta: null },
     });
 
-    expect(screen.getByText("暂无可比较的成本对比")).toBeInTheDocument();
-    expect(screen.queryByText("单例成本与基线持平")).not.toBeInTheDocument();
-    expect(screen.queryByText("Token 消耗与基线相当")).not.toBeInTheDocument();
+    expect(screen.getByTestId("usage-tokens-per-case")).toHaveTextContent("—");
+    expect(screen.getByText("未采集到 token 消耗数据")).toBeInTheDocument();
+    expect(screen.queryByText(/\$|USD/)).not.toBeInTheDocument();
   });
 
-  it("only reports equal cost for an explicit comparable zero delta", () => {
+  it("keeps token evidence independent of legacy cost comparison (S6.5)", () => {
     renderKpis({
       comparable_cohort: {
         baseline: { cost_per_case: 0.01 },
@@ -143,7 +143,8 @@ describe("LaunchKpiOverview comparison evidence", () => {
       cost_comparison: { status: "COMPARABLE", delta: 0 },
     });
 
-    expect(screen.getByText("单例成本与基线持平")).toBeInTheDocument();
+    expect(screen.getByTestId("usage-tokens-per-case")).toHaveTextContent("—");
+    expect(screen.getByText("未采集到 token 消耗数据")).toBeInTheDocument();
   });
 });
 
@@ -235,5 +236,95 @@ describe("LaunchKpiOverview regression count unknown-safe (issue 119 U2)", () =>
     });
     expect(regressionValue()).not.toHaveTextContent("0");
     expect(screen.queryByText(/未发现回归/)).not.toBeInTheDocument();
+  });
+});
+
+
+describe("LaunchKpiOverview token consumption card (S6.5)", () => {
+  const renderKpis = (comparisonSummary?: any) =>
+    render(
+      <LaunchKpiOverview
+        totalItems={3}
+        passedItems={3}
+        decisionCounts={{ pass: 3, fail: 0, unknown: 0 }}
+        decidedPassRate="100.0%"
+        decisionCoverage={1}
+        comparisonSummary={comparisonSummary}
+      />,
+    );
+
+  it("renders token consumption from the frozen total-case denominator", () => {
+    renderKpis({
+      candidate: {
+        usage_tokens_per_case: 91.6667,
+        usage_input_tokens_per_case: 60,
+        usage_output_tokens_per_case: 31.6667,
+        usage_case_count: 3,
+        usage_coverage: 1,
+      },
+    });
+
+    expect(screen.getByText("单用例平均 token 消耗")).toBeInTheDocument();
+    const main = screen.getByTestId("usage-tokens-per-case");
+    expect(main).toHaveTextContent("91.7");
+    expect(screen.getByTestId("usage-tokens-breakdown")).toHaveTextContent("输入 60 / 输出 31.7 tokens");
+    expect(screen.queryByText(/\$|USD/)).not.toBeInTheDocument();
+  });
+
+  it("never renders a money amount even when legacy cost evidence exists", () => {
+    renderKpis({
+      candidate: {
+        cost_per_case: 0.01,
+        cost_currency: "USD",
+      },
+    });
+
+    expect(screen.getByTestId("usage-tokens-per-case")).toHaveTextContent("—");
+    expect(screen.getByText("未采集到 token 消耗数据")).toBeInTheDocument();
+    expect(screen.queryByText(/\$|USD/)).not.toBeInTheDocument();
+  });
+
+  it("surfaces fail-closed reason when token evidence is incomplete", () => {
+    renderKpis({
+      candidate: {
+        usage_case_count: 2,
+        usage_coverage: 0.6667,
+        usage_partial: true,
+        usage_unavailable_reason: "INCOMPLETE_ATTEMPT_COST",
+      },
+    });
+
+    expect(screen.getByTestId("usage-tokens-per-case")).toHaveTextContent("—");
+    expect(screen.getByText("部分用例缺少 token 证据 (2/3)")).toBeInTheDocument();
+  });
+
+  it("keeps a baseline comparable cohort candidate without money formatting", () => {
+    renderKpis({
+      comparable_cohort: {
+        baseline: { usage_tokens_per_case: 50 },
+        candidate: {
+          usage_tokens_per_case: 91.6667,
+          usage_input_tokens_per_case: 60,
+          usage_output_tokens_per_case: 31.6667,
+        },
+      },
+      cost_comparison: { status: "COMPARABLE", delta: 0 },
+    });
+
+    expect(screen.getByTestId("usage-tokens-per-case")).toHaveTextContent("91.7");
+    expect(screen.getByTestId("usage-tokens-breakdown")).toHaveTextContent("输入 60 / 输出 31.7 tokens");
+    expect(screen.queryByText(/\$|USD/)).not.toBeInTheDocument();
+  });
+
+  it("prefers no usage value instead of full-run fallback inside a cohort", () => {
+    renderKpis({
+      candidate: { usage_tokens_per_case: 91.6667 },
+      comparable_cohort: {
+        baseline: { usage_tokens_per_case: null },
+        candidate: { usage_tokens_per_case: null },
+      },
+    });
+
+    expect(screen.getByTestId("usage-tokens-per-case")).toHaveTextContent("—");
   });
 });

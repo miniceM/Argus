@@ -349,7 +349,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     expect(screen.getByText("综合质量通过率")).toBeInTheDocument();
     expect(screen.getByText("正式回归用例数")).toBeInTheDocument();
     expect(screen.getByText("P95 响应时延")).toBeInTheDocument();
-    expect(screen.getByText("单用例平均成本")).toBeInTheDocument();
+    expect(screen.getByText("单用例平均 token 消耗")).toBeInTheDocument();
 
     // 5. Default tab is Gate & Comparison, with audit/manifest panel not displayed in Tab 1
     expect(screen.getByRole("tab", { name: /门禁与版本对比/ })).toHaveAttribute("aria-selected", "true");

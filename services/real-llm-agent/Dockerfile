@@ -1,5 +1,5 @@
 # Issue #198 独立 Real LLM Agent 镜像；Python 3.12 与 CI 对齐。
-FROM docker.io/library/python:3.12.12-slim
+FROM docker.io/library/python:3.14.8-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

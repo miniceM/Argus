@@ -138,3 +138,29 @@
    - **首选**：Runner 在创建 item trace 时即注入 experiment baggage 属性（execution 时 manifest 已可用），实现"一次写入即物化"，无重放；
    - **补绑**：backfill 对历史 launch 的每个 case root span 重放（P2 路径），幂等（重放同 id 不炸不重复）。
 4. 云端遗留：probe 产生的两条数据（experiment `107bcc65…` + v3 run 的 1 条已物化 item）保留作为 UI 侧证据点，可人工在 UI 核对；project 数据量不爆炸。
+
+## S6.2 方向 A 落地（2026-10-16）：OTel projection 策略 + 真实 E2E 终验
+
+### 实现内容（本地，分支 `codex/issue198-real-llm-agent`，未 push）
+
+- **Worker 路径策略化**（`services/eval-runner/app/langfuse_run_items.py`）：`link_dataset_run_item` 统一封装 legacy REST 与 `otel` 两条策略；`ARGUS_LANGFUSE_RUN_ITEM_STRATEGY=otel`（每次调用实时读取，不缓存）。OTel 路径强校验 `dataset_id` / `observation_id` / base_url+keys，缺一 fail closed。
+- **OTLP 投影模块**（`services/eval-runner/app/langfuse_otel_projection.py`）：自建 OTLP protobuf payload，POST `/api/public/otel/v1/traces`（`x-langfuse-ingestion-version: 4`，basic auth），span 属性 `langfuse.experiment.id/name/dataset.id` + `langfuse.experiment.item.id/root_observation_id/version`；凭据不落日志/DB/仓库。
+- **backfill 脚本升级**（`scripts/backfill_langfuse_run_items.py`）：支持 `otel` 模式（从 env-file 读凭据、失败 entry 附 `detail`/`status_code`、非 dry-run 逐条打印非 CREATED 结果）；修复原先只读 `os.getenv("LANGFUSE_BASE_URL")` 导致 backfill base_url 为空的根因。
+- **版本归一化修复**（`langfuse_sync.py` Phase 4）：`parse_dataset_version` 返回 datetime 时转 `isoformat()`，消除 `_attr_str` 的 `bad argument type for built-in operation`；Phase 4 直接调用统一包进 `_invoke_with_timeout`（对齐 round4 audit 语义）。
+- 环境事实（诊断时确认）：cloud POC 栈 eval-runner 为容器内 SQLite + 无 Redis；`_syncer_loop` 静默吞异常，"容器日志无声"不等于 sync 未执行，需以 `langfuse_sync_tasks` 状态为准。
+
+### 真实 E2E 终验（v5 launch，付费真实模型）
+
+- Launch `79dca54d-c95c-4aa5-8761-e154512a9e00`（dataset `banking-agent-regression` = `cmu5gbnus0006ad0kjc2u7r1k`，frozen version `2026-10-16T01:25:21.912011+00:00`，6 cases，全部 succeeded）。
+- Runner outbox：`langfuse_sync_tasks` 6 条全部 `SYNCED`、`attempts=1`、无 retry；trace_id/observation_id 为 launch 真实链路标识（32/16 hex）。
+- **云端验证（Langfuse v4 API，`fromStartTime` 时间窗）**：
+  - `experiments.list(id=53751a88-3a79-5564-8e10-2b9470dcefb9)` → **1 命中**，name=`argus-79dca54d-c95`；
+  - `experiments.list_items(experiment_id=…, from_start_time=1970 起点)` → **6 items**，trace_id 与 outbox 6 条逐一匹配。
+- run_id 派生口径（重要）：worker 实际发送的 `dataset_run_name` 为 LaunchService 派生的 `argus-<launch_id 前 n 位>`（本例 `argus-79dca54d-c95`），不是 launch 人类可读名 `issue198-token-e2e-v5`。`self_assigned_run_id = uuid5(URL, "argus-run:<launch_id>:<run_name>")`。
+- 排查更正记录：此前"experiments.list(id=677feeaf…)=0"为**假阴性**——验证脚本用 launch 可读名派生 run_id，与 worker 实际发送的 run_name 不一致；worker OTel 投影本身一直是成功的，无需 backfill 补绑。
+- backfill 路径同样验证过（v3 run）：launch `ef196ee2-8b94-409f-8b35-aaf5e77dcce3` 补绑 `created=5 duplicated=0 failed=0 skips=1`；run `fb7f61b8-761e-4ce7-b980-880c58fa51d4` itemCount=6。
+
+### 验证结论
+
+- S6.2 方向 A：**PASS** —— 真实付费 Launch 在 worker 内经 OTel 策略完成 v4 experiment + 6 run item 的物化，云端 `GET /api/public/experiments` 与 `list_items` 双向可见。
+- 附录：v4 experiments API 需要必填 `fromStartTime`（ISO 8601）；不带该参数返回 400。

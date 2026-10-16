@@ -119,3 +119,22 @@
    - B. 接受 v4 新组织边界：run-item 面通过 CI 的 `run_experiment` 路径保证（可证明），版本化 Launch 的 run-item 可见性作为 open issue 记录、暂不修。
    - C. 迁移到 SDK `dataset.run_experiment` 重跑（付费重放，改变评测语义，不推荐）。
 2. `.tmp.compose-buildid.yml` 为本地临时 override，不提交（保持 untracked）。
+
+### 方向 A probe 记录（2026-10-16，OTel replay 三连验证）
+
+执行环境：Langfuse 云端（jp 区，`cmu5a6fj…` 项目）；POST `/api/public/otel/v1/traces`（OTLP/protobuf，basic auth，`x-langfuse-ingestion-version: 4`）。三次 probe 全部 200。
+
+| probe | 动作 | 关键属性 | 结果 |
+|---|---|---|---|
+| P1 合成 trace | 新 trace root span（app 侧 `langfuse.experiment.*` + item 属性，experiment id 自配 `107bcc65…`，run name `argus-issue198-otel-probe-1`） | `langfuse.experiment.id/name/dataset.id`, `item.id`, `item.root_observation_id` = 本 span id | `experiments.list(id=…)` **1 次命中**、itemCount=1、`list_items` 1 条（trace id 匹配）→ v4 experiment 由 OTel 属性物化成立，experiment id 可自配 |
+| P2 已有 trace 重放 | v3 run `fb7f61b8…` 的真实 case trace `8dbe7811…`（root observation `88b26ef7…`）同 trace_id / 同 span_id 重放，experiment id = **真实 run id**、name = `issue198-token-e2e-v3` | 同上 + item.id = `00000000-0000-4000-8000-000000000001` | `experiments.list` **命中真实 run 且 itemCount=1**；`list_items` item trace_id 匹配；原 CHAIN root observation 保留（重放同 span id 生成第二行 SPAN 记录，无数据丢失）→ backward 合并语义成立 |
+| P3 补 item.version 重放 | P1 trace 重放并增加 `langfuse.experiment.item.version` | + `item.version` | item_count 不变，`list_items.dataset_item_id` 仍 None（与 CI 可见 run 同形态，v4 rest 投影不含该列，非阻断） |
+
+结论（直接进入实施设计输入）：
+
+1. **v4 合同成立**：在新组织物化 run + run item 的做法 = 对每个 case 的 item root observation 元数据重放带 `langfuse.experiment.*` baggage 属性（`OTLP POST /otel/v1/traces`）。
+2. backward 合并安全：同 trace / 同 root span id 重放保留既有 observation 与 Scores，不会写 0。
+3. worker / backfill 的下位可选实现（供正式实施分节）：
+   - **首选**：Runner 在创建 item trace 时即注入 experiment baggage 属性（execution 时 manifest 已可用），实现"一次写入即物化"，无重放；
+   - **补绑**：backfill 对历史 launch 的每个 case root span 重放（P2 路径），幂等（重放同 id 不炸不重复）。
+4. 云端遗留：probe 产生的两条数据（experiment `107bcc65…` + v3 run 的 1 条已物化 item）保留作为 UI 侧证据点，可人工在 UI 核对；project 数据量不爆炸。

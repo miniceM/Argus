@@ -281,7 +281,7 @@ def test_outbox_publishes_item_tokens_total_score(setup_runtime):
     assert len(token_scores) == 1
     score = token_scores[0]
     assert score["id"] == stable_score_id(
-        item_id=item_id, generation=generation, evaluator_id="tokens_total"
+        item_id=item_id, generation=generation, evaluator_id="platform:tokens_total"
     )
     assert score["value"] == 50.0
     assert score["trace_id"] == "trace-token"
@@ -330,7 +330,7 @@ def test_outbox_without_usage_evidence_never_publishes_token_score(setup_runtime
 
 # ---------- S6.6 run-level: run score payload + `argus_run_tokens_total` ----------
 
-def test_run_score_payload_contains_run_tokens_total(setup_runtime):
+def test_partial_run_score_omits_run_tokens_total(setup_runtime):
     db_mgr = setup_runtime[0]
     usage = [(35, 15, 50), None, (145, 80, 225)]  # case-2 has no token evidence
     launch_id = _usage_launch(db_mgr, usage_cases=usage)
@@ -342,13 +342,12 @@ def test_run_score_payload_contains_run_tokens_total(setup_runtime):
     with db_mgr.get_session() as session:
         task = session.query(LangfuseRunScoreTaskRecord).one()
         assert task.snapshot_id == snapshot_id
-        assert task.scores_payload.get("run_tokens_total") == 275
-        assert "run_tokens_total" in task.scores_payload
+        assert "run_tokens_total" not in task.scores_payload
 
 
 def test_run_score_publishes_argus_run_tokens_total(setup_runtime):
     db_mgr = setup_runtime[0]
-    usage = [(35, 15, 50), None, (145, 80, 225)]
+    usage = [(35, 15, 50), (0, 0, 0), (145, 80, 225)]
     launch_id = _usage_launch(db_mgr, usage_cases=usage, dataset_source="langfuse")
     with db_mgr.get_session() as session:
         launch = session.get(Launch, launch_id)
@@ -381,3 +380,58 @@ def test_run_score_skips_run_tokens_total_without_evidence(setup_runtime):
     lf = FakeLangfuseSDK()
     assert LangfuseRunScoreSyncer(db_mgr, lf).process_batch() == 1
     assert all(s.get("name") != "argus_run_tokens_total" for s in lf.scores.created)
+
+
+def test_total_only_usage_preserves_unknown_breakdown():
+    from app.aggregation import aggregate_run
+
+    summary = aggregate_run([{"usage": {"total_tokens": 100}}], [])
+    assert summary["usage_tokens_total"] == 100
+    assert summary["usage_input_tokens_per_case"] is None
+    assert summary["usage_output_tokens_per_case"] is None
+
+
+def test_mixed_usage_preserves_unknown_breakdown():
+    from app.aggregation import aggregate_run
+
+    summary = aggregate_run([
+        {"usage": {"total_tokens": 100, "input_tokens": 60, "output_tokens": 40}},
+        {"usage": {"total_tokens": 50}},
+    ], [])
+    assert summary["usage_tokens_total"] == 150
+    assert summary["usage_input_tokens_per_case"] is None
+    assert summary["usage_output_tokens_per_case"] is None
+
+
+def test_platform_token_score_does_not_overwrite_same_named_evaluator():
+    from app.langfuse_sync import _project_scores
+
+    kwargs = {
+        "payload": {"item_id": "item-1", "dispatch_generation": 1},
+        "scores": {"tokens_total": 0.5, "_usage_tokens": {"total_tokens": 100}},
+        "snapshot_id": None, "revision": None, "policy_digest": None,
+    }
+    projected = _project_scores(**kwargs)
+    assert len(projected) == 2
+    assert len({score.score_id for score in projected}) == 2
+    assert {score.value for score in projected} == {0.5, 100.0}
+    assert [score.score_id for score in projected] == [
+        score.score_id for score in _project_scores(**kwargs)
+    ]
+
+
+def test_retry_with_missing_usage_withholds_formal_run_score(setup_runtime):
+    db_mgr = setup_runtime[0]
+    launch_id = _usage_launch(db_mgr, usage_cases=[(35, 15, 50)])
+    with db_mgr.get_session() as session:
+        item = session.query(Item).filter_by(launch_id=launch_id).one()
+        session.add(Attempt(
+            id=str(uuid.uuid4()), item_execution_id=item.id, attempt_no=2,
+            status="FAILED", dispatch_generation=1, usage_cost=None,
+        ))
+        session.flush()
+        snapshot = create_result_snapshot(session, session.get(Launch, launch_id))
+        assert snapshot.summary["usage_partial"] is True
+        session.flush()
+        task = session.query(LangfuseRunScoreTaskRecord).one()
+        assert "run_tokens_total" not in task.scores_payload

@@ -272,7 +272,11 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
         "critical_failure_count": summary["critical_failure_count"],
         "p95_latency_ms": summary["p95_latency_ms"],
         # Issue 198 S6.6: run-level token total as a Langfuse run score.
-        "run_tokens_total": summary.get("usage_tokens_total"),
+        "run_tokens_total": (
+            summary.get("usage_tokens_total")
+            if summary.get("usage_coverage") == 1.0 and not summary.get("usage_partial")
+            else None
+        ),
         **{f"score_mean_{key}": value for key, value in summary["score_means"].items()},
     }
     session.add(LangfuseRunScoreTaskRecord(

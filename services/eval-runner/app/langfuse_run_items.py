@@ -35,16 +35,10 @@ _SECRET_KEY_ENV = "LANGFUSE_SECRET_KEY"
 
 def resolve_run_item_strategy() -> str:
     """Read the strategy from the environment each time it is needed."""
-    raw = str(os.getenv(STRATEGY_ENV) or "legacy").strip().lower()
+    configured = os.getenv(STRATEGY_ENV)
+    raw = "legacy" if configured is None else configured.strip().lower()
     if raw not in VALID_STRATEGIES:
-        logger.warning(
-            "Unknown %s=%s (valid values: %s); falling back to %s",
-            STRATEGY_ENV,
-            raw,
-            "/".join(VALID_STRATEGIES),
-            LEGACY_STRATEGY,
-        )
-        return LEGACY_STRATEGY
+        raise ValueError(f"Invalid {STRATEGY_ENV}; expected legacy or otel")
     return raw
 
 

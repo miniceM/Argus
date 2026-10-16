@@ -373,3 +373,20 @@ test.describe("Issue #86 comparison comparability", () => {
     await expect(page.getByTestId("comparison-diagnostic-label")).toContainText("仅供诊断");
   });
 });
+
+
+test("部分 token 证据即使有平均值也不显示完整 KPI", async ({ page }) => {
+  const body = comparison();
+  body.summary.comparable_cohort.candidate = metrics({
+    usage_tokens_per_case: 91.7,
+    usage_partial: true,
+    usage_case_count: 2,
+    usage_coverage: 0.5,
+    usage_unavailable_reason: "COST_NOT_RECORDED",
+  });
+  await mockApi(page, body);
+  await page.goto(`/launches/${LAUNCH_ID}`);
+  await expect(page.getByTestId("usage-tokens-per-case")).toHaveText("—");
+  await expect(page.getByTestId("usage-tokens-breakdown")).toHaveText("部分用例缺少 token 证据 (2/4)");
+  await expect(page.getByTestId("usage-unavailable-reason")).toHaveText("COST_NOT_RECORDED");
+});

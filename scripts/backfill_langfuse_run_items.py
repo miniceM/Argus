@@ -252,9 +252,19 @@ def fetch_launch_and_items(launch_id: str, base_url: str, timeout_seconds: float
     import json
 
     launch_detail = json.loads(launch.decode("utf-8"))
-    with urllib.request.urlopen(f"{base}/experiment-launches/{launch_id}/items?limit=500", timeout=timeout_seconds) as resp:
-        payload = json.loads(resp.read().decode("utf-8"))
-    items = payload if isinstance(payload, list) else payload.get("data") or []
+    items: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        url = f"{base}/experiment-launches/{launch_id}/items?limit=500&offset={offset}"
+        with urllib.request.urlopen(url, timeout=timeout_seconds) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        page = payload if isinstance(payload, list) else payload.get("data")
+        if not isinstance(page, list):
+            raise ValueError("Invalid launch items response: expected a list")
+        items.extend(page)
+        if len(page) < 500:
+            break
+        offset += len(page)
     return launch_detail, items
 
 
@@ -306,7 +316,7 @@ def backfill_launches(
         failed = sum(1 for o in outcomes if o["status"] == "FAILED")
         print(
             f"launch={launch_id} created={created} duplicated={duplicated} failed={failed} "
-            f"skips={len(skips)} dry_run={dry_run}"
+            f"fetched={len(items)} planned={len(outcomes)} skips={len(skips)} dry_run={dry_run}"
         )
         if not dry_run:
             for outcome in outcomes:

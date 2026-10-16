@@ -241,3 +241,54 @@ def test_apply_backfill_otel_run_id_override_reuses_existing_run(monkeypatch, tm
     assert projection_calls, "otel strategy must post at least one OTel payload"
     run_ids = {call["run_id"] for call in projection_calls}
     assert run_ids == {"fb7f61b8-761e-4ce7-b980-880c58fa51d4"}
+
+
+def test_fetch_launch_items_paginates_past_500(monkeypatch):
+    import io
+    import json
+    from urllib.parse import parse_qs, urlsplit
+
+    module = _load_script()
+    offsets = []
+    rows = [{"id": f"item-{i}"} for i in range(501)]
+
+    def urlopen(url, **kwargs):
+        if "/items?" not in url:
+            return io.BytesIO(json.dumps(_LAUNCH).encode())
+        params = parse_qs(urlsplit(url).query)
+        offset = int(params.get("offset", [0])[0])
+        offsets.append(offset)
+        return io.BytesIO(json.dumps(rows[offset:offset + 500]).encode())
+
+    monkeypatch.setattr(module.urllib.request, "urlopen", urlopen)
+    _, items = module.fetch_launch_and_items("launch-1", "http://runner")
+    assert items == rows
+    assert offsets == [0, 500]
+
+
+def test_paginated_backfill_accounts_for_every_item_in_dry_and_write_modes(monkeypatch, tmp_path):
+    import io
+    import json
+    from urllib.parse import parse_qs, urlsplit
+
+    module = _load_script()
+    rows = [dict(_ITEMS[0], id=f"exec-{i}", dataset_item_id=f"ds-{i}") for i in range(501)]
+
+    def urlopen(url, **kwargs):
+        if "/items?" not in url:
+            return io.BytesIO(json.dumps(_LAUNCH).encode())
+        offset = int(parse_qs(urlsplit(url).query).get("offset", [0])[0])
+        return io.BytesIO(json.dumps(rows[offset:offset + 500]).encode())
+
+    calls = []
+    lf = SimpleNamespace(api=SimpleNamespace(dataset_run_items=SimpleNamespace(
+        create=lambda **kwargs: calls.append(kwargs),
+    )))
+    monkeypatch.setattr(module.urllib.request, "urlopen", urlopen)
+    for dry_run in (True, False):
+        report = module.backfill_launches(
+            ["launch-1"], "http://runner", env_path=tmp_path / ".env", dry_run=dry_run, lf=lf,
+        )["launch-1"]
+        assert len(report["payloads"]) == 501
+        assert report["skips"] == []
+        assert len(calls) == (0 if dry_run else 501)

@@ -288,6 +288,7 @@ describe("LaunchKpiOverview token consumption card (S6.5)", () => {
     renderKpis({
       candidate: {
         usage_case_count: 2,
+        usage_tokens_per_case: 91.6667,
         usage_coverage: 0.6667,
         usage_partial: true,
         usage_unavailable_reason: "INCOMPLETE_ATTEMPT_COST",

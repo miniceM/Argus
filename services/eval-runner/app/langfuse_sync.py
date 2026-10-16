@@ -365,7 +365,7 @@ def _append_platform_usage_score(
     projected.append(
         ProjectedScore(
             evaluator_id="tokens_total",
-            score_id=stable_score_id(item_id=item_id, generation=generation, evaluator_id="tokens_total"),
+            score_id=stable_score_id(item_id=item_id, generation=generation, evaluator_id="platform:tokens_total"),
             applicable=True,
             value=float(total),
             comment="Argus case token total (all attempts, incl. reasoning).",

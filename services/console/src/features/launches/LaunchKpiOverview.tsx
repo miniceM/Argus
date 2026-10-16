@@ -239,17 +239,18 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
   const hasUsageTokens = typeof candidateUsageTokens === "number" && Number.isFinite(candidateUsageTokens);
   const usagePartial = candidateUsageFlags.usage_partial === true;
   const usageCaseCount = candidateUsageFlags.usage_case_count;
+  const usageTotalCases = candidateUsageFlags.total_cases ?? total;
   let usageTokenText = "—";
   let usageSubText = "未采集到 token 消耗数据";
   let usageBreakdownText = "—";
 
-  if (hasUsageTokens) {
+  if (usagePartial || (typeof usageCaseCount === "number" && usageCaseCount < usageTotalCases && usageCaseCount > 0)) {
+    const shown = typeof usageCaseCount === "number" ? usageCaseCount : 0;
+    usageSubText = `部分用例缺少 token 证据 (${shown}/${usageTotalCases})`;
+  } else if (hasUsageTokens) {
     usageTokenText = formatTokenRate(candidateUsageTokens);
     usageBreakdownText = `输入 ${formatTokenRate(candidateUsageInput)} / 输出 ${formatTokenRate(candidateUsageOutput)} tokens`;
     usageSubText = usageBreakdownText;
-  } else if (usagePartial || (typeof usageCaseCount === "number" && usageCaseCount < total && usageCaseCount > 0)) {
-    const shown = typeof usageCaseCount === "number" ? usageCaseCount : 0;
-    usageSubText = `部分用例缺少 token 证据 (${shown}/${total})`;
   }
 
   return (
@@ -413,6 +414,9 @@ export const LaunchKpiOverview: React.FC<LaunchKpiOverviewProps> = ({
             </div>
             <div className="mt-3 pt-2.5 border-t border-border flex items-center gap-1.5 text-xs text-muted-foreground">
               <span data-testid="usage-tokens-breakdown">{usageSubText}</span>
+              {usageTokenText === "—" && candidateUsageFlags.usage_unavailable_reason && (
+                <span data-testid="usage-unavailable-reason">{candidateUsageFlags.usage_unavailable_reason}</span>
+              )}
             </div>
           </div>
         </div>

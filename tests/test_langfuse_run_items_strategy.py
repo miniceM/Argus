@@ -162,6 +162,8 @@ def test_resolve_run_item_strategy_otel_is_explicit(monkeypatch):
     assert resolve_run_item_strategy() == "otel"
 
 
-def test_resolve_run_item_strategy_unknown_falls_back_to_legacy(monkeypatch):
-    monkeypatch.setenv("ARGUS_LANGFUSE_RUN_ITEM_STRATEGY", "bogus")
-    assert resolve_run_item_strategy() == "legacy"
+@pytest.mark.parametrize("invalid", ["bogus", "oetl", "", "   "])
+def test_resolve_run_item_strategy_unknown_fails_closed(monkeypatch, invalid):
+    monkeypatch.setenv("ARGUS_LANGFUSE_RUN_ITEM_STRATEGY", invalid)
+    with pytest.raises(ValueError):
+        resolve_run_item_strategy()

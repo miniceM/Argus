@@ -93,6 +93,7 @@ def _usage_summary(items: list[dict[str, Any]], total: int) -> dict[str, Any]:
             "usage_unavailable_reason": None,
         }
     sums = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    component_counts = {"input_tokens": 0, "output_tokens": 0}
     case_states: list[str] = []
     for item in items:
         raw = item.get("usage") if isinstance(item, dict) else None
@@ -104,6 +105,7 @@ def _usage_summary(items: list[dict[str, Any]], total: int) -> dict[str, Any]:
                 value = _finite_token(usage.get(key))
                 if value is not None:
                     sums[key] += value
+                    component_counts[key] += 1
         else:
             partial = any(_finite_token(usage.get(k)) is not None for k in ("input_tokens", "output_tokens"))
             case_states.append("INCOMPLETE_ATTEMPT_COST" if partial else "COST_NOT_RECORDED")
@@ -113,9 +115,9 @@ def _usage_summary(items: list[dict[str, Any]], total: int) -> dict[str, Any]:
         reason = "INCOMPLETE_ATTEMPT_COST" if "INCOMPLETE_ATTEMPT_COST" in case_states else "COST_NOT_RECORDED"
     return {
         "usage_tokens_per_case": (sums["total_tokens"] / total) if case_count else None,
-        "usage_input_tokens_per_case": (sums["input_tokens"] / total) if case_count else None,
-        "usage_output_tokens_per_case": (sums["output_tokens"] / total) if case_count else None,
-        # S6.6: run 级 token 总量，供 run score 上报；全部用例无证据时 fail-closed。
+        "usage_input_tokens_per_case": (sums["input_tokens"] / total) if component_counts["input_tokens"] == total else None,
+        "usage_output_tokens_per_case": (sums["output_tokens"] / total) if component_counts["output_tokens"] == total else None,
+        # 已观测总量：partial 时仅为下界，正式 Run Score 必须另行核验完整 coverage。
         "usage_tokens_total": sums["total_tokens"] if case_count else None,
         "usage_case_count": case_count,
         "usage_coverage": case_count / total,

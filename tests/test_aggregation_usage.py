@@ -75,8 +75,8 @@ def test_usage_per_case_denominator_is_total_cases_incl_failures_and_retries():
     summary = aggregate_run(items, [])
     assert summary["total_cases"] == 3
     assert summary["usage_tokens_per_case"] == (50 + 225) / 3
-    assert summary["usage_input_tokens_per_case"] == (35 + 145) / 3
-    assert summary["usage_output_tokens_per_case"] == (15 + 80) / 3
+    assert summary["usage_input_tokens_per_case"] is None
+    assert summary["usage_output_tokens_per_case"] is None
     assert summary["usage_case_count"] == 2
     assert summary["usage_coverage"] == 2 / 3
     assert summary["usage_partial"] is True

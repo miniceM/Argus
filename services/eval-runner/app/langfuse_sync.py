@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import random
 import threading
 import time
@@ -11,6 +12,7 @@ from typing import Any
 
 from sqlalchemy import func, or_, select, text, update
 
+from .config import settings
 from .dataset import parse_dataset_version
 from .db import DatabaseManager
 from .db_models import (
@@ -28,6 +30,7 @@ from .langfuse_projection import (
     scope_state_from_tasks,
     stable_score_id,
 )
+from .langfuse_run_items import link_dataset_run_item, resolve_run_item_strategy
 from .state_machine import TERMINAL_LAUNCH_STATUSES
 
 logger = logging.getLogger("argus.langfuse_sync")
@@ -171,6 +174,16 @@ def _get_db_now(session, is_pg: bool) -> datetime:
 
 _MAX_INFLIGHT_REMOTE_CALLS = 16
 _REMOTE_CALL_SEMAPHORE = threading.BoundedSemaphore(value=_MAX_INFLIGHT_REMOTE_CALLS)
+
+
+def read_launch_dataset_id(db_mgr: DatabaseManager, launch_id: str) -> str | None:
+    """Langfuse dataset id for one launch (v4 projection writes require it)."""
+    from .db_models import ExperimentLaunchRecord
+
+    with db_mgr.get_session() as session:
+        launch = session.get(ExperimentLaunchRecord, launch_id)
+        dataset_id = launch.dataset_id if launch else None
+        return str(dataset_id) if dataset_id else None
 
 
 def _invoke_with_timeout(fn: Callable[..., Any], *args: Any, timeout: float, **kwargs: Any) -> Any:
@@ -727,25 +740,35 @@ class LangfuseOutboxSyncer:
                             f"Langfuse dataset requires explicit frozen dataset_version timestamp, got '{raw_ver}'. Silent fallback prohibited."
                         )
                     try:
-                        version_val = parse_dataset_version(raw_ver)
-                        if version_val is None:
-                            version_val = raw_ver
+                        parsed_version = parse_dataset_version(raw_ver)
+                        version_val = parsed_version.isoformat() if parsed_version else raw_ver
                     except Exception:
-                        version_val = raw_ver
+                        version_val = str(raw_ver)
 
-                    kwargs: dict[str, Any] = {
+                    strategy = resolve_run_item_strategy()
+                    launch_kwargs: dict[str, Any] = {
+                        "strategy": strategy,
+                        "lf": lf,
+                        "launch_id": payload["launch_id"],
                         "run_name": payload["dataset_run_name"],
                         "dataset_item_id": payload["dataset_item_id"],
+                        "dataset_version": version_val,
                         "trace_id": payload["trace_id"],
                         "observation_id": payload.get("observation_id"),
-                        "dataset_version": version_val,
                     }
-                    res = _invoke_with_timeout(
-                        lf.api.dataset_run_items.create,
+                    if strategy == "otel":
+                        launch_kwargs["dataset_id"] = read_launch_dataset_id(self.db_mgr, payload["launch_id"])
+                        launch_kwargs.update({
+                            "langfuse_base_url": settings.langfuse_base_url,
+                            "langfuse_public_key": os.getenv("LANGFUSE_PUBLIC_KEY", ""),
+                            "langfuse_secret_key": os.getenv("LANGFUSE_SECRET_KEY", ""),
+                        })
+                    run_id = _invoke_with_timeout(
+                        link_dataset_run_item,
                         timeout=_remaining_timeout(),
-                        **kwargs,
+                        timeout_seconds=_remaining_timeout(),
+                        **launch_kwargs,
                     )
-                    run_id = getattr(res, "dataset_run_id", None)
                     if run_id:
                         logger.debug("Linked DatasetRunItem with remote dataset_run_id=%s", run_id)
 

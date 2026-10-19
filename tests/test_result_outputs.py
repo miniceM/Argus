@@ -137,7 +137,7 @@ def test_case_output_api_uses_only_frozen_observation_refs_and_sides_fail_indepe
     assert "saved-candidate-observation" in requested_refs
     assert "attacker-controlled-id" not in requested_refs
     assert "attacker-controlled-trace" not in requested_refs
-    assert all(call["fields"] == "core,io" and call["limit"] == 2 for call in observations.calls)
+    assert all(call["fields"] == "core,io" and call["limit"] == 10 for call in observations.calls)
     assert all(call["request_options"] == {"timeout_in_seconds": 15, "max_retries": 2} for call in observations.calls)
 
 
@@ -180,3 +180,44 @@ def test_json_null_output_is_available_and_large_outputs_are_truncated():
     assert large.output_status == "AVAILABLE"
     assert large.truncated is True
     assert len(large.output) <= result_outputs.MAX_OUTPUT_CHARS + 1
+
+
+def test_disambiguates_otel_span_and_business_observation():
+    client = SimpleNamespace(api=SimpleNamespace(observations=FakeObservations(
+        records=[
+            SimpleNamespace(id="obs-1", trace_id="trace-1", type="SPAN", output=None),
+            SimpleNamespace(id="obs-1", trace_id="trace-1", type="TOOL", output='{"answer": "hello"}'),
+        ]
+    )))
+    res = result_outputs.fetch_observation_output(
+        {"observation_id": "obs-1", "trace_id": "trace-1"}, client=client
+    )
+    assert res.output_status == "AVAILABLE"
+    assert res.output == {"answer": "hello"}
+
+    # Identical non-null outputs should also be safely accepted
+    idempotent_client = SimpleNamespace(api=SimpleNamespace(observations=FakeObservations(
+        records=[
+            SimpleNamespace(id="obs-1", trace_id="trace-1", type="TOOL", output='{"answer": "hello"}'),
+            SimpleNamespace(id="obs-1", trace_id="trace-1", type="TOOL", output='{"answer": "hello"}'),
+        ]
+    )))
+    idempotent_res = result_outputs.fetch_observation_output(
+        {"observation_id": "obs-1", "trace_id": "trace-1"}, client=idempotent_client
+    )
+    assert idempotent_res.output_status == "AVAILABLE"
+    assert idempotent_res.output == {"answer": "hello"}
+
+    # Conflicting distinct outputs must fail closed with AMBIGUOUS_OBSERVATION_REFERENCE
+    conflicting_client = SimpleNamespace(api=SimpleNamespace(observations=FakeObservations(
+        records=[
+            SimpleNamespace(id="obs-1", trace_id="trace-1", type="TOOL", output='{"answer": "hello"}'),
+            SimpleNamespace(id="obs-1", trace_id="trace-1", type="TOOL", output='{"answer": "different"}'),
+        ]
+    )))
+    conflicting_res = result_outputs.fetch_observation_output(
+        {"observation_id": "obs-1", "trace_id": "trace-1"}, client=conflicting_client
+    )
+    assert conflicting_res.output_status == "FETCH_FAILED"
+    assert conflicting_res.reason == "AMBIGUOUS_OBSERVATION_REFERENCE"
+

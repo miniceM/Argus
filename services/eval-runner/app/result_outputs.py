@@ -86,7 +86,7 @@ def fetch_observation_output(
         response = observations(
             fields="core,io",
             filter=json.dumps(filters),
-            limit=2,
+            limit=10,
             request_options={"timeout_in_seconds": 15, "max_retries": 2},
         )
     except Exception as exc:
@@ -109,11 +109,28 @@ def fetch_observation_output(
         return OutputSideResponse(
             output_status="NOT_FOUND", reason="OBSERVATION_NOT_FOUND", retryable=True, **base
         )
-    if len(matching) != 1:
-        return OutputSideResponse(
-            output_status="FETCH_FAILED", reason="AMBIGUOUS_OBSERVATION_REFERENCE", retryable=False, **base
-        )
-    output, truncated = _safe_output(getattr(matching[0], "output", None))
+    if len(matching) == 1:
+        target_item = matching[0]
+    else:
+        # Multiple records can share the same (id, trace_id), e.g. an OTel projection SPAN
+        # alongside the actual business TOOL/CHAIN observation. Prioritize records with output.
+        with_output = [item for item in matching if getattr(item, "output", None) is not None]
+        if len(with_output) == 1:
+            target_item = with_output[0]
+        elif len(with_output) > 1:
+            first_out = getattr(with_output[0], "output", None)
+            if all(getattr(item, "output", None) == first_out for item in with_output):
+                target_item = with_output[0]
+            else:
+                return OutputSideResponse(
+                    output_status="FETCH_FAILED", reason="AMBIGUOUS_OBSERVATION_REFERENCE", retryable=False, **base
+                )
+        else:
+            non_span = [item for item in matching if getattr(item, "type", None) != "SPAN"]
+            target_item = non_span[0] if non_span else matching[0]
+
+    output, truncated = _safe_output(getattr(target_item, "output", None))
     return OutputSideResponse(
         output_status="AVAILABLE", output=output, truncated=truncated, **base
     )
+

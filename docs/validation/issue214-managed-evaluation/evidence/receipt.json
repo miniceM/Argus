@@ -1,0 +1,62 @@
+{
+  "runs": [
+    {
+      "launch_id": "b8c9e206-d643-4a1d-828b-48e9babb227b",
+      "trace_id": "8bdb2c77e83712ddcb98b34110d22fb3",
+      "observation_id": "36f88fa0b6dfcf14",
+      "environment": "issue214-20261019",
+      "dataset_id": "cmvf080gu001iad0i4ctjw5l4",
+      "dataset_item_id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+      "experiment_id": "7159593c-85aa-5caa-963e-c6ffbc7877c5",
+      "from_start_time": "2026-10-19T00:00:00Z",
+      "input_digest": "74e9ba3c7b5a6f28e69fa9a9d91ebe02fee60079ad86902042eee8b78a6f6103",
+      "output_digest": "2445100345285784ef3b596b5c8266698b4e93c085287982ec791c12199ea872",
+      "evaluators": [
+        {
+          "id": "cmvf082z1002uad0gkb42lwel",
+          "version_id": "cmvf082z1002wad0g6y71t1r8",
+          "rule_id": "cmvf0836f002zad0gbxjd4eyn",
+          "score_name": "issue214-20261019t084028z-judge",
+          "type": "llm_as_judge"
+        },
+        {
+          "id": "cmvf083f50034ad0gbpddxpar",
+          "version_id": "cmvf083f50036ad0ggpilrl84",
+          "rule_id": "cmvf083me001lad0i4v3cplr8",
+          "score_name": "issue214-20261019t084028z-code",
+          "type": "code"
+        }
+      ],
+      "code_io_hashes": true
+    },
+    {
+      "launch_id": "7894e45e-9bbf-4cb7-af65-5f5d0b57fb8a",
+      "trace_id": "c8dd1b2f3645e514ae39c85c8ffb8f9e",
+      "observation_id": "bb24565c4e5a7c18",
+      "environment": "issue214-20261019",
+      "dataset_id": "cmvf080gu001iad0i4ctjw5l4",
+      "dataset_item_id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+      "experiment_id": "dc67f695-d2ce-58eb-8659-2141f55d45e6",
+      "from_start_time": "2026-10-19T00:00:00Z",
+      "input_digest": "74e9ba3c7b5a6f28e69fa9a9d91ebe02fee60079ad86902042eee8b78a6f6103",
+      "output_digest": "4134d1fea7bb695093e6cd37a932e94c6a5fc0028f7f5de4d6dc27632d677bf3",
+      "evaluators": [
+        {
+          "id": "cmvf082z1002uad0gkb42lwel",
+          "version_id": "cmvf082z1002wad0g6y71t1r8",
+          "rule_id": "cmvf0836f002zad0gbxjd4eyn",
+          "score_name": "issue214-20261019t084028z-judge",
+          "type": "llm_as_judge"
+        },
+        {
+          "id": "cmvf083f50034ad0gbpddxpar",
+          "version_id": "cmvf083f50036ad0ggpilrl84",
+          "rule_id": "cmvf083me001lad0i4v3cplr8",
+          "score_name": "issue214-20261019t084028z-code",
+          "type": "code"
+        }
+      ],
+      "code_io_hashes": true
+    }
+  ]
+}

@@ -1,0 +1,104 @@
+{
+  "status": 200,
+  "response": {
+    "data": [
+      {
+        "id": "282afd74-4a34-5923-be3f-8f68ba7c0dd8",
+        "projectId": "cmu5a6fj500aoad0jvrckiypb",
+        "name": "issue214-20261019t084028z-judge",
+        "source": "EVAL",
+        "timestamp": "2026-10-19T08:53:42.728Z",
+        "environment": "issue214-20261019",
+        "createdAt": "2026-10-19T08:53:43.000Z",
+        "updatedAt": "2026-10-19T08:53:42.823Z",
+        "comment": "The expression (135 + 287) * 3 equals 422 * 3 = 1266, so the agent's answer is correct.",
+        "configId": null,
+        "metadata": {
+          "job_execution_id": "5dcdea5fefbe2057d2bb345a4e0b66e9",
+          "job_configuration_id": "cmvf0836f002zad0gbxjd4eyn",
+          "evaluation_rule_id": "cmvf0836f002zad0gbxjd4eyn",
+          "evaluation_rule_assignment_id": "cmvf0836f0031ad0gkepi8s86",
+          "evaluator_version_id": "cmvf082z1002wad0g6y71t1r8",
+          "evaluator_id": "cmvf082z1002uad0gkb42lwel",
+          "target_trace_id": "1fe7ebbabbff41debcbac17ec78a0d26",
+          "target_observation_id": "b87c48ff8b344012"
+        },
+        "subject": {
+          "kind": "observation",
+          "id": "b87c48ff8b344012",
+          "traceId": "1fe7ebbabbff41debcbac17ec78a0d26"
+        },
+        "dataType": "BOOLEAN",
+        "value": true
+      },
+      {
+        "id": "b8a117c9-b825-57fb-bf5b-d6964a42a420",
+        "projectId": "cmu5a6fj500aoad0jvrckiypb",
+        "name": "issue214-20261019t084028z-code",
+        "source": "EVAL",
+        "timestamp": "2026-10-19T08:53:41.403Z",
+        "environment": "issue214-20261019",
+        "createdAt": "2026-10-19T08:53:42.000Z",
+        "updatedAt": "2026-10-19T08:53:41.539Z",
+        "comment": "Native HTTP text checked by Langfuse managed Python runtime; expected constant 1266 is smoke rubric only",
+        "configId": null,
+        "metadata": {
+          "input_sha256": "74e9ba3c7b5a6f28e69fa9a9d91ebe02fee60079ad86902042eee8b78a6f6103",
+          "output_sha256": "2445100345285784ef3b596b5c8266698b4e93c085287982ec791c12199ea872",
+          "experiment_context_present": false,
+          "job_execution_id": "629e738b7cb0db94b9556fc7445e7675",
+          "job_configuration_id": "cmvf083me001lad0i4v3cplr8",
+          "evaluation_rule_id": "cmvf083me001lad0i4v3cplr8",
+          "evaluation_rule_assignment_id": "cmvf083me001nad0ip6tn9wpb",
+          "evaluator_version_id": "cmvf083f50036ad0ggpilrl84",
+          "evaluator_id": "cmvf083f50034ad0gbpddxpar",
+          "target_trace_id": "1fe7ebbabbff41debcbac17ec78a0d26",
+          "target_observation_id": "b87c48ff8b344012",
+          "dispatcher_name": "aws-lambda",
+          "code_eval_runtime": "PYTHON"
+        },
+        "subject": {
+          "kind": "observation",
+          "id": "b87c48ff8b344012",
+          "traceId": "1fe7ebbabbff41debcbac17ec78a0d26"
+        },
+        "dataType": "BOOLEAN",
+        "value": true
+      },
+      {
+        "id": "8a7c74ff-399c-584b-8ba0-36c3cd2bbbb3",
+        "projectId": "cmu5a6fj500aoad0jvrckiypb",
+        "name": "issue214-20261019t084028z-code",
+        "source": "EVAL",
+        "timestamp": "2026-10-19T08:53:41.367Z",
+        "environment": "issue214-20261019",
+        "createdAt": "2026-10-19T08:53:42.000Z",
+        "updatedAt": "2026-10-19T08:53:41.452Z",
+        "comment": "Native HTTP text checked by Langfuse managed Python runtime; expected constant 1266 is smoke rubric only",
+        "configId": null,
+        "metadata": {
+          "input_sha256": "74e9ba3c7b5a6f28e69fa9a9d91ebe02fee60079ad86902042eee8b78a6f6103",
+          "output_sha256": "2445100345285784ef3b596b5c8266698b4e93c085287982ec791c12199ea872",
+          "experiment_context_present": false,
+          "job_execution_id": "962bfa959a08f6ff0f9d5ffd4d8f14b8",
+          "job_configuration_id": "cmvf0oz4g0013ad0dzk88qwjk",
+          "evaluation_rule_id": "cmvf0oz4g0013ad0dzk88qwjk",
+          "evaluation_rule_assignment_id": "cmvf0oz4g0015ad0ds5y0xshv",
+          "evaluator_version_id": "cmvf083f50036ad0ggpilrl84",
+          "evaluator_id": "cmvf083f50034ad0gbpddxpar",
+          "target_trace_id": "1fe7ebbabbff41debcbac17ec78a0d26",
+          "target_observation_id": "b87c48ff8b344012",
+          "dispatcher_name": "aws-lambda",
+          "code_eval_runtime": "PYTHON"
+        },
+        "subject": {
+          "kind": "observation",
+          "id": "b87c48ff8b344012",
+          "traceId": "1fe7ebbabbff41debcbac17ec78a0d26"
+        },
+        "dataType": "BOOLEAN",
+        "value": true
+      }
+    ]
+  }
+}

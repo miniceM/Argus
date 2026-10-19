@@ -1,0 +1,19 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____________ test_cursor_pagination_is_complete_and_non_repeating _____________
+
+    def test_cursor_pagination_is_complete_and_non_repeating():
+        calls = []
+        def fetch(path, params):
+            calls.append((path, dict(params)))
+            return {"data": [params.get("cursor", "first")], "meta": {"cursor": "second" if "cursor" not in params else None}}
+>       assert probe.read_pages(fetch, "/api/public/v3/scores", {"limit": 1}) == ["first", "second"]
+E       AssertionError: assert ['first'] == ['first', 'second']
+E
+E         Right contains one more item: 'second'
+E         Use -v to get more diff
+
+tests/test_langfuse_managed_probe.py:123: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_langfuse_managed_probe.py::test_cursor_pagination_is_complete_and_non_repeating
+1 failed, 23 deselected in 0.09s

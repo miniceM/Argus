@@ -1,0 +1,51 @@
+{
+  "timing_evidence": "negative-window-evidence.json",
+  "observations": [
+    {
+      "duplicate_score_ids": [
+        "c2904b83-0f19-5c09-8190-7416f3d6a019",
+        "f28b2bcc-5e28-5030-b70f-f56c88a22978"
+      ],
+      "rule_miss_score_ids": [],
+      "invalid_score_ids": [],
+      "invalid_code_error_observed": true,
+      "wrong_answer_score_count": 0
+    },
+    {
+      "duplicate_score_ids": [
+        "c2904b83-0f19-5c09-8190-7416f3d6a019",
+        "f28b2bcc-5e28-5030-b70f-f56c88a22978"
+      ],
+      "rule_miss_score_ids": [],
+      "invalid_score_ids": [
+        "bb9f74cc-650d-585d-ac0c-4f933c5cf5fb"
+      ],
+      "invalid_code_error_observed": true,
+      "wrong_answer_score_count": 2
+    },
+    {
+      "duplicate_score_ids": [
+        "c2904b83-0f19-5c09-8190-7416f3d6a019",
+        "f28b2bcc-5e28-5030-b70f-f56c88a22978"
+      ],
+      "rule_miss_score_ids": [],
+      "invalid_score_ids": [
+        "bb9f74cc-650d-585d-ac0c-4f933c5cf5fb"
+      ],
+      "invalid_code_error_observed": true,
+      "wrong_answer_score_count": 2
+    },
+    {
+      "duplicate_score_ids": [
+        "c2904b83-0f19-5c09-8190-7416f3d6a019",
+        "f28b2bcc-5e28-5030-b70f-f56c88a22978"
+      ],
+      "rule_miss_score_ids": [],
+      "invalid_score_ids": [
+        "bb9f74cc-650d-585d-ac0c-4f933c5cf5fb"
+      ],
+      "invalid_code_error_observed": true,
+      "wrong_answer_score_count": 2
+    }
+  ]
+}

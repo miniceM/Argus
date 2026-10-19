@@ -1,0 +1,30 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____________ test_current_observations_v2_returns_raw_json_strings _____________
+
+receipt = {'trace_id': '11111111111111111111111111111111', 'observation_id': '2222222222222222', 'environment': 'isolated-test', 'dataset_id': 'dataset-1', ...}
+
+    def test_current_observations_v2_returns_raw_json_strings(receipt):
+        row = {"id": receipt["observation_id"], "traceId": receipt["trace_id"], "type": "TOOL",
+               "name": "remote-agent-http", "environment": receipt["environment"],
+               "input": json.dumps({"request": {"question": "compute"}}), "output": json.dumps({"text": "1266"})}
+>       assert probe.verify_observation([row], receipt) == row
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_langfuse_managed_probe.py:154:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+scripts/verify_langfuse_managed.py:44: in verify_observation
+    require(json_digest(row[field]) == receipt[f"{field}_digest"], f"Native observation {field} mismatch")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+condition = False, message = 'Native observation input mismatch'
+
+    def require(condition: bool, message: str) -> None:
+        if not condition:
+>           raise EvidenceError(message)
+E           managed_probe.EvidenceError: Native observation input mismatch
+
+scripts/verify_langfuse_managed.py:27: EvidenceError
+=========================== short test summary info ============================
+FAILED tests/test_langfuse_managed_probe.py::test_current_observations_v2_returns_raw_json_strings
+1 failed, 23 deselected in 0.05s

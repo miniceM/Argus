@@ -1,0 +1,917 @@
+[
+  {
+    "at": "2026-10-19T08:40:28.579421+00:00",
+    "host": "127.0.0.1",
+    "method": "GET",
+    "path": "/api/v1/agent-versions?agent_id=p0-flowise-20261019",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:40:28.601823+00:00",
+    "host": "127.0.0.1",
+    "method": "POST",
+    "path": "/api/v1/agents",
+    "status": 201
+  },
+  {
+    "at": "2026-10-19T08:40:28.626748+00:00",
+    "host": "127.0.0.1",
+    "method": "POST",
+    "path": "/api/v1/agent-versions",
+    "status": 201
+  },
+  {
+    "at": "2026-10-19T08:40:28.940636+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "POST",
+    "path": "/api/public/datasets",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:40:29.191309+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "POST",
+    "path": "/api/public/dataset-items",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:40:32.127810+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "POST",
+    "path": "/api/public/v2/evaluators",
+    "status": 201
+  },
+  {
+    "at": "2026-10-19T08:40:32.388506+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "POST",
+    "path": "/api/public/v2/evaluation-rules",
+    "status": 201
+  },
+  {
+    "at": "2026-10-19T08:40:32.702890+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "POST",
+    "path": "/api/public/v2/evaluators",
+    "status": 201
+  },
+  {
+    "at": "2026-10-19T08:40:32.982084+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "POST",
+    "path": "/api/public/v2/evaluation-rules",
+    "status": 201
+  },
+  {
+    "at": "2026-10-19T08:40:34.160124+00:00",
+    "host": "127.0.0.1",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches",
+    "status": 201
+  },
+  {
+    "at": "2026-10-19T08:40:34.304863+00:00",
+    "host": "127.0.0.1",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches/b8c9e206-d643-4a1d-828b-48e9babb227b/run",
+    "status": 202
+  },
+  {
+    "at": "2026-10-19T08:40:34.545808+00:00",
+    "host": "127.0.0.1",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/b8c9e206-d643-4a1d-828b-48e9babb227b/items",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:40:37.775366+00:00",
+    "host": "127.0.0.1",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/b8c9e206-d643-4a1d-828b-48e9babb227b/items",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:40:41.282722+00:00",
+    "host": "127.0.0.1",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/b8c9e206-d643-4a1d-828b-48e9babb227b/items",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:40:41.651035+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/observations?traceId=8bdb2c77e83712ddcb98b34110d22fb3&fields=core%2Cbasic%2Cio%2Cmetadata%2Ctrace_context&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:40:46.587280+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/observations?traceId=8bdb2c77e83712ddcb98b34110d22fb3&fields=core%2Cbasic%2Cio%2Cmetadata%2Ctrace_context&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:40:50.960341+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/observations?traceId=8bdb2c77e83712ddcb98b34110d22fb3&fields=core%2Cbasic%2Cio%2Cmetadata%2Ctrace_context&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:40:55.292164+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/observations?traceId=8bdb2c77e83712ddcb98b34110d22fb3&fields=core%2Cbasic%2Cio%2Cmetadata%2Ctrace_context&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:40:55.541271+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:41:01.777192+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:41:08.019109+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:41:14.549431+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:41:20.842599+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:41:27.131105+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:41:33.421098+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:41:39.720428+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:41:46.006735+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:41:52.305980+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:41:58.595224+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:42:04.888122+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:42:11.176325+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:42:17.469687+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:42:23.763146+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:42:30.050498+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:42:36.344013+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:42:42.636309+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:42:48.940369+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:42:55.215334+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:43:01.507499+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:43:07.799286+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:43:14.088802+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:43:20.383294+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:43:26.673966+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:43:32.965874+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:43:39.253965+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:43:45.547242+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:43:51.837188+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:43:58.129417+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:44:04.422728+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:44:10.717877+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:44:17.004538+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:44:23.294050+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:44:29.586468+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:44:35.882419+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:44:42.167860+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:44:44.980154+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvf0836f002zad0gbxjd4eyn",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:44:45.311251+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvf083me001lad0i4v3cplr8",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:45:25.410253+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvf0836f002zad0gbxjd4eyn",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:45:25.694377+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvf083me001lad0i4v3cplr8",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:45:25.990400+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/observations?traceId=8bdb2c77e83712ddcb98b34110d22fb3&fields=core%2Cbasic%2Cio%2Cmetadata%2Ctrace_context&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:45:26.304003+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:45:26.566924+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1&cursor=eyJ2IjoxLCJsYXN0VGltZXN0YW1wIjoiMjAyNi0xMC0xOVQwODo0MDo0Ni4yODJaIiwibGFzdElkIjoiYzI5MDRiODMtMGYxOS01YzA5LTgxOTAtNzQxNmYzZDZhMDE5In0",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:45:27.555118+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/experiment-items?experimentId=7159593c-85aa-5caa-963e-c6ffbc7877c5&fromStartTime=2026-10-19T00%3A00%3A00Z&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:45:28.122542+00:00",
+    "host": "127.0.0.1",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches",
+    "status": 201
+  },
+  {
+    "at": "2026-10-19T08:45:28.132883+00:00",
+    "host": "127.0.0.1",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches/7894e45e-9bbf-4cb7-af65-5f5d0b57fb8a/run",
+    "status": 202
+  },
+  {
+    "at": "2026-10-19T08:45:28.141544+00:00",
+    "host": "127.0.0.1",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/7894e45e-9bbf-4cb7-af65-5f5d0b57fb8a/items",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:45:31.165149+00:00",
+    "host": "127.0.0.1",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/7894e45e-9bbf-4cb7-af65-5f5d0b57fb8a/items",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:45:34.193383+00:00",
+    "host": "127.0.0.1",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/7894e45e-9bbf-4cb7-af65-5f5d0b57fb8a/items",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:45:37.219142+00:00",
+    "host": "127.0.0.1",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/7894e45e-9bbf-4cb7-af65-5f5d0b57fb8a/items",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:45:37.493817+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/observations?traceId=c8dd1b2f3645e514ae39c85c8ffb8f9e&fields=core%2Cbasic%2Cio%2Cmetadata%2Ctrace_context&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:45:41.781815+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/observations?traceId=c8dd1b2f3645e514ae39c85c8ffb8f9e&fields=core%2Cbasic%2Cio%2Cmetadata%2Ctrace_context&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:45:46.149588+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/observations?traceId=c8dd1b2f3645e514ae39c85c8ffb8f9e&fields=core%2Cbasic%2Cio%2Cmetadata%2Ctrace_context&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:45:46.404290+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=c8dd1b2f3645e514ae39c85c8ffb8f9e&observationId=bb24565c4e5a7c18&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:45:52.647693+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=c8dd1b2f3645e514ae39c85c8ffb8f9e&observationId=bb24565c4e5a7c18&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:45:52.943786+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=c8dd1b2f3645e514ae39c85c8ffb8f9e&observationId=bb24565c4e5a7c18&source=EVAL&fields=subject%2Cdetails&limit=1&cursor=eyJ2IjoxLCJsYXN0VGltZXN0YW1wIjoiMjAyNi0xMC0xOVQwODo0NTo0MS4yOTBaIiwibGFzdElkIjoiOTdhNzBmN2YtZmVhZC01MGY5LTkxZmEtN2ViNTgwMDc2YzZhIn0",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:45:53.178073+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/experiment-items?experimentId=dc67f695-d2ce-58eb-8659-2141f55d45e6&fromStartTime=2026-10-19T00%3A00%3A00Z&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:29.405270+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/evaluators/cmvf082z1002uad0gkb42lwel",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:29.707928+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/evaluators/cmvf083f50034ad0gbpddxpar",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:29.954195+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:30.233166+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1&cursor=eyJ2IjoxLCJsYXN0VGltZXN0YW1wIjoiMjAyNi0xMC0xOVQwODo0MDo0Ni4yODJaIiwibGFzdElkIjoiYzI5MDRiODMtMGYxOS01YzA5LTgxOTAtNzQxNmYzZDZhMDE5In0",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:30.871797+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "POST",
+    "path": "/api/public/otel/v1/traces",
+    "status": 200,
+    "payload_sha256": "b11109006b3775b92a63966f62f0cbd53c8060d86a1d91b64466d53ae86c4c8c"
+  },
+  {
+    "at": "2026-10-19T08:48:31.279136+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "POST",
+    "path": "/api/public/otel/v1/traces",
+    "status": 200,
+    "payload_sha256": "d269223da87b60084548d1e90a50da5991ed16444c028ac927a15fdf43354003"
+  },
+  {
+    "at": "2026-10-19T08:48:32.016522+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "POST",
+    "path": "/api/public/otel/v1/traces",
+    "status": 200,
+    "payload_sha256": "ec42ebc7bac47fa77d0ada3ffcd7433b5dd076646141a27ed98dfa136b3b8e86"
+  },
+  {
+    "at": "2026-10-19T08:48:32.432730+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "POST",
+    "path": "/api/public/otel/v1/traces",
+    "status": 200,
+    "payload_sha256": "7929b88069582be40d39887a9da03bf94e6d95d9a611a14eafe18340f9d94066"
+  },
+  {
+    "at": "2026-10-19T08:48:32.673896+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:32.950996+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1&cursor=eyJ2IjoxLCJsYXN0VGltZXN0YW1wIjoiMjAyNi0xMC0xOVQwODo0MDo0Ni4yODJaIiwibGFzdElkIjoiYzI5MDRiODMtMGYxOS01YzA5LTgxOTAtNzQxNmYzZDZhMDE5In0",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:33.190573+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=3b56e3108cb540009d5cb32585dca4f5&observationId=e22b75ce2cbe45f5&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:33.461191+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8ad7ae4e633246c3b4ad81c866d74018&observationId=d1ab1253669f45a4&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:33.703347+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=ac7ab47bb04d4dc0ad9f1c99daf3766e&observationId=2f303ad97e4b4974&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:34.151740+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/observations?environment=langfuse-code-eval&fromStartTime=2026-10-19T08%3A35%3A00Z&fields=core%2Cbasic%2Cio%2Cmetadata&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:34.482329+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/observations?environment=langfuse-llm-as-a-judge&fromStartTime=2026-10-19T08%3A35%3A00Z&fields=core%2Cbasic%2Cio%2Cmetadata&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:46.732050+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:47.009798+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1&cursor=eyJ2IjoxLCJsYXN0VGltZXN0YW1wIjoiMjAyNi0xMC0xOVQwODo0MDo0Ni4yODJaIiwibGFzdElkIjoiYzI5MDRiODMtMGYxOS01YzA5LTgxOTAtNzQxNmYzZDZhMDE5In0",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:47.233496+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=3b56e3108cb540009d5cb32585dca4f5&observationId=e22b75ce2cbe45f5&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:47.536499+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8ad7ae4e633246c3b4ad81c866d74018&observationId=d1ab1253669f45a4&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:47.775285+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=ac7ab47bb04d4dc0ad9f1c99daf3766e&observationId=2f303ad97e4b4974&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:48.058560+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=ac7ab47bb04d4dc0ad9f1c99daf3766e&observationId=2f303ad97e4b4974&source=EVAL&fields=subject%2Cdetails&limit=1&cursor=eyJ2IjoxLCJsYXN0VGltZXN0YW1wIjoiMjAyNi0xMC0xOVQwODo0ODozNi4xMjdaIiwibGFzdElkIjoiZTFjZGViMTctZDQ3YS01ZTU2LWE1NmItMTQ3MDQwNDMxY2MyIn0",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:48.583808+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/observations?environment=langfuse-code-eval&fromStartTime=2026-10-19T08%3A35%3A00Z&fields=core%2Cbasic%2Cio%2Cmetadata&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:48:48.900654+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/observations?environment=langfuse-llm-as-a-judge&fromStartTime=2026-10-19T08%3A35%3A00Z&fields=core%2Cbasic%2Cio%2Cmetadata&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:49:01.164084+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:49:01.407563+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1&cursor=eyJ2IjoxLCJsYXN0VGltZXN0YW1wIjoiMjAyNi0xMC0xOVQwODo0MDo0Ni4yODJaIiwibGFzdElkIjoiYzI5MDRiODMtMGYxOS01YzA5LTgxOTAtNzQxNmYzZDZhMDE5In0",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:49:01.687861+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=3b56e3108cb540009d5cb32585dca4f5&observationId=e22b75ce2cbe45f5&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:49:01.931570+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8ad7ae4e633246c3b4ad81c866d74018&observationId=d1ab1253669f45a4&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:49:02.335303+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=ac7ab47bb04d4dc0ad9f1c99daf3766e&observationId=2f303ad97e4b4974&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:49:02.578469+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=ac7ab47bb04d4dc0ad9f1c99daf3766e&observationId=2f303ad97e4b4974&source=EVAL&fields=subject%2Cdetails&limit=1&cursor=eyJ2IjoxLCJsYXN0VGltZXN0YW1wIjoiMjAyNi0xMC0xOVQwODo0ODozNi4xMjdaIiwibGFzdElkIjoiZTFjZGViMTctZDQ3YS01ZTU2LWE1NmItMTQ3MDQwNDMxY2MyIn0",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:49:03.260217+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/observations?environment=langfuse-code-eval&fromStartTime=2026-10-19T08%3A35%3A00Z&fields=core%2Cbasic%2Cio%2Cmetadata&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:49:03.583974+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/observations?environment=langfuse-llm-as-a-judge&fromStartTime=2026-10-19T08%3A35%3A00Z&fields=core%2Cbasic%2Cio%2Cmetadata&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:49:15.843952+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:49:16.090451+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1&cursor=eyJ2IjoxLCJsYXN0VGltZXN0YW1wIjoiMjAyNi0xMC0xOVQwODo0MDo0Ni4yODJaIiwibGFzdElkIjoiYzI5MDRiODMtMGYxOS01YzA5LTgxOTAtNzQxNmYzZDZhMDE5In0",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:49:16.368138+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=3b56e3108cb540009d5cb32585dca4f5&observationId=e22b75ce2cbe45f5&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 429
+  },
+  {
+    "at": "2026-10-19T08:49:16.597086+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvf0836f002zad0gbxjd4eyn",
+    "status": 429
+  },
+  {
+    "at": "2026-10-19T08:53:10.233685+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvf0836f002zad0gbxjd4eyn",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:53:13.189497+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvf083me001lad0i4v3cplr8",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:53:16.201738+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:53:19.217845+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8bdb2c77e83712ddcb98b34110d22fb3&observationId=36f88fa0b6dfcf14&source=EVAL&fields=subject%2Cdetails&limit=1&cursor=eyJ2IjoxLCJsYXN0VGltZXN0YW1wIjoiMjAyNi0xMC0xOVQwODo0MDo0Ni4yODJaIiwibGFzdElkIjoiYzI5MDRiODMtMGYxOS01YzA5LTgxOTAtNzQxNmYzZDZhMDE5In0",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:53:22.253274+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=3b56e3108cb540009d5cb32585dca4f5&observationId=e22b75ce2cbe45f5&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:53:25.186224+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=8ad7ae4e633246c3b4ad81c866d74018&observationId=d1ab1253669f45a4&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:53:28.261068+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=ac7ab47bb04d4dc0ad9f1c99daf3766e&observationId=2f303ad97e4b4974&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:53:31.525590+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=ac7ab47bb04d4dc0ad9f1c99daf3766e&observationId=2f303ad97e4b4974&source=EVAL&fields=subject%2Cdetails&limit=1&cursor=eyJ2IjoxLCJsYXN0VGltZXN0YW1wIjoiMjAyNi0xMC0xOVQwODo0ODozNi4xMjdaIiwibGFzdElkIjoiZTFjZGViMTctZDQ3YS01ZTU2LWE1NmItMTQ3MDQwNDMxY2MyIn0",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:53:34.458596+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/observations?environment=langfuse-code-eval&fromStartTime=2026-10-19T08%3A35%3A00Z&fields=core%2Cbasic%2Cio%2Cmetadata&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:53:37.267840+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v2/observations?environment=langfuse-llm-as-a-judge&fromStartTime=2026-10-19T08%3A35%3A00Z&fields=core%2Cbasic%2Cio%2Cmetadata&limit=100",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:53:40.279516+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "POST",
+    "path": "/api/public/v2/evaluation-rules",
+    "status": 201
+  },
+  {
+    "at": "2026-10-19T08:53:40.612027+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "POST",
+    "path": "/api/public/otel/v1/traces",
+    "status": 200,
+    "payload_sha256": "d230ed56a8c9b6c7abdc8184fc083d48ea2a33664cc80133628c789d232b0442"
+  },
+  {
+    "at": "2026-10-19T08:53:43.229053+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=1fe7ebbabbff41debcbac17ec78a0d26&observationId=b87c48ff8b344012&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:53:51.615596+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=1fe7ebbabbff41debcbac17ec78a0d26&observationId=b87c48ff8b344012&source=EVAL&fields=subject%2Cdetails&limit=1",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:53:54.966698+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=1fe7ebbabbff41debcbac17ec78a0d26&observationId=b87c48ff8b344012&source=EVAL&fields=subject%2Cdetails&limit=1&cursor=eyJ2IjoxLCJsYXN0VGltZXN0YW1wIjoiMjAyNi0xMC0xOVQwODo1Mzo0Mi43MjhaIiwibGFzdElkIjoiMjgyYWZkNzQtNGEzNC01OTIzLWJlM2YtOGY2OGJhN2MwZGQ4In0",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:53:57.549354+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "GET",
+    "path": "/api/public/v3/scores?traceId=1fe7ebbabbff41debcbac17ec78a0d26&observationId=b87c48ff8b344012&source=EVAL&fields=subject%2Cdetails&limit=1&cursor=eyJ2IjoxLCJsYXN0VGltZXN0YW1wIjoiMjAyNi0xMC0xOVQwODo1Mzo0MS40MDNaIiwibGFzdElkIjoiYjhhMTE3YzktYjgyNS01N2ZiLWJmNWItZDY5NjRhNDJhNDIwIn0",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:54:00.527880+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvf0836f002zad0gbxjd4eyn",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:54:04.019098+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvf083me001lad0i4v3cplr8",
+    "status": 200
+  },
+  {
+    "at": "2026-10-19T08:54:06.553969+00:00",
+    "host": "jp.cloud.langfuse.com",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvf0oz4g0013ad0dzk88qwjk",
+    "status": 200
+  }
+]

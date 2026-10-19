@@ -1,0 +1,25 @@
+[python-venv]/bin/python -m pytest -q tests/test_trajectory_backend_integration.py tests/test_trajectory_observation_integration.py -m trajectory_local
+...............................                                          [100%]
+=============================== warnings summary ===============================
+tests/test_trajectory_observation_integration.py: 91 warnings
+  [python-venv]/lib/python3.12/site-packages/sqlalchemy/sql/schema.py:4296: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return util.wrap_callable(lambda ctx: fn(), fn)  # type: ignore[call-arg, no-any-return, no-untyped-call]  # noqa: E501
+
+tests/test_trajectory_observation_integration.py::test_sync_entry_injects_remote_observation_parent
+  [checkout]/services/eval-runner/app/execution.py:79: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at = datetime.utcnow()
+
+tests/test_trajectory_observation_integration.py::test_sync_entry_injects_remote_observation_parent
+  [checkout]/services/eval-runner/app/execution.py:128: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=datetime.utcnow(),
+
+tests/test_trajectory_observation_integration.py::test_sync_entry_injects_remote_observation_parent
+  [checkout]/services/eval-runner/app/execution.py:165: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=datetime.utcnow(),
+
+tests/test_trajectory_observation_integration.py::test_sync_entry_injects_remote_observation_parent
+  [checkout]/services/eval-runner/app/execution.py:297: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at = datetime.utcnow()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+31 passed, 95 warnings in 199.65s (0:03:19)

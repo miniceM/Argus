@@ -1,0 +1,10 @@
+{
+  "case": "duplicate",
+  "trace_id": "8bdb2c77e83712ddcb98b34110d22fb3",
+  "observation_id": "36f88fa0b6dfcf14",
+  "name": "remote-agent-http",
+  "environment": "issue214-20261019",
+  "payload_sha256": "7615afba950806abc9de178137a75844720b1fe0a529653fc8ac838606a52b04",
+  "controlled_replay_not_agent_execution": true,
+  "emitted": false
+}

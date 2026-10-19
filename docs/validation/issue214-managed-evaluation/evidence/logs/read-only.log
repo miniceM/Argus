@@ -1,0 +1,24 @@
+{
+  "status": "PASS",
+  "read_only": true,
+  "score_write_requests": 0,
+  "checks": [
+    {
+      "launch_id": "b8c9e206-d643-4a1d-828b-48e9babb227b",
+      "trace_id": "8bdb2c77e83712ddcb98b34110d22fb3",
+      "score_ids": [
+        "c2904b83-0f19-5c09-8190-7416f3d6a019",
+        "f28b2bcc-5e28-5030-b70f-f56c88a22978"
+      ]
+    },
+    {
+      "launch_id": "7894e45e-9bbf-4cb7-af65-5f5d0b57fb8a",
+      "trace_id": "c8dd1b2f3645e514ae39c85c8ffb8f9e",
+      "score_ids": [
+        "97a70f7f-fead-50f9-91fa-7eb580076c6a",
+        "5ac91494-a574-560d-a2df-cba41f016691"
+      ]
+    }
+  ]
+}
+read-only exit 0

@@ -1,0 +1,70 @@
+{
+  "status": 200,
+  "response": {
+    "data": [
+      {
+        "id": "e1cdeb17-d47a-5e56-a56b-147040431cc2",
+        "projectId": "cmu5a6fj500aoad0jvrckiypb",
+        "name": "issue214-20261019t084028z-judge",
+        "source": "EVAL",
+        "timestamp": "2026-10-19T08:48:36.127Z",
+        "environment": "issue214-20261019",
+        "createdAt": "2026-10-19T08:48:37.000Z",
+        "updatedAt": "2026-10-19T08:48:36.218Z",
+        "comment": "The agent answered 0, which is incorrect. (135 + 287) * 3 = 422 * 3 = 1266, matching the smoke-test reference. Thus the answer does not correctly solve the arithmetic question.",
+        "configId": null,
+        "metadata": {
+          "job_execution_id": "4476ffd36bb2809a693cefa018388d7d",
+          "job_configuration_id": "cmvf0836f002zad0gbxjd4eyn",
+          "evaluation_rule_id": "cmvf0836f002zad0gbxjd4eyn",
+          "evaluation_rule_assignment_id": "cmvf0836f0031ad0gkepi8s86",
+          "evaluator_version_id": "cmvf082z1002wad0g6y71t1r8",
+          "evaluator_id": "cmvf082z1002uad0gkb42lwel",
+          "target_trace_id": "ac7ab47bb04d4dc0ad9f1c99daf3766e",
+          "target_observation_id": "2f303ad97e4b4974"
+        },
+        "subject": {
+          "kind": "observation",
+          "id": "2f303ad97e4b4974",
+          "traceId": "ac7ab47bb04d4dc0ad9f1c99daf3766e"
+        },
+        "dataType": "BOOLEAN",
+        "value": false
+      },
+      {
+        "id": "214100e4-f47d-581d-bd61-9017ce4f32cd",
+        "projectId": "cmu5a6fj500aoad0jvrckiypb",
+        "name": "issue214-20261019t084028z-code",
+        "source": "EVAL",
+        "timestamp": "2026-10-19T08:48:33.355Z",
+        "environment": "issue214-20261019",
+        "createdAt": "2026-10-19T08:48:34.000Z",
+        "updatedAt": "2026-10-19T08:48:33.678Z",
+        "comment": "Native HTTP text checked by Langfuse managed Python runtime; expected constant 1266 is smoke rubric only",
+        "configId": null,
+        "metadata": {
+          "input_sha256": "74e9ba3c7b5a6f28e69fa9a9d91ebe02fee60079ad86902042eee8b78a6f6103",
+          "output_sha256": "8d65e11fcbca68c11dadddb2d0f31bd3825162c7b0d7dcc62e2c72d24894fc36",
+          "experiment_context_present": false,
+          "job_execution_id": "9caea62cf4b44ce9cc636578592b299d",
+          "job_configuration_id": "cmvf083me001lad0i4v3cplr8",
+          "evaluation_rule_id": "cmvf083me001lad0i4v3cplr8",
+          "evaluation_rule_assignment_id": "cmvf083me001nad0ip6tn9wpb",
+          "evaluator_version_id": "cmvf083f50036ad0ggpilrl84",
+          "evaluator_id": "cmvf083f50034ad0gbpddxpar",
+          "target_trace_id": "ac7ab47bb04d4dc0ad9f1c99daf3766e",
+          "target_observation_id": "2f303ad97e4b4974",
+          "dispatcher_name": "aws-lambda",
+          "code_eval_runtime": "PYTHON"
+        },
+        "subject": {
+          "kind": "observation",
+          "id": "2f303ad97e4b4974",
+          "traceId": "ac7ab47bb04d4dc0ad9f1c99daf3766e"
+        },
+        "dataType": "BOOLEAN",
+        "value": false
+      }
+    ]
+  }
+}

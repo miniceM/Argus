@@ -1,0 +1,14 @@
+{
+  "status": 429,
+  "provenance": "Actual HTTP error body preserved in the one-shot probe exception log; failed request also appears in request-audit.json",
+  "response": {
+    "message": "Rate limit exceeded",
+    "code": "rate_limited",
+    "details": {
+      "retryAfterSeconds": 13,
+      "limit": 30,
+      "remaining": 0,
+      "resetAt": "2026-10-19T08:49:29.572Z"
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "duplicate_ingestion": {
+    "status": "PASS",
+    "unchanged_score_ids": [
+      "c2904b83-0f19-5c09-8190-7416f3d6a019",
+      "f28b2bcc-5e28-5030-b70f-f56c88a22978"
+    ],
+    "observation_identity": [
+      "8bdb2c77e83712ddcb98b34110d22fb3",
+      "36f88fa0b6dfcf14"
+    ]
+  },
+  "rule_miss": {
+    "status": "PASS",
+    "identity": [
+      "3b56e3108cb540009d5cb32585dca4f5",
+      "e22b75ce2cbe45f5"
+    ],
+    "zero_scores_observed_seconds": 290.974
+  },
+  "invalid_input": {
+    "status": "PASS",
+    "identity": [
+      "8ad7ae4e633246c3b4ad81c866d74018",
+      "d1ab1253669f45a4"
+    ],
+    "code_execution_id": "7b960087b86149ee",
+    "error": "ISSUE214_INVALID_OBSERVATION_IO",
+    "code_score_count": 0
+  },
+  "wrong_answer": {
+    "status": "PASS",
+    "identity": [
+      "ac7ab47bb04d4dc0ad9f1c99daf3766e",
+      "2f303ad97e4b4974"
+    ],
+    "boolean_false_scores": [
+      "e1cdeb17-d47a-5e56-a56b-147040431cc2",
+      "214100e4-f47d-581d-bd61-9017ce4f32cd"
+    ]
+  },
+  "same_name_duplicate_assignment": {
+    "status": "PASS (ambiguity detected, NOT adopted)",
+    "identity": [
+      "1fe7ebbabbff41debcbac17ec78a0d26",
+      "b87c48ff8b344012"
+    ],
+    "code_scores": 2,
+    "distinct_rule_ids": [
+      "cmvf083me001lad0i4v3cplr8",
+      "cmvf0oz4g0013ad0dzk88qwjk"
+    ],
+    "verifier_rejected": true
+  }
+}

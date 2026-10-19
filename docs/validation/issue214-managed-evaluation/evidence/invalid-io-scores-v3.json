@@ -1,0 +1,36 @@
+{
+  "status": 200,
+  "response": {
+    "data": [
+      {
+        "id": "bb9f74cc-650d-585d-ac0c-4f933c5cf5fb",
+        "projectId": "cmu5a6fj500aoad0jvrckiypb",
+        "name": "issue214-20261019t084028z-judge",
+        "source": "EVAL",
+        "timestamp": "2026-10-19T08:48:34.575Z",
+        "environment": "issue214-20261019",
+        "createdAt": "2026-10-19T08:48:35.000Z",
+        "updatedAt": "2026-10-19T08:48:34.672Z",
+        "comment": "The agent provided no answer. The correct computation is (135 + 287) * 3 = 422 * 3 = 1266, so the answer is incorrect/incomplete.",
+        "configId": null,
+        "metadata": {
+          "job_execution_id": "952241f627ac78c5e3de2b8a953e3551",
+          "job_configuration_id": "cmvf0836f002zad0gbxjd4eyn",
+          "evaluation_rule_id": "cmvf0836f002zad0gbxjd4eyn",
+          "evaluation_rule_assignment_id": "cmvf0836f0031ad0gkepi8s86",
+          "evaluator_version_id": "cmvf082z1002wad0g6y71t1r8",
+          "evaluator_id": "cmvf082z1002uad0gkb42lwel",
+          "target_trace_id": "8ad7ae4e633246c3b4ad81c866d74018",
+          "target_observation_id": "d1ab1253669f45a4"
+        },
+        "subject": {
+          "kind": "observation",
+          "id": "d1ab1253669f45a4",
+          "traceId": "8ad7ae4e633246c3b4ad81c866d74018"
+        },
+        "dataType": "BOOLEAN",
+        "value": false
+      }
+    ]
+  }
+}

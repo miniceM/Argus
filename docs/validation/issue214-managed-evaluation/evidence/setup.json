@@ -1,0 +1,24 @@
+{
+  "prefix": "issue214-20261019t084028z",
+  "environment": "issue214-20261019",
+  "evaluators": [
+    {
+      "id": "cmvf082z1002uad0gkb42lwel",
+      "version_id": "cmvf082z1002wad0g6y71t1r8",
+      "rule_id": "cmvf0836f002zad0gbxjd4eyn",
+      "score_name": "issue214-20261019t084028z-judge",
+      "type": "llm_as_judge"
+    },
+    {
+      "id": "cmvf083f50034ad0gbpddxpar",
+      "version_id": "cmvf083f50036ad0ggpilrl84",
+      "rule_id": "cmvf083me001lad0i4v3cplr8",
+      "score_name": "issue214-20261019t084028z-code",
+      "type": "code"
+    }
+  ],
+  "rule_ids": [
+    "cmvf0836f002zad0gbxjd4eyn",
+    "cmvf083me001lad0i4v3cplr8"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "rule-miss": {
+    "trace_id": "3b56e3108cb540009d5cb32585dca4f5",
+    "submitted_at": "2026-10-19T08:48:31.279136+00:00",
+    "last_score_query_response_at": "2026-10-19T08:53:22.253274+00:00",
+    "observed_window_seconds": 290.974,
+    "clock": "UTC wall-clock request-audit timestamps; not resumed process monotonic counter"
+  },
+  "invalid-io": {
+    "trace_id": "8ad7ae4e633246c3b4ad81c866d74018",
+    "submitted_at": "2026-10-19T08:48:32.016522+00:00",
+    "last_score_query_response_at": "2026-10-19T08:53:25.186224+00:00",
+    "observed_window_seconds": 293.17,
+    "clock": "UTC wall-clock request-audit timestamps; not resumed process monotonic counter"
+  },
+  "wrong-answer": {
+    "trace_id": "ac7ab47bb04d4dc0ad9f1c99daf3766e",
+    "submitted_at": "2026-10-19T08:48:32.432730+00:00",
+    "last_score_query_response_at": "2026-10-19T08:53:31.525590+00:00",
+    "observed_window_seconds": 299.093,
+    "clock": "UTC wall-clock request-audit timestamps; not resumed process monotonic counter"
+  },
+  "duplicate-rule-control": {
+    "trace_id": "1fe7ebbabbff41debcbac17ec78a0d26",
+    "submitted_at": "2026-10-19T08:53:40.612027+00:00",
+    "last_score_query_response_at": "2026-10-19T08:53:57.549354+00:00",
+    "observed_window_seconds": 16.937,
+    "clock": "UTC wall-clock request-audit timestamps; not resumed process monotonic counter"
+  }
+}

@@ -1,0 +1,231 @@
+{
+  "status": 200,
+  "response_hex": "7b226e616d65223a226f74656c2d696e67657374696f6e2d6a6f62222c2264617461223a7b226964223a2231636336386434662d653038392d346436392d613938322d366163333961313264323363222c2274696d657374616d70223a22323032362d31302d31395430383a34383a33312e3338315a222c226e616d65223a226f74656c2d696e67657374696f6e2d6a6f62222c227061796c6f6164223a7b2264617461223a7b2266696c654b6579223a226f74656c2f636d75356136666a353030616f6164306a7672636b697970622f323032362f31302f31392f30382f34382f62623335373863392d623465372d343638642d623964652d6133313630383833663666332e6a736f6e222c227075626c69634b6579223a22706b2d6c662d37643837373036312d653862322d346638382d393161332d383635613234613532613539227d2c2261757468436865636b223a7b2276616c69644b6579223a747275652c2273636f7065223a7b2270726f6a6563744964223a22636d75356136666a353030616f6164306a7672636b69797062222c226163636573734c6576656c223a2270726f6a656374222c226f72674964223a22636d75356136666a323030616b6164306a7a34637734646565227d7d2c2273646b4e616d65223a22756e6b6e6f776e222c2273646b56657273696f6e223a22756e6b6e6f776e222c22696e67657374696f6e56657273696f6e223a2234227d7d2c226f707473223a7b22617474656d707473223a362c2272656d6f76654f6e436f6d706c657465223a747275652c2272656d6f76654f6e4661696c223a3130303030302c226261636b6f6666223a7b2274797065223a226578706f6e656e7469616c222c2264656c6179223a353030307d2c227472616365706172656e74223a2230302d39343261353536383064383731376531363461653764666132633730336338612d343531306239316535393261343630652d3030222c2262616767616765223a226c616e67667573652e6865616465722e782d6c616e67667573652d696e67657374696f6e2d76657273696f6e3d342c6c616e67667573652e636c69636b686f7573652e737572666163653d7075626c69636170692c6c616e67667573652e636c69636b686f7573652e726f7574653d504f53542532302532466170692532467075626c69632532466f74656c25324676312532467472616365732c6c616e67667573652e636c69636b686f7573652e757365725f6167656e743d507974686f6e2d75726c6c6962253246332e31322c6c616e67667573652e70726f6a6563742e69643d636d75356136666a353030616f6164306a7672636b697970622c6c616e67667573652e70726f6a6563742e73697a653d756e6b6e6f776e2c6c616e67667573652e6170695f6b65792e69643d636d753567386f637830303077616430626739626471377066227d2c226964223a223732393032393537222c2270726f6772657373223a302c2272657475726e76616c7565223a6e756c6c2c22737461636b7472616365223a6e756c6c2c227072696f72697479223a302c22617474656d70747353746172746564223a302c22617474656d7074734d616465223a302c227374616c6c6564436f756e746572223a302c2274696d657374616d70223a313739323339393731313338312c2271756575655175616c69666965644e616d65223a227b6f74656c2d696e67657374696f6e2d71756575657d3a6f74656c2d696e67657374696f6e2d7175657565227d",
+  "trace_id": "3b56e3108cb540009d5cb32585dca4f5",
+  "observation_id": "e22b75ce2cbe45f5",
+  "name": "issue214-rule-miss",
+  "environment": "issue214-20261019",
+  "input": {
+    "agent": "issue214-20261019t084028z:v1",
+    "request": {
+      "question": "Compute (135 + 287) * 3. You must call calculator.",
+      "streaming": false
+    }
+  },
+  "output": {
+    "text": "1266",
+    "question": "Compute (135 + 287) * 3. You must call calculator.",
+    "chatId": "b4cb9419-690c-4a6b-948a-55c030ec7026",
+    "chatMessageId": "e9ecb9ff-a514-4a06-aeff-1c89e088ce2f",
+    "executionId": "e05ac516-8882-44ab-96c5-7cf8748bb655",
+    "agentFlowExecutedData": [
+      {
+        "nodeId": "startAgentflow_0",
+        "nodeLabel": "Start",
+        "data": {
+          "id": "startAgentflow_0",
+          "name": "startAgentflow",
+          "input": {
+            "question": "Compute (135 + 287) * 3. You must call calculator."
+          },
+          "output": {
+            "question": "Compute (135 + 287) * 3. You must call calculator."
+          },
+          "state": {}
+        },
+        "previousNodeIds": [],
+        "status": "FINISHED"
+      },
+      {
+        "nodeId": "agentAgentflow_0",
+        "nodeLabel": "QnA",
+        "data": {
+          "id": "agentAgentflow_0",
+          "name": "agentAgentflow",
+          "input": {
+            "messages": [
+              {
+                "role": "system",
+                "content": "You are a calculator agent. You MUST use the calculator tool to compute every arithmetic expression. Return only the numeric final result, without explanation."
+              },
+              {
+                "role": "user",
+                "content": "Compute (135 + 287) * 3. You must call calculator."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "name": "calculator",
+                    "args": {
+                      "input": "(135 + 287) * 3"
+                    },
+                    "type": "tool_call",
+                    "id": "call_00_79y83eqfgx966icujeffpp1z"
+                  }
+                ],
+                "additional_kwargs": {
+                  "tool_calls": [
+                    {
+                      "id": "call_00_79y83eqfgx966icujeffpp1z",
+                      "type": "function",
+                      "function": {
+                        "name": "calculator",
+                        "arguments": "{\"input\": \"(135 + 287) * 3\"}"
+                      }
+                    }
+                  ]
+                },
+                "usage_metadata": {
+                  "output_tokens": 74,
+                  "input_tokens": 374,
+                  "total_tokens": 448,
+                  "input_token_details": {
+                    "cache_read": 256
+                  },
+                  "output_token_details": {
+                    "reasoning": 29
+                  }
+                },
+                "id": "021792399236446d5288a603f9a5ec332174783e04745d2d0226f"
+              },
+              {
+                "role": "tool",
+                "content": "1266",
+                "tool_call_id": "call_00_79y83eqfgx966icujeffpp1z",
+                "name": "calculator",
+                "additional_kwargs": {}
+              }
+            ],
+            "agentModel": "chatOpenAI",
+            "agentTools": [
+              {
+                "agentSelectedTool": "calculator",
+                "agentSelectedToolRequiresHumanInput": false,
+                "agentSelectedToolConfig": {
+                  "agentSelectedTool": "calculator"
+                }
+              }
+            ],
+            "agentKnowledgeDocumentStores": [],
+            "agentEnableMemory": false,
+            "agentMemoryType": "allMessages",
+            "agentReturnResponseAs": "userMessage",
+            "agentModelConfig": {
+              "cache": "",
+              "modelName": "deepseek-v4.1-flash",
+              "temperature": 0,
+              "streaming": false,
+              "maxTokens": 1000,
+              "topP": "",
+              "frequencyPenalty": "",
+              "presencePenalty": "",
+              "timeout": 90000,
+              "strictToolCalling": "",
+              "stopSequence": "",
+              "basepath": "https://opencode.ai/zen/go/v1",
+              "proxyUrl": "",
+              "baseOptions": "{\"x-opencode-session\": \"argus-flowise-p0-20261019\"}",
+              "allowImageUploads": "",
+              "imageResolution": "low",
+              "reasoningEffort": "",
+              "agentModel": "chatOpenAI",
+              "maxRetries": 0
+            }
+          },
+          "output": {
+            "content": "1266",
+            "timeMetadata": {
+              "start": 1792399234764,
+              "end": 1792399239140,
+              "delta": 4376
+            },
+            "calledTools": [],
+            "usageMetadata": {
+              "output_tokens": 3,
+              "input_tokens": 433,
+              "total_tokens": 1320,
+              "input_token_details": {
+                "cache_read": 384
+              },
+              "output_token_details": {
+                "reasoning": 0
+              },
+              "tool_call_tokens": 884
+            },
+            "responseMetadata": {
+              "tokenUsage": {
+                "promptTokens": 433,
+                "completionTokens": 3,
+                "totalTokens": 436
+              },
+              "finish_reason": "stop",
+              "model_provider": "openai",
+              "model_name": "deepseek-v4.1-flash"
+            },
+            "usedTools": [
+              {
+                "tool": "calculator",
+                "toolInput": {
+                  "input": "(135 + 287) * 3"
+                },
+                "toolOutput": "1266"
+              }
+            ],
+            "availableTools": [
+              {
+                "name": "calculator",
+                "description": "Useful for getting the result of a math expression. The input to this tool should be a valid mathematical expression that could be executed by a simple calculator.",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "input": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "toolNode": {
+                  "label": "Calculator",
+                  "name": "calculator"
+                }
+              }
+            ]
+          },
+          "state": {},
+          "chatHistory": [
+            {
+              "role": "user",
+              "content": "Compute (135 + 287) * 3. You must call calculator."
+            },
+            {
+              "role": "user",
+              "content": "1266",
+              "name": "qna",
+              "additional_kwargs": {
+                "usedTools": [
+                  {
+                    "tool": "calculator",
+                    "toolInput": {
+                      "input": "(135 + 287) * 3"
+                    },
+                    "toolOutput": "1266"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "previousNodeIds": [
+          "startAgentflow_0"
+        ],
+        "status": "FINISHED"
+      }
+    ],
+    "sessionId": "b4cb9419-690c-4a6b-948a-55c030ec7026"
+  },
+  "controlled_replay_not_new_agent_execution": true,
+  "submitted_at": "2026-10-19T08:48:31.279136+00:00",
+  "payload_sha256": "d269223da87b60084548d1e90a50da5991ed16444c028ac927a15fdf43354003"
+}

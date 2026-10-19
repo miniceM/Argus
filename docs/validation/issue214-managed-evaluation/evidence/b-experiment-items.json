@@ -1,0 +1,20 @@
+{
+  "status": 200,
+  "response": {
+    "data": [
+      {
+        "id": "bb24565c4e5a7c18",
+        "traceId": "c8dd1b2f3645e514ae39c85c8ffb8f9e",
+        "startTime": "2026-10-19T08:45:37.524Z",
+        "endTime": "2026-10-19T08:45:37.524Z",
+        "level": "DEFAULT",
+        "environment": "default",
+        "experimentId": "dc67f695-d2ce-58eb-8659-2141f55d45e6",
+        "experimentName": "argus-7894e45e-9bb",
+        "experimentItemId": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+        "experimentDatasetId": "cmvf080gu001iad0i4ctjw5l4",
+        "experimentItemVersion": "2026-10-19T08:45:27.614Z"
+      }
+    ]
+  }
+}

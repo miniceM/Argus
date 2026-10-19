@@ -1,0 +1,39 @@
+{
+  "status": 200,
+  "request": {
+    "enabled": false
+  },
+  "response": {
+    "id": "cmvf083me001lad0i4v3cplr8",
+    "name": "issue214-20261019t084028z-same-name-rule",
+    "createdBy": null,
+    "enabled": false,
+    "sampling": 1,
+    "filter": [
+      {
+        "type": "stringOptions",
+        "column": "environment",
+        "operator": "any of",
+        "value": [
+          "issue214-20261019"
+        ]
+      },
+      {
+        "type": "stringOptions",
+        "column": "name",
+        "operator": "any of",
+        "value": [
+          "remote-agent-http"
+        ]
+      }
+    ],
+    "evaluatorAssignments": [
+      {
+        "evaluatorId": "cmvf083f50034ad0gbpddxpar",
+        "variableMapping": null
+      }
+    ],
+    "createdAt": "2026-10-19T08:40:33.110Z",
+    "updatedAt": "2026-10-19T08:54:04.159Z"
+  }
+}

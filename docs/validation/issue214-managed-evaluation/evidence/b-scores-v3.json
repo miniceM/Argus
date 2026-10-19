@@ -1,0 +1,70 @@
+{
+  "status": 200,
+  "response": {
+    "data": [
+      {
+        "id": "97a70f7f-fead-50f9-91fa-7eb580076c6a",
+        "projectId": "cmu5a6fj500aoad0jvrckiypb",
+        "name": "issue214-20261019t084028z-judge",
+        "source": "EVAL",
+        "timestamp": "2026-10-19T08:45:41.290Z",
+        "environment": "issue214-20261019",
+        "createdAt": "2026-10-19T08:45:42.000Z",
+        "updatedAt": "2026-10-19T08:45:41.541Z",
+        "comment": "The expression evaluates to (135 + 287) * 3 = 422 * 3 = 1266, which matches the agent's answer.",
+        "configId": null,
+        "metadata": {
+          "job_execution_id": "b142830ef316a0c5a45566d104ede99b",
+          "job_configuration_id": "cmvf0836f002zad0gbxjd4eyn",
+          "evaluation_rule_id": "cmvf0836f002zad0gbxjd4eyn",
+          "evaluation_rule_assignment_id": "cmvf0836f0031ad0gkepi8s86",
+          "evaluator_version_id": "cmvf082z1002wad0g6y71t1r8",
+          "evaluator_id": "cmvf082z1002uad0gkb42lwel",
+          "target_trace_id": "c8dd1b2f3645e514ae39c85c8ffb8f9e",
+          "target_observation_id": "bb24565c4e5a7c18"
+        },
+        "subject": {
+          "kind": "observation",
+          "id": "bb24565c4e5a7c18",
+          "traceId": "c8dd1b2f3645e514ae39c85c8ffb8f9e"
+        },
+        "dataType": "BOOLEAN",
+        "value": true
+      },
+      {
+        "id": "5ac91494-a574-560d-a2df-cba41f016691",
+        "projectId": "cmu5a6fj500aoad0jvrckiypb",
+        "name": "issue214-20261019t084028z-code",
+        "source": "EVAL",
+        "timestamp": "2026-10-19T08:45:39.077Z",
+        "environment": "issue214-20261019",
+        "createdAt": "2026-10-19T08:45:40.000Z",
+        "updatedAt": "2026-10-19T08:45:39.208Z",
+        "comment": "Native HTTP text checked by Langfuse managed Python runtime; expected constant 1266 is smoke rubric only",
+        "configId": null,
+        "metadata": {
+          "input_sha256": "74e9ba3c7b5a6f28e69fa9a9d91ebe02fee60079ad86902042eee8b78a6f6103",
+          "output_sha256": "4134d1fea7bb695093e6cd37a932e94c6a5fc0028f7f5de4d6dc27632d677bf3",
+          "experiment_context_present": false,
+          "job_execution_id": "da336518ec73c056d4d8a4e0d4404377",
+          "job_configuration_id": "cmvf083me001lad0i4v3cplr8",
+          "evaluation_rule_id": "cmvf083me001lad0i4v3cplr8",
+          "evaluation_rule_assignment_id": "cmvf083me001nad0ip6tn9wpb",
+          "evaluator_version_id": "cmvf083f50036ad0ggpilrl84",
+          "evaluator_id": "cmvf083f50034ad0gbpddxpar",
+          "target_trace_id": "c8dd1b2f3645e514ae39c85c8ffb8f9e",
+          "target_observation_id": "bb24565c4e5a7c18",
+          "dispatcher_name": "aws-lambda",
+          "code_eval_runtime": "PYTHON"
+        },
+        "subject": {
+          "kind": "observation",
+          "id": "bb24565c4e5a7c18",
+          "traceId": "c8dd1b2f3645e514ae39c85c8ffb8f9e"
+        },
+        "dataType": "BOOLEAN",
+        "value": true
+      }
+    ]
+  }
+}

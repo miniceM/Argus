@@ -1,0 +1,20 @@
+{
+  "status": 200,
+  "request": {
+    "name": "issue214-20261019t084028z",
+    "description": "Issue214 isolated managed evaluator real HTTP proof; no gate adoption"
+  },
+  "response": {
+    "id": "cmvf080gu001iad0i4ctjw5l4",
+    "projectId": "cmu5a6fj500aoad0jvrckiypb",
+    "name": "issue214-20261019t084028z",
+    "description": "Issue214 isolated managed evaluator real HTTP proof; no gate adoption",
+    "metadata": null,
+    "inputSchema": null,
+    "expectedOutputSchema": null,
+    "createdAt": "2026-10-19T08:40:29.022Z",
+    "updatedAt": "2026-10-19T08:40:29.022Z",
+    "items": [],
+    "runs": []
+  }
+}

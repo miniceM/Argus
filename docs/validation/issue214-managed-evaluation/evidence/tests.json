@@ -1,0 +1,49 @@
+{
+  "source_base_sha": "265c55014b4810d5f481aa67b37f047a658fe3ac",
+  "scope": "Final local worktree content, before PR commit. Remote exact-head CI is reported separately, not inferred from these local logs.",
+  "make_validate": {
+    "status": "PASS",
+    "command": "PATH=<Python3.12 venv>/bin:<verified official Node22.22.0>/bin:$PATH make validate",
+    "python": {
+      "passed": 1412,
+      "skipped": 7,
+      "deselected": 31,
+      "skip_reason": "7 optional real PostgreSQL tests require TEST_POSTGRES_URL; not claimed executed"
+    },
+    "console": {
+      "files_passed": 53,
+      "tests_passed": 861,
+      "typecheck": "PASS",
+      "build": "PASS"
+    },
+    "compose": "PASS"
+  },
+  "new_contracts": {
+    "status": "PASS",
+    "passed": 37
+  },
+  "focused_regressions": {
+    "status": "PASS",
+    "passed": 72
+  },
+  "s4_real_ingestion": {
+    "status": "PASS",
+    "command": "make trajectory-prepare && make trajectory-test S4_PYTHON=<Python3.12>",
+    "passed": 31
+  },
+  "live_cloud_readback": {
+    "status": "PASS",
+    "command": "python scripts/verify_langfuse_managed.py <receipt> --evidence-dir <new-dir> --page-size 1",
+    "api_pages": 13,
+    "score_writes": 0,
+    "real_agent_launches": 2,
+    "positive_managed_scores": 4
+  },
+  "ruff": "PASS",
+  "red_to_green": [
+    "missing verifier/replayer before implementation",
+    "current Observations v2 raw JSON strings caused a real assertion failure, fixed by explicit parsing",
+    "meta.cursor caused a real pagination assertion failure, fixed without a latest/zero fallback"
+  ],
+  "retained_logs_redaction": "Absolute checkout and local virtual-environment paths replaced with placeholders; test results unchanged."
+}

@@ -1,0 +1,29 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/public/experiment-items",
+    "query": {
+      "experimentId": "7159593c-85aa-5caa-963e-c6ffbc7877c5",
+      "fromStartTime": "2026-10-19T00:00:00Z",
+      "limit": 1
+    }
+  },
+  "response": {
+    "data": [
+      {
+        "id": "36f88fa0b6dfcf14",
+        "traceId": "8bdb2c77e83712ddcb98b34110d22fb3",
+        "startTime": "2026-10-19T08:48:30.238Z",
+        "endTime": "2026-10-19T08:48:30.238Z",
+        "level": "DEFAULT",
+        "environment": "default",
+        "experimentId": "7159593c-85aa-5caa-963e-c6ffbc7877c5",
+        "experimentName": "argus-b8c9e206-d64",
+        "experimentItemId": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+        "experimentDatasetId": "cmvf080gu001iad0i4ctjw5l4",
+        "experimentItemVersion": "2026-10-19T08:40:33.033Z"
+      }
+    ],
+    "meta": {}
+  }
+}

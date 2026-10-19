@@ -1,0 +1,21 @@
+{
+  "at": "2026-10-19T08:40:28.530183+00:00",
+  "main_sha": "265c55014b4810d5f481aa67b37f047a658fe3ac",
+  "langfuse_host": "https://jp.cloud.langfuse.com",
+  "langfuse_environment": "Cloud Japan v4 (observations-first; exact server build is not exposed)",
+  "flowise_image": "sha256:cf880b17b1290fbaebebc76c33954bde67b3775aff95feec72a1d060cc81e43d",
+  "source_mount": "/Users/hosea/Documents/Codex/2026-10-19/goal-minicem-argus-github-issue-214/work/Argus/services/eval-runner/app",
+  "runner_image": "sha256:54480a175d2ad85506406dbd93a1f69d82dd8dd17dd0a87a99a38b67a1279c39",
+  "scope": "Native evaluators only; no Score writes, no Argus Score Collector/Snapshot/Gate changes",
+  "actual_runtime": {
+    "python": "3.14.8",
+    "langfuse_sdk": "4.17.0",
+    "opentelemetry_sdk": "1.45.1"
+  },
+  "validation_runtime": {
+    "python": "3.12.4",
+    "node": "22.22.0",
+    "pnpm": "10.5.2"
+  },
+  "public_openapi_sha256": "301fc5d38a5d4bc2dc97f517e205ea2b0c145a993eec93f490e3a958408de6f6"
+}

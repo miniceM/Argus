@@ -1,0 +1,6 @@
+{
+  "dataset_run_name": "argus-b8c9e206-d64",
+  "status": "SYNCED",
+  "attempts": 1,
+  "scores_payload": "{\"_dataset_source\": \"langfuse\", \"_typed_results\": [{\"evaluator_id\": \"answer_present\", \"result_type\": \"boolean\", \"status\": \"succeeded\", \"value\": false, \"normalized_value\": 0.0, \"comment\": \"\\u672a\\u8fd4\\u56de\\u975e\\u7a7a\\u56de\\u7b54\", \"evidence\": null, \"duration_ms\": 0.1, \"error_code\": null, \"error_message\": null, \"provenance\": {\"binding_id\": \"bind_d0aa01a1534521de\", \"evaluator_id\": \"answer_present\", \"evaluator_version\": \"1.0.0\", \"definition_digest\": \"sha256:7ba48ef5d6f6feb127e3f18705a9a2db3b1558df689baa6c70180e96cf26d5f5\", \"executor_type\": \"builtin_python\", \"manifest_schema_version\": \"1.2\", \"contract_status\": \"FROZEN_VERIFIED\"}}], \"_policy_digest\": \"sha256:51966620d6a2d10352c52b5c37fd315ff5693f02a28e50f3867dab8e9fb077f9\", \"_dataset_run_id\": \"7159593c-85aa-5caa-963e-c6ffbc7877c5\"}"
+}

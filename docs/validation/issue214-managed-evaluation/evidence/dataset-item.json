@@ -1,0 +1,40 @@
+{
+  "status": 200,
+  "request": {
+    "datasetName": "issue214-20261019t084028z",
+    "input": {
+      "question": "Compute (135 + 287) * 3. You must call calculator.",
+      "streaming": false
+    },
+    "expectedOutput": {
+      "answer": "1266"
+    },
+    "metadata": {
+      "issue": 214,
+      "purpose": "synthetic calculator task"
+    }
+  },
+  "response": {
+    "id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+    "datasetId": "cmvf080gu001iad0i4ctjw5l4",
+    "status": "ACTIVE",
+    "sourceTraceId": null,
+    "sourceObservationId": null,
+    "createdAt": "2026-10-19T08:40:29.328Z",
+    "updatedAt": "2026-10-19T08:40:29.328Z",
+    "input": {
+      "question": "Compute (135 + 287) * 3. You must call calculator.",
+      "streaming": false
+    },
+    "expectedOutput": {
+      "answer": "1266"
+    },
+    "metadata": {
+      "issue": 214,
+      "purpose": "synthetic calculator task"
+    },
+    "datasetName": "issue214-20261019t084028z",
+    "version": "2026-10-19T08:40:29.327Z",
+    "mediaReferences": []
+  }
+}

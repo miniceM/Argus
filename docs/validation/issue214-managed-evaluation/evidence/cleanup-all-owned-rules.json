@@ -1,0 +1,274 @@
+{
+  "verified_at": "2026-10-19T09:09:38.337593+00:00",
+  "all_disabled": true,
+  "formal_namespace_rules": 3,
+  "preflight_rules": 4,
+  "rules": [
+    {
+      "namespace": "issue214-20261019t083900z",
+      "rule_id": "cmvf067m80018ad0i8285y1lt",
+      "status": 200,
+      "response": {
+        "id": "cmvf067m80018ad0i8285y1lt",
+        "name": "issue214-20261019t083900z-same-name-rule",
+        "createdBy": null,
+        "enabled": false,
+        "sampling": 1,
+        "filter": [
+          {
+            "type": "stringOptions",
+            "column": "environment",
+            "operator": "any of",
+            "value": [
+              "issue214-20261019t083900z"
+            ]
+          },
+          {
+            "type": "stringOptions",
+            "column": "name",
+            "operator": "any of",
+            "value": [
+              "remote-agent-http"
+            ]
+          }
+        ],
+        "evaluatorAssignments": [
+          {
+            "evaluatorId": "cmvf067dd0008ad0gssbn74ys",
+            "variableMapping": null
+          }
+        ],
+        "createdAt": "2026-10-19T08:39:04.976Z",
+        "updatedAt": "2026-10-19T08:39:26.469Z"
+      }
+    },
+    {
+      "namespace": "issue214-20261019t083900z",
+      "rule_id": "cmvf0684o0007ad0dyo802y8m",
+      "status": 200,
+      "response": {
+        "id": "cmvf0684o0007ad0dyo802y8m",
+        "name": "issue214-20261019t083900z-same-name-rule",
+        "createdBy": null,
+        "enabled": false,
+        "sampling": 1,
+        "filter": [
+          {
+            "type": "stringOptions",
+            "column": "environment",
+            "operator": "any of",
+            "value": [
+              "issue214-20261019t083900z"
+            ]
+          },
+          {
+            "type": "stringOptions",
+            "column": "name",
+            "operator": "any of",
+            "value": [
+              "remote-agent-http"
+            ]
+          }
+        ],
+        "evaluatorAssignments": [
+          {
+            "evaluatorId": "cmvf067v80002ad0d817wn8ll",
+            "variableMapping": null
+          }
+        ],
+        "createdAt": "2026-10-19T08:39:05.640Z",
+        "updatedAt": "2026-10-19T08:39:26.801Z"
+      }
+    },
+    {
+      "namespace": "issue214-20261019t083708z",
+      "rule_id": "cmvf03smv0011ad0i7cfbluip",
+      "status": 200,
+      "response": {
+        "id": "cmvf03smv0011ad0i7cfbluip",
+        "name": "issue214-20261019t083708z-same-name-rule",
+        "createdBy": null,
+        "enabled": false,
+        "sampling": 1,
+        "filter": [
+          {
+            "type": "stringOptions",
+            "column": "environment",
+            "operator": "any of",
+            "value": [
+              "issue214-20261019t083708z"
+            ]
+          },
+          {
+            "type": "stringOptions",
+            "column": "name",
+            "operator": "any of",
+            "value": [
+              "remote-agent-http"
+            ]
+          }
+        ],
+        "evaluatorAssignments": [
+          {
+            "evaluatorId": "cmvf03sf5000wad0ijcfyy95i",
+            "variableMapping": null
+          }
+        ],
+        "createdAt": "2026-10-19T08:37:12.248Z",
+        "updatedAt": "2026-10-19T08:37:20.447Z"
+      }
+    },
+    {
+      "namespace": "issue214-20261019t083708z",
+      "rule_id": "cmvf03t5u001bad0g7xscx5c5",
+      "status": 200,
+      "response": {
+        "id": "cmvf03t5u001bad0g7xscx5c5",
+        "name": "issue214-20261019t083708z-same-name-rule",
+        "createdBy": null,
+        "enabled": false,
+        "sampling": 1,
+        "filter": [
+          {
+            "type": "stringOptions",
+            "column": "environment",
+            "operator": "any of",
+            "value": [
+              "issue214-20261019t083708z"
+            ]
+          },
+          {
+            "type": "stringOptions",
+            "column": "name",
+            "operator": "any of",
+            "value": [
+              "remote-agent-http"
+            ]
+          }
+        ],
+        "evaluatorAssignments": [
+          {
+            "evaluatorId": "cmvf03sxg0016ad0gd1fdv7s9",
+            "variableMapping": null
+          }
+        ],
+        "createdAt": "2026-10-19T08:37:12.930Z",
+        "updatedAt": "2026-10-19T08:37:20.722Z"
+      }
+    },
+    {
+      "namespace": "issue214-20261019t084028z",
+      "rule_id": "cmvf0836f002zad0gbxjd4eyn",
+      "status": 200,
+      "response": {
+        "id": "cmvf0836f002zad0gbxjd4eyn",
+        "name": "issue214-20261019t084028z-same-name-rule",
+        "createdBy": null,
+        "enabled": false,
+        "sampling": 1,
+        "filter": [
+          {
+            "type": "stringOptions",
+            "column": "environment",
+            "operator": "any of",
+            "value": [
+              "issue214-20261019"
+            ]
+          },
+          {
+            "type": "stringOptions",
+            "column": "name",
+            "operator": "any of",
+            "value": [
+              "remote-agent-http"
+            ]
+          }
+        ],
+        "evaluatorAssignments": [
+          {
+            "evaluatorId": "cmvf082z1002uad0gkb42lwel",
+            "variableMapping": null
+          }
+        ],
+        "createdAt": "2026-10-19T08:40:32.535Z",
+        "updatedAt": "2026-10-19T08:54:00.667Z"
+      }
+    },
+    {
+      "namespace": "issue214-20261019t084028z",
+      "rule_id": "cmvf083me001lad0i4v3cplr8",
+      "status": 200,
+      "response": {
+        "id": "cmvf083me001lad0i4v3cplr8",
+        "name": "issue214-20261019t084028z-same-name-rule",
+        "createdBy": null,
+        "enabled": false,
+        "sampling": 1,
+        "filter": [
+          {
+            "type": "stringOptions",
+            "column": "environment",
+            "operator": "any of",
+            "value": [
+              "issue214-20261019"
+            ]
+          },
+          {
+            "type": "stringOptions",
+            "column": "name",
+            "operator": "any of",
+            "value": [
+              "remote-agent-http"
+            ]
+          }
+        ],
+        "evaluatorAssignments": [
+          {
+            "evaluatorId": "cmvf083f50034ad0gbpddxpar",
+            "variableMapping": null
+          }
+        ],
+        "createdAt": "2026-10-19T08:40:33.110Z",
+        "updatedAt": "2026-10-19T08:54:04.159Z"
+      }
+    },
+    {
+      "namespace": "issue214-20261019t084028z",
+      "rule_id": "cmvf0oz4g0013ad0dzk88qwjk",
+      "status": 200,
+      "response": {
+        "id": "cmvf0oz4g0013ad0dzk88qwjk",
+        "name": "issue214-20261019t084028z-same-name-rule",
+        "createdBy": null,
+        "enabled": false,
+        "sampling": 1,
+        "filter": [
+          {
+            "type": "stringOptions",
+            "column": "environment",
+            "operator": "any of",
+            "value": [
+              "issue214-20261019"
+            ]
+          },
+          {
+            "type": "stringOptions",
+            "column": "name",
+            "operator": "any of",
+            "value": [
+              "remote-agent-http"
+            ]
+          }
+        ],
+        "evaluatorAssignments": [
+          {
+            "evaluatorId": "cmvf083f50034ad0gbpddxpar",
+            "variableMapping": null
+          }
+        ],
+        "createdAt": "2026-10-19T08:53:40.433Z",
+        "updatedAt": "2026-10-19T08:54:06.702Z"
+      }
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "status": 400,
+  "request": {
+    "method": "GET",
+    "path": "/api/public/v2/observations?traceId=8bdb2c77e83712ddcb98b34110d22fb3&parseIoAsJson=true"
+  },
+  "response": {
+    "message": "Invalid request data",
+    "error": [
+      {
+        "code": "custom",
+        "path": [
+          "parseIoAsJson"
+        ],
+        "message": "parseIoAsJson=true is no longer supported on the v2 observations endpoint. Input/output fields are always returned as raw strings. Remove the parseIoAsJson parameter or set it to false."
+      }
+    ]
+  }
+}

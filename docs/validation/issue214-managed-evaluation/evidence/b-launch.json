@@ -1,0 +1,259 @@
+{
+  "status": 201,
+  "request": {
+    "name": "issue214-20261019t084028z-b",
+    "agent_id": "issue214-20261019t084028z",
+    "agent_version": "v1",
+    "dataset_name": "issue214-20261019t084028z",
+    "environment": "issue214-20261019",
+    "max_concurrency": 1,
+    "evaluator_selections": [
+      {
+        "id": "answer_present",
+        "version": "1.0.0"
+      }
+    ],
+    "quality_policy": {
+      "rules": [
+        {
+          "evaluator_id": "answer_present",
+          "operator": "==",
+          "expected_value": true,
+          "result_type": "boolean",
+          "required": true
+        }
+      ]
+    },
+    "idempotency_key": "issue214-20261019t084028z-b"
+  },
+  "response": {
+    "environment": "issue214-20261019",
+    "is_active_baseline": false,
+    "baseline_revision": null,
+    "id": "7894e45e-9bbf-4cb7-af65-5f5d0b57fb8a",
+    "name": "issue214-20261019t084028z-b",
+    "status": "PENDING",
+    "quality_conclusion": "unknown",
+    "idempotency_key": "issue214-20261019t084028z-b",
+    "dataset_id": "cmvf080gu001iad0i4ctjw5l4",
+    "dataset_name": "issue214-20261019t084028z",
+    "dataset_version": "2026-10-19T08:45:27.614789+00:00",
+    "agent_id": "issue214-20261019t084028z",
+    "agent_version": "v1",
+    "agent_version_id": "37157585-aad0-4227-8441-567d01a58dc2",
+    "manifest": {
+      "schema_version": "1.2",
+      "dataset": {
+        "source": "langfuse",
+        "dataset_name": "issue214-20261019t084028z",
+        "dataset_id": "cmvf080gu001iad0i4ctjw5l4",
+        "dataset_version": "2026-10-19T08:45:27.614789+00:00",
+        "snapshot_digest": "58d7eff0c9f4d1b5b84895c5ce434d8114a2b9921bc869defcbacb6dff1bf4c3",
+        "items_count": 1,
+        "items": [
+          {
+            "id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+            "input": {
+              "question": "Compute (135 + 287) * 3. You must call calculator.",
+              "streaming": false
+            },
+            "expected_output": {
+              "answer": "1266"
+            },
+            "metadata": {
+              "issue": 214,
+              "purpose": "synthetic calculator task"
+            }
+          }
+        ]
+      },
+      "comparison": {
+        "environment": "issue214-20261019",
+        "baseline_snapshot_id": null,
+        "baseline_binding_revision": null,
+        "baseline_resolution": "none",
+        "comparison_policy_version": "comparison-v1"
+      },
+      "agent": {
+        "agent_id": "issue214-20261019t084028z",
+        "version": "v1",
+        "agent_version_id": "37157585-aad0-4227-8441-567d01a58dc2",
+        "endpoint": "http://argus-flowise-p0-flowise:3000/api/v1/prediction/8b8d2606-379c-42c4-9ac9-08dcbf9490e8",
+        "protocol": "HTTP_JSON",
+        "method": "POST",
+        "request_mapping": {
+          "question": "input.question",
+          "streaming": "input.streaming"
+        },
+        "usage_cost_mapping": null,
+        "credential_ref": null,
+        "credential_id": null,
+        "spec_digest": "7e40b0ba35abd178834ab496a448f15c913cf647c8a21d7f2d30b8d548313649",
+        "artifact_ref": "docker:flowiseai/flowise@sha256:cf880b17b1290fbaebebc76c33954bde67b3775aff95feec72a1d060cc81e43d",
+        "is_idempotent": false,
+        "environment": "issue214-20261019"
+      },
+      "evaluators": [
+        {
+          "id": "answer_present",
+          "version": "1.0.0",
+          "scope": "item",
+          "threshold": 1.0,
+          "params": {},
+          "direction": "higher_is_better",
+          "critical": false,
+          "name": "answer_present",
+          "binding_id": "bind_d0aa01a1534521de",
+          "binding_schema_version": "1.2",
+          "result_type": "boolean",
+          "content_digest": "7ba48ef5d6f6feb127e3f18705a9a2db3b1558df689baa6c70180e96cf26d5f5",
+          "input_contract": {
+            "type": "object",
+            "required": [
+              "output",
+              "expected_output"
+            ],
+            "properties": {
+              "output": {
+                "type": "object",
+                "description": "被测 Agent 返回的业务响应体"
+              },
+              "expected_output": {
+                "type": "object",
+                "description": "DatasetItem 的期望输出",
+                "properties": {
+                  "intent": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "output_contract": {
+            "type": "boolean",
+            "description": "是否返回非空回答"
+          },
+          "category_values": null,
+          "normalization_rule": {
+            "kind": "boolean",
+            "true_value": 1.0,
+            "false_value": 0.0
+          },
+          "definition_digest": "sha256:7ba48ef5d6f6feb127e3f18705a9a2db3b1558df689baa6c70180e96cf26d5f5",
+          "implementation_ref": "builtin:answer_present@1.0.0",
+          "executor_type": "builtin_python",
+          "implementation_artifact": {
+            "kind": "python_source",
+            "locator": "app.evaluators:answer_present",
+            "digest": "sha256:b9a395645eef40645a65abdb9924985185273230f70c481d904aab3c506c3841",
+            "runtime": "cpython",
+            "dependencies": []
+          },
+          "runner": {
+            "runner_version": "0.2.0",
+            "build_id": "265c55014b4810d5f481aa67b37f047a658fe3ac",
+            "mapping_engine_version": "sha256-mapping-engine-v1"
+          },
+          "composed_of": [],
+          "contract_status": "FROZEN_VERIFIED",
+          "binding_digest": "sha256:349d82346675741b93aed352b9227ef908d0aab9bb1d190416f74840082f833e",
+          "verification_status": "RECORDED",
+          "release_eligible": true,
+          "eligibility_reasons": []
+        }
+      ],
+      "quality_policy": {
+        "policy_id": "custom",
+        "version": "1.0",
+        "schema_version": "1.0",
+        "rules": [
+          {
+            "evaluator_id": "answer_present",
+            "operator": "==",
+            "threshold": null,
+            "expected_value": true,
+            "result_type": "boolean",
+            "required": true,
+            "critical": false,
+            "unknown_handling": "unknown_not_releasable",
+            "note": null
+          }
+        ],
+        "unknown_handling": "unknown_not_releasable",
+        "description": null,
+        "policy_digest": "sha256:51966620d6a2d10352c52b5c37fd315ff5693f02a28e50f3867dab8e9fb077f9"
+      },
+      "measurement_digest": "sha256:fa8c07b16a82ca472653ae061a0e2dcf57b90af4523199a04b302342a71974ed",
+      "runner": {
+        "runner_version": "0.2.0",
+        "build_id": "265c55014b4810d5f481aa67b37f047a658fe3ac",
+        "mapping_engine_version": "sha256-mapping-engine-v1"
+      },
+      "execution_policy": {
+        "max_concurrency": 1,
+        "timeout_seconds": 150.0,
+        "max_retries": 0,
+        "rate_limit_per_minute": 600
+      },
+      "contract_digests": {
+        "schema_version": "comparison-contract-1",
+        "measurement": {
+          "digest": "sha256:fa8c07b16a82ca472653ae061a0e2dcf57b90af4523199a04b302342a71974ed",
+          "version": "1.2"
+        },
+        "quality_policy": {
+          "digest": "sha256:51966620d6a2d10352c52b5c37fd315ff5693f02a28e50f3867dab8e9fb077f9",
+          "version": "custom@1.0"
+        },
+        "aggregation_comparison": {
+          "digest": "sha256:7c761e6f314e8397ad766e02d5071687a2995da6a76cea4d7d187c5c2252499b",
+          "version": "comparison-v1"
+        }
+      }
+    },
+    "langfuse_experiment_id": null,
+    "langfuse_experiment_url": null,
+    "langfuse_sync_status": "PENDING",
+    "langfuse_sync_error": null,
+    "links": {
+      "langfuse_experiment": null,
+      "langfuse_trace": null
+    },
+    "progress": {
+      "total": 1,
+      "pending": 1,
+      "queued": 0,
+      "running": 0,
+      "retry_wait": 0,
+      "succeeded": 0,
+      "failed": 0,
+      "timed_out": 0,
+      "cancelled": 0,
+      "completed": 0,
+      "percentage": 0.0,
+      "attempts": 0,
+      "retries": 0,
+      "allowed_actions": [
+        "run",
+        "cancel"
+      ],
+      "action_reasons": {
+        "resume": "没有被取消的用例可供恢复",
+        "retry_failed": "当前评测没有失败或超时的用例",
+        "retry_evaluation": "当前没有失败或缺失的评测需要重评"
+      },
+      "recoverable_evaluation_count": 0,
+      "evaluating": 0
+    },
+    "cancel_requested_at": null,
+    "status_reason": null,
+    "allowed_actions": [
+      "run",
+      "cancel"
+    ],
+    "created_by": null,
+    "created_at": "2026-10-19T08:45:28.101331",
+    "started_at": null,
+    "completed_at": null
+  }
+}

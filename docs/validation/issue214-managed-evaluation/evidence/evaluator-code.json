@@ -1,0 +1,29 @@
+{
+  "status": 201,
+  "request": {
+    "name": "issue214-20261019t084028z-code",
+    "type": "code",
+    "sourceCode": "def evaluate(ctx):\n    import json\n    import hashlib\n    def parsed(value):\n        if isinstance(value, str):\n            return json.loads(value)\n        return value\n    inp = parsed(ctx.observation.input)\n    out = parsed(ctx.observation.output)\n    if not isinstance(inp, dict) or not isinstance(inp.get(\"request\"), dict) or not isinstance(out, dict) or not isinstance(out.get(\"text\"), str):\n        raise ValueError(\"ISSUE214_INVALID_OBSERVATION_IO\")\n    def digest(value):\n        return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(\",\", \":\"), ensure_ascii=False).encode()).hexdigest()\n    passed = out[\"text\"].strip() == \"1266\"\n    return {\"scores\": [{\"name\": 'issue214-20261019t084028z-code', \"value\": passed, \"dataType\": \"BOOLEAN\", \"comment\": \"Native HTTP text checked by Langfuse managed Python runtime; expected constant 1266 is smoke rubric only\", \"metadata\": {\"input_sha256\": digest(inp), \"output_sha256\": digest(out), \"experiment_context_present\": ctx.experiment is not None}}]}\n",
+    "sourceCodeLanguage": "PYTHON"
+  },
+  "response": {
+    "id": "cmvf083f50034ad0gbpddxpar",
+    "name": "issue214-20261019t084028z-code",
+    "description": null,
+    "createdBy": null,
+    "status": "active",
+    "pausedAt": null,
+    "pausedReason": null,
+    "pausedMessage": null,
+    "evaluationRuleAssignments": [],
+    "createdAt": "2026-10-19T08:40:32.849Z",
+    "updatedAt": "2026-10-19T08:40:32.849Z",
+    "versionId": "cmvf083f50036ad0ggpilrl84",
+    "version": 1,
+    "versionCreatedAt": "2026-10-19T08:40:32.849Z",
+    "versionCreatedBy": null,
+    "type": "code",
+    "sourceCode": "def evaluate(ctx):\n    import json\n    import hashlib\n    def parsed(value):\n        if isinstance(value, str):\n            return json.loads(value)\n        return value\n    inp = parsed(ctx.observation.input)\n    out = parsed(ctx.observation.output)\n    if not isinstance(inp, dict) or not isinstance(inp.get(\"request\"), dict) or not isinstance(out, dict) or not isinstance(out.get(\"text\"), str):\n        raise ValueError(\"ISSUE214_INVALID_OBSERVATION_IO\")\n    def digest(value):\n        return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(\",\", \":\"), ensure_ascii=False).encode()).hexdigest()\n    passed = out[\"text\"].strip() == \"1266\"\n    return {\"scores\": [{\"name\": 'issue214-20261019t084028z-code', \"value\": passed, \"dataType\": \"BOOLEAN\", \"comment\": \"Native HTTP text checked by Langfuse managed Python runtime; expected constant 1266 is smoke rubric only\", \"metadata\": {\"input_sha256\": digest(inp), \"output_sha256\": digest(out), \"experiment_context_present\": ctx.experiment is not None}}]}\n",
+    "sourceCodeLanguage": "PYTHON"
+  }
+}

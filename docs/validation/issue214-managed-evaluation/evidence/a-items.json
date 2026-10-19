@@ -1,0 +1,82 @@
+{
+  "status": 200,
+  "response": [
+    {
+      "id": "3c526bb5-0b51-48d7-92d1-adc5f7e9d718",
+      "launch_id": "b8c9e206-d643-4a1d-828b-48e9babb227b",
+      "dataset_item_id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+      "execution_status": "succeeded",
+      "eval_status": "succeeded",
+      "quality_conclusion": "fail",
+      "execution_error": null,
+      "eval_error": null,
+      "trace_id": "8bdb2c77e83712ddcb98b34110d22fb3",
+      "observation_id": "36f88fa0b6dfcf14",
+      "langfuse_trace_url": "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/8bdb2c77e83712ddcb98b34110d22fb3",
+      "final_attempt_id": "fbaecd6f-118d-404d-895c-c149406bdbeb",
+      "scores": {},
+      "evaluation_results": [
+        {
+          "evaluator_id": "answer_present",
+          "evaluator_version": "1.0.0",
+          "result_type": "boolean",
+          "status": "succeeded",
+          "value": false,
+          "normalized_value": 0.0,
+          "comment": "未返回非空回答",
+          "evidence": null,
+          "duration_ms": 0.1,
+          "error_code": null,
+          "error_message": null,
+          "provenance": {
+            "binding_id": "bind_d0aa01a1534521de",
+            "evaluator_id": "answer_present",
+            "evaluator_version": "1.0.0",
+            "definition_digest": "sha256:7ba48ef5d6f6feb127e3f18705a9a2db3b1558df689baa6c70180e96cf26d5f5",
+            "executor_type": "builtin_python",
+            "manifest_schema_version": "1.2",
+            "contract_status": "FROZEN_VERIFIED"
+          }
+        }
+      ],
+      "quality_evaluation": {
+        "conclusion": "fail",
+        "policy_id": "custom",
+        "policy_version": "1.0",
+        "policy_digest": "sha256:51966620d6a2d10352c52b5c37fd315ff5693f02a28e50f3867dab8e9fb077f9",
+        "decided_by": "QUALITY_POLICY",
+        "releasable": true,
+        "unknown_reasons": [],
+        "rules": [
+          {
+            "evaluator_id": "answer_present",
+            "result_type": "boolean",
+            "required": true,
+            "critical": false,
+            "operator": "==",
+            "expected": true,
+            "observed_value": false,
+            "observed_status": "succeeded",
+            "conclusion": "fail",
+            "reason_code": "QUALITY_RULE_VIOLATED",
+            "explanation": "必要指标 'answer_present' 违反规则：实际值 false 与期望 true 不一致。"
+          }
+        ]
+      },
+      "evaluation_status": "none",
+      "evaluation_generation": 0,
+      "evaluation_error": null,
+      "evaluation_reused_output_digest": null,
+      "evaluation_recoverable": true,
+      "attempt_count": 1,
+      "final_attempt_http_status": 200,
+      "final_attempt_latency_ms": 5973,
+      "queued_at": "2026-10-19T08:40:34.175329",
+      "available_at": null,
+      "lease_owner": null,
+      "dispatch_generation": 1,
+      "started_at": "2026-10-19T08:40:34.311568",
+      "completed_at": "2026-10-19T08:40:40.809596"
+    }
+  ]
+}

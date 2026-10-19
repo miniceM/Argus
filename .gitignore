@@ -8,3 +8,7 @@ __pycache__/
 *.pem
 .venv/
 .DS_Store
+
+# Issue #213 local credentials and evidence
+examples/flowise/.runtime/
+.env.flowise

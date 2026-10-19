@@ -1,0 +1,81 @@
+name: argus-flowise-e2e
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust # 仅隔离 Docker 网络，不映射宿主端口
+      POSTGRES_DB: flowise
+    volumes: [postgres-state:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d flowise"]
+      interval: 2s
+      retries: 30
+  flowise-init:
+    image: alpine:3.22
+    command: [sh, -c, "chown -R 1000:1000 /state"]
+    volumes: [flowise-state:/state]
+  flowise:
+    image: flowiseai/flowise@sha256:cf880b17b1290fbaebebc76c33954bde67b3775aff95feec72a1d060cc81e43d
+    environment:
+      DATABASE_TYPE: postgres
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: flowise
+      DATABASE_USER: postgres
+      DISABLE_FLOWISE_TELEMETRY: "true"
+      # 仅专用本地测试：允许 requestsGet 访问隔离网络内的 evidence-tool。
+      HTTP_SECURITY_CHECK: "false"
+    ports: ["127.0.0.1:${FLOWISE_PORT:-19091}:3000"]
+    volumes: [flowise-state:/home/node/.flowise]
+    depends_on:
+      postgres: {condition: service_healthy}
+      flowise-init: {condition: service_completed_successfully}
+  evidence-tool:
+    image: python:3.12-slim
+    command: [python, /fixture/evidence_tool.py]
+    volumes: ["./evidence_tool.py:/fixture/evidence_tool.py:ro", "tool-state:/state"]
+    ports: ["127.0.0.1:${TOOL_PORT:-19094}:8080"]
+  eval-runner:
+    build:
+      context: ../../services/eval-runner
+      args: {ARGUS_BUILD_ID: "${ARGUS_BUILD_ID:?set exact git SHA}", RUNNER_VERSION: "0.2.0"}
+    env_file: ["./.runtime/runner.env"]
+    environment:
+      DATABASE_URL: sqlite:////state/argus.db
+      ARGUS_DB_MODE: standalone
+      ARGUS_DATASET_SOURCE: langfuse
+      ARGUS_LANGFUSE_RUN_ITEM_STRATEGY: otel
+      LANGFUSE_TRACING_ENVIRONMENT: issue213
+      ARGUS_LANGFUSE_DASHBOARD_URL: "${LANGFUSE_BASE_URL}"
+      ARGUS_SECRET_MODE: development
+      ARGUS_ALLOWED_CREDENTIAL_ENVS: FLOWISE_API_TOKEN,FLOWISE_INVALID_TOKEN
+      AGENT_REGISTRY_PATH: /app/config/agents.yaml
+      DATASET_SEED_PATH: /app/data/dataset.json
+      ARGUS_CONSOLE_BASE_URL: "http://localhost:${CONSOLE_PORT:-19093}"
+    volumes: ["../../config:/app/config:ro", "../../data:/app/data:ro", "../../migrations:/app/migrations:ro", "runner-state:/state"]
+    ports: ["127.0.0.1:${ARGUS_PORT:-19090}:8080"]
+  console:
+    build: ../../services/console
+    environment: {RUNNER_HOST: eval-runner, RUNNER_PORT: "8080"}
+    ports: ["127.0.0.1:${CONSOLE_PORT:-19093}:8080"]
+  demo-agent-v1:
+    profiles: [regression]
+    build: ../../services/demo-agent
+    environment: {AGENT_VERSION: v1}
+  demo-agent-v2:
+    profiles: [regression]
+    build: ../../services/demo-agent
+    environment: {AGENT_VERSION: v2}
+  real-llm-agent:
+    profiles: [regression]
+    build: ../../services/real-llm-agent
+    environment:
+      MODEL_BASE_URL: "${MODEL_BASE_URL}"
+      MODEL_API_KEY: "${MODEL_API_KEY}"
+      MODEL_NAME: "${MODEL_NAME}"
+
+volumes:
+  postgres-state:
+  flowise-state:
+  runner-state:
+  tool-state:

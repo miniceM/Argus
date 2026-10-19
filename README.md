@@ -195,6 +195,7 @@ Remote Agent Runner ── W3C Trace Context ──► 业务 Agent
 | Agent 凭据管理 | [凭据 Provider 与部署边界](./docs/secret-providers.md) |
 | 端到端演示流程 | [walkthrough.md](./walkthrough.md) |
 | Langfuse `zh-CN` 镜像构建与发布 | [deploy/langfuse/README.md](./deploy/langfuse/README.md) |
+| Flowise 原生 HTTP 工具 Agent（#213） | [部署与联调](./examples/flowise/README.md) · [真实验收记录](./docs/validation/issue-213/README.md) |
 | 最近一次验证记录 | [VALIDATION_REPORT.md](./VALIDATION_REPORT.md) |
 | 参与开发、代码规范、质量门禁 | [AGENTS.md](./AGENTS.md) |
 | 提交 PR 前要做什么 | [CONTRIBUTING.md](./CONTRIBUTING.md) |

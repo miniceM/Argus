@@ -1,0 +1,9 @@
+{
+  "items": [
+    {"id": "plain", "scenario": "success", "question": "Remember the marker {marker} only in this conversation. Reply exactly READY.", "expected_output": {"text": "READY"}},
+    {"id": "tools", "scenario": "success", "question": "This is a new conversation. Do not invent a previous marker: include NO_PREVIOUS_MARKER. Call evidence_lookup with case_id {case_id}, then calculator to compute (135 + 287) * 3. Return the tool receipt and the computed result.", "expected_output": {"value": 1266, "requires_tool_receipt": true, "session_isolated": true}},
+    {"id": "structured", "scenario": "success", "question": "Return only this JSON object, without markdown or other text: {\"status\":\"ok\",\"value\":42}", "expected_output": {"status": "ok", "value": 42}},
+    {"id": "auth", "scenario": "auth", "question": "Reply OK. This request must be rejected before model execution because its endpoint credential is invalid.", "expected_output": {"execution_status": "failed", "http_status": 401}},
+    {"id": "timeout", "scenario": "timeout", "question": "Call calculator to compute (136 + 288) * 7 and explain the arithmetic in detail.", "expected_output": {"execution_status": "failed", "reason": "timeout or model unreachable, never simulated success"}}
+  ]
+}

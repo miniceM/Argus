@@ -540,3 +540,10 @@ def test_ambiguous_local_trace_observation_mapping_is_never_adopted(context):
     report = collect(context, [score()])
     assert report["decisions"][0]["reason"] == "ITEM_IDENTITY_AMBIGUOUS"
     assert not records(context[0], EvaluationResultRecord)
+
+
+def test_actual_cloud_terminal_meta_omits_cursor():
+    # 来自 #214 的当前真实响应形状：末页 scores.meta={limit:1}，observations.meta={}。
+    for meta in ({}, {'limit':100}):
+        with client(lambda r: httpx.Response(200,json={'data':[score()], 'meta':meta})) as remote:
+            assert len(remote.scores_for('trace216','obs216','correctness'))==1

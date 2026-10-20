@@ -96,11 +96,10 @@ class ScoresV3Client:
                 or not isinstance(payload.get("data"), list)
                 or not all(isinstance(row, dict) for row in payload["data"])
                 or not isinstance(payload.get("meta"), dict)
-                or "cursor" not in payload["meta"]
             ):
                 raise ScoresReadError("RESPONSE_INVALID")
             rows.extend(payload["data"])
-            cursor = payload["meta"]["cursor"]
+            cursor = payload["meta"].get("cursor")
             if cursor is None:
                 return rows
             if not isinstance(cursor, str) or not cursor or cursor in seen:

@@ -29,6 +29,7 @@ from .langfuse_run_scores import LangfuseRunScoreSyncer
 from .langfuse_sync import LangfuseOutboxSyncer
 from .limiter import DistributedAgentLimiter, MemoryAgentLimiter, RedisDistributedLimiter
 from .link_lease import build_link_loop_lease
+from .managed_score_recovery import WORK_TYPE_MANAGED
 from .manifest import LaunchService
 from .metrics import metrics_router
 from .models import BootstrapResult, ExperimentRequest, ExperimentResult
@@ -129,6 +130,10 @@ async def lifespan(app: FastAPI):
                         # Issue #84: evaluation-only recovery reuses the stored
                         # Agent output and never invokes the Agent.
                         await worker.execute_evaluation_message(m_id, i_id, g)
+                    elif work_type == WORK_TYPE_MANAGED:
+                        # Issue #217: managed score collection reuses the stored
+                        # Agent output/trace and never invokes the Agent.
+                        await worker.execute_managed_message(m_id, i_id, g)
                     else:
                         await worker.execute_item_message(m_id, i_id, g)
                 except Exception:

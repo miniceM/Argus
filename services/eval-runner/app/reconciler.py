@@ -403,9 +403,11 @@ class ExecutionReconciler:
         effective run and no duplicate Agent call.
         """
         from .evaluation_recovery import EVALUATION_RUNNING, WORK_TYPE_EVALUATION
+        from .managed_score_recovery import WORK_TYPE_MANAGED, is_managed_manifest
 
         now = datetime.now(UTC)
-        reenqueue: list[tuple[str, int]] = []
+        reenqueue_eval: list[tuple[str, int]] = []
+        reenqueue_managed: list[tuple[str, int]] = []
         recovered = 0
 
         with self.db_mgr.get_session() as session:
@@ -419,8 +421,14 @@ class ExecutionReconciler:
                     ExperimentItemExecutionRecord.evaluation_lease_expires_at <= now_sql,
                 )
             ).all()
+            launch_cache: dict[str, Any] = {}
 
             for it in expired:
+                launch = launch_cache.get(it.launch_id)
+                if launch is None:
+                    launch = session.get(ExperimentLaunchRecord, it.launch_id)
+                    launch_cache[it.launch_id] = launch
+                manifest = (launch.manifest if launch else {}) or {}
                 it.evaluation_lease_owner = None
                 it.evaluation_lease_token = None
                 it.evaluation_lease_expires_at = None
@@ -441,21 +449,76 @@ class ExecutionReconciler:
                         completed_at=now,
                     )
                 )
-                reenqueue.append((it.id, it.evaluation_generation))
+                if is_managed_manifest(manifest):
+                    reenqueue_managed.append((it.id, it.evaluation_generation))
+                else:
+                    reenqueue_eval.append((it.id, it.evaluation_generation))
                 recovered += 1
 
             session.commit()
 
-        if reenqueue:
-            self.queue.enqueue_items(reenqueue, work_type=WORK_TYPE_EVALUATION)
+        if reenqueue_eval:
+            self.queue.enqueue_items(reenqueue_eval, work_type=WORK_TYPE_EVALUATION)
+        if reenqueue_managed:
+            self.queue.enqueue_items(reenqueue_managed, work_type=WORK_TYPE_MANAGED)
 
         return recovered
+
+    def reconcile_managed_collections(self, limit: int = 100) -> int:
+        """#217：到期 Managed 评分重试入队（指数退避经 available_at 复用）。
+
+        仅处理执行已成功、评测等待中、无租约且已到期的 Managed Item；
+        取消中的 Launch 永不入队；Builtin 的 evaluating 由原有路径处理。
+        """
+        from .managed_score_recovery import WORK_TYPE_MANAGED, is_managed_manifest
+
+        due: list[tuple[str, int]] = []
+        with self.db_mgr.get_session() as session:
+            is_pg = session.bind.dialect.name == "postgresql"
+            now_sql = func.clock_timestamp() if is_pg else func.now()
+            rows = session.scalars(
+                select(ExperimentItemExecutionRecord)
+                .where(
+                    ExperimentItemExecutionRecord.execution_status == "succeeded",
+                    ExperimentItemExecutionRecord.eval_status == "pending",
+                    ExperimentItemExecutionRecord.evaluation_status == "evaluating",
+                    ExperimentItemExecutionRecord.evaluation_lease_token.is_(None),
+                    (
+                        (ExperimentItemExecutionRecord.available_at.is_(None))
+                        | (ExperimentItemExecutionRecord.available_at <= now_sql)
+                    ),
+                )
+                .limit(limit * 2)
+            ).all()
+            launch_cache: dict[str, Any] = {}
+            for row in rows:
+                if len(due) >= limit:
+                    break
+                launch = launch_cache.get(row.launch_id)
+                if launch is None:
+                    launch = session.get(ExperimentLaunchRecord, row.launch_id)
+                    launch_cache[row.launch_id] = launch
+                if launch is None or launch.cancel_requested_at or launch.status in (
+                    "CANCELLING",
+                    "CANCELLED",
+                ):
+                    continue
+                if not is_managed_manifest((launch.manifest if launch else {}) or {}):
+                    continue
+                # 到期即刷新 available_at 占位？不，由收集 worker 在重试时设置；
+                # 此处仅入队，认领仍经评测租约 CAS，重复入队安全。
+                due.append((row.id, row.evaluation_generation))
+            session.commit()
+        if due:
+            self.queue.enqueue_items(due, work_type=WORK_TYPE_MANAGED)
+        return len(due)
 
     def run_reconcile_cycle(self) -> None:
         """Executes one full pass of all reconciliation recovery actions."""
         self.reconcile_retry_waits()
         self.reconcile_expired_leases()
         self.reconcile_expired_evaluation_leases()
+        self.reconcile_managed_collections()
         self.reconcile_backlog()
         self.reconcile_launch_states()
         self.reconcile_sync_statuses()

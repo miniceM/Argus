@@ -1032,7 +1032,7 @@ def summarize_typed_results(
         eval_error = None
 
     if managed:
-        eval_status = "failed"
+        eval_status = "pending"
         eval_error = "LANGFUSE_MANAGED_SCORES_PENDING: 待收集评分，暂不可用于正式发布。"
 
     return FrozenItemEvaluation(

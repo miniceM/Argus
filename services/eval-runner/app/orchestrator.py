@@ -410,6 +410,7 @@ class LaunchOrchestrator:
             WORK_TYPE_EVALUATION,
         )
         from .execution_checkpoint import CheckpointUnavailableError, load_recoverable_checkpoint
+        from .managed_score_recovery import MANAGED_PENDING_MESSAGE, WORK_TYPE_MANAGED, is_managed_manifest
 
         now = datetime.now(UTC)
         is_pg = self.db_mgr.engine.dialect.name == "postgresql"
@@ -452,13 +453,22 @@ class LaunchOrchestrator:
             candidates = session.scalars(item_stmt).all()
 
             manifest = launch.manifest or {}
+            managed = is_managed_manifest(manifest)
+            managed_items: list[tuple[str, int]] = []
             for it in candidates:
                 item_id = it.id
                 # Already being re-evaluated: idempotent no-op (double-click).
                 if it.evaluation_status == EVALUATION_RUNNING:
                     already_running.append(item_id)
                     continue
-                if (it.eval_status or "").lower() not in RECOVERABLE_EVAL_STATUSES:
+                if managed:
+                    # #217：Managed 等待态 pending 亦可手动重提；终态失败亦可重提。
+                    if (it.eval_status or "").lower() not in (
+                        "pending",
+                        *RECOVERABLE_EVAL_STATUSES,
+                    ):
+                        continue
+                elif (it.eval_status or "").lower() not in RECOVERABLE_EVAL_STATUSES:
                     continue
                 # Validate the recoverable artifact *before* dispatching, so a
                 # missing/expired/corrupt checkpoint is a clear refusal, not a
@@ -468,7 +478,7 @@ class LaunchOrchestrator:
                         session,
                         item_execution_id=item_id,
                         dispatch_generation=it.dispatch_generation,
-                        manifest=manifest,
+                        manifest=None if managed else manifest,
                         now=now,
                     )
                 except CheckpointUnavailableError as exc:
@@ -485,14 +495,25 @@ class LaunchOrchestrator:
 
                 it.evaluation_generation = (it.evaluation_generation or 0) + 1
                 it.evaluation_status = EVALUATION_RUNNING
-                it.evaluation_error = None
+                it.evaluation_error = MANAGED_PENDING_MESSAGE if managed else None
                 it.evaluation_lease_owner = None
                 it.evaluation_lease_token = None
                 it.evaluation_lease_expires_at = None
-                it.evaluation_started_at = now
+                if managed and it.evaluation_started_at is None:
+                    it.evaluation_started_at = now
+                elif not managed:
+                    it.evaluation_started_at = now
                 it.evaluation_completed_at = None
+                if managed:
+                    it.eval_status = "pending"
+                    it.eval_error = MANAGED_PENDING_MESSAGE
+                    it.quality_conclusion = "unknown"
+                    it.available_at = None
                 it.updated_at = now
-                dispatch_items.append((item_id, it.evaluation_generation))
+                if managed:
+                    managed_items.append((item_id, it.evaluation_generation))
+                else:
+                    dispatch_items.append((item_id, it.evaluation_generation))
                 submitted.append(item_id)
 
             if not submitted and not already_running:
@@ -509,6 +530,8 @@ class LaunchOrchestrator:
 
         if dispatch_items:
             self.queue.enqueue_items(dispatch_items, work_type=WORK_TYPE_EVALUATION)
+        if managed_items:
+            self.queue.enqueue_items(managed_items, work_type=WORK_TYPE_MANAGED)
 
         return {
             "launch": launch,

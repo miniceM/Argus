@@ -241,7 +241,8 @@ class ManagedScoreCollector:
         for field in ("input", "output"):
             _check(
                 f"{field}_sha256" not in meta
-                or meta[f"{field}_sha256"] == ctx[f"{field}_digest"].removeprefix("sha256:"),
+                or meta[f"{field}_sha256"]
+                == canonical_output_digest(_parse_io(obs.get(field))).removeprefix("sha256:"),
                 "SCORE_IO_MISMATCH",
             )
         stamp = _utc(row.get("timestamp"))

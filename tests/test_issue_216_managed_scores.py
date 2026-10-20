@@ -544,6 +544,16 @@ def test_ambiguous_local_trace_observation_mapping_is_never_adopted(context):
 
 def test_actual_cloud_terminal_meta_omits_cursor():
     # 来自 #214 的当前真实响应形状：末页 scores.meta={limit:1}，observations.meta={}。
-    for meta in ({}, {'limit':100}):
-        with client(lambda r: httpx.Response(200,json={'data':[score()], 'meta':meta})) as remote:
-            assert len(remote.scores_for('trace216','obs216','correctness'))==1
+    for meta in ({}, {"limit": 100}):
+        with client(lambda r: httpx.Response(200, json={"data": [score()], "meta": meta})) as remote:
+            assert len(remote.scores_for("trace216", "obs216", "correctness")) == 1
+
+
+def test_code_score_hashes_full_native_observation_input_not_only_request(context):
+    from app.execution_checkpoint import canonical_output_digest
+
+    raw = score()
+    raw["metadata"]["input_sha256"] = canonical_output_digest(context[2]["input"]).removeprefix("sha256:")
+    raw["metadata"]["output_sha256"] = canonical_output_digest(context[2]["output"]).removeprefix("sha256:")
+    assert collect(context, [raw])["decisions"][0]["decision"] == "ADOPTED"
+    assert len(records(context[0], EvaluationResultRecord)) == 1

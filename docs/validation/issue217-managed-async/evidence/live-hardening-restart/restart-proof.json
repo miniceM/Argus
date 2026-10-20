@@ -1,0 +1,30 @@
+{
+  "status": "PASS",
+  "source_commit": "a9de722ff9997865550e652473b02ae15b840f41",
+  "restart_mode": "SIGKILL owned isolated Runner",
+  "database_reused": true,
+  "crashed_at": "2026-10-20T11:32:02.867362+00:00",
+  "restored_at": "2026-10-20T11:32:03.935869+00:00",
+  "before": {
+    "id": "696ea11c-e3d7-44dd-960d-efdfc9c9f949",
+    "execution_status": "succeeded",
+    "eval_status": "pending",
+    "evaluation_status": "evaluating",
+    "evaluation_generation": 2,
+    "evaluation_lease_expires_at": null,
+    "http_attempts": 1,
+    "checkpoint_output_digest": "sha256:5097d463501befb0eaebd6d16a43a5649df06e05bd27da407c107bf36887ae12"
+  },
+  "after": {
+    "id": "696ea11c-e3d7-44dd-960d-efdfc9c9f949",
+    "execution_status": "succeeded",
+    "eval_status": "succeeded",
+    "evaluation_status": "recovered",
+    "evaluation_generation": 3,
+    "evaluation_lease_expires_at": null,
+    "http_attempts": 1,
+    "checkpoint_output_digest": "sha256:5097d463501befb0eaebd6d16a43a5649df06e05bd27da407c107bf36887ae12"
+  },
+  "existing_services_modified": false,
+  "notes": "真实 Langfuse EVAL 双评分；无手工 collect，无人工 Score 写入，无 Agent 重试。"
+}

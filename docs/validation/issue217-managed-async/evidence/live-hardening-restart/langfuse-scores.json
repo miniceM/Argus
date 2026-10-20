@@ -1,0 +1,70 @@
+{
+  "trace_id": "7bbffff21aa767dbbcb1bb3b6704a7fb",
+  "observation_id": "5133e55f63c0ce86",
+  "source": "EVAL",
+  "data": [
+    {
+      "id": "db17d1d7-2770-5f58-895f-139b1b0e5144",
+      "projectId": "cmu5a6fj500aoad0jvrckiypb",
+      "name": "issue214-20261019t084028z-code",
+      "source": "EVAL",
+      "timestamp": "2026-10-20T11:32:03.352Z",
+      "environment": "issue217-hardening-20261020t113145z",
+      "createdAt": "2026-10-20T11:32:04.000Z",
+      "updatedAt": "2026-10-20T11:32:03.439Z",
+      "comment": "Native HTTP text checked by Langfuse managed Python runtime; expected constant 1266 is smoke rubric only",
+      "configId": null,
+      "metadata": {
+        "input_sha256": "d49e77674f16e1e452af417d7c5e8328ee3eb7832e31d8c7f417a3c219a0fc7d",
+        "output_sha256": "5097d463501befb0eaebd6d16a43a5649df06e05bd27da407c107bf36887ae12",
+        "experiment_context_present": true,
+        "job_execution_id": "46ff593ffb0bf0e8dc65b96ffd7a058b",
+        "job_configuration_id": "cmvglscqe0017ad0kv2plgsp6",
+        "evaluation_rule_id": "cmvglscqe0017ad0kv2plgsp6",
+        "evaluation_rule_assignment_id": "cmvglscqe0019ad0kkhlrwmi5",
+        "evaluator_version_id": "cmvf083f50036ad0ggpilrl84",
+        "evaluator_id": "cmvf083f50034ad0gbpddxpar",
+        "target_trace_id": "7bbffff21aa767dbbcb1bb3b6704a7fb",
+        "target_observation_id": "5133e55f63c0ce86",
+        "dispatcher_name": "aws-lambda",
+        "code_eval_runtime": "PYTHON"
+      },
+      "subject": {
+        "kind": "observation",
+        "id": "5133e55f63c0ce86",
+        "traceId": "7bbffff21aa767dbbcb1bb3b6704a7fb"
+      },
+      "dataType": "BOOLEAN",
+      "value": true
+    },
+    {
+      "id": "818f1d4c-f072-57fa-b55a-bca8b3439972",
+      "projectId": "cmu5a6fj500aoad0jvrckiypb",
+      "name": "issue214-20261019t084028z-judge",
+      "source": "EVAL",
+      "timestamp": "2026-10-20T11:32:05.451Z",
+      "environment": "issue217-hardening-20261020t113145z",
+      "createdAt": "2026-10-20T11:32:06.000Z",
+      "updatedAt": "2026-10-20T11:32:05.535Z",
+      "comment": "The expression (135 + 287) * 3 equals 422 * 3 = 1266, so the agent's answer is correct.",
+      "configId": null,
+      "metadata": {
+        "job_execution_id": "99dec8b7464956b2df4ed1abc700328a",
+        "job_configuration_id": "cmvgls9670012ad0kuqpamhva",
+        "evaluation_rule_id": "cmvgls9670012ad0kuqpamhva",
+        "evaluation_rule_assignment_id": "cmvgls9670014ad0kxh56lo24",
+        "evaluator_version_id": "cmvf082z1002wad0g6y71t1r8",
+        "evaluator_id": "cmvf082z1002uad0gkb42lwel",
+        "target_trace_id": "7bbffff21aa767dbbcb1bb3b6704a7fb",
+        "target_observation_id": "5133e55f63c0ce86"
+      },
+      "subject": {
+        "kind": "observation",
+        "id": "5133e55f63c0ce86",
+        "traceId": "7bbffff21aa767dbbcb1bb3b6704a7fb"
+      },
+      "dataType": "BOOLEAN",
+      "value": true
+    }
+  ]
+}

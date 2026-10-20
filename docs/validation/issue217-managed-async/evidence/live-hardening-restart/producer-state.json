@@ -1,0 +1,16 @@
+{
+  "status": "SYNCED",
+  "attempts": 1,
+  "published_output_digest": "sha256:5097d463501befb0eaebd6d16a43a5649df06e05bd27da407c107bf36887ae12",
+  "matches_checkpoint": true,
+  "agent_http_attempts": 1,
+  "checkpoint": {
+    "output_digest": "sha256:5097d463501befb0eaebd6d16a43a5649df06e05bd27da407c107bf36887ae12",
+    "created_at": "2026-10-20 11:32:01.142819"
+  },
+  "scorable_tool_count": 1,
+  "score_ids": [
+    "818f1d4c-f072-57fa-b55a-bca8b3439972",
+    "db17d1d7-2770-5f58-895f-139b1b0e5144"
+  ]
+}

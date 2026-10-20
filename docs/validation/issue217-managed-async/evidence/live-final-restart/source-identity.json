@@ -1,0 +1,15 @@
+{
+  "functional_commit": "e9f69edd87212bb99b96f42257afb5169dfca74c",
+  "checked_at": "2026-10-20T12:00:52.809023+00:00",
+  "source_hashes": {
+    "services/eval-runner/app/managed_score_recovery.py": "eff0466b12675ee24badbe5ac32343868c855b836d2d36d7fc2b0d9edaf3695a",
+    "services/eval-runner/app/worker.py": "446c9ed5e3e9c70874033e1b13c977f79ccb388f00399e28f6767b25069f216f",
+    "services/eval-runner/app/main.py": "1616cb8506b57bbda69eba39b838777f4ecce1161b97abdbd1c9e3826d33d59d",
+    "services/eval-runner/app/evaluation_recovery.py": "d7984e1bc5adba4e559091b0d266753bb8559097ceeb518c2ac5e25e6ab56864",
+    "services/eval-runner/app/langfuse_managed_scores.py": "fe7778e4b2de68f95be6b7affe1970a1638df1b3a6617fa67f5913a167d36797",
+    "services/eval-runner/app/langfuse_run_items.py": "ecfb4a26cdb1982faa211d508debe69ab841835ddefb38d544742f6ab309bfbd",
+    "services/eval-runner/app/langfuse_sync.py": "9a5d4be1aa84884bb6590e3d05cc79a3c1b85ba18e931c460cf7e5193bcfca50",
+    "services/eval-runner/app/langfuse_otel_projection.py": "03f29de77f0810409d516023abaa39c16c3fc4dc92361b4137e33a51a141a660",
+    "services/eval-runner/app/reconciler.py": "826d74382c7d033dda64be429838126c800128e317cdf5214de70baad9a49282"
+  }
+}

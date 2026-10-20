@@ -1,0 +1,338 @@
+{
+  "functional_commit": "e9f69edd87212bb99b96f42257afb5169dfca74c",
+  "scope": "本轮加固专项；既有 #215/#216/#217/#84 回归另由 make validate 覆盖",
+  "scenarios": [
+    {
+      "scenario": "absolute-deadline",
+      "status": "PASS",
+      "evidence_kind": "真实数据库/运行时 + 受控 Score/HTTP 故障；非 Langfuse 生产故障注入",
+      "tests": [
+        {
+          "name": "test_expired_deadline_never_reads_remote[sqlite]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_expired_deadline_never_reads_remote[postgresql]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_deadline_during_fetch_rejects_late_score[sqlite]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_deadline_during_fetch_rejects_late_score[postgresql]",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "scenario": "retry-after-and-duplicate-backoff",
+      "status": "PASS",
+      "evidence_kind": "真实数据库/运行时 + 受控 Score/HTTP 故障；非 Langfuse 生产故障注入",
+      "tests": [
+        {
+          "name": "test_retry_after_is_respected_and_duplicate_cannot_skip_backoff[sqlite]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_retry_after_is_respected_and_duplicate_cannot_skip_backoff[postgresql]",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "scenario": "429-5xx-timeout-then-converge",
+      "status": "PASS",
+      "evidence_kind": "真实数据库/运行时 + 受控 Score/HTTP 故障；非 Langfuse 生产故障注入",
+      "tests": [
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[sqlite-RATE_LIMITED]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[sqlite-UPSTREAM_UNAVAILABLE]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[sqlite-TIMEOUT]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[postgresql-RATE_LIMITED]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[postgresql-UPSTREAM_UNAVAILABLE]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[postgresql-TIMEOUT]",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "scenario": "401-403-unknown-terminal",
+      "status": "PASS",
+      "evidence_kind": "真实数据库/运行时 + 受控 Score/HTTP 故障；非 Langfuse 生产故障注入",
+      "tests": [
+        {
+          "name": "test_auth_failure_stops_unknown_without_agent[sqlite-AUTHENTICATION_FAILED]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_auth_failure_stops_unknown_without_agent[sqlite-AUTHORIZATION_FAILED]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_auth_failure_stops_unknown_without_agent[postgresql-AUTHENTICATION_FAILED]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_auth_failure_stops_unknown_without_agent[postgresql-AUTHORIZATION_FAILED]",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "scenario": "cancel-backoff",
+      "status": "PASS",
+      "evidence_kind": "真实数据库/运行时 + 受控 Score/HTTP 故障；非 Langfuse 生产故障注入",
+      "tests": [
+        {
+          "name": "test_cancel_during_backoff_settles_without_agent_rerun[sqlite]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_during_backoff_settles_without_agent_rerun[postgresql]",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "scenario": "stale-token-cannot-overwrite-winner-audit",
+      "status": "PASS",
+      "evidence_kind": "真实数据库/运行时 + 受控 Score/HTTP 故障；非 Langfuse 生产故障注入",
+      "tests": [
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[sqlite]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[postgresql]",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "scenario": "scan-renew-race",
+      "status": "PASS",
+      "evidence_kind": "真实数据库/运行时 + 受控 Score/HTTP 故障；非 Langfuse 生产故障注入",
+      "tests": [
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[sqlite]",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[postgresql]",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "scenario": "crash-consumes-budget-including-pre-attempt",
+      "status": "PASS",
+      "evidence_kind": "真实数据库/运行时 + 受控 Score/HTTP 故障；非 Langfuse 生产故障注入",
+      "tests": [
+        {
+          "name": "test_crashed_collections_consume_budget[sqlite]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_crashed_collections_consume_budget[postgresql]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_late_attempt_start_cannot_spend_new_manual_cycle_budget[sqlite]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_late_attempt_start_cannot_spend_new_manual_cycle_budget[postgresql]",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "scenario": "four-workers-single-adoption",
+      "status": "PASS",
+      "evidence_kind": "真实数据库/运行时 + 受控 Score/HTTP 故障；非 Langfuse 生产故障注入",
+      "tests": [
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[sqlite]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[postgresql]",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "scenario": "two-postgres-reconcilers-single-advance",
+      "status": "PASS",
+      "evidence_kind": "真实数据库/运行时 + 受控 Score/HTTP 故障；非 Langfuse 生产故障注入",
+      "tests": [
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[sqlite]",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[postgresql]",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "scenario": "late-timeout-thread-fenced",
+      "status": "PASS",
+      "evidence_kind": "真实数据库/运行时 + 受控 Score/HTTP 故障；非 Langfuse 生产故障注入",
+      "tests": [
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[sqlite]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[postgresql]",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "scenario": "runtime-http-permit-not-blocked",
+      "status": "PASS",
+      "evidence_kind": "真实数据库/运行时 + 受控 Score/HTTP 故障；非 Langfuse 生产故障注入",
+      "tests": [
+        {
+          "name": "test_live_dispatcher_managed_wait_does_not_block_http",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "scenario": "durable-scorable-tool-and-single-producer",
+      "status": "PASS",
+      "evidence_kind": "真实数据库/运行时 + 受控 Score/HTTP 故障；非 Langfuse 生产故障注入",
+      "tests": [
+        {
+          "name": "test_managed_outbox_restores_scorable_observation_from_checkpoint[sqlite]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_outbox_restores_scorable_observation_from_checkpoint[postgresql]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[sqlite-PENDING]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[sqlite-SYNCED]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[sqlite-FAILED]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[sqlite-SKIPPED]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[postgresql-PENDING]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[postgresql-SYNCED]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[postgresql-FAILED]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[postgresql-SKIPPED]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_sdk_and_outbox_have_one_scorable_publisher[sqlite-otel]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_sdk_and_outbox_have_one_scorable_publisher[sqlite-legacy]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_sdk_and_outbox_have_one_scorable_publisher[postgresql-otel]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_sdk_and_outbox_have_one_scorable_publisher[postgresql-legacy]",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "scenario": "corrupt-checkpoint-fails-closed",
+      "status": "PASS",
+      "evidence_kind": "真实数据库/运行时 + 受控 Score/HTTP 故障；非 Langfuse 生产故障注入",
+      "tests": [
+        {
+          "name": "test_managed_projection_refuses_corrupt_checkpoint[sqlite]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_projection_refuses_corrupt_checkpoint[postgresql]",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "scenario": "outbox-failure-manual-recovery-without-agent",
+      "status": "PASS",
+      "evidence_kind": "真实数据库/运行时 + 受控 Score/HTTP 故障；非 Langfuse 生产故障注入",
+      "tests": [
+        {
+          "name": "test_projection_failure_resubmit_has_one_new_budget_without_agent[sqlite]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_projection_failure_resubmit_has_one_new_budget_without_agent[postgresql]",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "scenario": "invalid-infinite-attempt-limit",
+      "status": "PASS",
+      "evidence_kind": "真实数据库/运行时 + 受控 Score/HTTP 故障；非 Langfuse 生产故障注入",
+      "tests": [
+        {
+          "name": "test_infinite_attempt_config_is_safe[inf]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_infinite_attempt_config_is_safe[-inf]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_infinite_attempt_config_is_safe[Infinity]",
+          "status": "PASS"
+        },
+        {
+          "name": "test_infinite_attempt_config_is_safe[1e309]",
+          "status": "PASS"
+        }
+      ]
+    }
+  ]
+}

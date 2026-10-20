@@ -1,0 +1,256 @@
+{
+  "request": {
+    "agent_id": "issue217-20261020t110335z",
+    "agent_version": "v1",
+    "dataset_name": "issue214-20261019t084028z",
+    "name": "issue217-20261020t110335z",
+    "environment": "issue217-hardening-20261020t110330z",
+    "max_concurrency": 1,
+    "idempotency_key": "issue217-20261020t110335z",
+    "evaluation_source": "langfuse_managed",
+    "managed_evaluation": {
+      "project_id": "cmu5a6fj500aoad0jvrckiypb",
+      "environment": "issue217-hardening-20261020t110330z",
+      "target": {
+        "name": "remote-agent-http",
+        "type": "TOOL"
+      },
+      "scores": [
+        {
+          "name": "issue214-20261019t084028z-judge",
+          "data_type": "boolean",
+          "required": true,
+          "rule_id": "cmvgks0ny003qad0j8rps58cx",
+          "evaluator_id": "cmvf082z1002uad0gkb42lwel"
+        },
+        {
+          "name": "issue214-20261019t084028z-code",
+          "data_type": "boolean",
+          "required": true,
+          "rule_id": "cmvgks495003vad0jbgak6f61",
+          "evaluator_id": "cmvf083f50034ad0gbpddxpar"
+        }
+      ]
+    },
+    "quality_policy": {
+      "rules": [
+        {
+          "evaluator_id": "issue214-20261019t084028z-judge",
+          "result_type": "boolean",
+          "operator": "==",
+          "expected_value": true,
+          "required": true
+        },
+        {
+          "evaluator_id": "issue214-20261019t084028z-code",
+          "result_type": "boolean",
+          "operator": "==",
+          "expected_value": true,
+          "required": true
+        }
+      ]
+    }
+  },
+  "response": {
+    "environment": "issue217-hardening-20261020t110330z",
+    "is_active_baseline": false,
+    "baseline_revision": null,
+    "id": "3f949075-1de9-4207-a0a5-42863f6d083d",
+    "name": "issue217-20261020t110335z",
+    "status": "PENDING",
+    "quality_conclusion": "unknown",
+    "idempotency_key": "issue217-20261020t110335z",
+    "dataset_id": "cmvf080gu001iad0i4ctjw5l4",
+    "dataset_name": "issue214-20261019t084028z",
+    "dataset_version": "2026-10-20T11:03:45.515312+00:00",
+    "agent_id": "issue217-20261020t110335z",
+    "agent_version": "v1",
+    "agent_version_id": "dcbcfc28-99c3-4fe7-95e9-59f45a8d2bb3",
+    "manifest": {
+      "schema_version": "1.2",
+      "dataset": {
+        "source": "langfuse",
+        "dataset_name": "issue214-20261019t084028z",
+        "dataset_id": "cmvf080gu001iad0i4ctjw5l4",
+        "dataset_version": "2026-10-20T11:03:45.515312+00:00",
+        "snapshot_digest": "58d7eff0c9f4d1b5b84895c5ce434d8114a2b9921bc869defcbacb6dff1bf4c3",
+        "items_count": 1,
+        "items": [
+          {
+            "id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+            "input": {
+              "question": "Compute (135 + 287) * 3. You must call calculator.",
+              "streaming": false
+            },
+            "expected_output": {
+              "answer": "1266"
+            },
+            "metadata": {
+              "issue": 214,
+              "purpose": "synthetic calculator task"
+            }
+          }
+        ]
+      },
+      "comparison": {
+        "environment": "issue217-hardening-20261020t110330z",
+        "baseline_snapshot_id": null,
+        "baseline_binding_revision": null,
+        "baseline_resolution": "none",
+        "comparison_policy_version": "comparison-v1"
+      },
+      "agent": {
+        "agent_id": "issue217-20261020t110335z",
+        "version": "v1",
+        "agent_version_id": "dcbcfc28-99c3-4fe7-95e9-59f45a8d2bb3",
+        "endpoint": "http://127.0.0.1:19091/api/v1/prediction/8b8d2606-379c-42c4-9ac9-08dcbf9490e8",
+        "protocol": "HTTP_JSON",
+        "method": "POST",
+        "request_mapping": {
+          "question": "input.question",
+          "streaming": "input.streaming"
+        },
+        "usage_cost_mapping": null,
+        "credential_ref": null,
+        "credential_id": null,
+        "spec_digest": "3ce94f63741ba395db6a8ef0c0e6a60730759b02bdadf32a4da31fa1471f784b",
+        "artifact_ref": "docker:flowiseai/flowise@sha256:cf880b17b1290fbaebebc76c33954bde67b3775aff95feec72a1d060cc81e43d",
+        "is_idempotent": false,
+        "environment": "issue217-hardening-20261020t110330z"
+      },
+      "evaluators": [],
+      "quality_policy": {
+        "policy_id": "langfuse-managed",
+        "version": "1.0",
+        "schema_version": "1.0",
+        "rules": [
+          {
+            "evaluator_id": "issue214-20261019t084028z-judge",
+            "operator": "==",
+            "threshold": null,
+            "expected_value": true,
+            "result_type": "boolean",
+            "required": true,
+            "critical": false,
+            "unknown_handling": "unknown_not_releasable",
+            "note": null
+          },
+          {
+            "evaluator_id": "issue214-20261019t084028z-code",
+            "operator": "==",
+            "threshold": null,
+            "expected_value": true,
+            "result_type": "boolean",
+            "required": true,
+            "critical": false,
+            "unknown_handling": "unknown_not_releasable",
+            "note": null
+          }
+        ],
+        "unknown_handling": "unknown_not_releasable",
+        "description": null,
+        "policy_digest": "sha256:3a58a1493f0ec4e75d689901b81be8f399fd91ca02cd3d703980e96fb9241418"
+      },
+      "measurement_digest": "sha256:4628fbed38d4c91ac98f4c7099a2a6caa7873a3e6195bf0aeebb273165357672",
+      "runner": {
+        "runner_version": "0.2.0",
+        "build_id": "592a9178ca207ffe11e454f47e76c6eaffdaa595",
+        "mapping_engine_version": "sha256-mapping-engine-v1"
+      },
+      "execution_policy": {
+        "max_concurrency": 1,
+        "timeout_seconds": 150.0,
+        "max_retries": 0,
+        "rate_limit_per_minute": 600
+      },
+      "evaluation_source": "langfuse_managed",
+      "managed_evaluation": {
+        "project_id": "cmu5a6fj500aoad0jvrckiypb",
+        "environment": "issue217-hardening-20261020t110330z",
+        "target": {
+          "name": "remote-agent-http",
+          "type": "TOOL"
+        },
+        "scores": [
+          {
+            "name": "issue214-20261019t084028z-judge",
+            "data_type": "boolean",
+            "required": true,
+            "rule_id": "cmvgks0ny003qad0j8rps58cx",
+            "evaluator_id": "cmvf082z1002uad0gkb42lwel"
+          },
+          {
+            "name": "issue214-20261019t084028z-code",
+            "data_type": "boolean",
+            "required": true,
+            "rule_id": "cmvgks495003vad0jbgak6f61",
+            "evaluator_id": "cmvf083f50034ad0gbpddxpar"
+          }
+        ],
+        "schema_version": "1.0",
+        "source": "EVAL",
+        "execution_semantics": "langfuse_latest",
+        "acceptance_digest": "sha256:4628fbed38d4c91ac98f4c7099a2a6caa7873a3e6195bf0aeebb273165357672"
+      },
+      "contract_digests": {
+        "schema_version": "comparison-contract-1",
+        "measurement": {
+          "digest": "sha256:4628fbed38d4c91ac98f4c7099a2a6caa7873a3e6195bf0aeebb273165357672",
+          "version": "1.2"
+        },
+        "quality_policy": {
+          "digest": "sha256:3a58a1493f0ec4e75d689901b81be8f399fd91ca02cd3d703980e96fb9241418",
+          "version": "langfuse-managed@1.0"
+        },
+        "aggregation_comparison": {
+          "digest": "sha256:7c761e6f314e8397ad766e02d5071687a2995da6a76cea4d7d187c5c2252499b",
+          "version": "comparison-v1"
+        }
+      }
+    },
+    "langfuse_experiment_id": null,
+    "langfuse_experiment_url": null,
+    "langfuse_sync_status": "PENDING",
+    "langfuse_sync_error": null,
+    "links": {
+      "langfuse_experiment": null,
+      "langfuse_trace": null
+    },
+    "progress": {
+      "total": 1,
+      "pending": 1,
+      "queued": 0,
+      "running": 0,
+      "retry_wait": 0,
+      "succeeded": 0,
+      "failed": 0,
+      "timed_out": 0,
+      "cancelled": 0,
+      "completed": 0,
+      "percentage": 0.0,
+      "attempts": 0,
+      "retries": 0,
+      "allowed_actions": [
+        "run",
+        "cancel"
+      ],
+      "action_reasons": {
+        "resume": "没有被取消的用例可供恢复",
+        "retry_failed": "当前评测没有失败或超时的用例",
+        "retry_evaluation": "当前没有失败或缺失的评测需要重评"
+      },
+      "recoverable_evaluation_count": 0,
+      "evaluating": 0
+    },
+    "cancel_requested_at": null,
+    "status_reason": null,
+    "allowed_actions": [
+      "run",
+      "cancel"
+    ],
+    "created_by": null,
+    "created_at": "2026-10-20T11:03:46.018316",
+    "started_at": null,
+    "completed_at": null
+  }
+}

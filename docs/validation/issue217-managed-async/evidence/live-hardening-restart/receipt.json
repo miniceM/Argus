@@ -1,0 +1,25 @@
+{
+  "status": "PASS",
+  "mode": "automatic-convergence-without-manual-collect",
+  "environment": "issue217-hardening-20261020t113145z",
+  "launch_id": "2e3a3f4f-a4a6-499d-bd26-fcc9c9cbf194",
+  "item_id": "696ea11c-e3d7-44dd-960d-efdfc9c9f949",
+  "trace_id": "7bbffff21aa767dbbcb1bb3b6704a7fb",
+  "observation_id": "5133e55f63c0ce86",
+  "rule_ids": [
+    "cmvgls9670012ad0kuqpamhva",
+    "cmvglscqe0017ad0kv2plgsp6"
+  ],
+  "score_ids": [
+    "db17d1d7-2770-5f58-895f-139b1b0e5144",
+    "818f1d4c-f072-57fa-b55a-bca8b3439972"
+  ],
+  "effective_result_count": 2,
+  "http_attempts": 1,
+  "score_write_requests": 0,
+  "manual_collect_calls": 0,
+  "eval_status": "succeeded",
+  "quality_conclusion": "pass",
+  "at": "2026-10-20T11:32:32.886292+00:00",
+  "recovery_sha256": "4bcbe9bb2347ffd8b472a0e15fe6b2a2eccaf70f0365b6cded0f704fe8bf05fd"
+}

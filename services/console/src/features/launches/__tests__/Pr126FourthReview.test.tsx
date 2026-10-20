@@ -1046,6 +1046,31 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     expect(screen.getByText(/score_means 仅为可比 Case 的聚合趋势/)).toBeInTheDocument();
   });
 
+  it("#215: Manifest 区展示已保存的外部采纳条件而不声称远程实现已冻结", () => {
+    const launch = structuredClone(mockLaunch) as any;
+    launch.quality_conclusion = "unknown";
+    launch.manifest.evaluation_source = "langfuse_managed";
+    launch.manifest.evaluators = [];
+    launch.manifest.managed_evaluation = {
+      project_id: "frozen-project-215", environment: "production",
+      execution_semantics: "langfuse_latest", source: "EVAL",
+      target: { name: "remote-agent-http", type: "TOOL" },
+      scores: [{ name: "accuracy", data_type: "numeric", required: true, rule_id: "frozen-rule-215" }],
+    };
+    launch.manifest.quality_policy.rules = [
+      { evaluator_id: "accuracy", result_type: "numeric", operator: ">=", threshold: 0.8, required: true },
+    ];
+    render(<QueryClientProvider client={queryClient}>
+      <ManifestAuditTab launch={launch} activeSnapshot={null} />
+    </QueryClientProvider>);
+    const region = screen.getByRole("region", { name: "Langfuse Managed 采纳契约" });
+    expect(region).toHaveTextContent("frozen-project-215");
+    expect(region).toHaveTextContent("frozen-rule-215");
+    expect(region).toHaveTextContent("0.8");
+    expect(region).toHaveTextContent("远程执行实现并未冻结");
+    expect(region).toHaveTextContent("待收集评分，暂不可用于正式发布");
+  });
+
   it("REVIEW: frozen policy renders all strict and inclusive numeric operators", () => {
     const launch = structuredClone(mockLaunch) as any;
     launch.manifest.quality_policy.rules = [

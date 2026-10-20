@@ -1,0 +1,23 @@
+........................................                                 [100%]
+=============================== warnings summary ===============================
+tests/test_issue_215_managed_evaluation.py: 160 warnings
+tests/test_launch_manifest_freeze.py: 47 warnings
+  $PYTHON_VENV/lib/python3.12/site-packages/sqlalchemy/sql/schema.py:4296: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return util.wrap_callable(lambda ctx: fn(), fn)  # type: ignore[call-arg, no-any-return, no-untyped-call]  # noqa: E501
+
+tests/test_issue_215_managed_evaluation.py: 48 warnings
+tests/test_launch_manifest_freeze.py: 54 warnings
+  $REPO/services/eval-runner/app/manifest.py:423: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    created_at=datetime.utcnow(),
+
+tests/test_issue_215_managed_evaluation.py: 48 warnings
+tests/test_launch_manifest_freeze.py: 54 warnings
+  $REPO/services/eval-runner/app/manifest.py:424: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    updated_at=datetime.utcnow(),
+
+tests/test_issue_215_managed_evaluation.py::test_api_creates_and_queries_immutable_contract
+  $PYTHON_VENV/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+40 passed, 412 warnings in 1.97s

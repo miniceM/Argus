@@ -1,0 +1,70 @@
+import { test, expect } from "@playwright/test";
+import path from "node:path";
+import { writeFile } from "node:fs/promises";
+
+// 真实本地 API/SQLite；不访问 Langfuse 或模型，外部 ID 是契约测试值。
+const evidence = path.resolve(process.cwd(), "../../docs/validation/issue215-managed-evaluation/evidence");
+
+test("#215 显式配置 → 服务端拒绝无效规则 → 创建/刷新读回不可变契约", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/launches/new");
+  const source = page.getByLabel("评测来源 (Evaluation Source)");
+  await expect(source).toHaveValue("builtin");
+  await source.selectOption("langfuse_managed");
+  await expect(page.getByText("待收集评分，暂不可用于正式发布。执行成功不等于质量 PASS。")).toBeVisible();
+  await expect(page.getByTestId("evaluator-catalog")).toHaveCount(0);
+  await page.getByLabel("Langfuse Project ID").fill("issue215-contract-test-project");
+  await page.getByLabel("Score 名称 1").fill("correctness");
+  await page.getByLabel("Rule ID 1").fill("issue215-existing-rule-reference");
+  await page.getByLabel("Evaluator ID 1", { exact: true }).fill("issue215-existing-evaluator-reference");
+  await page.getByRole("button", { name: "添加外部 Score" }).click();
+  await page.getByLabel("Score 名称 2").fill("correctness");
+  await page.getByLabel("Rule ID 2").fill("issue215-second-rule-reference");
+  const invalid = page.waitForResponse((response) => response.url().endsWith("/api/v1/experiment-launches") && response.request().method() === "POST");
+  await page.getByRole("button", { name: /创建评测任务/ }).click();
+  const rejected = await invalid;
+  expect(rejected.status()).toBe(400);
+  expect((await rejected.json()).detail.code).toBe("MANAGED_SCORE_DUPLICATE");
+  await expect(page.getByText(/Score 名称重复/)).toBeVisible();
+  await page.screenshot({ path: path.join(evidence, "creation-error-desktop.png"), fullPage: true });
+  await page.getByLabel("Score 名称 2").fill("accuracy");
+  await page.getByLabel("Score 类型 2").selectOption("numeric");
+  await page.getByLabel("阈值 2").fill("0.8");
+  await page.screenshot({ path: path.join(evidence, "creation-desktop.png"), fullPage: true });
+  await source.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(evidence, "creation-source-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await source.scrollIntoViewIfNeeded();
+  const fields = page.getByRole("region", { name: "Langfuse Managed 配置" }).locator("input, select, button");
+  for (const field of await fields.all()) {
+    const box = await field.boundingBox();
+    expect(box, "配置控件必须有布局区域").not.toBeNull();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+  }
+  await page.screenshot({ path: path.join(evidence, "creation-mobile.png"), fullPage: true });
+  const createdResponse = page.waitForResponse((response) => response.url().endsWith("/api/v1/experiment-launches") && response.request().method() === "POST");
+  await page.getByRole("button", { name: /创建评测任务/ }).click();
+  const response = await createdResponse;
+  expect(response.status()).toBe(201);
+  const created = await response.json();
+  await writeFile(path.join(evidence, "create-request.json"), JSON.stringify(response.request().postDataJSON(), null, 2) + "\n");
+  await writeFile(path.join(evidence, "frozen-manifest.json"), JSON.stringify(created.manifest, null, 2) + "\n");
+  expect(created.manifest.evaluation_source).toBe("langfuse_managed");
+  expect(created.manifest.evaluators).toEqual([]);
+  expect(created.manifest.managed_evaluation.scores).toHaveLength(2);
+  expect(created.manifest.managed_evaluation.execution_semantics).toBe("langfuse_latest");
+  expect(created.quality_conclusion.toLowerCase()).toBe("unknown");
+  await page.waitForURL(`**/launches/${created.id}`);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByRole("tab", { name: /快照与审计/ }).click();
+  const frozen = page.getByRole("region", { name: "Langfuse Managed 采纳契约" });
+  await expect(frozen).toContainText("issue215-existing-rule-reference");
+  await expect(frozen).toContainText("远程执行实现并未冻结");
+  await expect(frozen).toContainText("0.8");
+  await page.reload();
+  await expect(frozen).toContainText("issue215-existing-rule-reference");
+  const read = await page.request.get(`/api/v1/experiment-launches/${created.id}`);
+  expect((await read.json()).manifest).toEqual(created.manifest);
+  await page.screenshot({ path: path.join(evidence, "manifest-desktop.png") });
+});

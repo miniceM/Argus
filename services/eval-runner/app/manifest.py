@@ -23,6 +23,7 @@ from .evaluator_binding import (
     manifest_measurement_digest,
 )
 from .evaluators import EvaluatorSelectionError, default_evaluator_registry
+from .managed_evaluation import ManagedEvaluationError, freeze_managed_evaluation
 from .quality_policy import (
     QUALITY_POLICY_SCHEMA_VERSION,
     QualityRule,
@@ -79,6 +80,8 @@ class LaunchService:
         dataset_client: Any | None = None,
         allow_run_scope: bool = False,
         quality_policy_rules: list[dict[str, Any]] | None = None,
+        evaluation_source: str = "builtin",
+        managed_evaluation: dict[str, Any] | None = None,
     ) -> ExperimentLaunchRecord:
         from .baselines import normalize_environment
 
@@ -87,6 +90,20 @@ class LaunchService:
         identity_error = validate_runner_identity(runner_identity.model_dump(), runner_identity)
         if identity_error:
             raise ValueError(f"{identity_error}: runner build identity is unavailable")
+        managed_contract = None
+        managed_policy = None
+        if evaluation_source not in ("builtin", "langfuse_managed"):
+            raise ManagedEvaluationError("EVALUATION_SOURCE_INVALID", "未知的 Evaluation Source。")
+        if evaluation_source == "builtin" and managed_evaluation is not None:
+            raise ManagedEvaluationError("EVALUATION_SOURCE_CONFLICT", "Builtin 不能携带 Managed 配置。")
+        if evaluation_source == "langfuse_managed":
+            if managed_evaluation is None:
+                raise ManagedEvaluationError("MANAGED_CONTRACT_REQUIRED", "必须提供 Managed Score 采纳契约。")
+            if evaluator_ids is not None or evaluator_selections is not None:
+                raise ManagedEvaluationError("EVALUATION_SOURCE_CONFLICT", "Managed 不能混用 Builtin Evaluator。")
+            managed_contract, managed_policy = freeze_managed_evaluation(
+                managed_evaluation, environment=normalized_environment, policy_rules=quality_policy_rules,
+            )
         # ---- Issue #80: normalize the request into explicit (id, version) selections ----
         if evaluator_selections is not None and evaluator_ids is not None:
             raise EvaluatorSelectionError(
@@ -94,7 +111,9 @@ class LaunchService:
                 code="EVALUATOR_SELECTION_AMBIGUOUS",
             )
 
-        if evaluator_selections is not None:
+        if managed_contract is not None:
+            requested = []
+        elif evaluator_selections is not None:
             if len(evaluator_selections) == 0:
                 raise EvaluatorSelectionError(
                     "evaluator_selections must not be empty. A launch must have at least one evaluator.",
@@ -162,7 +181,9 @@ class LaunchService:
         item_bindings = [
             binding for binding in frozen_bindings.values() if binding.scope == "item"
         ]
-        if quality_policy_rules is not None:
+        if managed_policy is not None:
+            policy = managed_policy
+        elif quality_policy_rules is not None:
             policy = freeze_quality_policy(
                 policy_id=str(quality_policy_rules and "custom") or "custom",
                 version=QUALITY_POLICY_SCHEMA_VERSION,
@@ -187,6 +208,8 @@ class LaunchService:
             "name": name,
             "quality_policy_digest": policy.policy_digest,
         }
+        if managed_contract is not None:
+            payload_data["managed_evaluation"] = managed_contract
         payload_digest = compute_payload_digest(payload_data)
 
         # Upfront idempotency check: never call external services if key already exists
@@ -284,6 +307,11 @@ class LaunchService:
                 "rate_limit_per_minute": ver_rec.rate_limit_per_minute,
             },
         }
+
+        if managed_contract is not None:
+            manifest["evaluation_source"] = "langfuse_managed"
+            manifest["managed_evaluation"] = managed_contract
+            manifest["measurement_digest"] = managed_contract["acceptance_digest"]
 
         # ---- Issue #86: freeze the three comparison contracts independently ----
         # Measurement, judgement and comparison semantics move independently, so

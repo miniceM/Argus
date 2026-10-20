@@ -136,6 +136,14 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
 
   return (
     <div className="space-y-6">
+      {manifest.evaluation_source === "langfuse_managed" && <section className="space-y-3 rounded-xl border border-border bg-surface p-5" aria-label="Langfuse Managed 采纳契约">
+        <h3 className="text-sm font-bold">Langfuse Managed Evaluation</h3>
+        <p className="text-sm text-timeout">待收集评分，暂不可用于正式发布。</p>
+        <p className="text-xs text-muted-foreground">已冻结 Score 采纳条件；Langfuse Rule 遵循当前 latest，远程执行实现并未冻结。以下为当前所选 Manifest 的原始配置，不从外部 Rule 回填。</p>
+        <JsonViewer data={manifest.managed_evaluation ?? {}} />
+        <h4 className="text-sm font-semibold">对应 QualityPolicy</h4>
+        <JsonViewer data={manifest.quality_policy ?? {}} />
+      </section>}
       {/* 1. 四维版本不可变快照卡片 (4D Manifest) */}
       <div className="bg-surface border border-border rounded-xl p-5 shadow-xs space-y-4">
         <div className="flex items-center justify-between border-b border-border pb-3 flex-wrap gap-2">

@@ -23,6 +23,7 @@ from .evaluation_result_store import persist_typed_results, result_to_payload
 from .evaluator_binding import evaluate_frozen_item
 from .evaluators import EvaluatorSelectionError
 from .executor import RemoteAgentExecutor
+from .managed_evaluation import ManagedEvaluationError
 from .models import (
     EvaluationResultResponse,
     EvaluationRetryBlockedItem,
@@ -89,6 +90,8 @@ def create_experiment_launch(
             name=payload.name,
             idempotency_key=effective_key,
             max_concurrency=payload.max_concurrency,
+            evaluation_source="builtin" if payload.evaluation_source is None else payload.evaluation_source,
+            managed_evaluation=payload.managed_evaluation.model_dump(exclude_none=True) if payload.managed_evaluation else None,
             evaluator_ids=payload.evaluator_ids,
             evaluator_selections=(
                 [sel.model_dump() for sel in payload.evaluator_selections]
@@ -102,6 +105,8 @@ def create_experiment_launch(
             ),
         )
         return _enrich_launch(launch, orchestrator)
+    except ManagedEvaluationError as exc:
+        raise HTTPException(status_code=400, detail=exc.to_payload()) from exc
     except EnvironmentContractError as exc:
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=exc.to_payload()) from exc
     except QualityPolicyError as exc:

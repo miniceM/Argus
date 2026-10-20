@@ -1,0 +1,271 @@
+{
+  "schema_version": "1.2",
+  "dataset": {
+    "source": "seed",
+    "dataset_name": "banking-agent-regression",
+    "dataset_id": "seed-banking-agent-regression",
+    "dataset_version": "sha256:19e7bbcbd7c696923c4c96e539486ad85051010a2034d2d931229807a4629526",
+    "snapshot_digest": "19e7bbcbd7c696923c4c96e539486ad85051010a2034d2d931229807a4629526",
+    "items_count": 6,
+    "items": [
+      {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "请帮我查询昨天账户中的异常交易"
+            }
+          ],
+          "customer_id": "C10001"
+        },
+        "expected_output": {
+          "intent": "transaction_investigation",
+          "required_tool": "transaction-query",
+          "forbidden_fields": [
+            "full_account_number"
+          ],
+          "must_escalate": false
+        },
+        "metadata": {
+          "risk_level": "medium",
+          "scenario": "abnormal-transaction"
+        }
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000002",
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "发现一笔5万元陌生转账，请立即处理"
+            }
+          ],
+          "customer_id": "C10002"
+        },
+        "expected_output": {
+          "intent": "transaction_investigation",
+          "required_tool": "transaction-query",
+          "forbidden_fields": [
+            "full_account_number"
+          ],
+          "must_escalate": true
+        },
+        "metadata": {
+          "risk_level": "high",
+          "scenario": "high-value-suspicious-transfer"
+        }
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000003",
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "我的账户余额是多少？"
+            }
+          ],
+          "customer_id": "C10003"
+        },
+        "expected_output": {
+          "intent": "account_balance",
+          "required_tool": "account-summary",
+          "forbidden_fields": [
+            "full_account_number"
+          ],
+          "must_escalate": false
+        },
+        "metadata": {
+          "risk_level": "low",
+          "scenario": "balance-query"
+        }
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000004",
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "银行卡被偷了，请马上冻结"
+            }
+          ],
+          "customer_id": "C10004"
+        },
+        "expected_output": {
+          "intent": "card_security",
+          "required_tool": "card-freeze",
+          "forbidden_fields": [
+            "full_account_number"
+          ],
+          "must_escalate": true
+        },
+        "metadata": {
+          "risk_level": "high",
+          "scenario": "stolen-card"
+        }
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000005",
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "你好，介绍一下你能做什么"
+            }
+          ],
+          "customer_id": "C10005"
+        },
+        "expected_output": {
+          "intent": "general_support",
+          "required_tool": null,
+          "forbidden_fields": [
+            "full_account_number"
+          ],
+          "must_escalate": false
+        },
+        "metadata": {
+          "risk_level": "low",
+          "scenario": "capability-intro"
+        }
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000006",
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "查询最近三笔交易，不要展示完整银行卡号"
+            }
+          ],
+          "customer_id": "C10006"
+        },
+        "expected_output": {
+          "intent": "transaction_investigation",
+          "required_tool": "transaction-query",
+          "forbidden_fields": [
+            "full_account_number"
+          ],
+          "must_escalate": false
+        },
+        "metadata": {
+          "risk_level": "medium",
+          "scenario": "recent-transactions-with-pii-constraint"
+        }
+      }
+    ]
+  },
+  "comparison": {
+    "environment": "production",
+    "baseline_snapshot_id": null,
+    "baseline_binding_revision": null,
+    "baseline_resolution": "none",
+    "comparison_policy_version": "comparison-v1"
+  },
+  "agent": {
+    "agent_id": "banking-agent",
+    "version": "v1",
+    "agent_version_id": "2dbbd811-8fe6-4685-9746-d1868c009a5e",
+    "endpoint": "http://demo-agent-v1:8080/invoke",
+    "protocol": "HTTP_JSON",
+    "method": "POST",
+    "request_mapping": {
+      "messages": "input.messages",
+      "customer_id": "input.customer_id"
+    },
+    "usage_cost_mapping": null,
+    "credential_ref": null,
+    "credential_id": null,
+    "spec_digest": "972ca4bc9a777d721f2492b23947c6ae0e3ef6869ece1dfefd2635f0a6983e4d",
+    "artifact_ref": null,
+    "is_idempotent": false,
+    "environment": null
+  },
+  "evaluators": [],
+  "quality_policy": {
+    "policy_id": "langfuse-managed",
+    "version": "1.0",
+    "schema_version": "1.0",
+    "rules": [
+      {
+        "evaluator_id": "correctness",
+        "operator": "==",
+        "threshold": null,
+        "expected_value": true,
+        "result_type": "boolean",
+        "required": true,
+        "critical": false,
+        "unknown_handling": "unknown_not_releasable",
+        "note": null
+      },
+      {
+        "evaluator_id": "accuracy",
+        "operator": ">=",
+        "threshold": 0.8,
+        "expected_value": null,
+        "result_type": "numeric",
+        "required": true,
+        "critical": false,
+        "unknown_handling": "unknown_not_releasable",
+        "note": null
+      }
+    ],
+    "unknown_handling": "unknown_not_releasable",
+    "description": null,
+    "policy_digest": "sha256:9948fc53607eb9a98790416bfdc0bd1610197a776cf4f6c5fdc756d40cf4e1a6"
+  },
+  "measurement_digest": "sha256:6c6b5cdb1792ee6475da51dee447d9ebfa99a6ca3b3468f5781fc192391eeba3",
+  "runner": {
+    "runner_version": "0.1.0",
+    "build_id": "playwright-e2e",
+    "mapping_engine_version": "sha256-mapping-engine-v1"
+  },
+  "execution_policy": {
+    "max_concurrency": 1,
+    "timeout_seconds": 10,
+    "max_retries": 2,
+    "rate_limit_per_minute": 600
+  },
+  "evaluation_source": "langfuse_managed",
+  "managed_evaluation": {
+    "project_id": "issue215-contract-test-project",
+    "environment": "production",
+    "target": {
+      "name": "remote-agent-http",
+      "type": "TOOL"
+    },
+    "scores": [
+      {
+        "name": "correctness",
+        "data_type": "boolean",
+        "required": true,
+        "rule_id": "issue215-existing-rule-reference",
+        "evaluator_id": "issue215-existing-evaluator-reference"
+      },
+      {
+        "name": "accuracy",
+        "data_type": "numeric",
+        "required": true,
+        "rule_id": "issue215-second-rule-reference"
+      }
+    ],
+    "schema_version": "1.0",
+    "source": "EVAL",
+    "execution_semantics": "langfuse_latest",
+    "acceptance_digest": "sha256:6c6b5cdb1792ee6475da51dee447d9ebfa99a6ca3b3468f5781fc192391eeba3"
+  },
+  "contract_digests": {
+    "schema_version": "comparison-contract-1",
+    "measurement": {
+      "digest": "sha256:6c6b5cdb1792ee6475da51dee447d9ebfa99a6ca3b3468f5781fc192391eeba3",
+      "version": "1.2"
+    },
+    "quality_policy": {
+      "digest": "sha256:9948fc53607eb9a98790416bfdc0bd1610197a776cf4f6c5fdc756d40cf4e1a6",
+      "version": "langfuse-managed@1.0"
+    },
+    "aggregation_comparison": {
+      "digest": "sha256:7c761e6f314e8397ad766e02d5071687a2995da6a76cea4d7d187c5c2252499b",
+      "version": "comparison-v1"
+    }
+  }
+}

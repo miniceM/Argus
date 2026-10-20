@@ -709,6 +709,30 @@ Console：Comparison Report 新增「Langfuse 同步」面板，逐范围显示�
 并显式声明"同步失败不会改变上方质量结论、结果修订或 digest"。同步状态与执行、质量结论
 分区展示，互不冒充。
 
+#### 8.3.8 Launch 级 Langfuse Managed 采纳契约（Issue #215）
+
+Builtin 是默认来源。旧请求/旧 Manifest 不回填新字段，仍使用原有精确版本的
+`EvaluatorBinding` 和 QualityPolicy。显式选择 `langfuse_managed` 的 Launch
+不混用本地 Evaluator；Manifest 的 `evaluators` 为空，新增
+`evaluation_source` 与 `managed_evaluation`，既有 `quality_policy` 保存对应冻结规则。
+不增加数据库表、外部 Evaluator Registry、Prompt/Code 编辑器或远程版本锁。
+
+`managed_evaluation` 保存 project/environment、期望 Score、必要性、Observation
+目标和已有 Rule/Evaluator 引用；固定 `source=EVAL` 与
+`execution_semantics=langfuse_latest`。`acceptance_digest` 和独立的
+`policy_digest` 标识已保存的采纳条件与判定规则，**不标识远程执行实现版本**。
+Rule 更新不会回写本 Launch 的条件，也不意味着未来执行仍使用旧 Evaluator。
+
+API 完整类型以 [OpenAPI](docs/openapi.json) 为准；[创建请求和 Frozen Manifest
+实例、错误码与验收记录](docs/validation/issue215-managed-evaluation/README.md) 说明本阶段可操作范围。
+数值/布尔/分类复用既有 QualityPolicy 校验；text 仅为可选证据，不进入判定规则。
+当前目标限定为 #214 验证过的 `remote-agent-http / TOOL`，不能采纳无业务 IO 的 replay span。
+
+本项只有配置与诊断，不回收或采纳 Score：HTTP 执行仍可成功，但评测返回
+`LANGFUSE_MANAGED_SCORES_PENDING`，质量 UNKNOWN、不可发布。即使调用方传入
+本地 typed 结果，也不能绕过该停机线。自动查询/关联、异步收集/恢复、正式 Gate
+采纳与完整 Console 流程分别属于 #216～#219。
+
 ### 8.4 ExperimentItemExecution
 
 表示单个 Dataset Item 的执行状态：

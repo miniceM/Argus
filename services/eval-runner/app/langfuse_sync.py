@@ -30,7 +30,11 @@ from .langfuse_projection import (
     scope_state_from_tasks,
     stable_score_id,
 )
-from .langfuse_run_items import link_dataset_run_item, resolve_run_item_strategy
+from .langfuse_run_items import (
+    link_dataset_run_item,
+    read_managed_observation_projection,
+    resolve_run_item_strategy,
+)
 from .state_machine import TERMINAL_LAUNCH_STATUSES
 
 logger = logging.getLogger("argus.langfuse_sync")
@@ -651,6 +655,7 @@ class LangfuseOutboxSyncer:
 
         error_msg: str | None = None
         run_id: str | None = None
+        managed_observation_digest: str | None = None
         lease_lost = threading.Event()
 
         if client_st != "READY" or lf is None:
@@ -758,6 +763,12 @@ class LangfuseOutboxSyncer:
                     }
                     if strategy == "otel":
                         launch_kwargs["dataset_id"] = read_launch_dataset_id(self.db_mgr, payload["launch_id"])
+                        projection = read_managed_observation_projection(self.db_mgr, payload)
+                        if projection is not None:
+                            launch_kwargs["observation_projection"] = projection
+                            managed_observation_digest = dict(projection["attributes"])[
+                                "langfuse.observation.metadata.argus_checkpoint_digest"
+                            ]
                         launch_kwargs.update({
                             "langfuse_base_url": settings.langfuse_base_url,
                             "langfuse_public_key": os.getenv("LANGFUSE_PUBLIC_KEY", ""),
@@ -864,6 +875,8 @@ class LangfuseOutboxSyncer:
                 if run_id:
                     updated_scores = dict(task.scores_payload or {})
                     updated_scores["_dataset_run_id"] = str(run_id)
+                    if managed_observation_digest is not None:
+                        updated_scores["_managed_observation_digest"] = managed_observation_digest
                     task.scores_payload = updated_scores
                 task_succeeded = True
             else:

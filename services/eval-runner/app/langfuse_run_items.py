@@ -71,6 +71,7 @@ def link_dataset_run_item(
     langfuse_secret_key: str | None = None,
     timeout_seconds: float = 30.0,
     invoke_legacy: Callable[..., Any] | None = None,
+    observation_projection: dict[str, Any] | None = None,
 ) -> str | None:
     """One-shot run-item dispatch.
 
@@ -113,6 +114,7 @@ def link_dataset_run_item(
                 secret_key=langfuse_secret_key,
             ),
             timeout_seconds=timeout_seconds,
+            **(observation_projection or {}),
         )
         return run_id
 
@@ -126,3 +128,55 @@ class OtelProjectionCredentials:
         self.base_url = base_url
         self.public_key = public_key
         self.secret_key = secret_key
+
+
+def read_managed_observation_projection(db_mgr: Any, payload: dict[str, Any]) -> dict[str, Any] | None:
+    """从成功 Checkpoint 为现有 Outbox 恢复可评分 TOOL，不依赖 SDK 的内存缓冲。
+
+    同一 trace/span、固定时间和输入输出保证重放身份稳定；Builtin/失败执行
+    仍使用原始关联标记。Checkpoint 损坏/失配必须走现有 Outbox 失败恢复，
+    不能伪造空输入输出，更不能重调 Agent。
+    """
+    import json
+    from datetime import UTC
+
+    from .db_models import ExperimentItemExecutionRecord, ExperimentLaunchRecord
+    from .execution_checkpoint import CheckpointUnavailableError, load_recoverable_checkpoint
+    from .managed_evaluation import evaluation_source
+
+    with db_mgr.get_session() as session:
+        launch = session.get(ExperimentLaunchRecord, payload["launch_id"])
+        if launch is None or evaluation_source(launch.manifest) != "langfuse_managed":
+            return None
+        item = session.get(ExperimentItemExecutionRecord, payload["item_id"])
+        if item is None or item.execution_status != "succeeded":
+            return None
+        checkpoint = load_recoverable_checkpoint(
+            session, item_execution_id=item.id, dispatch_generation=payload["dispatch_generation"],
+        )
+        if (item.dispatch_generation != payload["dispatch_generation"]
+                or checkpoint.trace_id != payload["trace_id"]
+                or checkpoint.observation_id != payload.get("observation_id")):
+            raise CheckpointUnavailableError("CHECKPOINT_MISMATCH")
+        contract = (launch.manifest or {}).get("managed_evaluation") or {}
+        created = checkpoint.created_at
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=UTC)
+        attributes = [
+            ("langfuse.observation.type", "tool"),
+            ("langfuse.environment", contract["environment"]),
+            ("langfuse.observation.input", json.dumps(
+                {"agent": f"{launch.agent_id}:{launch.agent_version}", "request": checkpoint.input_payload},
+                ensure_ascii=False, allow_nan=False,
+            )),
+            ("langfuse.observation.output", json.dumps(checkpoint.agent_output, ensure_ascii=False, allow_nan=False)),
+            ("langfuse.observation.metadata.launch_id", launch.id),
+            ("langfuse.observation.metadata.item_id", item.id),
+            ("langfuse.observation.metadata.generation", str(payload["dispatch_generation"])),
+            ("langfuse.observation.metadata.argus_checkpoint_digest", checkpoint.output_digest),
+        ]
+        return {
+            "span_name": contract["target"]["name"],
+            "start_unix_nano": int(created.timestamp() * 1_000_000_000),
+            "attributes": attributes,
+        }

@@ -75,6 +75,8 @@ TERMINAL_CODES = frozenset(
         "CHECKPOINT_DISABLED",
         "CHECKPOINT_BINDING_MISMATCH",
         "CHECKPOINT_MISMATCH",
+        "OBSERVATION_PROJECTION_FAILED",
+        "OBSERVATION_PROJECTION_MISSING",
     }
 )
 
@@ -240,6 +242,68 @@ def reconcile_managed_interruption(session, observed, *, require_expired: bool =
         item.eval_error = MANAGED_PENDING_MESSAGE
         item.evaluation_error = "EVALUATION_LEASE_EXPIRED: 评分收集已退避重试，不会再次调用 Agent。"
     return True
+
+
+
+def _managed_projection_reason(db_mgr, claim, output_digest: str) -> str | None:
+    """OTLP Managed 必须先有持久发布凭据，不能把仅关联标记的 SYNCED 当作可评分。
+
+    旧版本已 SYNCED 的空标记只在每个人工收集周期补投一次；复用同一 Outbox、
+    Checkpoint 和发布租约，不另建任务。失败/新周期的预算独立且均有上界。
+    """
+    from .db_models import ExperimentItemExecutionRecord as Item
+    from .db_models import ExperimentLaunchRecord as Launch
+    from .db_models import LangfuseSyncTaskRecord as Task
+    from .langfuse_run_items import resolve_run_item_strategy
+
+    if resolve_run_item_strategy() != "otel":
+        return None
+    is_pg = db_mgr.engine.dialect.name == "postgresql"
+    with db_mgr.get_session() as session:
+        if not is_pg:
+            session.execute(update(Launch).where(Launch.id == claim["launch_id"]).values(id=Launch.id))
+        launch_stmt = select(Launch).where(Launch.id == claim["launch_id"])
+        if is_pg:
+            launch_stmt = launch_stmt.with_for_update()
+        launch = session.scalar(launch_stmt)
+        stmt = select(Item).where(Item.id == claim["item_id"])
+        if is_pg:
+            stmt = stmt.with_for_update()
+        item = session.scalar(stmt)
+        if not launch or launch.cancel_requested_at or launch.status in ("CANCELLING", "CANCELLED"):
+            return "EVALUATION_CANCELLED"
+        if (not item or item.evaluation_generation != claim["evaluation_generation"]
+                or item.evaluation_lease_token != claim["lease_token"]
+                or item.dispatch_generation != claim["dispatch_generation"]
+                or _as_utc(item.evaluation_lease_expires_at) is None
+                or _as_utc(item.evaluation_lease_expires_at) <= _now()):
+            return "LEASE_LOST"
+        stmt = select(Task).where(
+            Task.item_id == item.id, Task.dispatch_generation == item.dispatch_generation,
+            Task.task_type == "FULL_EVAL_SYNC",
+        )
+        if is_pg:
+            stmt = stmt.with_for_update()
+        task = session.scalar(stmt)
+        if task is None:
+            return "OBSERVATION_PROJECTION_MISSING"
+        payload = dict(task.scores_payload or {})
+        if payload.get("_managed_observation_digest") == output_digest:
+            return None
+        epoch = _as_utc(item.evaluation_started_at).isoformat()
+        if task.status in ("SYNCED", "FAILED", "SKIPPED") and payload.get("_managed_observation_cycle") != epoch:
+            task.status = "PENDING"
+            task.attempts = 0
+            task.next_retry_at = _now()
+            task.owner_id = None
+            task.claim_token = None
+            task.lease_expires_at = None
+            task.last_error = "OBSERVATION_PROJECTION_PENDING: 从 Checkpoint 补发完整可评分 Observation。"
+        elif task.status in ("FAILED", "SKIPPED"):
+            return "OBSERVATION_PROJECTION_FAILED"
+        payload["_managed_observation_cycle"] = epoch
+        task.scores_payload = payload
+        return "OBSERVATION_PROJECTION_PENDING"
 
 
 def get_managed_score_client():
@@ -970,10 +1034,14 @@ def recover_managed_scores(
         "dispatch_generation": expected_dispatch,
     }
     factory = client_factory or get_managed_score_client
-    report = _collect_with_timeout(
-        db_mgr, factory, launch_id, item_id, fence=fence,
-        timeout_seconds=collect_timeout,
-    )
+    projection_reason = _managed_projection_reason(db_mgr, claim, output_digest)
+    if projection_reason is not None:
+        report = {"decisions": [{"reason": projection_reason}], "retry_after": None}
+    else:
+        report = _collect_with_timeout(
+            db_mgr, factory, launch_id, item_id, fence=fence,
+            timeout_seconds=collect_timeout,
+        )
 
     with db_mgr.get_session() as session:
         item = session.get(ExperimentItemExecutionRecord, item_id)

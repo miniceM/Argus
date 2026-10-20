@@ -716,9 +716,18 @@ class ExecutionWorker:
             async def _do_invocation_and_eval():
                 nonlocal trace_id, obs_id
                 if lf and hasattr(lf, "start_as_current_observation"):
+                    from .langfuse_run_items import resolve_run_item_strategy
+                    from .managed_evaluation import evaluation_source
+
+                    managed_otlp = (
+                        evaluation_source(manifest) == "langfuse_managed"
+                        and resolve_run_item_strategy() == "otel"
+                    )
+                    # Managed/OTLP 的可评分 TOOL 由持久 Outbox 唯一发布；
+                    # SDK 只保留传输 span，避免崩溃丢失及双生产者重复评分。
                     with lf.start_as_current_observation(
-                        as_type="tool",
-                        name="remote-agent-http",
+                        as_type="span" if managed_otlp else "tool",
+                        name="remote-agent-http-transport" if managed_otlp else "remote-agent-http",
                         input={"agent": f"{spec.agent_id}:{spec.version}", "request": mapped_payload},
                         metadata={"endpoint": spec.endpoint},
                     ) as http_obs:

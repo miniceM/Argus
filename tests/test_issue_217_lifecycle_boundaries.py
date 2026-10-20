@@ -377,3 +377,147 @@ def test_two_postgresql_reconcilers_advance_one_generation(runtime):
     assert _item(db, item_id).evaluation_generation == 2
     assert len(rows(db, EvaluationAttemptRecord, item_id)) == 1
     assert len(rows(db, ExecutionAttemptRecord, item_id)) == 1
+
+
+def test_managed_outbox_restores_scorable_observation_from_checkpoint(runtime, monkeypatch):
+    """SDK 尚未导出即进程退出，已有 Outbox 必须独立恢复真实可评分 TOOL。"""
+    import json
+    from types import SimpleNamespace
+
+    from app.db_models import (
+        ExecutionCheckpointRecord,
+        ExperimentItemExecutionRecord,
+        ExperimentLaunchRecord,
+        LangfuseSyncTaskRecord,
+    )
+    from app.langfuse_sync import LangfuseOutboxSyncer
+    from opentelemetry.proto.collector.trace.v1 import trace_service_pb2
+
+    db, launch_id, item_id, _, _ = start(runtime)
+    with db.get_session() as session:
+        item = session.get(ExperimentItemExecutionRecord, item_id)
+        checkpoint = session.scalar(select(ExecutionCheckpointRecord).where(
+            ExecutionCheckpointRecord.item_execution_id == item_id))
+        task = session.scalar(select(LangfuseSyncTaskRecord).where(LangfuseSyncTaskRecord.item_id == item_id))
+        assert task is not None
+        session.get(ExperimentLaunchRecord, launch_id).dataset_id = "dataset-langfuse"
+        for obj in (item, checkpoint, task):
+            obj.trace_id, obj.observation_id = "a" * 32, "b" * 16
+        task.dataset_version = "2026-10-20T00:00:00+00:00"
+        task.scores_payload = {**task.scores_payload, "_dataset_source": "langfuse"}
+    monkeypatch.setenv("ARGUS_LANGFUSE_RUN_ITEM_STRATEGY", "otel")
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
+    monkeypatch.setattr("app.langfuse_sync.settings", SimpleNamespace(langfuse_base_url="https://langfuse.example"))
+    captured = []
+
+    def post(payload, **kwargs):
+        req = trace_service_pb2.ExportTraceServiceRequest.FromString(payload)
+        captured.extend(span for rs in req.resource_spans for scopes in rs.scope_spans for span in scopes.spans)
+        return 202, b""
+
+    monkeypatch.setattr("app.langfuse_otel_projection.post_langfuse_projection", post)
+    client = Mock()
+    syncer = LangfuseOutboxSyncer(db, client)
+    claimed = syncer.claim_tasks()
+    assert len(claimed) == 1
+    assert syncer.process_single_task(*claimed[0])
+    assert len(captured) == 1
+    span = captured[0]
+    assert span.name == "remote-agent-http"
+    attrs = {a.key: a.value.string_value for a in span.attributes}
+    assert attrs["langfuse.observation.type"] == "tool"
+    assert attrs["langfuse.environment"] == "production"
+    assert json.loads(attrs["langfuse.observation.input"])["request"] == checkpoint.input_payload
+    assert json.loads(attrs["langfuse.observation.output"]) == {"answer": "ok"}
+    assert span.trace_id.hex() == "a" * 32 and span.span_id.hex() == "b" * 16
+    client.api.scores.create.assert_not_called()
+    assert len(rows(db, ExecutionAttemptRecord, item_id)) == 1
+
+
+@pytest.mark.parametrize("prior", ["PENDING", "SYNCED", "FAILED", "SKIPPED"])
+def test_managed_collection_waits_for_durable_observation_publication(runtime, monkeypatch, prior):
+    from app.db_models import LangfuseSyncTaskRecord
+
+    db, _, item_id, obs, good = start(runtime)
+    with db.get_session() as session:
+        task = session.scalar(select(LangfuseSyncTaskRecord).where(LangfuseSyncTaskRecord.item_id == item_id))
+        task.status = prior
+    monkeypatch.setenv("ARGUS_LANGFUSE_RUN_ITEM_STRATEGY", "otel")
+    factory = Mock(return_value=Remote(obs, [good]))
+    out = recover_managed_scores(db, item_id=item_id, evaluation_generation=1, worker_id="restore",
+                                 client_factory=factory)
+    assert out["reason"] == "RETRY_SCHEDULED"
+    factory.assert_not_called()
+    with db.get_session() as session:
+        task = session.scalar(select(LangfuseSyncTaskRecord).where(LangfuseSyncTaskRecord.item_id == item_id))
+        assert task.status == "PENDING"
+    assert _item(db, item_id).eval_status == "pending"
+    assert _item(db, item_id).quality_conclusion == "unknown"
+    assert len(rows(db, ExecutionAttemptRecord, item_id)) == 1
+
+
+@pytest.mark.parametrize("strategy", ["otel", "legacy"])
+def test_managed_sdk_and_outbox_have_one_scorable_publisher(runtime, monkeypatch, strategy):
+    from unittest.mock import MagicMock
+
+    monkeypatch.setenv("ARGUS_LANGFUSE_RUN_ITEM_STRATEGY", strategy)
+    client = MagicMock()
+    client.get_current_trace_id.return_value = "a" * 32
+    client.get_current_observation_id.return_value = "b" * 16
+    result = _run_managed_http(runtime, _managed_manifest(), {"answer": "ok"}, lf_client=client)
+    assert result[-2] == 1 and result[-1]
+    children = [call.kwargs for call in client.start_as_current_observation.call_args_list
+                if call.kwargs.get("name", "").startswith("remote-agent-http")]
+    assert len(children) == 1
+    assert children[0]["as_type"] == ("span" if strategy == "otel" else "tool")
+    assert children[0]["name"] == ("remote-agent-http-transport" if strategy == "otel" else "remote-agent-http")
+
+
+def test_managed_projection_refuses_corrupt_checkpoint(runtime):
+    from app.db_models import ExecutionCheckpointRecord, ExperimentItemExecutionRecord, LangfuseSyncTaskRecord
+    from app.execution_checkpoint import CheckpointUnavailableError
+    from app.langfuse_run_items import read_managed_observation_projection
+
+    db, _, item_id, _, _ = start(runtime)
+    with db.get_session() as session:
+        cp = session.scalar(select(ExecutionCheckpointRecord).where(ExecutionCheckpointRecord.item_execution_id == item_id))
+        cp.agent_output = {"tampered": True}
+        task = session.scalar(select(LangfuseSyncTaskRecord).where(LangfuseSyncTaskRecord.item_id == item_id))
+        item = session.get(ExperimentItemExecutionRecord, item_id)
+        payload = {"launch_id": item.launch_id, "item_id": item_id, "dispatch_generation": item.dispatch_generation,
+                   "trace_id": task.trace_id, "observation_id": task.observation_id}
+    with pytest.raises(CheckpointUnavailableError) as exc:
+        read_managed_observation_projection(db, payload)
+    assert exc.value.code == "CHECKPOINT_CORRUPT"
+    assert len(rows(db, ExecutionAttemptRecord, item_id)) == 1
+
+
+def test_projection_failure_resubmit_has_one_new_budget_without_agent(runtime, monkeypatch):
+    from app.db_models import LangfuseSyncTaskRecord
+    from test_issue_217_managed_async import _make_collection_due
+
+    db, launch_id, item_id, obs, _ = start(runtime)
+    monkeypatch.setenv("ARGUS_LANGFUSE_RUN_ITEM_STRATEGY", "otel")
+    factory = Mock(return_value=Remote(obs, []))
+    first = recover_managed_scores(db, item_id=item_id, evaluation_generation=1,
+                                   worker_id="pending", client_factory=factory)
+    assert first["reason"] == "RETRY_SCHEDULED"
+    with db.get_session() as session:
+        task = session.scalar(select(LangfuseSyncTaskRecord).where(LangfuseSyncTaskRecord.item_id == item_id))
+        task.status = "FAILED"
+        task.attempts = 5
+    due = _make_collection_due(db, item_id)
+    failed = recover_managed_scores(db, item_id=item_id, evaluation_generation=due.evaluation_generation,
+                                    worker_id="failed", client_factory=factory)
+    assert failed["reason"] == "OBSERVATION_PROJECTION_FAILED" and failed["finalized"]
+    assert item_id in runtime[3].retry_failed_evaluations(launch_id)["submitted"]
+    current = _item(db, item_id)
+    again = recover_managed_scores(db, item_id=item_id, evaluation_generation=current.evaluation_generation,
+                                   worker_id="resubmitted", client_factory=factory)
+    assert again["reason"] == "RETRY_SCHEDULED"
+    with db.get_session() as session:
+        task = session.scalar(select(LangfuseSyncTaskRecord).where(LangfuseSyncTaskRecord.item_id == item_id))
+        assert task.status == "PENDING" and task.attempts == 0
+    factory.assert_not_called()
+    assert len(rows(db, ExecutionAttemptRecord, item_id)) == 1

@@ -89,7 +89,7 @@ def _managed_manifest():
     }
 
 
-def _run_managed_http(setup_runtime, manifest, body):
+def _run_managed_http(setup_runtime, manifest, body, *, lf_client=None):
     from app.executor import SingleInvocationResult
 
     db_mgr, queue, limiter, orchestrator, worker, _rec = setup_runtime
@@ -100,7 +100,7 @@ def _run_managed_http(setup_runtime, manifest, body):
     msg = queue.read_group("m217", count=1)[0]
 
     async def _run():
-        with patch("app.worker.get_langfuse_client_safe", return_value=None):
+        with patch("app.worker.get_langfuse_client_safe", return_value=lf_client):
             with patch("app.worker.RemoteAgentExecutor.invoke_once", new_callable=AsyncMock) as mock:
                 mock.return_value = SingleInvocationResult(
                     status_code=200, body=body, raw_response="{}",

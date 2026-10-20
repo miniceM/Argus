@@ -918,6 +918,42 @@ class EvaluationResultResponse(BaseModel):
     provenance: EvaluationResultProvenance | None = None
 
 
+class ManagedScoreDecisionResponse(BaseModel):
+    score_name: str
+    score_id: str | None = None
+    decision: str
+    reason: str
+    evidence_id: str
+
+
+class ManagedScoreCollectionResponse(BaseModel):
+    launch_id: str
+    item_execution_id: str
+    quality_conclusion: Literal["unknown"] = "unknown"
+    releasable: Literal[False] = False
+    retry_after: str | None = None
+    decisions: list[ManagedScoreDecisionResponse]
+
+
+class ManagedScoreEvidenceResponse(BaseModel):
+    id: str
+    score_name: str
+    score_id: str | None = None
+    decision: str
+    reason: str
+    created_at: datetime
+    evidence: dict[str, Any]
+
+
+class ManagedScoreDiagnosticsResponse(BaseModel):
+    launch_id: str
+    item_execution_id: str
+    quality_conclusion: Literal["unknown"] = "unknown"
+    releasable: Literal[False] = False
+    results: list[EvaluationResultResponse]
+    evidence: list[ManagedScoreEvidenceResponse]
+
+
 class ExperimentItemExecutionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

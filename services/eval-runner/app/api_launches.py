@@ -23,6 +23,8 @@ from .evaluation_result_store import persist_typed_results, result_to_payload
 from .evaluator_binding import evaluate_frozen_item
 from .evaluators import EvaluatorSelectionError
 from .executor import RemoteAgentExecutor
+from .langfuse_managed_scores import ManagedScoreCollector
+from .langfuse_scores_client import ScoresReadError, ScoresV3Client
 from .managed_evaluation import ManagedEvaluationError
 from .models import (
     EvaluationResultResponse,
@@ -34,6 +36,8 @@ from .models import (
     ExperimentLaunchResponse,
     ExperimentLaunchRunActionResponse,
     ExperimentLaunchRunRequest,
+    ManagedScoreCollectionResponse,
+    ManagedScoreDiagnosticsResponse,
     RetryEvaluationResponse,
     RetryFailedRequest,
 )
@@ -698,3 +702,37 @@ async def run_experiment_launch(
     db_mgr, reg, _, orchestrator = services
     launch_rec = await run_launch_synchronously(db_mgr, reg, payload.launch_id)
     return _enrich_launch(launch_rec, orchestrator)
+
+
+def get_managed_score_client():
+    return ScoresV3Client.from_env()
+
+
+@router.post("/experiment-launches/{launch_id}/items/{item_id}/managed-scores/collect",
+    response_model=ManagedScoreCollectionResponse, summary="单次定向查询并采纳托管 Score，仅供诊断")
+def collect_managed_scores(launch_id: str, item_id: str, services=Depends(get_services)):
+    db, _, _, _ = services
+    client = None
+    try:
+        try:
+            client = get_managed_score_client()
+        except ScoresReadError:
+            # 未配置时也保留一次可读诊断，不回退到 Builtin 或伪造缺省值。
+            pass
+        return ManagedScoreCollector(db, client).collect(launch_id, item_id)
+    except ScoresReadError as exc:
+        raise HTTPException(status_code=404 if exc.code == "ITEM_NOT_FOUND" else 409,
+            detail={"code": exc.code}) from None
+    finally:
+        if isinstance(client, ScoresV3Client):
+            client.http.close()
+
+
+@router.get("/experiment-launches/{launch_id}/items/{item_id}/managed-scores",
+    response_model=ManagedScoreDiagnosticsResponse, summary="只读托管 Score 采纳记录、原始证据与拒绝原因")
+def get_managed_scores(launch_id: str, item_id: str, services=Depends(get_services)):
+    db, _, _, _ = services
+    try:
+        return ManagedScoreCollector(db, None).diagnostics(launch_id, item_id)
+    except ScoresReadError as exc:
+        raise HTTPException(status_code=404, detail={"code": exc.code}) from None

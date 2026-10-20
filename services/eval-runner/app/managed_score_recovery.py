@@ -109,7 +109,8 @@ def get_retry_config() -> dict[str, float]:
         max_attempts = 10
     if max_attempts < 1:
         max_attempts = 10
-    max_attempts = min(max_attempts, 100000)
+    # 上界 100：deadline（默认 1800s）下更大值形同无界，高频 429 会 hammer 远端。
+    max_attempts = min(max_attempts, 100)
 
     return {
         "max_attempts": max_attempts,
@@ -232,6 +233,28 @@ def _round_cleanly_adopted(report: dict[str, Any] | None, required: list[str]) -
     return all(name in adopted for name in required)
 
 
+def _report_covers_adopted(report: dict[str, Any] | None, required: list[str], adopted: dict[str, Any]) -> bool:
+    """本轮报告是否背书了当前库内每个必选名的已采纳行。
+
+    纵深绑定：collect 与 finalize 间隙若库行偏离报告（带外改写、
+    陈旧报告复用），即使 ``is_complete`` 仍为真，也必须拒绝终结，
+    返回 COMPLETION_RACE 重试而非基于旧快照 PASS。按外部评分身份
+    （``external_score_id``）逐必选名覆盖判定。
+    """
+    decisions = (report or {}).get("decisions") or []
+    covered: dict[str, set] = {}
+    for entry in decisions:
+        if entry.get("decision") in ROUND_ADOPTED_DECISIONS:
+            covered.setdefault(str(entry.get("score_name")), set()).add(entry.get("score_id"))
+    for name in required:
+        row = adopted.get(name)
+        if row is None:
+            return False
+        if getattr(row, "external_score_id", None) not in covered.get(name, set()):
+            return False
+    return True
+
+
 def _cycle_attempts_used(session, item_id: str, cycle_start) -> int:
     """当前人工收集周期内已消耗的尝试次数。
 
@@ -250,11 +273,12 @@ def _cycle_attempts_used(session, item_id: str, cycle_start) -> int:
     return sum(1 for value in rows if _as_utc(value) is not None and _as_utc(value) >= start)
 
 
-def _collect_with_timeout(collector, launch_id: str, item_id: str, *, fence, timeout_seconds: float) -> dict:
+def _collect_with_timeout(db_mgr, client_factory, launch_id: str, item_id: str, *, fence, timeout_seconds: float) -> dict:
     """有界执行一轮收集：超时即转为可重试 TIMEOUT，不长期占位。
 
-    用 daemon 线程承载阻塞远端调用；超时后不等 hung 住的线程，
-    由租约围栏保证其迟到写入无效。
+    用 daemon 线程承载阻塞远端调用；client 由工作线程自建自关，
+    主线程超时后不再触碰该连接（无跨线程 close 竞态），迟到写入
+    仍由租约围栏保证无效。未配置客户端同样经报告归一终态，不烧退避。
     """
     import threading
 
@@ -262,8 +286,28 @@ def _collect_with_timeout(collector, launch_id: str, item_id: str, *, fence, tim
     worker_error: list[BaseException] = []
 
     def _run() -> None:
+        from .langfuse_managed_scores import ManagedScoreCollector
+        from .langfuse_scores_client import ScoresV3Client as _ScoresV3Client
+
+        client = None
         try:
-            box["report"] = collector.collect(launch_id, item_id, fence=fence)
+            client = client_factory()
+            if client is None:
+                box["report"] = {
+                    "decisions": [{"reason": "CLIENT_NOT_CONFIGURED"}],
+                    "retry_after": None,
+                }
+                return
+            try:
+                box["report"] = ManagedScoreCollector(db_mgr, client).collect(
+                    launch_id, item_id, fence=fence
+                )
+            finally:
+                if isinstance(client, _ScoresV3Client):
+                    try:
+                        client.close()
+                    except Exception:
+                        pass
         except BaseException as exc:  # noqa: BLE001 - 与外层异常归一保持一致
             worker_error.append(exc)
 
@@ -350,6 +394,33 @@ def _record_managed_attempt_started(
         session.commit()
 
 
+def _open_collection_cycle(item, *, now, pending_message: str | None, reset_cycle_start: bool) -> int:
+    """开启一次评分收集的公共字段写入（首轮提交 / 人工重提 / 补偿提交共用）。
+
+    代际单调递增做防旧隔离；``reset_cycle_start`` 为真（人工重提）时
+    重置周期起点，给出新重试窗口与 Deadline。``pending_message`` 为
+    None 时为 Builtin 重评，不碰执行侧 pending/unknown 结论。
+    """
+    new_gen = int(item.evaluation_generation or 0) + 1
+    item.evaluation_generation = new_gen
+    item.evaluation_status = EVALUATION_RUNNING
+    item.evaluation_error = pending_message
+    item.evaluation_lease_owner = None
+    item.evaluation_lease_token = None
+    item.evaluation_lease_expires_at = None
+    if reset_cycle_start or item.evaluation_started_at is None:
+        item.evaluation_started_at = now
+    item.evaluation_completed_at = None
+    if pending_message is not None:
+        # Managed：执行已成功但评分未齐，保持 PENDING / UNKNOWN，不伪造结论。
+        # available_at 复用为 Managed 下次可执行时间；None 表示立即到期。
+        item.eval_status = "pending"
+        item.quality_conclusion = "unknown"
+        item.eval_error = pending_message
+        item.available_at = None
+    return new_gen
+
+
 def submit_managed_collection(
     db_mgr: DatabaseManager,
     queue,
@@ -390,22 +461,10 @@ def submit_managed_collection(
         if item.evaluation_status == EVALUATION_RUNNING:
             session.rollback()
             return {"already_running": True, "evaluation_generation": item.evaluation_generation}
-        new_gen = int(item.evaluation_generation or 0) + 1
-        item.evaluation_generation = new_gen
-        item.evaluation_status = EVALUATION_RUNNING
-        item.evaluation_error = MANAGED_PENDING_MESSAGE
-        item.evaluation_lease_owner = None
-        item.evaluation_lease_token = None
-        item.evaluation_lease_expires_at = None
-        if item.evaluation_started_at is None or new_cycle:
-            item.evaluation_started_at = now
-        item.evaluation_completed_at = None
-        # available_at 复用为 Managed 下次可执行时间；None 表示立即到期。
-        item.available_at = None
-        # 执行已成功但评分未齐：保持 PENDING / UNKNOWN，不伪造结论。
-        item.eval_status = "pending"
-        item.quality_conclusion = "unknown"
-        item.eval_error = MANAGED_PENDING_MESSAGE
+        new_gen = _open_collection_cycle(
+            item, now=now, pending_message=MANAGED_PENDING_MESSAGE,
+            reset_cycle_start=new_cycle,
+        )
         item.updated_at = now
         session.commit()
     queue.enqueue_items([(item_id, new_gen)], work_type=WORK_TYPE_MANAGED)
@@ -534,12 +593,16 @@ def _schedule_retry(
             )
             session.commit()
             return RecoveryOutcome(claimed=True, finalized=False, reason="DISPATCH_SUPERSEDED")
-        delay = backoff_delay(generation, base=float(cfg["base_delay"]), cap=float(cfg["max_delay"]))
+        # BLOCKER-1：退避按本周期次数（与预算同一口径），不用单调代际：
+        # 人工重提后代际已很大，若沿用代际新周期首退即封顶。本轮 attempt
+        # 行此时仍为 running，故计入次数，首退 delay(1)=base。
+        cycle_attempt = max(1, int(_cycle_attempts_used(session, item_id, item.evaluation_started_at)))
+        delay = backoff_delay(cycle_attempt, base=float(cfg["base_delay"]), cap=float(cfg["max_delay"]))
         next_gen = generation + 1
         _close_attempt(
             session, item_id=item_id, evaluation_generation=generation,
             status="failed", error_type=reason,
-            error_message=f"托管评分未齐（{reason}），{delay:.1f}s 后重试（第 {next_gen} 轮）。",
+            error_message=f"托管评分未齐（{reason}），{delay:.1f}s 后重试（本周期第 {cycle_attempt} 次）。",
             now=now,
         )
         item.evaluation_generation = next_gen
@@ -566,8 +629,15 @@ def _finalize_success(
     claim: dict[str, Any],
     *,
     launch_id: str | None = None,
+    report: dict[str, Any] | None = None,
+    required: list[str] | None = None,
 ) -> RecoveryOutcome:
-    """必选 Score 齐全：按冻结 QualityPolicy 判定质量并冻结新快照。"""
+    """必选 Score 齐全：按冻结 QualityPolicy 判定质量并冻结新快照。
+
+    ``report``/``required`` 为本轮收集证据：行锁内复验“报告背书了
+    当前库内已采纳行”，防 collect→finalize 间隙偏离（BLOCKER-3）。
+    未传入时退化为仅 ``is_complete`` 判定（兼容旧调用）。
+    """
     from .db_models import ExperimentItemExecutionRecord, ExperimentLaunchRecord
     from .evaluation_result_store import result_from_record
     from .evaluator_binding import manifest_quality_policy
@@ -632,6 +702,13 @@ def _finalize_success(
             return RecoveryOutcome(claimed=True, finalized=False, reason="CANCELLED_SUPERSEDE")
         if not is_complete(session, item_id, manifest):
             # 竞争窗口：采纳结果被回滚或代际已变，降级为重试而非伪造完成。
+            session.rollback()
+            return RecoveryOutcome(claimed=True, finalized=False, reason="COMPLETION_RACE")
+        if report is not None and required is not None and not _report_covers_adopted(
+            report, required, _adopted_by_name(session, item_id)
+        ):
+            # 间隙偏离：库内已采纳行不是本轮报告背书的身份，陈旧报告
+            # 不得终结，重试由下一轮重采收敛。
             session.rollback()
             return RecoveryOutcome(claimed=True, finalized=False, reason="COMPLETION_RACE")
         adopted_rows = list(_adopted_by_name(session, item_id).values())
@@ -753,37 +830,16 @@ def recover_managed_scores(
 
     # 只读远端，不持有任何 DB 锁与 Agent 并发额度。
     # 租约围栏随收集传入：远端耗时期间失租/换代/取消，迟到写入无效。
-    from .langfuse_managed_scores import ManagedScoreCollector
-
     fence = {
         "evaluation_generation": evaluation_generation,
         "lease_token": claim["lease_token"],
         "dispatch_generation": expected_dispatch,
     }
     factory = client_factory or get_managed_score_client
-    client = factory()
-    if client is None:
-        # 未配置 Langfuse 凭据：终态，需人工配置后手动重评；不烧退避次数。
-        return _fail_managed(
-            db_mgr, claim, error_code="CLIENT_NOT_CONFIGURED",
-            error_message="未配置 Langfuse 评分客户端，质量保持 UNKNOWN，需配置后手动重评。",
-            launch_id=launch_id,
-        )
-    from .langfuse_scores_client import ScoresV3Client as _ScoresV3Client
-
-    owned_client = isinstance(client, _ScoresV3Client)
-    try:
-        report = _collect_with_timeout(
-            ManagedScoreCollector(db_mgr, client),
-            launch_id, item_id, fence=fence,
-            timeout_seconds=get_collect_timeout_seconds(),
-        )
-    finally:
-        if owned_client:
-            try:
-                client.close()
-            except Exception:
-                pass
+    report = _collect_with_timeout(
+        db_mgr, factory, launch_id, item_id, fence=fence,
+        timeout_seconds=get_collect_timeout_seconds(),
+    )
 
     with db_mgr.get_session() as session:
         item = session.get(ExperimentItemExecutionRecord, item_id)
@@ -802,7 +858,7 @@ def recover_managed_scores(
 
     # 已存成功行不等于本轮证据完整：歧义/冲突/读失败必须阻塞终结。
     if complete and _round_cleanly_adopted(report, required):
-        return _finalize_success(db_mgr, claim, launch_id=launch_id)
+        return _finalize_success(db_mgr, claim, launch_id=launch_id, report=report, required=required)
 
     reason = _dominant_reason(report)
     if reason == "CANCELLED_SUPERSEDE":
@@ -817,11 +873,6 @@ def recover_managed_scores(
     # 有界：本周期超限或超期 → 终态 UNKNOWN，不伪造分数。
     # 预算按周期统计（与单调代际解耦），人工重提开启新周期。
     if attempts_used >= int(cfg["max_attempts"]):
-        return _fail_managed(
-            db_mgr, claim, error_code=MANAGED_EXHAUSTED_CODE,
-            error_message=f"托管评分重试已达上限（{int(cfg['max_attempts'])} 次），质量保持 UNKNOWN。",
-            launch_id=launch_id,
-        )
         return _fail_managed(
             db_mgr, claim, error_code=MANAGED_EXHAUSTED_CODE,
             error_message=f"托管评分重试已达上限（{int(cfg['max_attempts'])} 次），质量保持 UNKNOWN。",

@@ -410,7 +410,12 @@ class LaunchOrchestrator:
             WORK_TYPE_EVALUATION,
         )
         from .execution_checkpoint import CheckpointUnavailableError, load_recoverable_checkpoint
-        from .managed_score_recovery import MANAGED_PENDING_MESSAGE, WORK_TYPE_MANAGED, is_managed_manifest
+        from .managed_score_recovery import (
+            MANAGED_PENDING_MESSAGE,
+            WORK_TYPE_MANAGED,
+            _open_collection_cycle,
+            is_managed_manifest,
+        )
 
         now = datetime.now(UTC)
         is_pg = self.db_mgr.engine.dialect.name == "postgresql"
@@ -478,6 +483,8 @@ class LaunchOrchestrator:
                         session,
                         item_execution_id=item_id,
                         dispatch_generation=it.dispatch_generation,
+                        # Managed 用 manifest=None：Builtin binding 口径不适用托管收集，
+                        # 契约校验下沉到 Collector（acceptance_digest + 强来源核验）。
                         manifest=None if managed else manifest,
                         now=now,
                     )
@@ -493,21 +500,13 @@ class LaunchOrchestrator:
                     )
                     continue
 
-                it.evaluation_generation = (it.evaluation_generation or 0) + 1
-                it.evaluation_status = EVALUATION_RUNNING
-                it.evaluation_error = MANAGED_PENDING_MESSAGE if managed else None
-                it.evaluation_lease_owner = None
-                it.evaluation_lease_token = None
-                it.evaluation_lease_expires_at = None
-                # #217 P1-4：人工重提开启新的收集周期：重置周期起点，给出新的
-                # 重试窗口与 Deadline；代际仍单调递增做防旧隔离。
-                it.evaluation_started_at = now
-                it.evaluation_completed_at = None
-                if managed:
-                    it.eval_status = "pending"
-                    it.eval_error = MANAGED_PENDING_MESSAGE
-                    it.quality_conclusion = "unknown"
-                    it.available_at = None
+                # 周期字段写入与 submit_managed_collection 共用 helper，防双路径漂移；
+                # started_at 重置沿用既有语义（Managed/Builtin 均重置，代际单调防旧）。
+                _open_collection_cycle(
+                    it, now=now,
+                    pending_message=MANAGED_PENDING_MESSAGE if managed else None,
+                    reset_cycle_start=True,
+                )
                 it.updated_at = now
                 if managed:
                     managed_items.append((item_id, it.evaluation_generation))

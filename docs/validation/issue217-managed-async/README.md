@@ -68,7 +68,9 @@ ARGUS_MANAGED_SCORE_CONCURRENCY=4
 
 - 退避：`min(5 * 2^(N-1), 300)` 秒，N 为本周期内第几次尝试（1 起始）。
 - 重试预算按人工收集周期统计（本周期内 `EvaluationAttemptRecord` 行数），
-  与单调代际解耦；人工重提开启新周期并重置起点与 Deadline。
+  退避与预算同一口径；人工重提开启新周期并重置起点与 Deadline。
+- `ARGUS_MANAGED_SCORE_MAX_ATTEMPTS` 上界 100（Deadline 1800s 下更大值
+  形同无界，会 hammer 远端）。
 - 单次完整收集总预算 45s（小于 60s Worker 租约）：远端 hung 住即转
   可重试 TIMEOUT，不长期占位；收集结束关闭自建客户端连接。
 - Managed 收集使用独立并发槽（默认 4），不占用 Agent HTTP 执行槽。

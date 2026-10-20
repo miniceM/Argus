@@ -529,6 +529,9 @@ def test_retry_config_sanitizes_invalid_values(monkeypatch):
     assert get_retry_config()["max_attempts"] == 10
     monkeypatch.setenv("ARGUS_MANAGED_SCORE_MAX_ATTEMPTS", "3")
     assert get_retry_config()["max_attempts"] == 3
+    # 上界 100：deadline 下更大值形同无界，会 hammer 远端。
+    monkeypatch.setenv("ARGUS_MANAGED_SCORE_MAX_ATTEMPTS", "1000000")
+    assert get_retry_config()["max_attempts"] == 100
 
 
 def test_score_client_closed_and_managed_slots_separate(setup_runtime, monkeypatch):
@@ -609,3 +612,88 @@ def test_hanging_remote_bounded_by_collect_timeout(setup_runtime, monkeypatch):
     assert outcome["reason"] in ("TIMEOUT", "RETRY_SCHEDULED")
     assert elapsed < 10
     assert _item(db_mgr, item_id).evaluation_status == "evaluating"
+
+
+def test_fresh_cycle_backoff_starts_small(setup_runtime, monkeypatch):
+    """BLOCKER-1：人工重提的新周期退避从 5s 起，而非沿用单调代际封顶 300s。"""
+    manifest = _managed_manifest()
+    db_mgr, _, _, orchestrator, _, launch_id, item_id, _, _ = _run_managed_http(
+        setup_runtime, manifest, {"answer": "ok"}
+    )
+    obs, _, _ = _observation_for(db_mgr, item_id)
+    monkeypatch.setenv("ARGUS_MANAGED_SCORE_MAX_ATTEMPTS", "2")
+    monkeypatch.setattr(
+        "app.managed_score_recovery.get_managed_score_client", lambda: Remote(obs, [])
+    )
+    item = _item(db_mgr, item_id)
+    assert recover_managed_scores(
+        db_mgr, item_id=item_id, evaluation_generation=item.evaluation_generation,
+        worker_id="w1",
+    )["finalized"] is False
+    item2 = _item(db_mgr, item_id)
+    exhausted = recover_managed_scores(
+        db_mgr, item_id=item_id,
+        evaluation_generation=item2.evaluation_generation, worker_id="w1",
+    )
+    assert exhausted["finalized"] is True and exhausted.get("exhausted") is True
+    resub = orchestrator.retry_failed_evaluations(launch_id)
+    assert item_id in resub["submitted"]
+    item3 = _item(db_mgr, item_id)
+    before = datetime.now(UTC)
+    again = recover_managed_scores(
+        db_mgr, item_id=item_id,
+        evaluation_generation=item3.evaluation_generation, worker_id="w2",
+    )
+    assert again["finalized"] is False
+    assert again["reason"] == "RETRY_SCHEDULED"
+    scheduled = _item(db_mgr, item_id).available_at
+    assert scheduled is not None
+    delay = (scheduled.replace(tzinfo=UTC) - before).total_seconds()
+    assert delay <= 10, f"fresh cycle must back off small, got {delay:.1f}s"
+
+
+def test_finalize_rejects_diverged_report(setup_runtime, monkeypatch):
+    """BLOCKER-3：collect 与 finalize 间隙库行偏离报告，终结必须拒绝而非 PASS。"""
+    from app.evaluation_recovery import claim_evaluation
+    from app.langfuse_managed_scores import ManagedScoreCollector
+    from app.managed_score_recovery import (
+        _finalize_success,
+        _round_cleanly_adopted,
+        required_score_names,
+    )
+
+    manifest = _managed_manifest()
+    db_mgr, _, _, _, _, launch_id, item_id, _, _ = _run_managed_http(
+        setup_runtime, manifest, {"answer": "ok"}
+    )
+    obs, trace_id, obs_id = _observation_for(db_mgr, item_id)
+    good = _good_score(trace_id, obs_id, id="p1a")
+    report = ManagedScoreCollector(
+        db_mgr, Remote(obs, [copy.deepcopy(good)])
+    ).collect(launch_id, item_id)
+    required = required_score_names(manifest)
+    assert _round_cleanly_adopted(report, required) is True
+    # 间隙：库行被带外改写为报告未背书的身份（同名不同源）。
+    with db_mgr.get_session() as session:
+        row = session.scalars(
+            select(EvaluationResultRecord).where(
+                EvaluationResultRecord.item_execution_id == item_id
+            )
+        ).one()
+        row.external_score_id = "p1x-injected"
+        evidence = dict(row.evidence or {})
+        score = dict(evidence.get("score") or {})
+        score["id"] = "p1x-injected"
+        evidence["score"] = score
+        row.evidence = evidence
+        session.commit()
+    item = _item(db_mgr, item_id)
+    claim = claim_evaluation(
+        db_mgr, item_id=item_id,
+        evaluation_generation=item.evaluation_generation, worker_id="w9",
+    )
+    assert claim is not None
+    out = _finalize_success(db_mgr, claim, launch_id=launch_id, report=report, required=required)
+    assert out["finalized"] is False
+    assert out["reason"] == "COMPLETION_RACE"
+    assert _item(db_mgr, item_id).eval_status != "succeeded"

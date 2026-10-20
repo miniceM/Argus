@@ -22,9 +22,7 @@ from test_issue_215_managed_evaluation import managed  # noqa: E402
 from test_launch_manifest_freeze import setup_db  # noqa: E402
 
 
-@pytest.fixture
-def context(tmp_path):
-    db, registry = setup_db(tmp_path)
+def _context_for_db(db, registry):
     launch = managed(LaunchService(db, registry))
     now = datetime.now(UTC)
     with db.get_session() as session:
@@ -66,6 +64,11 @@ def context(tmp_path):
         "output": {"answer": "hello"},
     }
     return db, launch, observation
+
+
+@pytest.fixture
+def context(tmp_path):
+    return _context_for_db(*setup_db(tmp_path))
 
 
 def score(**patch):
@@ -545,7 +548,7 @@ def test_ambiguous_local_trace_observation_mapping_is_never_adopted(context):
 def test_actual_cloud_terminal_meta_omits_cursor():
     # 来自 #214 的当前真实响应形状：末页 scores.meta={limit:1}，observations.meta={}。
     for meta in ({}, {"limit": 100}):
-        with client(lambda r: httpx.Response(200, json={"data": [score()], "meta": meta})) as remote:
+        with client(lambda r, meta=meta: httpx.Response(200, json={"data": [score()], "meta": meta})) as remote:
             assert len(remote.scores_for("trace216", "obs216", "correctness")) == 1
 
 
@@ -557,3 +560,103 @@ def test_code_score_hashes_full_native_observation_input_not_only_request(contex
     raw["metadata"]["output_sha256"] = canonical_output_digest(context[2]["output"]).removeprefix("sha256:")
     assert collect(context, [raw])["decisions"][0]["decision"] == "ADOPTED"
     assert len(records(context[0], EvaluationResultRecord)) == 1
+
+
+def _assert_external_unique_and_audit_fk(db, launch):
+    from sqlalchemy.exc import IntegrityError
+
+    with db.get_session() as session:
+        with pytest.raises(IntegrityError), session.begin_nested():
+            session.add(
+                EvaluationResultRecord(
+                    id="collision-result",
+                    item_execution_id="item216",
+                    launch_id=launch.id,
+                    evaluator_id="other-metric",
+                    result_type="boolean",
+                    status="succeeded",
+                    value=True,
+                    external_project_id="project-215",
+                    external_score_id="score216",
+                )
+            )
+            session.flush()
+        with pytest.raises(IntegrityError), session.begin_nested():
+            session.add(
+                ManagedScoreEvidenceRecord(
+                    id="wrong-scope",
+                    item_execution_id="item216",
+                    launch_id="other-launch",
+                    dispatch_generation=1,
+                    score_name="correctness",
+                    decision="REJECTED",
+                    reason="TEST",
+                    evidence={},
+                )
+            )
+            session.flush()
+
+
+def test_database_unique_score_and_audit_scope_constraints(context):
+    collect(context, [score()])
+    _assert_external_unique_and_audit_fk(context[0], context[1])
+
+
+def test_postgresql_migration_and_concurrent_adoption(tmp_path):
+    import os
+    import uuid
+
+    from app.db import DatabaseManager, MigrationRunner
+    from app.registry import AgentRegistry
+    from sqlalchemy import create_engine, text
+
+    url = os.getenv("TEST_POSTGRES_URL")
+    if not url:
+        pytest.skip("TEST_POSTGRES_URL absent; requires isolated PostgreSQL")
+    schema = "issue216_" + uuid.uuid4().hex
+    admin = create_engine(url)
+    with admin.begin() as conn:
+        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+    db = DatabaseManager(url)
+    db.engine.dispose()
+    db.engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
+    db.session_factory.configure(bind=db.engine)
+    try:
+        migration = MigrationRunner(db.engine, ROOT / "migrations")
+        assert "019_managed_score_evidence.sql" in migration.apply_all()
+        assert migration.apply_all() == []
+        registry = AgentRegistry(db)
+        registry.import_yaml(ROOT / "config/agents.yaml")
+        ctx = _context_for_db(db, registry)
+        test_concurrent_collection_has_one_result_and_audit(ctx)
+        _assert_external_unique_and_audit_fk(db, ctx[1])
+    finally:
+        db.engine.dispose()
+        with admin.begin() as conn:
+            conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        admin.dispose()
+
+
+def test_retained_live_receipt_is_not_a_mock_result():
+    import json
+
+    base = ROOT / "docs/validation/issue216-managed-scores/evidence/live-adoption"
+    receipt = json.loads((base / "receipt.json").read_text())
+    first = json.loads((base / "diagnostics-first.json").read_text())
+    repeated = json.loads((base / "diagnostics-repeat.json").read_text())
+    assert receipt["status"] == "PASS" and receipt["effective_result_count"] == 2
+    assert receipt["http_attempts"] == 1 and receipt["score_write_requests"] == 0
+    assert first["results"] == repeated["results"]
+    assert set(receipt["score_ids"]) == {r["evidence"]["score"]["id"] for r in first["results"]}
+    for result in first["results"]:
+        assert result["provenance"]["executor_type"] == "langfuse_managed"
+        assert result["provenance"]["contract_status"] == "MANAGED_DIAGNOSTIC_ONLY"
+        assert result["evaluator_version"] is None
+        score = result["evidence"]["score"]
+        assert score["source"] == "EVAL" and score["metadata"]["job_execution_id"]
+        assert score["subject"] == {
+            "kind": "observation",
+            "id": receipt["observation_id"],
+            "traceId": receipt["trace_id"],
+        }
+    assert all(not r["enabled"] for r in json.loads((base / "owned-rules-paused.json").read_text()))

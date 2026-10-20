@@ -214,6 +214,9 @@ def reconcile_managed_interruption(session, observed, *, require_expired: bool =
         status="failed", error_type=code, error_message="评分收集中断；原 Agent 输出保持不变。",
         now=now, launch_id=launch_id if require_expired else None,
     )
+    # claim 后、attempt 插入前崩溃时会补最小审计行；autoflush=False，
+    # 必须先持久化到当前事务，再按周期计数，否则崩溃可绕过最后一次预算。
+    session.flush()
     cfg = get_retry_config()
     used = _cycle_attempts_used(session, item_id, item.evaluation_started_at)
     start = _as_utc(item.evaluation_started_at)

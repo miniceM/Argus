@@ -1,0 +1,158 @@
+.........................................................F               [100%]
+=================================== FAILURES ===================================
+__________________ test_invalid_score_id_is_json_safe_in_api ___________________
+
+context = (<app.db.DatabaseManager object at 0x10ba80170>, <app.db_models.ExperimentLaunchRecord object at 0x10d53fb60>, {'id': 'obs216', 'traceId': 'trace216', 'projectId': 'project-215', 'name': 'remote-agent-http', ...})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10c0edac0>
+
+    def test_invalid_score_id_is_json_safe_in_api(context, monkeypatch):
+        from app import api_launches
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        app = FastAPI()
+        app.include_router(api_launches.router)
+        app.dependency_overrides[api_launches.get_services] = lambda: (context[0],None,None,None)
+        monkeypatch.setattr(api_launches,'get_managed_score_client',lambda: Remote(context[2],[score(id={'bad':1})]))
+>       response = TestClient(app).post(f'/api/v1/experiment-launches/{context[1].id}/items/item216/managed-scores/collect')
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_issue_216_managed_scores.py:396:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/httpx/_client.py:1144: in post
+    return self.request(
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/starlette/testclient.py:457: in request
+    return super().request(
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/httpx/_client.py:825: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/httpx/_client.py:914: in send
+    response = self._send_handling_auth(
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/httpx/_client.py:942: in _send_handling_auth
+    response = self._send_handling_redirects(
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/httpx/_client.py:979: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/httpx/_client.py:1014: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/starlette/testclient.py:354: in handle_request
+    raise exc
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/starlette/testclient.py:351: in handle_request
+    portal.call(self.app, scope, receive, send)
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/anyio/from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.4/Frameworks/Python.framework/Versions/3.12/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.4/Frameworks/Python.framework/Versions/3.12/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/anyio/from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/fastapi/applications.py:1215: in __call__
+    await super().__call__(scope, receive, send)
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/starlette/applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:186: in __call__
+    raise exc
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/fastapi/telemetry/_asgi.py:151: in __call__
+    await self.app(scope, receive, send)
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/starlette/routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/fastapi/routing.py:2786: in app
+    await route.handle(scope, receive, send)
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/fastapi/routing.py:1817: in handle
+    await self.original_router.handle(scope, receive, send)
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/fastapi/routing.py:2869: in handle
+    await included_router._handle_selected(scope, receive, send)
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/fastapi/routing.py:1843: in _handle_selected
+    await original_route.handle(scope, receive, send)
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/fastapi/routing.py:1308: in handle
+    await effective_context.app(scope, receive, send)
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/fastapi/routing.py:165: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:53: in wrapped_app
+    raise exc
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/fastapi/routing.py:151: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/fastapi/routing.py:749: in app
+    content = await serialize_response(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+field = ModelField(field_info=FieldInfo(annotation=ManagedScoreCollectionResponse, required=True), name='Response_collect_mana...api_v1_experiment_launches__launch_id__items__item_id__managed_scores_collect_post', mode='serialization', config=None)
+response_content = {'launch_id': 'f7033552-19f3-49cb-94dc-23bcfa23293a', 'item_execution_id': 'item216', 'quality_conclusion': 'unknown', 'releasable': False, ...}
+include = None, exclude = None, by_alias = True, exclude_unset = False
+exclude_defaults = False, exclude_none = False, is_coroutine = False
+endpoint_ctx = {'file': '/Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/api_launches.py', 'line': 711, 'function': 'collect_managed_scores', 'path': 'POST /api/v1/experiment-launches/{launch_id}/items/{item_id}/managed-scores/collect'}
+dump_json = True
+
+    async def serialize_response(
+        *,
+        field: ModelField | None = None,
+        response_content: Any,
+        include: IncEx | None = None,
+        exclude: IncEx | None = None,
+        by_alias: bool = True,
+        exclude_unset: bool = False,
+        exclude_defaults: bool = False,
+        exclude_none: bool = False,
+        is_coroutine: bool = True,
+        endpoint_ctx: EndpointContext | None = None,
+        dump_json: bool = False,
+    ) -> Any:
+        if field:
+            if is_coroutine:
+                value, errors = field.validate(response_content, {}, loc=("response",))
+            else:
+                value, errors = await run_in_threadpool(
+                    field.validate, response_content, {}, loc=("response",)
+                )
+            if errors:
+                ctx = endpoint_ctx or EndpointContext()
+>               raise ResponseValidationError(
+                    errors=errors,
+                    body=response_content,
+                    endpoint_ctx=ctx,
+                )
+E               fastapi.exceptions.ResponseValidationError: 1 validation error:
+E                 {'type': 'string_type', 'loc': ('response', 'decisions', 0, 'score_id'), 'msg': 'Input should be a valid string', 'input': {'bad': 1}}
+E
+E                 File "/Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/api_launches.py", line 711, in collect_managed_scores
+E                   POST /api/v1/experiment-launches/{launch_id}/items/{item_id}/managed-scores/collect
+
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/fastapi/routing.py:331: ResponseValidationError
+=============================== warnings summary ===============================
+tests/test_issue_216_managed_scores.py: 517 warnings
+  /Users/hosea/work/ai-eval/Argus/.venv/lib/python3.12/site-packages/sqlalchemy/sql/schema.py:4296: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return util.wrap_callable(lambda ctx: fn(), fn)  # type: ignore[call-arg, no-any-return, no-untyped-call]  # noqa: E501
+
+tests/test_issue_216_managed_scores.py: 282 warnings
+  /Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/manifest.py:423: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    created_at=datetime.utcnow(),
+
+tests/test_issue_216_managed_scores.py: 282 warnings
+  /Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/manifest.py:424: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    updated_at=datetime.utcnow(),
+
+tests/test_issue_216_managed_scores.py::test_collect_and_read_api_expose_evidence_without_gate_mutation
+  /Users/hosea/work/ai-eval/Argus/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_issue_216_managed_scores.py::test_invalid_score_id_is_json_safe_in_api
+1 failed, 57 passed, 1082 warnings in 2.79s

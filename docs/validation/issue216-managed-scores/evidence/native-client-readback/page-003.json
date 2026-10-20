@@ -1,0 +1,56 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/public/v2/observations",
+    "query": {
+      "traceId": "8bdb2c77e83712ddcb98b34110d22fb3",
+      "fields": "core,basic,io,metadata,trace_context",
+      "limit": "1",
+      "cursor": "eyJsYXN0U3RhcnRUaW1lVG8iOiIyMDI2LTEwLTE5VDA4OjQwOjQzLjIxN1oiLCJsYXN0VHJhY2VJZCI6IjhiZGIyYzc3ZTgzNzEyZGRjYjk4YjM0MTEwZDIyZmIzIiwibGFzdElkIjoiMzZmODhmYTBiNmRmY2YxNCJ9"
+    }
+  },
+  "status": 200,
+  "response": {
+    "data": [
+      {
+        "id": "36f88fa0b6dfcf14",
+        "traceId": "8bdb2c77e83712ddcb98b34110d22fb3",
+        "startTime": "2026-10-19T08:40:34.490Z",
+        "endTime": "2026-10-19T08:40:34.490Z",
+        "projectId": "cmu5a6fj500aoad0jvrckiypb",
+        "parentObservationId": null,
+        "type": "TOOL",
+        "name": "remote-agent-http",
+        "level": "DEFAULT",
+        "statusMessage": "",
+        "version": "",
+        "environment": "issue214-20261019",
+        "input": "{\"agent\": \"issue214-20261019t084028z:v1\", \"request\": {\"question\": \"Compute (135 + 287) * 3. You must call calculator.\", \"streaming\": false}}",
+        "output": "{\"text\": \"1266\", \"question\": \"Compute (135 + 287) * 3. You must call calculator.\", \"chatId\": \"b4cb9419-690c-4a6b-948a-55c030ec7026\", \"chatMessageId\": \"e9ecb9ff-a514-4a06-aeff-1c89e088ce2f\", \"executionId\": \"e05ac516-8882-44ab-96c5-7cf8748bb655\", \"agentFlowExecutedData\": [{\"nodeId\": \"startAgentflow_0\", \"nodeLabel\": \"Start\", \"data\": {\"id\": \"startAgentflow_0\", \"name\": \"startAgentflow\", \"input\": {\"question\": \"Compute (135 + 287) * 3. You must call calculator.\"}, \"output\": {\"question\": \"Compute (135 + 287) * 3. You must call calculator.\"}, \"state\": {}}, \"previousNodeIds\": [], \"status\": \"FINISHED\"}, {\"nodeId\": \"agentAgentflow_0\", \"nodeLabel\": \"QnA\", \"data\": {\"id\": \"agentAgentflow_0\", \"name\": \"agentAgentflow\", \"input\": {\"messages\": [{\"role\": \"system\", \"content\": \"You are a calculator agent. You MUST use the calculator tool to compute every arithmetic expression. Return only the numeric final result, without explanation.\"}, {\"role\": \"user\", \"content\": \"Compute (135 + 287) * 3. You must call calculator.\"}, {\"role\": \"assistant\", \"content\": \"\", \"tool_calls\": [{\"name\": \"calculator\", \"args\": {\"input\": \"(135 + 287) * 3\"}, \"type\": \"tool_call\", \"id\": \"call_00_79y83eqfgx966icujeffpp1z\"}], \"additional_kwargs\": {\"tool_calls\": [{\"id\": \"call_00_79y83eqfgx966icujeffpp1z\", \"type\": \"function\", \"function\": {\"name\": \"calculator\", \"arguments\": \"{\\\"input\\\": \\\"(135 + 287) * 3\\\"}\"}}]}, \"usage_metadata\": {\"output_tokens\": 74, \"input_tokens\": 374, \"total_tokens\": 448, \"input_token_details\": {\"cache_read\": 256}, \"output_token_details\": {\"reasoning\": 29}}, \"id\": \"021792399236446d5288a603f9a5ec332174783e04745d2d0226f\"}, {\"role\": \"tool\", \"content\": \"1266\", \"tool_call_id\": \"call_00_79y83eqfgx966icujeffpp1z\", \"name\": \"calculator\", \"additional_kwargs\": {}}], \"agentModel\": \"chatOpenAI\", \"agentTools\": [{\"agentSelectedTool\": \"calculator\", \"agentSelectedToolRequiresHumanInput\": false, \"agentSelectedToolConfig\": {\"agentSelectedTool\": \"calculator\"}}], \"agentKnowledgeDocumentStores\": [], \"agentEnableMemory\": false, \"agentMemoryType\": \"allMessages\", \"agentReturnResponseAs\": \"userMessage\", \"agentModelConfig\": {\"cache\": \"\", \"modelName\": \"deepseek-v4.1-flash\", \"temperature\": 0, \"streaming\": false, \"maxTokens\": 1000, \"topP\": \"\", \"frequencyPenalty\": \"\", \"presencePenalty\": \"\", \"timeout\": 90000, \"strictToolCalling\": \"\", \"stopSequence\": \"\", \"basepath\": \"https://opencode.ai/zen/go/v1\", \"proxyUrl\": \"\", \"baseOptions\": \"{\\\"x-opencode-session\\\": \\\"argus-flowise-p0-20261019\\\"}\", \"allowImageUploads\": \"\", \"imageResolution\": \"low\", \"reasoningEffort\": \"\", \"agentModel\": \"chatOpenAI\", \"maxRetries\": 0}}, \"output\": {\"content\": \"1266\", \"timeMetadata\": {\"start\": 1792399234764, \"end\": 1792399239140, \"delta\": 4376}, \"calledTools\": [], \"usageMetadata\": {\"output_tokens\": 3, \"input_tokens\": 433, \"total_tokens\": 1320, \"input_token_details\": {\"cache_read\": 384}, \"output_token_details\": {\"reasoning\": 0}, \"tool_call_tokens\": 884}, \"responseMetadata\": {\"tokenUsage\": {\"promptTokens\": 433, \"completionTokens\": 3, \"totalTokens\": 436}, \"finish_reason\": \"stop\", \"model_provider\": \"openai\", \"model_name\": \"deepseek-v4.1-flash\"}, \"usedTools\": [{\"tool\": \"calculator\", \"toolInput\": {\"input\": \"(135 + 287) * 3\"}, \"toolOutput\": \"1266\"}], \"availableTools\": [{\"name\": \"calculator\", \"description\": \"Useful for getting the result of a math expression. The input to this tool should be a valid mathematical expression that could be executed by a simple calculator.\", \"schema\": {\"type\": \"object\", \"properties\": {\"input\": {\"type\": \"string\"}}, \"additionalProperties\": false}, \"toolNode\": {\"label\": \"Calculator\", \"name\": \"calculator\"}}]}, \"state\": {}, \"chatHistory\": [{\"role\": \"user\", \"content\": \"Compute (135 + 287) * 3. You must call calculator.\"}, {\"role\": \"user\", \"content\": \"1266\", \"name\": \"qna\", \"additional_kwargs\": {\"usedTools\": [{\"tool\": \"calculator\", \"toolInput\": {\"input\": \"(135 + 287) * 3\"}, \"toolOutput\": \"1266\"}]}}]}, \"previousNodeIds\": [\"startAgentflow_0\"], \"status\": \"FINISHED\"}], \"sessionId\": \"b4cb9419-690c-4a6b-948a-55c030ec7026\"}",
+        "metadata": {
+          "scope.name": "argus-issue214-controlled-replay",
+          "resourceAttributes.service.name": "argus-issue214-controlled-replay",
+          "attributes.langfuse.environment": "issue214-20261019",
+          "attributes.langfuse.observation.type": "tool"
+        },
+        "latency": 0,
+        "timeToFirstToken": null,
+        "userId": "",
+        "sessionId": "",
+        "isRootObservation": true,
+        "traceName": "remote-agent-http",
+        "release": "",
+        "tags": [],
+        "bookmarked": false,
+        "public": false,
+        "modelId": null,
+        "inputPrice": null,
+        "outputPrice": null,
+        "totalPrice": null
+      }
+    ],
+    "meta": {
+      "cursor": "eyJsYXN0U3RhcnRUaW1lVG8iOiIyMDI2LTEwLTE5VDA4OjQwOjM0LjQ5MFoiLCJsYXN0VHJhY2VJZCI6IjhiZGIyYzc3ZTgzNzEyZGRjYjk4YjM0MTEwZDIyZmIzIiwibGFzdElkIjoiMzZmODhmYTBiNmRmY2YxNCJ9"
+    }
+  }
+}

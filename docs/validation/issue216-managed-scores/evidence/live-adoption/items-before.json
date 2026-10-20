@@ -1,0 +1,72 @@
+[
+  {
+    "id": "b6c920e7-d950-412d-990e-466c92cd0b41",
+    "launch_id": "33969c21-e67c-4282-89c1-3498aeeaa8dc",
+    "dataset_item_id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+    "execution_status": "succeeded",
+    "eval_status": "failed",
+    "quality_conclusion": "unknown",
+    "execution_error": null,
+    "eval_error": "LANGFUSE_MANAGED_SCORES_PENDING: 待收集评分，暂不可用于正式发布。",
+    "trace_id": "47c0a6bd069c57989b84536c1a299327",
+    "observation_id": "8df5997b4fbb53ef",
+    "langfuse_trace_url": "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/47c0a6bd069c57989b84536c1a299327",
+    "final_attempt_id": "6d72bfa8-b3f4-4b2e-afea-b2e6e0b653ed",
+    "scores": {},
+    "evaluation_results": [],
+    "quality_evaluation": {
+      "conclusion": "unknown",
+      "policy_id": "langfuse-managed",
+      "policy_version": "1.0",
+      "policy_digest": "sha256:3a58a1493f0ec4e75d689901b81be8f399fd91ca02cd3d703980e96fb9241418",
+      "decided_by": "QUALITY_POLICY",
+      "releasable": false,
+      "unknown_reasons": [
+        "必要指标 'issue214-20261019t084028z-judge' 没有结果，证据不足，无法判定通过或不通过。",
+        "必要指标 'issue214-20261019t084028z-code' 没有结果，证据不足，无法判定通过或不通过。"
+      ],
+      "rules": [
+        {
+          "evaluator_id": "issue214-20261019t084028z-judge",
+          "result_type": "boolean",
+          "required": true,
+          "critical": false,
+          "operator": "==",
+          "expected": true,
+          "observed_value": null,
+          "observed_status": null,
+          "conclusion": "unknown",
+          "reason_code": "QUALITY_EVIDENCE_MISSING",
+          "explanation": "必要指标 'issue214-20261019t084028z-judge' 没有结果，证据不足，无法判定通过或不通过。"
+        },
+        {
+          "evaluator_id": "issue214-20261019t084028z-code",
+          "result_type": "boolean",
+          "required": true,
+          "critical": false,
+          "operator": "==",
+          "expected": true,
+          "observed_value": null,
+          "observed_status": null,
+          "conclusion": "unknown",
+          "reason_code": "QUALITY_EVIDENCE_MISSING",
+          "explanation": "必要指标 'issue214-20261019t084028z-code' 没有结果，证据不足，无法判定通过或不通过。"
+        }
+      ]
+    },
+    "evaluation_status": "none",
+    "evaluation_generation": 0,
+    "evaluation_error": null,
+    "evaluation_reused_output_digest": null,
+    "evaluation_recoverable": true,
+    "attempt_count": 1,
+    "final_attempt_http_status": 200,
+    "final_attempt_latency_ms": 5778,
+    "queued_at": "2026-10-20T02:29:35.380620",
+    "available_at": null,
+    "lease_owner": null,
+    "dispatch_generation": 1,
+    "started_at": "2026-10-20T02:29:35.446655",
+    "completed_at": "2026-10-20T02:29:41.505909"
+  }
+]

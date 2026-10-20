@@ -1,0 +1,520 @@
+[
+  {
+    "service": "langfuse",
+    "method": "GET",
+    "path": "/api/public/v2/evaluators/cmvf082z1002uad0gkb42lwel",
+    "status": 200,
+    "at": "2026-10-20T02:23:35.995685+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "POST",
+    "path": "/api/public/v2/evaluation-rules",
+    "status": 201,
+    "at": "2026-10-20T02:23:38.327203+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "GET",
+    "path": "/api/public/v2/evaluators/cmvf083f50034ad0gbpddxpar",
+    "status": 200,
+    "at": "2026-10-20T02:23:40.614717+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "POST",
+    "path": "/api/public/v2/evaluation-rules",
+    "status": 201,
+    "at": "2026-10-20T02:23:42.927707+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/agents",
+    "status": 201,
+    "at": "2026-10-20T02:23:42.948850+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/agent-versions",
+    "status": 201,
+    "at": "2026-10-20T02:23:42.957170+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches",
+    "status": 201,
+    "at": "2026-10-20T02:23:43.406592+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/run",
+    "status": 202,
+    "at": "2026-10-20T02:23:43.417390+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:23:43.426911+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:23:46.442817+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:23:49.456650+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:23:52.470532+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:23:55.488565+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:23:58.505915+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:01.520983+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:04.535285+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:07.553013+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:10.560735+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:13.567156+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:16.588383+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:19.609314+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:22.618385+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:25.635283+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:28.646939+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:31.655932+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:34.713307+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:37.732411+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:40.744186+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:43.790258+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:46.805050+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:49.822983+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:52.839036+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:55.853160+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:24:58.860913+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:01.890382+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:04.910196+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:08.200740+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:11.236170+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:14.251906+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:17.269516+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:20.304447+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:23.315188+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:26.330731+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:29.339502+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:32.360591+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:35.370674+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:38.390442+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:41.400214+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:44.415630+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:47.440174+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:50.454753+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:53.468085+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:56.482147+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:25:59.502035+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:02.519075+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:05.530707+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:08.540819+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:11.556003+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:14.591116+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:17.603770+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:20.618136+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:23.633335+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:26.646383+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:29.660287+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:32.680031+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:35.697043+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:38.726625+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:41.745555+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:44.759416+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:47.773574+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:50.787782+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/6654d650-1dac-4071-805d-0cf006fafa1c/items",
+    "status": 200,
+    "at": "2026-10-20T02:26:53.797762+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvg278q4000zad0gy55pscgn",
+    "status": 200,
+    "at": "2026-10-20T02:26:58.724088+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvg27caa001kad0dkd7cxvyg",
+    "status": 200,
+    "at": "2026-10-20T02:27:01.052274+00:00"
+  }
+]

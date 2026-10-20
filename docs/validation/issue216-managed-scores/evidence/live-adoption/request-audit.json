@@ -1,0 +1,233 @@
+[
+  {
+    "service": "langfuse",
+    "method": "GET",
+    "path": "/api/public/v2/evaluators/cmvf082z1002uad0gkb42lwel",
+    "status": 200,
+    "at": "2026-10-20T02:29:27.852068+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "POST",
+    "path": "/api/public/v2/evaluation-rules",
+    "status": 201,
+    "at": "2026-10-20T02:29:30.214816+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "GET",
+    "path": "/api/public/v2/evaluators/cmvf083f50034ad0gbpddxpar",
+    "status": 200,
+    "at": "2026-10-20T02:29:32.505329+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "POST",
+    "path": "/api/public/v2/evaluation-rules",
+    "status": 201,
+    "at": "2026-10-20T02:29:34.851215+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/agents",
+    "status": 201,
+    "at": "2026-10-20T02:29:34.884529+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/agent-versions",
+    "status": 201,
+    "at": "2026-10-20T02:29:34.932036+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches",
+    "status": 201,
+    "at": "2026-10-20T02:29:35.377235+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/run",
+    "status": 202,
+    "at": "2026-10-20T02:29:35.393850+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items",
+    "status": 200,
+    "at": "2026-10-20T02:29:35.409291+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items",
+    "status": 200,
+    "at": "2026-10-20T02:29:38.419490+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items",
+    "status": 200,
+    "at": "2026-10-20T02:29:41.523169+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores/collect",
+    "status": 200,
+    "at": "2026-10-20T02:29:41.848948+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores",
+    "status": 200,
+    "at": "2026-10-20T02:29:41.853610+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores/collect",
+    "status": 200,
+    "at": "2026-10-20T02:29:57.173840+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores",
+    "status": 200,
+    "at": "2026-10-20T02:29:57.179364+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores/collect",
+    "status": 200,
+    "at": "2026-10-20T02:30:13.213243+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores",
+    "status": 200,
+    "at": "2026-10-20T02:30:13.220296+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores/collect",
+    "status": 200,
+    "at": "2026-10-20T02:30:28.661495+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores",
+    "status": 200,
+    "at": "2026-10-20T02:30:28.671920+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores/collect",
+    "status": 200,
+    "at": "2026-10-20T02:30:44.410453+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores",
+    "status": 200,
+    "at": "2026-10-20T02:30:44.417225+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores/collect",
+    "status": 200,
+    "at": "2026-10-20T02:30:59.785770+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores",
+    "status": 200,
+    "at": "2026-10-20T02:30:59.793294+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores/collect",
+    "status": 200,
+    "at": "2026-10-20T02:31:15.240459+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores",
+    "status": 200,
+    "at": "2026-10-20T02:31:15.247189+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores/collect",
+    "status": 200,
+    "at": "2026-10-20T02:31:30.609260+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores",
+    "status": 200,
+    "at": "2026-10-20T02:31:30.616593+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores/collect",
+    "status": 200,
+    "at": "2026-10-20T02:31:46.464891+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores",
+    "status": 200,
+    "at": "2026-10-20T02:31:46.471184+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores/collect",
+    "status": 200,
+    "at": "2026-10-20T02:32:01.967943+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores",
+    "status": 200,
+    "at": "2026-10-20T02:32:01.975728+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvg2es9c001wad0dh8ulnwud",
+    "status": 200,
+    "at": "2026-10-20T02:32:08.683214+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvg2evtf001gad0f864w8yji",
+    "status": 200,
+    "at": "2026-10-20T02:32:11.074567+00:00"
+  }
+]

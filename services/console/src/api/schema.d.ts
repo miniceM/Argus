@@ -392,6 +392,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/experiment-launches/{launch_id}/items/{item_id}/managed-scores/collect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 单次定向查询并采纳托管 Score，仅供诊断 */
+        post: operations["collect_managed_scores_api_v1_experiment_launches__launch_id__items__item_id__managed_scores_collect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/experiment-launches/{launch_id}/items/{item_id}/managed-scores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 只读托管 Score 采纳记录、原始证据与拒绝原因 */
+        get: operations["get_managed_scores_api_v1_experiment_launches__launch_id__items__item_id__managed_scores_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/evaluators": {
         parameters: {
             query?: never;
@@ -2050,6 +2084,87 @@ export interface components {
             /** Type */
             type: string;
         };
+        /** ManagedScoreCollectionResponse */
+        ManagedScoreCollectionResponse: {
+            /** Launch Id */
+            launch_id: string;
+            /** Item Execution Id */
+            item_execution_id: string;
+            /**
+             * Quality Conclusion
+             * @default unknown
+             * @constant
+             */
+            quality_conclusion: "unknown";
+            /**
+             * Releasable
+             * @default false
+             * @constant
+             */
+            releasable: false;
+            /** Retry After */
+            retry_after?: string | null;
+            /** Decisions */
+            decisions: components["schemas"]["ManagedScoreDecisionResponse"][];
+        };
+        /** ManagedScoreDecisionResponse */
+        ManagedScoreDecisionResponse: {
+            /** Score Name */
+            score_name: string;
+            /** Score Id */
+            score_id?: string | null;
+            /** Decision */
+            decision: string;
+            /** Reason */
+            reason: string;
+            /** Evidence Id */
+            evidence_id: string;
+        };
+        /** ManagedScoreDiagnosticsResponse */
+        ManagedScoreDiagnosticsResponse: {
+            /** Launch Id */
+            launch_id: string;
+            /** Item Execution Id */
+            item_execution_id: string;
+            /**
+             * Quality Conclusion
+             * @default unknown
+             * @constant
+             */
+            quality_conclusion: "unknown";
+            /**
+             * Releasable
+             * @default false
+             * @constant
+             */
+            releasable: false;
+            /** Results */
+            results: components["schemas"]["EvaluationResultResponse"][];
+            /** Evidence */
+            evidence: components["schemas"]["ManagedScoreEvidenceResponse"][];
+        };
+        /** ManagedScoreEvidenceResponse */
+        ManagedScoreEvidenceResponse: {
+            /** Id */
+            id: string;
+            /** Score Name */
+            score_name: string;
+            /** Score Id */
+            score_id?: string | null;
+            /** Decision */
+            decision: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Evidence */
+            evidence: {
+                [key: string]: unknown;
+            };
+        };
         /** ManagedScoreExpectation */
         ManagedScoreExpectation: {
             /** Name */
@@ -3546,6 +3661,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExperimentLaunchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    collect_managed_scores_api_v1_experiment_launches__launch_id__items__item_id__managed_scores_collect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedScoreCollectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_managed_scores_api_v1_experiment_launches__launch_id__items__item_id__managed_scores_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                launch_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedScoreDiagnosticsResponse"];
                 };
             };
             /** @description Validation Error */

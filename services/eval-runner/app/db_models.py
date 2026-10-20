@@ -264,6 +264,7 @@ class EvaluationResultRecord(Base):
     __tablename__ = "evaluation_results"
     __table_args__ = (
         UniqueConstraint("item_execution_id", "evaluator_id", name="uq_evaluation_results_item_evaluator"),
+        UniqueConstraint("external_project_id", "external_score_id", name="uq_evaluation_results_external_score"),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -274,6 +275,8 @@ class EvaluationResultRecord(Base):
         String(64), ForeignKey("experiment_launches.id", ondelete="CASCADE"), nullable=False
     )
     evaluator_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    external_project_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    external_score_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     evaluator_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     result_type: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -594,3 +597,24 @@ class LangfuseRunScoreTaskRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
+
+
+class ManagedScoreEvidenceRecord(Base):
+    """只追加采纳/拒绝审计，不是另一套评分结果；测量仍在 evaluation_results。"""
+
+    __tablename__ = "managed_score_evidence"
+    __table_args__ = (
+        ForeignKeyConstraint(["item_execution_id", "launch_id"],
+            ["experiment_item_executions.id", "experiment_item_executions.launch_id"], ondelete="CASCADE"),
+        Index("ix_managed_score_evidence_item", "item_execution_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    item_execution_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    launch_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    dispatch_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    score_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    score_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

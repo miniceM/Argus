@@ -1,0 +1,51 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/public/v3/scores",
+    "query": {
+      "traceId": "47c0a6bd069c57989b84536c1a299327",
+      "observationId": "8df5997b4fbb53ef",
+      "source": "EVAL",
+      "fields": "details,subject",
+      "name": "issue214-20261019t084028z-judge",
+      "limit": "1"
+    }
+  },
+  "status": 200,
+  "response": {
+    "data": [
+      {
+        "id": "867fb112-3be4-57de-9d72-6bd3b8cb323e",
+        "projectId": "cmu5a6fj500aoad0jvrckiypb",
+        "name": "issue214-20261019t084028z-judge",
+        "source": "EVAL",
+        "timestamp": "2026-10-20T02:29:45.120Z",
+        "environment": "issue216-20261020",
+        "createdAt": "2026-10-20T02:29:46.000Z",
+        "updatedAt": "2026-10-20T02:29:59.109Z",
+        "comment": "The expression (135 + 287) * 3 equals 422 * 3 = 1266, so the agent's answer is correct.",
+        "configId": null,
+        "metadata": {
+          "job_execution_id": "fca1ff380c3f58b38df3c98b4a405d16",
+          "job_configuration_id": "cmvg2es9c001wad0dh8ulnwud",
+          "evaluation_rule_id": "cmvg2es9c001wad0dh8ulnwud",
+          "evaluation_rule_assignment_id": "cmvg2es9c001yad0djumarv9t",
+          "evaluator_version_id": "cmvf082z1002wad0g6y71t1r8",
+          "evaluator_id": "cmvf082z1002uad0gkb42lwel",
+          "target_trace_id": "47c0a6bd069c57989b84536c1a299327",
+          "target_observation_id": "8df5997b4fbb53ef"
+        },
+        "subject": {
+          "kind": "observation",
+          "id": "8df5997b4fbb53ef",
+          "traceId": "47c0a6bd069c57989b84536c1a299327"
+        },
+        "dataType": "BOOLEAN",
+        "value": true
+      }
+    ],
+    "meta": {
+      "limit": 1
+    }
+  }
+}

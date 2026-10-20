@@ -1,0 +1,55 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/public/v3/scores",
+    "query": {
+      "traceId": "c8dd1b2f3645e514ae39c85c8ffb8f9e",
+      "observationId": "bb24565c4e5a7c18",
+      "source": "EVAL",
+      "fields": "subject,details",
+      "limit": 1,
+      "cursor": "eyJ2IjoxLCJsYXN0VGltZXN0YW1wIjoiMjAyNi0xMC0xOVQwODo0NTo0MS4yOTBaIiwibGFzdElkIjoiOTdhNzBmN2YtZmVhZC01MGY5LTkxZmEtN2ViNTgwMDc2YzZhIn0"
+    }
+  },
+  "response": {
+    "data": [
+      {
+        "id": "5ac91494-a574-560d-a2df-cba41f016691",
+        "projectId": "cmu5a6fj500aoad0jvrckiypb",
+        "name": "issue214-20261019t084028z-code",
+        "source": "EVAL",
+        "timestamp": "2026-10-19T08:45:39.077Z",
+        "environment": "issue214-20261019",
+        "createdAt": "2026-10-19T08:45:40.000Z",
+        "updatedAt": "2026-10-19T08:45:39.208Z",
+        "comment": "Native HTTP text checked by Langfuse managed Python runtime; expected constant 1266 is smoke rubric only",
+        "configId": null,
+        "metadata": {
+          "input_sha256": "74e9ba3c7b5a6f28e69fa9a9d91ebe02fee60079ad86902042eee8b78a6f6103",
+          "output_sha256": "4134d1fea7bb695093e6cd37a932e94c6a5fc0028f7f5de4d6dc27632d677bf3",
+          "experiment_context_present": false,
+          "job_execution_id": "da336518ec73c056d4d8a4e0d4404377",
+          "job_configuration_id": "cmvf083me001lad0i4v3cplr8",
+          "evaluation_rule_id": "cmvf083me001lad0i4v3cplr8",
+          "evaluation_rule_assignment_id": "cmvf083me001nad0ip6tn9wpb",
+          "evaluator_version_id": "cmvf083f50036ad0ggpilrl84",
+          "evaluator_id": "cmvf083f50034ad0gbpddxpar",
+          "target_trace_id": "c8dd1b2f3645e514ae39c85c8ffb8f9e",
+          "target_observation_id": "bb24565c4e5a7c18",
+          "dispatcher_name": "aws-lambda",
+          "code_eval_runtime": "PYTHON"
+        },
+        "subject": {
+          "kind": "observation",
+          "id": "bb24565c4e5a7c18",
+          "traceId": "c8dd1b2f3645e514ae39c85c8ffb8f9e"
+        },
+        "dataType": "BOOLEAN",
+        "value": true
+      }
+    ],
+    "meta": {
+      "limit": 1
+    }
+  }
+}

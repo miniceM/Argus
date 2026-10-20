@@ -1,0 +1,60 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/public/v2/observations",
+    "query": {
+      "traceId": "47c0a6bd069c57989b84536c1a299327",
+      "fields": "core,basic,io,metadata,trace_context",
+      "limit": "1"
+    }
+  },
+  "status": 200,
+  "response": {
+    "data": [
+      {
+        "id": "8df5997b4fbb53ef",
+        "traceId": "47c0a6bd069c57989b84536c1a299327",
+        "startTime": "2026-10-20T02:29:41.987Z",
+        "endTime": "2026-10-20T02:29:41.987Z",
+        "projectId": "cmu5a6fj500aoad0jvrckiypb",
+        "parentObservationId": null,
+        "type": "SPAN",
+        "name": "argus-run-item-replay",
+        "level": "DEFAULT",
+        "statusMessage": "",
+        "version": "",
+        "environment": "default",
+        "input": null,
+        "output": null,
+        "metadata": {
+          "scope.version": "1.0.0",
+          "scope.name": "argus-eval-runner",
+          "resourceAttributes.service.name": "argus-eval-runner",
+          "attributes.langfuse.experiment.item.version": "2026-10-20T02:29:34.963307+00:00",
+          "attributes.langfuse.experiment.item.root_observation_id": "8df5997b4fbb53ef",
+          "attributes.langfuse.experiment.item.id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+          "attributes.langfuse.experiment.dataset.id": "cmvf080gu001iad0i4ctjw5l4",
+          "attributes.langfuse.experiment.name": "argus-33969c21-e67",
+          "attributes.langfuse.experiment.id": "17464c01-9781-535e-89d9-f48f7e84d58e"
+        },
+        "latency": 0,
+        "timeToFirstToken": null,
+        "userId": "",
+        "sessionId": "",
+        "isRootObservation": true,
+        "traceName": "argus-run-item-replay",
+        "release": "",
+        "tags": [],
+        "bookmarked": false,
+        "public": false,
+        "modelId": null,
+        "inputPrice": null,
+        "outputPrice": null,
+        "totalPrice": null
+      }
+    ],
+    "meta": {
+      "cursor": "eyJsYXN0U3RhcnRUaW1lVG8iOiIyMDI2LTEwLTIwVDAyOjI5OjQxLjk4N1oiLCJsYXN0VHJhY2VJZCI6IjQ3YzBhNmJkMDY5YzU3OTg5Yjg0NTM2YzFhMjk5MzI3IiwibGFzdElkIjoiOGRmNTk5N2I0ZmJiNTNlZiJ9"
+    }
+  }
+}

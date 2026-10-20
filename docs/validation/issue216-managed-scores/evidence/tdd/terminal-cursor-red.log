@@ -1,0 +1,59 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_________________ test_actual_cloud_terminal_meta_omits_cursor _________________
+
+    def test_actual_cloud_terminal_meta_omits_cursor():
+        # 来自 #214 的当前真实响应形状：末页 scores.meta={limit:1}，observations.meta={}。
+        for meta in ({}, {'limit':100}):
+            with client(lambda r: httpx.Response(200,json={'data':[score()], 'meta':meta})) as remote:
+>               assert len(remote.scores_for('trace216','obs216','correctness'))==1
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_issue_216_managed_scores.py:549:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+services/eval-runner/app/langfuse_scores_client.py:118: in scores_for
+    return self._pages("/api/public/v3/scores", params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <app.langfuse_scores_client.ScoresV3Client object at 0x1095e3bc0>
+path = '/api/public/v3/scores'
+params = {'traceId': 'trace216', 'observationId': 'obs216', 'source': 'EVAL', 'fields': 'details,subject', ...}
+
+    def _pages(self, path: str, params: dict) -> list[dict]:
+        rows, seen = [], set()
+        params = {**params, "limit": self.page_size}
+        for _ in range(self.max_pages):
+            try:
+                response = self.http.get(path, params=params)
+            except httpx.TimeoutException:
+                raise ScoresReadError("TIMEOUT") from None
+            except httpx.HTTPError:
+                raise ScoresReadError("NETWORK_UNAVAILABLE") from None
+            self.requests.append({"method": "GET", "path": path, "query": dict(params), "status": response.status_code})
+            if response.status_code != 200:
+                code = {401: "AUTHENTICATION_FAILED", 403: "AUTHORIZATION_FAILED", 429: "RATE_LIMITED"}.get(
+                    response.status_code, "UPSTREAM_UNAVAILABLE"
+                )
+                retry = response.headers.get("Retry-After", "")
+                raise ScoresReadError(code, retry_after=retry if retry.isdigit() and len(retry) < 8 else None)
+            if len(response.content) > 8 * 1024 * 1024:
+                raise ScoresReadError("RESPONSE_TOO_LARGE")
+            try:
+                payload = response.json()
+            except ValueError:
+                raise ScoresReadError("RESPONSE_INVALID") from None
+            if (
+                not isinstance(payload, dict)
+                or not isinstance(payload.get("data"), list)
+                or not all(isinstance(row, dict) for row in payload["data"])
+                or not isinstance(payload.get("meta"), dict)
+                or "cursor" not in payload["meta"]
+            ):
+>               raise ScoresReadError("RESPONSE_INVALID")
+E               app.langfuse_scores_client.ScoresReadError: RESPONSE_INVALID
+
+services/eval-runner/app/langfuse_scores_client.py:101: ScoresReadError
+=========================== short test summary info ============================
+FAILED tests/test_issue_216_managed_scores.py::test_actual_cloud_terminal_meta_omits_cursor
+1 failed, 60 deselected in 0.52s

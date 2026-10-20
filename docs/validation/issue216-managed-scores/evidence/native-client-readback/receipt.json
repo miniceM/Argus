@@ -1,0 +1,183 @@
+{
+  "status": "PASS",
+  "read_only": true,
+  "checks": [
+    {
+      "trace_id": "8bdb2c77e83712ddcb98b34110d22fb3",
+      "observation_id": "36f88fa0b6dfcf14",
+      "score_ids": [
+        "c2904b83-0f19-5c09-8190-7416f3d6a019"
+      ],
+      "full_input_digest": "sha256:74e9ba3c7b5a6f28e69fa9a9d91ebe02fee60079ad86902042eee8b78a6f6103",
+      "request_digest": "sha256:d78b83dac632afdad275b01179ffc3a0919d1228e5b39004d28d02f253e9d714",
+      "score_input_digests": [
+        null
+      ]
+    },
+    {
+      "trace_id": "8bdb2c77e83712ddcb98b34110d22fb3",
+      "observation_id": "36f88fa0b6dfcf14",
+      "score_ids": [
+        "f28b2bcc-5e28-5030-b70f-f56c88a22978"
+      ],
+      "full_input_digest": "sha256:74e9ba3c7b5a6f28e69fa9a9d91ebe02fee60079ad86902042eee8b78a6f6103",
+      "request_digest": "sha256:d78b83dac632afdad275b01179ffc3a0919d1228e5b39004d28d02f253e9d714",
+      "score_input_digests": [
+        "74e9ba3c7b5a6f28e69fa9a9d91ebe02fee60079ad86902042eee8b78a6f6103"
+      ]
+    },
+    {
+      "trace_id": "47c0a6bd069c57989b84536c1a299327",
+      "observation_id": "8df5997b4fbb53ef",
+      "score_ids": [
+        "867fb112-3be4-57de-9d72-6bd3b8cb323e"
+      ],
+      "full_input_digest": "sha256:23bfc1ffc4d0cd4113cbd81e121347fa734156c2c9a0d127316ad4da4ab48fc8",
+      "request_digest": "sha256:d78b83dac632afdad275b01179ffc3a0919d1228e5b39004d28d02f253e9d714",
+      "score_input_digests": [
+        null
+      ]
+    },
+    {
+      "trace_id": "47c0a6bd069c57989b84536c1a299327",
+      "observation_id": "8df5997b4fbb53ef",
+      "score_ids": [
+        "8c66eceb-635d-52af-9c2d-f32216495a7a"
+      ],
+      "full_input_digest": "sha256:23bfc1ffc4d0cd4113cbd81e121347fa734156c2c9a0d127316ad4da4ab48fc8",
+      "request_digest": "sha256:d78b83dac632afdad275b01179ffc3a0919d1228e5b39004d28d02f253e9d714",
+      "score_input_digests": [
+        "23bfc1ffc4d0cd4113cbd81e121347fa734156c2c9a0d127316ad4da4ab48fc8"
+      ]
+    }
+  ],
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/public/v2/observations",
+      "query": {
+        "traceId": "8bdb2c77e83712ddcb98b34110d22fb3",
+        "fields": "core,basic,io,metadata,trace_context",
+        "limit": 1
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v2/observations",
+      "query": {
+        "traceId": "8bdb2c77e83712ddcb98b34110d22fb3",
+        "fields": "core,basic,io,metadata,trace_context",
+        "limit": 1,
+        "cursor": "eyJsYXN0U3RhcnRUaW1lVG8iOiIyMDI2LTEwLTE5VDA4OjQ4OjMwLjIzOFoiLCJsYXN0VHJhY2VJZCI6IjhiZGIyYzc3ZTgzNzEyZGRjYjk4YjM0MTEwZDIyZmIzIiwibGFzdElkIjoiMzZmODhmYTBiNmRmY2YxNCJ9"
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v2/observations",
+      "query": {
+        "traceId": "8bdb2c77e83712ddcb98b34110d22fb3",
+        "fields": "core,basic,io,metadata,trace_context",
+        "limit": 1,
+        "cursor": "eyJsYXN0U3RhcnRUaW1lVG8iOiIyMDI2LTEwLTE5VDA4OjQwOjQzLjIxN1oiLCJsYXN0VHJhY2VJZCI6IjhiZGIyYzc3ZTgzNzEyZGRjYjk4YjM0MTEwZDIyZmIzIiwibGFzdElkIjoiMzZmODhmYTBiNmRmY2YxNCJ9"
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v2/observations",
+      "query": {
+        "traceId": "8bdb2c77e83712ddcb98b34110d22fb3",
+        "fields": "core,basic,io,metadata,trace_context",
+        "limit": 1,
+        "cursor": "eyJsYXN0U3RhcnRUaW1lVG8iOiIyMDI2LTEwLTE5VDA4OjQwOjM0LjQ5MFoiLCJsYXN0VHJhY2VJZCI6IjhiZGIyYzc3ZTgzNzEyZGRjYjk4YjM0MTEwZDIyZmIzIiwibGFzdElkIjoiMzZmODhmYTBiNmRmY2YxNCJ9"
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v3/scores",
+      "query": {
+        "traceId": "8bdb2c77e83712ddcb98b34110d22fb3",
+        "observationId": "36f88fa0b6dfcf14",
+        "source": "EVAL",
+        "fields": "details,subject",
+        "name": "issue214-20261019t084028z-judge",
+        "limit": 1
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v3/scores",
+      "query": {
+        "traceId": "8bdb2c77e83712ddcb98b34110d22fb3",
+        "observationId": "36f88fa0b6dfcf14",
+        "source": "EVAL",
+        "fields": "details,subject",
+        "name": "issue214-20261019t084028z-code",
+        "limit": 1
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v2/observations",
+      "query": {
+        "traceId": "47c0a6bd069c57989b84536c1a299327",
+        "fields": "core,basic,io,metadata,trace_context",
+        "limit": 1
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v2/observations",
+      "query": {
+        "traceId": "47c0a6bd069c57989b84536c1a299327",
+        "fields": "core,basic,io,metadata,trace_context",
+        "limit": 1,
+        "cursor": "eyJsYXN0U3RhcnRUaW1lVG8iOiIyMDI2LTEwLTIwVDAyOjI5OjQxLjk4N1oiLCJsYXN0VHJhY2VJZCI6IjQ3YzBhNmJkMDY5YzU3OTg5Yjg0NTM2YzFhMjk5MzI3IiwibGFzdElkIjoiOGRmNTk5N2I0ZmJiNTNlZiJ9"
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v2/observations",
+      "query": {
+        "traceId": "47c0a6bd069c57989b84536c1a299327",
+        "fields": "core,basic,io,metadata,trace_context",
+        "limit": 1,
+        "cursor": "eyJsYXN0U3RhcnRUaW1lVG8iOiIyMDI2LTEwLTIwVDAyOjI5OjM1LjQ3N1oiLCJsYXN0VHJhY2VJZCI6IjQ3YzBhNmJkMDY5YzU3OTg5Yjg0NTM2YzFhMjk5MzI3IiwibGFzdElkIjoiOGRmNTk5N2I0ZmJiNTNlZiJ9"
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v3/scores",
+      "query": {
+        "traceId": "47c0a6bd069c57989b84536c1a299327",
+        "observationId": "8df5997b4fbb53ef",
+        "source": "EVAL",
+        "fields": "details,subject",
+        "name": "issue214-20261019t084028z-judge",
+        "limit": 1
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v3/scores",
+      "query": {
+        "traceId": "47c0a6bd069c57989b84536c1a299327",
+        "observationId": "8df5997b4fbb53ef",
+        "source": "EVAL",
+        "fields": "details,subject",
+        "name": "issue214-20261019t084028z-code",
+        "limit": 1
+      },
+      "status": 200
+    }
+  ]
+}

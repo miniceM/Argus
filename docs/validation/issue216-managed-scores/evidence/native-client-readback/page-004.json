@@ -1,0 +1,62 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/public/v2/observations",
+    "query": {
+      "traceId": "8bdb2c77e83712ddcb98b34110d22fb3",
+      "fields": "core,basic,io,metadata,trace_context",
+      "limit": "1",
+      "cursor": "eyJsYXN0U3RhcnRUaW1lVG8iOiIyMDI2LTEwLTE5VDA4OjQwOjM0LjQ5MFoiLCJsYXN0VHJhY2VJZCI6IjhiZGIyYzc3ZTgzNzEyZGRjYjk4YjM0MTEwZDIyZmIzIiwibGFzdElkIjoiMzZmODhmYTBiNmRmY2YxNCJ9"
+    }
+  },
+  "status": 200,
+  "response": {
+    "data": [
+      {
+        "id": "fc0c1ff393663cc2",
+        "traceId": "8bdb2c77e83712ddcb98b34110d22fb3",
+        "startTime": "2026-10-19T08:40:34.487Z",
+        "endTime": "2026-10-19T08:40:41.108Z",
+        "projectId": "cmu5a6fj500aoad0jvrckiypb",
+        "parentObservationId": null,
+        "type": "CHAIN",
+        "name": "eval_item_execution:5e459f57-c5f5-4cd1-90da-db533d16591e",
+        "level": "DEFAULT",
+        "statusMessage": "",
+        "version": "",
+        "environment": "issue214-20261019",
+        "input": "{\"question\": \"Compute (135 + 287) * 3. You must call calculator.\", \"streaming\": false}",
+        "output": null,
+        "metadata": {
+          "generation": 1,
+          "item_id": "3c526bb5-0b51-48d7-92d1-adc5f7e9d718",
+          "launch_id": "b8c9e206-d643-4a1d-828b-48e9babb227b",
+          "scope.attributes.public_key": "[redacted]",
+          "scope.version": "4.17.0",
+          "scope.name": "langfuse-sdk",
+          "resourceAttributes.service.name": "unknown_service:python3.14",
+          "resourceAttributes.langfuse.environment": "issue214-20261019",
+          "resourceAttributes.service.instance.id": "65daf418-6390-48f7-8bda-8547ad47af1e",
+          "resourceAttributes.telemetry.sdk.version": "1.45.1",
+          "resourceAttributes.telemetry.sdk.name": "opentelemetry",
+          "resourceAttributes.telemetry.sdk.language": "python"
+        },
+        "latency": 6.621,
+        "timeToFirstToken": null,
+        "userId": "",
+        "sessionId": "",
+        "isRootObservation": true,
+        "traceName": "eval_item_execution:5e459f57-c5f5-4cd1-90da-db533d16591e",
+        "release": "",
+        "tags": [],
+        "bookmarked": false,
+        "public": false,
+        "modelId": null,
+        "inputPrice": null,
+        "outputPrice": null,
+        "totalPrice": null
+      }
+    ],
+    "meta": {}
+  }
+}

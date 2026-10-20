@@ -1,0 +1,44 @@
+[
+  {
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc",
+    "status": 200,
+    "at": "2026-10-20T02:36:30.832145+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items",
+    "status": 200,
+    "at": "2026-10-20T02:36:30.863101+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores/collect",
+    "status": 200,
+    "at": "2026-10-20T02:36:31.565361+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores",
+    "status": 200,
+    "at": "2026-10-20T02:36:31.570771+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores/collect",
+    "status": 200,
+    "at": "2026-10-20T02:36:32.080699+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items/b6c920e7-d950-412d-990e-466c92cd0b41/managed-scores",
+    "status": 200,
+    "at": "2026-10-20T02:36:32.083691+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/33969c21-e67c-4282-89c1-3498aeeaa8dc/items",
+    "status": 200,
+    "at": "2026-10-20T02:36:32.087454+00:00"
+  }
+]

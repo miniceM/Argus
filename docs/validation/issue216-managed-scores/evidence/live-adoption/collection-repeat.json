@@ -1,0 +1,23 @@
+{
+  "launch_id": "33969c21-e67c-4282-89c1-3498aeeaa8dc",
+  "item_execution_id": "b6c920e7-d950-412d-990e-466c92cd0b41",
+  "quality_conclusion": "unknown",
+  "releasable": false,
+  "retry_after": null,
+  "decisions": [
+    {
+      "score_name": "issue214-20261019t084028z-judge",
+      "score_id": "867fb112-3be4-57de-9d72-6bd3b8cb323e",
+      "decision": "ALREADY_ADOPTED",
+      "reason": "VERIFIED",
+      "evidence_id": "mse_d92b821ef23c3477bda8484eeb4b1f828df84192cfe0eb7527a2b6bc"
+    },
+    {
+      "score_name": "issue214-20261019t084028z-code",
+      "score_id": "8c66eceb-635d-52af-9c2d-f32216495a7a",
+      "decision": "ALREADY_ADOPTED",
+      "reason": "VERIFIED",
+      "evidence_id": "mse_582d7bed2b950678098f62029490475eaee98607fd1ff196a4d7a665"
+    }
+  ]
+}

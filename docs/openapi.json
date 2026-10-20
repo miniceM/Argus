@@ -1648,6 +1648,108 @@
         }
       }
     },
+    "/api/v1/experiment-launches/{launch_id}/items/{item_id}/managed-scores/collect": {
+      "post": {
+        "tags": [
+          "Experiment Launches"
+        ],
+        "summary": "单次定向查询并采纳托管 Score，仅供诊断",
+        "operationId": "collect_managed_scores_api_v1_experiment_launches__launch_id__items__item_id__managed_scores_collect_post",
+        "parameters": [
+          {
+            "name": "launch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Launch Id"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedScoreCollectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/experiment-launches/{launch_id}/items/{item_id}/managed-scores": {
+      "get": {
+        "tags": [
+          "Experiment Launches"
+        ],
+        "summary": "只读托管 Score 采纳记录、原始证据与拒绝原因",
+        "operationId": "get_managed_scores_api_v1_experiment_launches__launch_id__items__item_id__managed_scores_get",
+        "parameters": [
+          {
+            "name": "launch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Launch Id"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedScoreDiagnosticsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/evaluators": {
       "get": {
         "tags": [
@@ -5834,6 +5936,191 @@
           "type"
         ],
         "title": "ManagedObservationTarget"
+      },
+      "ManagedScoreCollectionResponse": {
+        "properties": {
+          "launch_id": {
+            "type": "string",
+            "title": "Launch Id"
+          },
+          "item_execution_id": {
+            "type": "string",
+            "title": "Item Execution Id"
+          },
+          "quality_conclusion": {
+            "type": "string",
+            "const": "unknown",
+            "title": "Quality Conclusion",
+            "default": "unknown"
+          },
+          "releasable": {
+            "type": "boolean",
+            "const": false,
+            "title": "Releasable",
+            "default": false
+          },
+          "retry_after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry After"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/ManagedScoreDecisionResponse"
+            },
+            "type": "array",
+            "title": "Decisions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "launch_id",
+          "item_execution_id",
+          "decisions"
+        ],
+        "title": "ManagedScoreCollectionResponse"
+      },
+      "ManagedScoreDecisionResponse": {
+        "properties": {
+          "score_name": {
+            "type": "string",
+            "title": "Score Name"
+          },
+          "score_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Id"
+          },
+          "decision": {
+            "type": "string",
+            "title": "Decision"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "score_name",
+          "decision",
+          "reason",
+          "evidence_id"
+        ],
+        "title": "ManagedScoreDecisionResponse"
+      },
+      "ManagedScoreDiagnosticsResponse": {
+        "properties": {
+          "launch_id": {
+            "type": "string",
+            "title": "Launch Id"
+          },
+          "item_execution_id": {
+            "type": "string",
+            "title": "Item Execution Id"
+          },
+          "quality_conclusion": {
+            "type": "string",
+            "const": "unknown",
+            "title": "Quality Conclusion",
+            "default": "unknown"
+          },
+          "releasable": {
+            "type": "boolean",
+            "const": false,
+            "title": "Releasable",
+            "default": false
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationResultResponse"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/ManagedScoreEvidenceResponse"
+            },
+            "type": "array",
+            "title": "Evidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "launch_id",
+          "item_execution_id",
+          "results",
+          "evidence"
+        ],
+        "title": "ManagedScoreDiagnosticsResponse"
+      },
+      "ManagedScoreEvidenceResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "score_name": {
+            "type": "string",
+            "title": "Score Name"
+          },
+          "score_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Id"
+          },
+          "decision": {
+            "type": "string",
+            "title": "Decision"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Evidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "score_name",
+          "decision",
+          "reason",
+          "created_at",
+          "evidence"
+        ],
+        "title": "ManagedScoreEvidenceResponse"
       },
       "ManagedScoreExpectation": {
         "properties": {

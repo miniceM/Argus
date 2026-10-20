@@ -733,6 +733,14 @@ API 完整类型以 [OpenAPI](docs/openapi.json) 为准；[创建请求和 Froze
 本地 typed 结果，也不能绕过该停机线。自动查询/关联、异步收集/恢复、正式 Gate
 采纳与完整 Console 流程分别属于 #216～#219。
 
+#### 8.3.9 托管 Score 的定向采纳与诊断（Issue #216）
+
+- 仅对显式 Managed Launch 读取官方 Scores v3，按 Trace/Observation/source/name 定向、完整 cursor 分页；401/403/429/超时/分页错误不生成部分测量。
+- 通过当前 Item/checkpoint/generation/Manifest、唯一原生 TOOL 及其 IO、冻结 Rule/Evaluator 采纳条件、真实 Score subject/source/job metadata 共同证明归属；名称或 configId 不是归属依据。
+- 复用 TypedEvaluationResult 与 evaluation_results；外部 project/Score 唯一约束和 Item 写锁保护幂等，managed_score_evidence 仅保存追加式采纳/拒绝审计。缺分/冲突/旧代只作诊断，不伪造数值或替换已采纳结果。
+- provenance 为 MANAGED_DIAGNOSTIC_ONLY，未创建远程实现版本锁；不重算 QualityPolicy、回写 Snapshot、触发出站 Score 或修改 Release Gate。正式质量闭环仍属 #218。
+- API 的唯一契约来源为 docs/openapi.json；可复现操作、当前上游证据可用性限制及真实验收见 [Issue #216 验收记录](docs/validation/issue216-managed-scores/README.md)。
+
 ### 8.4 ExperimentItemExecution
 
 表示单个 Dataset Item 的执行状态：

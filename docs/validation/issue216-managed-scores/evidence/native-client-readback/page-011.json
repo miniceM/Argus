@@ -1,0 +1,56 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/public/v3/scores",
+    "query": {
+      "traceId": "47c0a6bd069c57989b84536c1a299327",
+      "observationId": "8df5997b4fbb53ef",
+      "source": "EVAL",
+      "fields": "details,subject",
+      "name": "issue214-20261019t084028z-code",
+      "limit": "1"
+    }
+  },
+  "status": 200,
+  "response": {
+    "data": [
+      {
+        "id": "8c66eceb-635d-52af-9c2d-f32216495a7a",
+        "projectId": "cmu5a6fj500aoad0jvrckiypb",
+        "name": "issue214-20261019t084028z-code",
+        "source": "EVAL",
+        "timestamp": "2026-10-20T02:29:43.129Z",
+        "environment": "issue216-20261020",
+        "createdAt": "2026-10-20T02:29:44.000Z",
+        "updatedAt": "2026-10-20T02:29:58.796Z",
+        "comment": "Native HTTP text checked by Langfuse managed Python runtime; expected constant 1266 is smoke rubric only",
+        "configId": null,
+        "metadata": {
+          "input_sha256": "23bfc1ffc4d0cd4113cbd81e121347fa734156c2c9a0d127316ad4da4ab48fc8",
+          "output_sha256": "a9ca78f3852f38231ae1c8e330c650f082976f38982010f6f5968f7341159eee",
+          "experiment_context_present": false,
+          "job_execution_id": "2cf742c2b2951a4c7d340d7f22990063",
+          "job_configuration_id": "cmvg2evtf001gad0f864w8yji",
+          "evaluation_rule_id": "cmvg2evtf001gad0f864w8yji",
+          "evaluation_rule_assignment_id": "cmvg2evtf001iad0fl4gu92ix",
+          "evaluator_version_id": "cmvf083f50036ad0ggpilrl84",
+          "evaluator_id": "cmvf083f50034ad0gbpddxpar",
+          "target_trace_id": "47c0a6bd069c57989b84536c1a299327",
+          "target_observation_id": "8df5997b4fbb53ef",
+          "dispatcher_name": "aws-lambda",
+          "code_eval_runtime": "PYTHON"
+        },
+        "subject": {
+          "kind": "observation",
+          "id": "8df5997b4fbb53ef",
+          "traceId": "47c0a6bd069c57989b84536c1a299327"
+        },
+        "dataType": "BOOLEAN",
+        "value": true
+      }
+    ],
+    "meta": {
+      "limit": 1
+    }
+  }
+}

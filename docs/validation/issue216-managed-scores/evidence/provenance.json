@@ -1,0 +1,24 @@
+{
+  "captured_at": "2026-10-20T02:43:36.915603+00:00",
+  "checkout_head": "2b96efea5b8ceabff7a2ce3e15cd752275bdba90",
+  "execution_source_ref": "5db5cd2",
+  "collector_verified_ref": "f08f5f2acf76a97f8f550a235c1479dc27b66929",
+  "execution_runtime": "isolated local Runner / SQLite; native existing Flowise + Langfuse Cloud project",
+  "execution_build_id": "5db5cd2-issue216",
+  "collector_runtime_build_id": "f08f5f2-issue216",
+  "python": "3.12.4",
+  "langfuse_sdk": "4.16.0",
+  "node": "v22.23.3",
+  "postgres_image_id": "sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+  "official_openapi_url": "https://cloud.langfuse.com/generated/api/openapi.yml",
+  "official_openapi_sha256": "301fc5d38a5d4bc2dc97f517e205ea2b0c145a993eec93f490e3a958408de6f6",
+  "implementation_files": {
+    "services/eval-runner/app/langfuse_managed_scores.py": "c9ebfeff562378c27d9eb1d53971a2e9cb69d2f7c754d87dcf89966bfe326a05",
+    "services/eval-runner/app/langfuse_scores_client.py": "040bc95af220d5c70b3bcca7f961fb3014a50c33fd88e1e13fc84ec995df0533"
+  },
+  "no_new_score_engine": true,
+  "score_write_requests": 0,
+  "existing_rules_modified": false,
+  "model_retry_verification": "AgentVersion max_retries=0; no hidden collector retries; no assertion of independent Flowise internal model retry inspection",
+  "scope": "diagnostic_only; no QualityPolicy/Snapshot/Release Gate or outgoing projection mutation"
+}

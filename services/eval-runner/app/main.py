@@ -122,18 +122,25 @@ async def lifespan(app: FastAPI):
     async def _worker_loop():
         semaphore = asyncio.Semaphore(settings.worker_concurrency)
         running_tasks = set()
+        managed_tasks = set()
+        from .worker import _managed_slot_count
+
+        managed_slots = _managed_slot_count()
 
         async def _process_item(m_id: str, i_id: str, g: int, work_type: str):
+            # Managed 不进入 HTTP 调度 Semaphore；其数量由独立槽位约束。
+            if work_type == WORK_TYPE_MANAGED:
+                try:
+                    await worker.execute_managed_message(m_id, i_id, g)
+                except Exception:
+                    pass
+                return
             async with semaphore:
                 try:
                     if work_type == WORK_TYPE_EVALUATION:
                         # Issue #84: evaluation-only recovery reuses the stored
                         # Agent output and never invokes the Agent.
                         await worker.execute_evaluation_message(m_id, i_id, g)
-                    elif work_type == WORK_TYPE_MANAGED:
-                        # Issue #217: managed score collection reuses the stored
-                        # Agent output/trace and never invokes the Agent.
-                        await worker.execute_managed_message(m_id, i_id, g)
                     else:
                         await worker.execute_item_message(m_id, i_id, g)
                 except Exception:
@@ -153,17 +160,23 @@ async def lifespan(app: FastAPI):
                     continue
 
                 for msg_id, item_id, gen, work_type in msgs:
+                    if work_type == WORK_TYPE_MANAGED and len(managed_tasks) >= managed_slots:
+                        # DB 中 pending/evaluating 是持久任务，Reconciler 会补投。
+                        # 槽满时确认冗余唤醒，不占 HTTP 槽、不创建无界等待协程。
+                        queue_adapter.ack(msg_id)
+                        continue
                     task = asyncio.create_task(_process_item(msg_id, item_id, gen, work_type or WORK_TYPE_INVOCATION))
-                    running_tasks.add(task)
-                    task.add_done_callback(running_tasks.discard)
+                    tasks = managed_tasks if work_type == WORK_TYPE_MANAGED else running_tasks
+                    tasks.add(task)
+                    task.add_done_callback(tasks.discard)
 
             except asyncio.CancelledError:
                 break
             except Exception:
                 await asyncio.sleep(1)
 
-        if running_tasks:
-            await asyncio.gather(*running_tasks, return_exceptions=True)
+        if running_tasks or managed_tasks:
+            await asyncio.gather(*running_tasks, *managed_tasks, return_exceptions=True)
 
     async def _reconciler_loop():
         while not stop_event.is_set():

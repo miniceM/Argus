@@ -105,7 +105,7 @@ def get_retry_config() -> dict[str, float]:
     attempts_raw = os.getenv("ARGUS_MANAGED_SCORE_MAX_ATTEMPTS", "10")
     try:
         max_attempts = int(float(attempts_raw))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         max_attempts = 10
     if max_attempts < 1:
         max_attempts = 10
@@ -143,6 +143,103 @@ def backoff_delay(attempt: int, *, base: float = 5.0, cap: float = 300.0) -> flo
     if attempt - 1 >= 32:
         return float(cap)
     return min(float(base) * (2.0 ** (attempt - 1)), float(cap))
+
+
+
+def _retry_delay(cfg, attempt: int, retry_after, now, cycle_start) -> float:
+    """尊重 Retry-After（秒数或 HTTP-date），但不把周期延长到 Deadline 之后。"""
+    import math
+    from email.utils import parsedate_to_datetime
+
+    delay = backoff_delay(attempt, base=float(cfg["base_delay"]), cap=float(cfg["max_delay"]))
+    if retry_after is not None:
+        try:
+            remote_delay = float(retry_after)
+        except (TypeError, ValueError, OverflowError):
+            try:
+                remote_delay = (_as_utc(parsedate_to_datetime(str(retry_after))) - now).total_seconds()
+            except (TypeError, ValueError, OverflowError):
+                remote_delay = 0.0
+        if math.isfinite(remote_delay):
+            delay = max(delay, remote_delay)
+    if cycle_start is not None:
+        remaining = (_as_utc(cycle_start) + timedelta(seconds=cfg["deadline"]) - now).total_seconds()
+        delay = min(delay, max(0.0, remaining))
+    return delay
+
+
+def reconcile_managed_interruption(session, observed, *, require_expired: bool = True) -> bool:
+    """用原行锁/CAS 接管中断，不复活同一代际、不重置收集周期预算。
+
+    扫描是候选提示而非写入授权：按 Launch → Item 加锁后重新读取 token、
+    generation、dispatch 与过期时间，防扫描后已续租/接管的 Worker 被清租。
+    取消可关闭无租约的退避任务；Builtin 不进入此路径。
+    """
+    from .db_models import ExperimentItemExecutionRecord as Item
+    from .db_models import ExperimentLaunchRecord as Launch
+
+    item_id, launch_id = observed.id, observed.launch_id
+    generation, token, dispatch = (
+        observed.evaluation_generation, observed.evaluation_lease_token, observed.dispatch_generation
+    )
+    is_pg = session.bind.dialect.name == "postgresql"
+    if not is_pg:
+        # SQLite 无 FOR UPDATE；同样先获得 Launch 写锁，保持统一锁顺序。
+        session.execute(update(Launch).where(Launch.id == launch_id).values(id=Launch.id))
+    launch_stmt = select(Launch).where(Launch.id == launch_id)
+    if is_pg:
+        launch_stmt = launch_stmt.with_for_update()
+    launch = session.scalar(launch_stmt.execution_options(populate_existing=True))
+    stmt = select(Item).where(Item.id == item_id)
+    if is_pg:
+        stmt = stmt.with_for_update()
+    item = session.scalar(stmt.execution_options(populate_existing=True))
+    now = _now()
+    if not item or not launch or not is_managed_manifest(launch.manifest):
+        return False
+    if (item.evaluation_status != EVALUATION_RUNNING or item.evaluation_generation != generation
+            or item.evaluation_lease_token != token or item.dispatch_generation != dispatch):
+        return False
+    cancelled = bool(launch.cancel_requested_at or launch.status in ("CANCELLING", "CANCELLED"))
+    expiry = _as_utc(item.evaluation_lease_expires_at)
+    if require_expired and (expiry is None or expiry > now):
+        return False
+    if not require_expired and not cancelled:
+        return False
+    code = "EVALUATION_CANCELLED" if cancelled else "LEASE_EXPIRED"
+    _close_attempt(
+        session, item_id=item_id, evaluation_generation=generation,
+        status="failed", error_type=code, error_message="评分收集中断；原 Agent 输出保持不变。",
+        now=now, launch_id=launch_id if require_expired else None,
+    )
+    cfg = get_retry_config()
+    used = _cycle_attempts_used(session, item_id, item.evaluation_started_at)
+    start = _as_utc(item.evaluation_started_at)
+    if not cancelled and used >= int(cfg["max_attempts"]):
+        code = MANAGED_EXHAUSTED_CODE
+    elif not cancelled and (start is None or now >= start + timedelta(seconds=cfg["deadline"])):
+        code = MANAGED_DEADLINE_CODE
+    item.evaluation_lease_owner = None
+    item.evaluation_lease_token = None
+    item.evaluation_lease_expires_at = None
+    item.quality_conclusion = "unknown"
+    item.updated_at = now
+    if code != "LEASE_EXPIRED":
+        item.eval_status = "failed"
+        item.eval_error = item.evaluation_error = f"{code}: 托管评分已终止，质量保持 UNKNOWN。"
+        item.evaluation_status = EVALUATION_FAILED
+        item.evaluation_completed_at = now
+        item.available_at = None
+        session.flush()
+        _materialize_recovery_snapshot_if_settled(session, launch)
+    else:
+        # 每次崩溃也消耗一轮：保留旧 attempt，新代际阻断迟到线程及重复旧消息。
+        item.evaluation_generation = generation + 1
+        item.available_at = now + timedelta(seconds=_retry_delay(cfg, max(1, used), None, now, start))
+        item.eval_status = "pending"
+        item.eval_error = MANAGED_PENDING_MESSAGE
+        item.evaluation_error = "EVALUATION_LEASE_EXPIRED: 评分收集已退避重试，不会再次调用 Agent。"
+    return True
 
 
 def get_managed_score_client():
@@ -347,6 +444,7 @@ def _record_managed_attempt_started(
     target_bindings: list[str],
     reused_output_digest: str,
     worker_id: str,
+    lease_token: str | None = None,
 ) -> None:
     """幂等记录收集 attempt：崩溃后租约失效重入同代时复活该行而非崩溃。
 
@@ -368,7 +466,7 @@ def _record_managed_attempt_started(
                         target_bindings=list(target_bindings),
                         reused_output_digest=reused_output_digest or "",
                         worker_id=worker_id,
-                        lease_token=None,
+                        lease_token=lease_token,
                         started_at=now,
                     )
                 )
@@ -385,6 +483,7 @@ def _record_managed_attempt_started(
                     target_bindings=list(target_bindings),
                     reused_output_digest=reused_output_digest or "",
                     worker_id=worker_id,
+                    lease_token=lease_token,
                     error_type=None,
                     error_message=None,
                     started_at=now,
@@ -504,6 +603,7 @@ def _fail_managed(
             session.rollback()
             return RecoveryOutcome(claimed=True, finalized=False, reason="ITEM_MISSING")
         # 终态写入同样要求有效租约：过期才到的失败不得覆盖当前结果。
+        now = _now()
         lease_exp = _as_utc(item.evaluation_lease_expires_at)
         if (
             item.evaluation_generation != generation
@@ -511,9 +611,10 @@ def _fail_managed(
             or item.evaluation_status != EVALUATION_RUNNING
             or lease_exp is None
             or lease_exp <= now
+            or item.dispatch_generation != claim.get("dispatch_generation", item.dispatch_generation)
         ):
             _close_attempt(
-                session, item_id=item_id, evaluation_generation=generation,
+                session, item_id=item_id, evaluation_generation=generation, lease_token=token,
                 status="discarded", error_type="SUPERSEDED_OR_LEASE_LOST",
                 error_message="旧评分收集已过期，未覆盖当前结果。", now=now,
             )
@@ -531,7 +632,7 @@ def _fail_managed(
         item.available_at = None
         item.updated_at = now
         _close_attempt(
-            session, item_id=item_id, evaluation_generation=generation,
+            session, item_id=item_id, evaluation_generation=generation, lease_token=token,
             status="failed", error_type=error_code, error_message=error_message, now=now,
         )
         session.flush()
@@ -549,6 +650,7 @@ def _schedule_retry(
     *,
     reason: str,
     launch_id: str | None = None,
+    retry_after: str | None = None,
 ) -> RecoveryOutcome:
     """可重试：关闭本轮 attempt，递增代际并设置指数退避，不入队（由 Reconciler 到期入队）。"""
     from .db_models import ExperimentItemExecutionRecord
@@ -570,6 +672,7 @@ def _schedule_retry(
         if not item:
             session.rollback()
             return RecoveryOutcome(claimed=True, finalized=False, reason="ITEM_MISSING")
+        now = _now()
         lease_exp = _as_utc(item.evaluation_lease_expires_at)
         if (
             item.evaluation_generation != generation
@@ -579,7 +682,7 @@ def _schedule_retry(
             or lease_exp <= now
         ):
             _close_attempt(
-                session, item_id=item_id, evaluation_generation=generation,
+                session, item_id=item_id, evaluation_generation=generation, lease_token=token,
                 status="discarded", error_type="SUPERSEDED_OR_LEASE_LOST",
                 error_message="旧评分收集已过期，未覆盖当前结果。", now=now,
             )
@@ -587,7 +690,7 @@ def _schedule_retry(
             return RecoveryOutcome(claimed=True, finalized=False, reason="SUPERSEDED_OR_LEASE_LOST")
         if expected_dispatch is not None and item.dispatch_generation != expected_dispatch:
             _close_attempt(
-                session, item_id=item_id, evaluation_generation=generation,
+                session, item_id=item_id, evaluation_generation=generation, lease_token=token,
                 status="discarded", error_type="DISPATCH_SUPERSEDED",
                 error_message="该执行已重跑，旧评分收集不再适用。", now=now,
             )
@@ -597,10 +700,10 @@ def _schedule_retry(
         # 人工重提后代际已很大，若沿用代际新周期首退即封顶。本轮 attempt
         # 行此时仍为 running，故计入次数，首退 delay(1)=base。
         cycle_attempt = max(1, int(_cycle_attempts_used(session, item_id, item.evaluation_started_at)))
-        delay = backoff_delay(cycle_attempt, base=float(cfg["base_delay"]), cap=float(cfg["max_delay"]))
+        delay = _retry_delay(cfg, cycle_attempt, retry_after, now, item.evaluation_started_at)
         next_gen = generation + 1
         _close_attempt(
-            session, item_id=item_id, evaluation_generation=generation,
+            session, item_id=item_id, evaluation_generation=generation, lease_token=token,
             status="failed", error_type=reason,
             error_message=f"托管评分未齐（{reason}），{delay:.1f}s 后重试（本周期第 {cycle_attempt} 次）。",
             now=now,
@@ -667,6 +770,7 @@ def _finalize_success(
         if not item:
             session.rollback()
             return RecoveryOutcome(claimed=True, finalized=False, reason="ITEM_MISSING")
+        now = _now()
         lease_exp = _as_utc(item.evaluation_lease_expires_at)
         if (
             item.evaluation_generation != generation
@@ -676,7 +780,7 @@ def _finalize_success(
             or lease_exp <= now
         ):
             _close_attempt(
-                session, item_id=item_id, evaluation_generation=generation,
+                session, item_id=item_id, evaluation_generation=generation, lease_token=token,
                 status="discarded", error_type="SUPERSEDED_OR_LEASE_LOST",
                 error_message="旧评分收集已过期，未覆盖当前结果。", now=now,
             )
@@ -684,7 +788,7 @@ def _finalize_success(
             return RecoveryOutcome(claimed=True, finalized=False, reason="SUPERSEDED_OR_LEASE_LOST")
         if expected_dispatch is not None and item.dispatch_generation != expected_dispatch:
             _close_attempt(
-                session, item_id=item_id, evaluation_generation=generation,
+                session, item_id=item_id, evaluation_generation=generation, lease_token=token,
                 status="discarded", error_type="DISPATCH_SUPERSEDED",
                 error_message="该执行已重跑，旧评分收集不再适用。", now=now,
             )
@@ -694,12 +798,19 @@ def _finalize_success(
             # 远程查询期间取消：迟到结果绝不能诞生新的成功结论，
             # 终态归属取消流程，不在此处写入。
             _close_attempt(
-                session, item_id=item_id, evaluation_generation=generation,
+                session, item_id=item_id, evaluation_generation=generation, lease_token=token,
                 status="discarded", error_type="EVALUATION_CANCELLED",
                 error_message="评测任务已取消，迟到评分未写入。", now=now,
             )
             session.commit()
             return RecoveryOutcome(claimed=True, finalized=False, reason="CANCELLED_SUPERSEDE")
+        cycle_start = _as_utc(item.evaluation_started_at)
+        if cycle_start is None or now >= cycle_start + timedelta(seconds=get_retry_config()["deadline"]):
+            session.rollback()
+            return _fail_managed(
+                db_mgr, claim, error_code=MANAGED_DEADLINE_CODE,
+                error_message="托管评分等待已超时，质量保持 UNKNOWN。", launch_id=launch_id,
+            )
         if not is_complete(session, item_id, manifest):
             # 竞争窗口：采纳结果被回滚或代际已变，降级为重试而非伪造完成。
             session.rollback()
@@ -735,7 +846,7 @@ def _finalize_success(
         item.available_at = None
         item.updated_at = now
         _close_attempt(
-            session, item_id=item_id, evaluation_generation=generation,
+            session, item_id=item_id, evaluation_generation=generation, lease_token=token,
             status="succeeded", now=now,
         )
         session.flush()
@@ -767,6 +878,7 @@ def recover_managed_scores(
     claim = claim_evaluation(
         db_mgr, item_id=item_id, evaluation_generation=evaluation_generation,
         worker_id=worker_id, lease_seconds=lease_seconds,
+        allow_expired=False, respect_available_at=True,
     )
     if claim is None:
         return RecoveryOutcome(claimed=False, finalized=False, reason="NOT_CLAIMABLE")
@@ -778,7 +890,7 @@ def recover_managed_scores(
         if item is None:
             session.rollback()
             return RecoveryOutcome(claimed=True, finalized=False, reason="ITEM_MISSING")
-        expected_dispatch = item.dispatch_generation
+        expected_dispatch = claim["dispatch_generation"]
         manifest = (session.get(ExperimentLaunchRecord, launch_id).manifest if launch_id else {}) or {}
         output_digest = ""
         try:
@@ -817,8 +929,22 @@ def recover_managed_scores(
                 error_message="Agent 尚未成功，暂不能收集托管评分。", launch_id=launch_id,
             )
         required = required_score_names(manifest)
+        cycle_start = _as_utc(item.evaluation_started_at)
+        attempts_used = _cycle_attempts_used(session, item_id, cycle_start)
         session.rollback()
     claim["dispatch_generation"] = expected_dispatch
+    cfg = get_retry_config()
+    deadline = cycle_start + timedelta(seconds=cfg["deadline"]) if cycle_start else now
+    if _now() >= deadline:
+        return _fail_managed(
+            db_mgr, claim, error_code=MANAGED_DEADLINE_CODE,
+            error_message="托管评分等待已超时，未读取远端；质量保持 UNKNOWN。", launch_id=launch_id,
+        )
+    if attempts_used >= int(cfg["max_attempts"]):
+        return _fail_managed(
+            db_mgr, claim, error_code=MANAGED_EXHAUSTED_CODE,
+            error_message="托管评分本周期预算已用尽，未读取远端；质量保持 UNKNOWN。", launch_id=launch_id,
+        )
 
     _record_managed_attempt_started(
         db_mgr, item_id=item_id, launch_id=launch_id,
@@ -826,11 +952,19 @@ def recover_managed_scores(
         target_bindings=sorted(required),
         reused_output_digest=output_digest,
         worker_id=worker_id,
+        lease_token=claim["lease_token"],
     )
 
     # 只读远端，不持有任何 DB 锁与 Agent 并发额度。
     # 租约围栏随收集传入：远端耗时期间失租/换代/取消，迟到写入无效。
+    collect_timeout = min(
+        get_collect_timeout_seconds(),
+        max(0.0, (deadline - _now()).total_seconds()),
+        max(0.0, (claim["lease_expires_at"] - _now()).total_seconds()),
+    )
     fence = {
+        "cycle_deadline": deadline,
+        "collection_deadline": _now() + timedelta(seconds=collect_timeout),
         "evaluation_generation": evaluation_generation,
         "lease_token": claim["lease_token"],
         "dispatch_generation": expected_dispatch,
@@ -838,7 +972,7 @@ def recover_managed_scores(
     factory = client_factory or get_managed_score_client
     report = _collect_with_timeout(
         db_mgr, factory, launch_id, item_id, fence=fence,
-        timeout_seconds=get_collect_timeout_seconds(),
+        timeout_seconds=collect_timeout,
     )
 
     with db_mgr.get_session() as session:
@@ -856,6 +990,12 @@ def recover_managed_scores(
             attempts_used = int(evaluation_generation)
         session.rollback()
 
+    # Deadline 是整个收集周期的绝对上界，不能被晚到的成功绕过。
+    if _now() >= deadline:
+        return _fail_managed(
+            db_mgr, claim, error_code=MANAGED_DEADLINE_CODE,
+            error_message="托管评分等待已超时，迟到评分未采纳；质量保持 UNKNOWN。", launch_id=launch_id,
+        )
     # 已存成功行不等于本轮证据完整：歧义/冲突/读失败必须阻塞终结。
     if complete and _round_cleanly_adopted(report, required):
         return _finalize_success(db_mgr, claim, launch_id=launch_id, report=report, required=required)
@@ -884,7 +1024,9 @@ def recover_managed_scores(
             error_message="托管评分等待已超时，质量保持 UNKNOWN，可在 Langfuse 出分后手动重评。",
             launch_id=launch_id,
         )
-    return _schedule_retry(db_mgr, claim, reason=reason, launch_id=launch_id)
+    return _schedule_retry(
+        db_mgr, claim, reason=reason, launch_id=launch_id, retry_after=(report or {}).get("retry_after"),
+    )
 
 
 

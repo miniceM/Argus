@@ -499,10 +499,9 @@ class LaunchOrchestrator:
                 it.evaluation_lease_owner = None
                 it.evaluation_lease_token = None
                 it.evaluation_lease_expires_at = None
-                if managed and it.evaluation_started_at is None:
-                    it.evaluation_started_at = now
-                elif not managed:
-                    it.evaluation_started_at = now
+                # #217 P1-4：人工重提开启新的收集周期：重置周期起点，给出新的
+                # 重试窗口与 Deadline；代际仍单调递增做防旧隔离。
+                it.evaluation_started_at = now
                 it.evaluation_completed_at = None
                 if managed:
                     it.eval_status = "pending"

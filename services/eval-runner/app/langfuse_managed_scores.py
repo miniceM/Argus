@@ -60,6 +60,11 @@ METADATA_FIELDS = (
     "output_sha256",
 )
 
+# 采纳同一性只看评分内容与归属，不看租约租期：同一原始 Score 在新
+# 代际/新租约下合法重读必须判 ALREADY_ADOPTED，不能误判为冲突。
+# P1-2：逐出 evaluation_generation、lease_token 后再比对。
+RESULT_IDENTITY_EXCLUDED_CTX_FIELDS = frozenset({"evaluation_generation", "lease_token"})
+
 
 def _utc(value):
     if isinstance(value, str):
@@ -251,13 +256,20 @@ class ManagedScoreCollector:
             row.get("value"), result_type=expected["data_type"], category_values=expected.get("category_values")
         )
 
-    def collect(self, launch_id: str, item_id: str) -> dict:
+    def collect(self, launch_id: str, item_id: str, *, fence: dict | None = None) -> dict:
+        """定向收集并采纳一轮 Score。
+
+        ``fence`` 为后台 Worker 已认领的租约围栏
+        ``{"evaluation_generation", "lease_token", "dispatch_generation"}``；
+        传入时写入前在行锁内复验，失租/换代/取消一律不写有效结果。
+        手动单次诊断 API 不传 fence，保持原有上下文一致性语义。
+        """
         try:
             with self.db.get_session() as session:
                 ctx, contract = self._context(session, launch_id, item_id)
         except ScoresReadError as exc:
             # 无有效 Context 时不伪造关联证据；已知 Item 的诊断仍可读取。
-            return self._failure(launch_id, item_id, exc.code)
+            return self._failure(launch_id, item_id, exc.code, fence=fence)
         decisions = []
         try:
             obs = self._observation(ctx, contract)
@@ -267,7 +279,10 @@ class ManagedScoreCollector:
                 for expected in contract["scores"]
             ]
         except ScoresReadError as exc:
-            return self._save(ctx, contract, [("REJECTED", exc.code, "", None, None)], retry_after=exc.retry_after)
+            return self._save(
+                ctx, contract, [("REJECTED", exc.code, "", None, None)],
+                retry_after=exc.retry_after, fence=fence,
+            )
         for expected, rows in candidates:
             unique, eligible, conflicts = {}, [], set()
             for row in rows:
@@ -327,9 +342,9 @@ class ManagedScoreCollector:
                 decisions.append(("ADOPTED", "VERIFIED", expected["name"], row, result))
             if not rows:
                 decisions.append(("MISSING", "SCORE_MISSING", expected["name"], None, None))
-        return self._save(ctx, contract, decisions)
+        return self._save(ctx, contract, decisions, fence=fence)
 
-    def _failure(self, launch_id, item_id, code):
+    def _failure(self, launch_id, item_id, code, *, fence=None):
         with self.db.get_session() as session:
             item = session.get(ExperimentItemExecutionRecord, item_id)
             if item is None or item.launch_id != launch_id:
@@ -339,9 +354,42 @@ class ManagedScoreCollector:
                 "item_execution_id": item_id,
                 "dispatch_generation": item.dispatch_generation,
             }
-        return self._save(ctx, {}, [("REJECTED", code, "", None, None)])
+        return self._save(ctx, {}, [("REJECTED", code, "", None, None)], fence=fence)
 
-    def _save(self, ctx, contract, decisions, retry_after=None):
+    def _check_fence(self, session, ctx, fence):
+        """行锁内复验调用者租约：失租/换代/取消返回丢弃原因，否则 None。
+
+        消除“远端查询耗时期间租约易主，旧 Worker 仍写入有效结果”的
+        TOCTOU 窗口；复用现有行锁与 CAS，不新增锁服务。
+        """
+        if not fence:
+            return None
+        item = session.get(ExperimentItemExecutionRecord, ctx["item_execution_id"])
+        if item is None or item.launch_id != ctx["launch_id"]:
+            return "LEASE_LOST"
+        launch = session.get(ExperimentLaunchRecord, ctx["launch_id"])
+        if launch is not None and (
+            launch.cancel_requested_at or launch.status in ("CANCELLING", "CANCELLED")
+        ):
+            return "CANCELLED_SUPERSEDE"
+        if (
+            item.evaluation_generation != fence.get("evaluation_generation")
+            or item.dispatch_generation != fence.get("dispatch_generation")
+        ):
+            return "SUPERSEDED_GENERATION"
+        exp = item.evaluation_lease_expires_at
+        if exp is not None and exp.tzinfo is None:
+            exp = exp.replace(tzinfo=UTC)
+        if (
+            item.evaluation_status != "evaluating"
+            or item.evaluation_lease_token != fence.get("lease_token")
+            or exp is None
+            or exp <= datetime.now(UTC)
+        ):
+            return "LEASE_LOST"
+        return None
+
+    def _save(self, ctx, contract, decisions, retry_after=None, *, fence=None):
         report = []
         with self.db.get_session() as session:
             # UPDATE 在 PostgreSQL / SQLite 均取得写锁；再读 Context 防 TOCTOU 和旧 generation。
@@ -361,8 +409,12 @@ class ManagedScoreCollector:
                 except ScoresReadError:
                     pass
             stale = bool(contract) and current != ctx
+            fence_reason = self._check_fence(session, ctx, fence)
             for decision, reason, name, raw, result in decisions:
-                if stale:
+                if fence_reason is not None:
+                    # 失租/换代/取消：不写任何有效结果与采纳审计，仅保留拒绝审计。
+                    decision, reason, result = "REJECTED", fence_reason, None
+                elif stale:
                     decision, reason, result = "REJECTED", "COLLECTION_CONTEXT_CHANGED", None
                 payload = {**ctx, "score": _score_evidence(raw) if raw else None}
                 if result is not None:
@@ -427,7 +479,11 @@ class ManagedScoreCollector:
             same = (
                 existing.executor_type == "langfuse_managed"
                 and proof.get("score") == result.evidence["score"]
-                and all(proof.get(k) == ctx[k] for k in ctx)
+                and all(
+                    proof.get(k) == ctx[k]
+                    for k in ctx
+                    if k not in RESULT_IDENTITY_EXCLUDED_CTX_FIELDS
+                )
             )
             return ("ALREADY_ADOPTED", "VERIFIED") if same else ("REJECTED", "RESULT_CONFLICT")
         row = EvaluationResultRecord(

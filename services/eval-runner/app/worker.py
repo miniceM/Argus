@@ -26,6 +26,17 @@ from .queue import QueueAdapter
 from .registry import AgentVersionSpec, map_request
 from .runner_identity import RunnerIdentity, current_runner_identity, validate_runner_identity
 
+
+def _managed_slot_count() -> int:
+    """托管评分收集独立并发槽（默认 4），非法配置回退默认。"""
+    import os
+
+    try:
+        value = int(float(os.getenv("ARGUS_MANAGED_SCORE_CONCURRENCY", "4")))
+    except (TypeError, ValueError):
+        return 4
+    return value if value >= 1 else 4
+
 try:
     from opentelemetry.propagate import inject
 except Exception:
@@ -50,6 +61,9 @@ class ExecutionWorker:
         self.worker_id = worker_id or f"worker-{uuid.uuid4().hex[:8]}"
         self.runner_identity = runner_identity or current_runner_identity()
         self.local_concurrency = asyncio.Semaphore(10)
+        # #217 P2：托管评分远端读取耗时久，独立限流，不与 HTTP 执行共用
+        # 本地槽，避免评分等待饿死业务 Agent 执行。
+        self.managed_concurrency = asyncio.Semaphore(_managed_slot_count())
         self.heartbeat_interval = 5.0
 
     def poll_queue(self, count: int = 10, block_ms: int = 1000) -> list[tuple[str, str, int, str]]:
@@ -1168,8 +1182,9 @@ class ExecutionWorker:
 
         永不调用业务 Agent，永不申请/持有 Agent HTTP 并发 permit；
         多 Worker 经评测租约 + 代际 CAS  fencing，迟到结果直接丢弃。
+        使用独立于 HTTP 执行的本地限流槽。
         """
-        async with self.local_concurrency:
+        async with self.managed_concurrency:
             from .managed_score_recovery import recover_managed_scores
 
             outcome = await asyncio.to_thread(

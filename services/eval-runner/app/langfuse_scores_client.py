@@ -66,7 +66,14 @@ class ScoresV3Client:
         return self
 
     def __exit__(self, *_):
-        self.http.close()
+        self.close()
+
+    def close(self) -> None:
+        """关闭底层 HTTP 连接；收集结束必须调用，避免长时间评分累积连接。"""
+        try:
+            self.http.close()
+        except Exception:
+            pass
 
     def _pages(self, path: str, params: dict) -> list[dict]:
         rows, seen = [], set()

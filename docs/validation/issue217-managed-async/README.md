@@ -9,10 +9,8 @@
   超限后 `eval=failed / quality=unknown` 且不伪造分数；多 Worker 单采纳、
   旧代迟到不覆盖、取消丢弃、重跑代际隔离、租约失效崩溃恢复均通过。
   证据：`evidence/mock-async-convergence/`（时间线、故障注入、并发结果均为受控 Mock，不声称真实 Langfuse）。
-- **真实 Langfuse 异步收敛（待运行）**：本机无 Langfuse 凭据/服务，
-  未执行真实联调。真实步骤见 §4，按 #216 的隔离 Runner + 自有 Rule
-  方式运行，成功后将 receipt 补入 `evidence/live-async-convergence/`。
-  在此之前不得宣称 #217 真实收敛已验证。
+- **真实 Langfuse 异步收敛（已执行，PASS，2026-10-20）**：见 §4，
+  receipt 与时间线已落入 `evidence/live-async-convergence/`。
 
 ## 2. 状态机与解耦
 
@@ -38,7 +36,22 @@ HTTP 200 → execution=succeeded, eval=pending, quality=unknown,
   DIAGNOSTIC，不可用于正式发布（由 #218 消费）。
 - `available_at` 复用为 Managed 下次可执行时间（`succeeded+pending+evaluating`
   才有效），不新增迁移；`evaluation_generation` 每次重试递增，旧代经
-  `(generation, lease_token)` CAS 丢弃；`dispatch_generation` 变化亦丢弃。
+  `(generation, lease_token, dispatch)` 围栏丢弃；`dispatch_generation` 变化亦丢弃。
+- 收集携带租约围栏：远端查询耗时期间失租/换代/取消，迟到写入一律无效，
+  只保留拒绝审计；手动单次诊断 API 不带围栏，保持原有语义。
+
+## 2.5 语义：Retry Collection（只读重读），不是 New Remote Evaluation
+
+- 自动轮询只做 **Score Collection**：对同一 Observation 的已有 Score 做
+  只读重读（GET observations/scores），**永不创建**新的 Langfuse Evaluator
+  Job，也**永不**调用业务 Agent（`attempt_count` 恒为 1）。
+- `evaluation_generation` 是 Argus 侧的收集代际（防旧隔离用），**不是**
+  Langfuse 的 `job_execution_id`；归属绑定看 Score `metadata`（rule /
+  evaluator / job_execution_id / target trace+observation）与冻结契约。
+- 终结要求已存成功行 **且** 本轮无歧义采纳：同名冲突（A 后出现合法 A+B）、
+  来源冲突、本轮读失败一律阻塞 PASS，保持 UNKNOWN/重试；同一原始 Score
+  的合法重读判 `ALREADY_ADOPTED`，不视为冲突。
+- 证据不足永远判 UNKNOWN，不伪造分数；历史质量快照不可变。
 
 ## 3. 重试、超时与恢复默认值
 
@@ -49,10 +62,17 @@ ARGUS_MANAGED_SCORE_MAX_ATTEMPTS=10
 ARGUS_MANAGED_SCORE_BASE_DELAY_SECONDS=5
 ARGUS_MANAGED_SCORE_MAX_DELAY_SECONDS=300
 ARGUS_MANAGED_SCORE_DEADLINE_SECONDS=1800
+ARGUS_MANAGED_SCORE_COLLECT_TIMEOUT_SECONDS=45
+ARGUS_MANAGED_SCORE_CONCURRENCY=4
 ```
 
-- 退避：`min(5 * 2^(N-1), 300)` 秒，N 为当前代际（1 起始）。
-- Deadline：自 `evaluation_started_at` 起 1800s；超期即终态 UNKNOWN。
+- 退避：`min(5 * 2^(N-1), 300)` 秒，N 为本周期内第几次尝试（1 起始）。
+- 重试预算按人工收集周期统计（本周期内 `EvaluationAttemptRecord` 行数），
+  与单调代际解耦；人工重提开启新周期并重置起点与 Deadline。
+- 单次完整收集总预算 45s（小于 60s Worker 租约）：远端 hung 住即转
+  可重试 TIMEOUT，不长期占位；收集结束关闭自建客户端连接。
+- Managed 收集使用独立并发槽（默认 4），不占用 Agent HTTP 执行槽。
+- Deadline：自本周期起点起 1800s；超期即终态 UNKNOWN。
 - 可重试：`RATE_LIMITED / UPSTREAM_UNAVAILABLE / NETWORK_UNAVAILABLE /
   TIMEOUT / SCORE_MISSING / OBSERVATION_* / RESPONSE_* / PAGINATION_*` 及
   各类 Score 校验拒绝（迟到正确分仍可能到达，故到期前继续重试）。

@@ -110,16 +110,12 @@ class ScoresV3Client:
         raise ScoresReadError("PAGINATION_LIMIT")
 
     def scores_for(self, trace_id: str, observation_id: str, name: str) -> list[dict]:
-        return self._pages(
-            "/api/public/v3/scores",
-            {
-                "traceId": trace_id,
-                "observationId": observation_id,
-                "name": name,
-                "source": "EVAL",
-                "fields": "details,subject",
-            },
-        )
+        params = {"traceId": trace_id, "observationId": observation_id, "source": "EVAL", "fields": "details,subject"}
+        # v3 的 name 是 CSV，合法的逗号名称不能被误拆成两个名称。
+        # 此时仍按 subject/source 定向查询，由采纳层做精确名称校验。
+        if "," not in name:
+            params["name"] = name
+        return self._pages("/api/public/v3/scores", params)
 
     def observations(self, trace_id: str) -> list[dict]:
         return self._pages(

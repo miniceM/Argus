@@ -140,6 +140,16 @@ class ManagedScoreCollector:
         contract["acceptance_digest"] = digest
         context["acceptance_digest"] = digest
         _check(item.execution_status == "succeeded" and item.trace_id and item.observation_id, "EXECUTION_NOT_READY")
+        collision = session.scalar(
+            select(ExperimentItemExecutionRecord.id)
+            .where(
+                ExperimentItemExecutionRecord.trace_id == item.trace_id,
+                ExperimentItemExecutionRecord.observation_id == item.observation_id,
+                ExperimentItemExecutionRecord.id != item_id,
+            )
+            .limit(1)
+        )
+        _check(collision is None, "ITEM_IDENTITY_AMBIGUOUS")
         cp = session.scalar(
             select(ExecutionCheckpointRecord).where(
                 ExecutionCheckpointRecord.item_execution_id == item_id,

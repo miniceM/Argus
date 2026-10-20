@@ -432,7 +432,7 @@ def test_same_external_score_cannot_be_claimed_by_another_launch(context):
         )
     raw = records(db, EvaluationResultRecord)[0].evidence["score"]
     report = ManagedScoreCollector(db, Remote(obs, [raw])).collect(other.id, "other-item")
-    assert report["decisions"][0]["reason"] == "SCORE_ALREADY_CLAIMED"
+    assert report["decisions"][0]["reason"] == "ITEM_IDENTITY_AMBIGUOUS"
     assert len(records(db, EvaluationResultRecord)) == 1
 
 
@@ -511,3 +511,32 @@ def test_invalid_score_id_is_json_safe_in_api(context, monkeypatch):
     response = TestClient(app).post(f"/api/v1/experiment-launches/{context[1].id}/items/item216/managed-scores/collect")
     assert response.status_code == 200
     assert response.json()["decisions"][0]["score_id"] is None
+
+
+def test_literal_comma_name_is_not_sent_as_csv_filter():
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"data": [], "meta": {"cursor": None}})
+
+    with client(handler) as remote:
+        remote.scores_for("trace", "obs", "quality,exact")
+    assert "name" not in requests[0].url.params
+
+
+def test_ambiguous_local_trace_observation_mapping_is_never_adopted(context):
+    with context[0].get_session() as session:
+        session.add(
+            ExperimentItemExecutionRecord(
+                id="colliding-item",
+                launch_id=context[1].id,
+                dataset_item_id="different-item",
+                execution_status="succeeded",
+                trace_id="trace216",
+                observation_id="obs216",
+            )
+        )
+    report = collect(context, [score()])
+    assert report["decisions"][0]["reason"] == "ITEM_IDENTITY_AMBIGUOUS"
+    assert not records(context[0], EvaluationResultRecord)

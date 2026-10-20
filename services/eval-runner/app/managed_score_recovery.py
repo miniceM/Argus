@@ -509,15 +509,33 @@ def _record_managed_attempt_started(
     reused_output_digest: str,
     worker_id: str,
     lease_token: str | None = None,
-) -> None:
+) -> bool:
     """幂等记录收集 attempt：崩溃后租约失效重入同代时复活该行而非崩溃。
 
-    同一 ``(item, generation)`` 唯一约束下，崩溃 Worker 留下的 ``running``
-    行先被 Reconciler 标为 ``failed``；重入时将其复活为 ``running``，
-    审计保留最新一次有效尝试，不因重复插入崩溃、不重复调用 Agent。
+    同一 ``(item, generation)`` 唯一约束防重复插入；生产调用带 token，
+    只允许仍有效的持有者更新审计。正常崩溃由 Reconciler 换到新代际，
+    此处仅兼容同代幂等记录，不允许旧进程复活并污染新周期预算。
     """
+    from .db_models import ExperimentItemExecutionRecord as Item
+    from .db_models import ExperimentLaunchRecord as Launch
+
     now = _now()
     with db_mgr.get_session() as session:
+        if lease_token is not None:
+            # 旧进程可能停在 claim→attempt 间隙。记录 attempt 本身也必须围栏，
+            # 否则恢复旧行的 started_at 会污染新的人工收集周期预算。
+            if db_mgr.engine.dialect.name == "postgresql":
+                session.scalar(select(Launch).where(Launch.id == launch_id).with_for_update())
+            else:
+                session.execute(update(Launch).where(Launch.id == launch_id).values(id=Launch.id))
+            fenced = session.execute(update(Item).where(
+                Item.id == item_id, Item.evaluation_generation == evaluation_generation,
+                Item.evaluation_lease_token == lease_token, Item.evaluation_status == EVALUATION_RUNNING,
+                Item.evaluation_lease_expires_at > _now(),
+            ).values(updated_at=Item.updated_at))
+            if fenced.rowcount != 1:
+                session.rollback()
+                return False
         try:
             with session.begin_nested():
                 session.add(
@@ -555,6 +573,7 @@ def _record_managed_attempt_started(
                 )
             )
         session.commit()
+        return True
 
 
 def _open_collection_cycle(item, *, now, pending_message: str | None, reset_cycle_start: bool) -> int:
@@ -1010,7 +1029,7 @@ def recover_managed_scores(
             error_message="托管评分本周期预算已用尽，未读取远端；质量保持 UNKNOWN。", launch_id=launch_id,
         )
 
-    _record_managed_attempt_started(
+    attempt_started = _record_managed_attempt_started(
         db_mgr, item_id=item_id, launch_id=launch_id,
         evaluation_generation=evaluation_generation,
         target_bindings=sorted(required),
@@ -1018,6 +1037,8 @@ def recover_managed_scores(
         worker_id=worker_id,
         lease_token=claim["lease_token"],
     )
+    if not attempt_started:
+        return RecoveryOutcome(claimed=True, finalized=False, reason="SUPERSEDED_OR_LEASE_LOST")
 
     # 只读远端，不持有任何 DB 锁与 Agent 并发额度。
     # 租约围栏随收集传入：远端耗时期间失租/换代/取消，迟到写入无效。

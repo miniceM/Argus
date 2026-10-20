@@ -521,3 +521,69 @@ def test_projection_failure_resubmit_has_one_new_budget_without_agent(runtime, m
         assert task.status == "PENDING" and task.attempts == 0
     factory.assert_not_called()
     assert len(rows(db, ExecutionAttemptRecord, item_id)) == 1
+
+
+@pytest.mark.parametrize("code", ["RATE_LIMITED", "UPSTREAM_UNAVAILABLE", "TIMEOUT"])
+def test_transient_score_failure_retries_then_converges_without_agent(runtime, code):
+    from test_issue_217_managed_async import _make_collection_due
+
+    db, _, item_id, obs, good = start(runtime)
+
+    class Fault(Remote):
+        def scores_for(self, *args):
+            raise ScoresReadError(code)
+
+    out = recover_managed_scores(db, item_id=item_id, evaluation_generation=1,
+                                 worker_id="fault", client_factory=lambda: Fault(obs, []))
+    assert out["reason"] == "RETRY_SCHEDULED"
+    waiting = _item(db, item_id)
+    assert waiting.execution_status == "succeeded" and waiting.eval_status == "pending"
+    assert waiting.quality_conclusion == "unknown" and waiting.evaluation_generation == 2
+    due = _make_collection_due(db, item_id)
+    done = recover_managed_scores(db, item_id=item_id, evaluation_generation=due.evaluation_generation,
+                                  worker_id="restored", client_factory=lambda: Remote(obs, [good]))
+    assert done["finalized"] and done["eval_status"] == "succeeded"
+    assert len(rows(db, EvaluationResultRecord, item_id)) == 1
+    assert len(rows(db, ExecutionAttemptRecord, item_id)) == 1
+
+
+@pytest.mark.parametrize("code", ["AUTHENTICATION_FAILED", "AUTHORIZATION_FAILED"])
+def test_auth_failure_stops_unknown_without_agent(runtime, code):
+    db, _, item_id, obs, _ = start(runtime)
+
+    class Fault(Remote):
+        def scores_for(self, *args):
+            raise ScoresReadError(code)
+
+    out = recover_managed_scores(db, item_id=item_id, evaluation_generation=1,
+                                 worker_id="denied", client_factory=lambda: Fault(obs, []))
+    assert out["finalized"] and out["reason"] == code
+    final = _item(db, item_id)
+    assert final.execution_status == "succeeded" and final.eval_status == "failed"
+    assert final.quality_conclusion == "unknown"
+    assert rows(db, EvaluationResultRecord, item_id) == []
+    assert len(rows(db, ExecutionAttemptRecord, item_id)) == 1
+
+
+def test_late_attempt_start_cannot_spend_new_manual_cycle_budget(runtime, monkeypatch):
+    from app.db_models import ExperimentItemExecutionRecord as Item
+    from app.managed_score_recovery import _cycle_attempts_used, _record_managed_attempt_started
+
+    db, launch_id, item_id, obs, good = start(runtime)
+    monkeypatch.setenv("ARGUS_MANAGED_SCORE_MAX_ATTEMPTS", "1")
+    old = claim_evaluation(db, item_id=item_id, evaluation_generation=1, worker_id="paused-before-record")
+    with db.get_session() as session:
+        session.get(Item, item_id).evaluation_lease_expires_at = datetime.now(UTC) - timedelta(seconds=5)
+    assert runtime[5].reconcile_expired_evaluation_leases() == 1
+    assert _item(db, item_id).evaluation_status == "failed"
+    assert item_id in runtime[3].retry_failed_evaluations(launch_id)["submitted"]
+    current = _item(db, item_id)
+    _record_managed_attempt_started(db, item_id=item_id, launch_id=launch_id, evaluation_generation=1,
+                                   target_bindings=[], reused_output_digest="stale", worker_id="late-old",
+                                   lease_token=old["lease_token"])
+    with db.get_session() as session:
+        assert _cycle_attempts_used(session, item_id, current.evaluation_started_at) == 0
+    done = recover_managed_scores(db, item_id=item_id, evaluation_generation=current.evaluation_generation,
+                                  worker_id="current", client_factory=lambda: Remote(obs, [good]))
+    assert done["finalized"] and done["eval_status"] == "succeeded"
+    assert len(rows(db, ExecutionAttemptRecord, item_id)) == 1

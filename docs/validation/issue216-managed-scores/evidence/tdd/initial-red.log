@@ -1,0 +1,17 @@
+
+==================================== ERRORS ====================================
+___________ ERROR collecting tests/test_issue_216_managed_scores.py ____________
+ImportError while importing test module '/Users/hosea/.codex/worktrees/2047/Argus/tests/test_issue_216_managed_scores.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/opt/homebrew/Cellar/python@3.12/3.12.4/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_issue_216_managed_scores.py:16: in <module>
+    from app.db_models import EvaluationResultRecord, ExperimentItemExecutionRecord, ManagedScoreEvidenceRecord  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   ImportError: cannot import name 'ManagedScoreEvidenceRecord' from 'app.db_models' (/Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/db_models.py)
+=========================== short test summary info ============================
+ERROR tests/test_issue_216_managed_scores.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.40s

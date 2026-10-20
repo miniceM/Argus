@@ -1,0 +1,54 @@
+{
+  "at": "2026-10-20T02:45:44.487391+00:00",
+  "tdd": "RED -> GREEN; retained logs in evidence/tdd",
+  "new_contract_tests": {
+    "status": "PASS",
+    "passed": 65,
+    "postgresql": "executed on isolated PostgreSQL 16",
+    "log": "postgresql-tests.log"
+  },
+  "make_validate": {
+    "status": "PASS",
+    "python_passed": 1527,
+    "python_skipped": 0,
+    "trajectory_deselected": 31,
+    "postgresql_specials": "executed, no TEST_POSTGRES_URL skips",
+    "log": "make-validate.log"
+  },
+  "console": {
+    "token_lint": "PASS",
+    "schema_sync": "PASS",
+    "typecheck": "PASS",
+    "vitest_files": 54,
+    "vitest_passed": 868,
+    "build": "PASS"
+  },
+  "compose_static": "PASS",
+  "local_console_playwright": {
+    "status": "NOT RUN",
+    "reason": "No UI component or interaction changes; generated API types only"
+  },
+  "trajectory_local": {
+    "status": "NOT RUN",
+    "reason": "No OTLP ingestion changes; 31 trajectory_local tests remain separate"
+  },
+  "real_managed_scores": {
+    "status": "PASS",
+    "effective_results": 2,
+    "repeat": "ALREADY_ADOPTED x2",
+    "agent_http_attempts": 1,
+    "score_write_requests": 0
+  },
+  "remote_pr_ci": {
+    "status": "NOT RUN",
+    "reason": "PR not created when this local report was produced; inspect exact PR head independently"
+  },
+  "targeted_regression": {
+    "status": "PASS",
+    "passed": 140,
+    "skipped": 1,
+    "reason": "Additional targeted run omitted TEST_POSTGRES_URL; the same PostgreSQL test passed in dedicated and full make validate runs",
+    "log": "targeted-tests.log"
+  },
+  "log_format": "TDD logs preserve content with trailing whitespace normalized for git diff --check"
+}

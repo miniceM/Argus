@@ -1,0 +1,438 @@
+./scripts/validate.sh
+[1/7] Parse YAML/JSON
+configuration parse: OK
+[2/7] Compile Python sources and check code quality
+All checks passed!
+[3/7] Verify zero evaluation-SDK dependency in Demo Agent and Real LLM Agent
+[4/7] Verify runner contains remote experiment + W3C propagation
+[5/7] Verify OpenAPI specification is up to date
+OpenAPI specification exported to: /Users/hosea/.codex/worktrees/2047/Argus/docs/openapi.json
+[6/8] Verify Console Frontend (contract sync, typecheck, unit tests, build)
+Checking Console OpenAPI TypeScript contract sync...
+
+> argus-console@0.2.0 api:generate /Users/hosea/.codex/worktrees/2047/Argus/services/console
+> openapi-typescript ../../docs/openapi.json -o src/api/schema.d.ts
+
+✨ openapi-typescript 7.13.0
+🚀 ../../docs/openapi.json → src/api/schema.d.ts [119.7ms]
+Running Console design token lint...
+
+> argus-console@0.2.0 lint:tokens /Users/hosea/.codex/worktrees/2047/Argus/services/console
+> node scripts/lint-tokens.mjs
+
+Design Token Lint: all files use semantic tokens.
+Running Console typecheck...
+
+> argus-console@0.2.0 typecheck /Users/hosea/.codex/worktrees/2047/Argus/services/console
+> tsc --noEmit
+
+Running Console unit tests...
+
+> argus-console@0.2.0 test /Users/hosea/.codex/worktrees/2047/Argus/services/console
+> vitest run
+
+
+ RUN  v3.2.7 /Users/hosea/.codex/worktrees/2047/Argus/services/console
+
+ ✓ src/components/__tests__/QualityDecisionSummary.test.tsx (8 tests) 2902ms
+   ✓ Issue #83 quality decision summary > shows PASS / FAIL / UNKNOWN side by side with the decided rate  802ms
+   ✓ Issue #83 quality decision summary > never shows a decided rate when nothing could be decided  667ms
+   ✓ Issue #83 per-rule explanations in the item drawer > explains an UNKNOWN case as insufficient evidence, not as a rule violation  372ms
+   ✓ Issue #83 per-rule explanations in the item drawer > names the violated rule for a FAIL case  406ms
+ ✓ src/features/launches/__tests__/launchActionIsolation.test.tsx (13 tests) 3216ms
+   ✓ U3: launch action feedback isolation > a late retry-evaluation failure cannot pollute the next revision page  487ms
+   ✓ U3: launch action feedback isolation > a late failure from another Launch cannot pollute the target Launch page  386ms
+   ✓ U3: launch action feedback isolation > another Launch's pending request does not disable or block the target Launch action  425ms
+ ✓ src/components/__tests__/CreateLaunch.test.tsx (24 tests) 3585ms
+   ✓ CreateLaunch Evaluator selection > preserves an empty selection and blocks submission instead of selecting everything again  480ms
+   ✓ CreateLaunch Evaluator selection > submits the confirmed quality policy rules, never the composite metric  453ms
+ ✓ src/components/__tests__/LaunchDetail.test.tsx (27 tests) 4060ms
+   ✓ LaunchDetail Frozen Manifest Structured Audit View > shows Items API failures instead of presenting them as an empty result  414ms
+   ✓ Issue #45 quality pass rate wording > labels the top metric as quality pass rate and keeps it separate from execution results  359ms
+   ✓ Issue #45 quality pass rate wording > keeps cancelled, timed-out and skipped items in the denominator  325ms
+   ✓ Issue #45 quality pass rate wording > renders an explicit empty state instead of a fabricated ratio when no items exist  362ms
+ ✓ src/features/launches/__tests__/Pr126IndependentReview.test.tsx (38 tests) 4803ms
+   ✓ Launch Detail Refactoring (#119, #120-#124) > AC1 & #120: Renders business Header with human-readable name, exact version badge, compact UUID copy, and 4 KPI cards  573ms
+   ✓ Launch Detail Refactoring (#119, #120-#124) > AC2 & #121: Tab switching synchronizes URL query param (?tab=cases, ?tab=audit)  441ms
+   ✓ Launch Detail Refactoring (#119, #120-#124) > AC5 & AC6 & #123: Tab 2 supports filter counts and inline accordion case expansion with lazy loaded outputs  355ms
+ ✓ src/features/launches/__tests__/Pr126ThirdReview.test.tsx (46 tests) 5634ms
+   ✓ Launch Detail Refactoring (#119, #120-#124) > AC1 & #120: Renders business Header with human-readable name, exact version badge, compact UUID copy, and 4 KPI cards  563ms
+   ✓ Launch Detail Refactoring (#119, #120-#124) > AC2 & #121: Tab switching synchronizes URL query param (?tab=cases, ?tab=audit)  467ms
+ ✓ src/features/launches/__tests__/Pr125ReviewProbes.test.tsx (16 tests) 1775ms
+ ✓ src/features/launches/__tests__/snapshotRevisionDiscovery.test.tsx (4 tests) 2703ms
+   ✓ snapshot revision discovery after a run finishes (F02) > starts bounded revision discovery from retry-evaluation submission when S1 already exists  1594ms
+   ✓ snapshot revision discovery is bounded > stops polling once the discovery window expires  841ms
+ ✓ src/components/__tests__/ComparisonReport.test.tsx (23 tests) 2480ms
+   ✓ ComparisonReport > labels the comparable-cohort ratio as quality pass rate and explains its denominator  321ms
+   ✓ ComparisonReport > uses a new route snapshot when the same Launch switches to a historical revision  328ms
+ ✓ src/features/launches/__tests__/comparisonResponseIdentity.test.tsx (17 tests) 2448ms
+   ✓ U1: paginated comparison identity > does not append a foreign second page to the verified first page  338ms
+stderr | src/features/launches/__tests__/LaunchDetailRefactor.test.tsx > Launch Detail Refactoring (#119, #120-#124) > AC7: resolves result types from the matching frozen evaluator and labels missing types
+Error: Not implemented: navigation (except hash changes)
+    at module.exports (/Users/hosea/work/ai-eval/Argus/services/console/node_modules/.pnpm/jsdom@26.1.0/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+    at navigateFetch (/Users/hosea/work/ai-eval/Argus/services/console/node_modules/.pnpm/jsdom@26.1.0/node_modules/jsdom/lib/jsdom/living/window/navigation.js:77:3)
+    at exports.navigate (/Users/hosea/work/ai-eval/Argus/services/console/node_modules/.pnpm/jsdom@26.1.0/node_modules/jsdom/lib/jsdom/living/window/navigation.js:55:3)
+    at Timeout._onTimeout (/Users/hosea/work/ai-eval/Argus/services/console/node_modules/.pnpm/jsdom@26.1.0/node_modules/jsdom/lib/jsdom/living/nodes/HTMLHyperlinkElementUtils-impl.js:80:7)
+    at listOnTimeout (node:internal/timers:585:17)
+    at processTimers (node:internal/timers:521:7) undefined
+
+ ✓ src/features/launches/__tests__/Pr126FourthReview.test.tsx (78 tests) 8605ms
+   ✓ Launch Detail Refactoring (#119, #120-#124) > AC1 & #120: Renders business Header with human-readable name, exact version badge, compact UUID copy, and 4 KPI cards  593ms
+   ✓ Launch Detail Refactoring (#119, #120-#124) > AC2 & #121: Tab switching synchronizes URL query param (?tab=cases, ?tab=audit)  505ms
+   ✓ Launch Detail Refactoring (#119, #120-#124) > EXTRA: transient non409 Baseline POST error allows an explicit retry  313ms
+   ✓ Launch Detail Refactoring (#119, #120-#124) > FOURTH: running-to-terminal automatically discovers newly frozen Snapshot history  312ms
+   ✓ Launch Detail Refactoring (#119, #120-#124) > REVIEW: loads, copies, and downloads an explicit snapshot when history is unavailable  407ms
+ ✓ src/features/launches/__tests__/LaunchDetailRefactor.test.tsx (17 tests) 2597ms
+   ✓ Launch Detail Refactoring (#119, #120-#124) > AC1 & #120: Renders business Header with human-readable name, exact version badge, compact UUID copy, and 4 KPI cards  473ms
+   ✓ Launch Detail Refactoring (#119, #120-#124) > AC2 & #121: Tab switching synchronizes URL query param (?tab=cases, ?tab=audit)  320ms
+   ✓ Launch Detail Refactoring (#119, #120-#124) > AC5: keeps selected historical quality counts consistent in the audit history and tooltip  319ms
+ ✓ src/components/__tests__/DeleteAgentModal.test.tsx (13 tests) 1606ms
+   ✓ DeleteAgentModal UX and Strong Name Verification Flow > renders simple deletion prompt for agent with versions but 0 launches  303ms
+stderr | src/components/AppShell.test.tsx > AppShell Langfuse Dashboard link > closes the mobile drawer and releases page inertness when crossing into desktop
+An update to AppShell inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/launches/__tests__/ManagedEvaluationFields.test.tsx (4 tests) 382ms
+ ✓ src/components/__tests__/LaunchesList.test.tsx (14 tests) 1300ms
+   ✓ LaunchesList High-Density Table & Information Hierarchy (Issue #26) > renders table with fixed layout, min-w-table-xl, and simplified headers  366ms
+ ✓ src/components/AppShell.test.tsx (19 tests) 965ms
+ ✓ src/components/__tests__/CreateVersionDialog.test.tsx (9 tests) 1373ms
+   ✓ CreateVersionDialog Help Indicators (Issue #18) > renders all 6 required field help buttons on the form  307ms
+   ✓ submits the same normalized environment used by Credential selection  340ms
+ ✓ src/features/launches/__tests__/SetBaselineModal.test.tsx (15 tests) 830ms
+ ✓ src/features/launches/__tests__/launchActionMenu.test.tsx (18 tests) 545ms
+ ✓ src/features/launches/__tests__/snapshotReportIsolation.test.tsx (9 tests) 927ms
+ ✓ src/features/launches/__tests__/resultSnapshot.test.tsx (14 tests) 427ms
+ ✓ src/components/__tests__/CredentialsPage.test.tsx (4 tests) 444ms
+ ✓ src/components/__tests__/RegisterAgentDialog.test.tsx (3 tests) 360ms
+ ✓ src/features/launches/__tests__/LaunchKpiOverview.test.tsx (22 tests) 330ms
+ ✓ src/components/__tests__/AgentArchiveConfirm.test.tsx (2 tests) 327ms
+ ✓ src/components/__tests__/Badges.test.tsx (10 tests) 62ms
+ ✓ src/components/__tests__/Overlay.test.tsx (10 tests) 214ms
+ ✓ src/components/__tests__/FrozenExecutionIdentity.test.tsx (7 tests) 550ms
+ ✓ src/components/__tests__/ItemTable.test.tsx (5 tests) 186ms
+ ✓ src/components/__tests__/JsonViewer.test.tsx (2 tests) 146ms
+ ✓ src/components/__tests__/Primitives.test.tsx (11 tests) 159ms
+ ✓ src/components/__tests__/BadgeToneContract.test.tsx (5 tests) 90ms
+ ✓ src/components/__tests__/FieldHelp.test.tsx (6 tests) 202ms
+ ✓ src/features/launches/__tests__/launchHeaderClaims.test.tsx (8 tests) 190ms
+ ✓ src/components/__tests__/EvaluationResults.test.tsx (9 tests) 127ms
+ ✓ src/components/__tests__/AgentActiveLaunchCount.test.tsx (4 tests) 364ms
+ ✓ src/components/__tests__/StateViews.test.tsx (3 tests) 108ms
+ ✓ src/components/__tests__/AttemptDrawer.test.tsx (1 test) 159ms
+ ✓ src/features/launches/__tests__/useCopyFeedback.test.tsx (7 tests) 70ms
+ ✓ src/design-system/__tests__/contrast.test.ts (59 tests) 13ms
+ ✓ src/features/launches/__tests__/langfuseSyncStatus.test.tsx (6 tests) 89ms
+ ✓ src/design-system/__tests__/tokensCss.test.ts (78 tests) 7ms
+ ✓ src/components/__tests__/launchLinkPolling.test.ts (19 tests) 32ms
+ ✓ src/components/__tests__/SecretRef.test.tsx (4 tests) 127ms
+ ✓ src/features/launches/__tests__/qualityPolicy.test.ts (22 tests) 12ms
+ ✓ src/design-system/__tests__/tokens.test.ts (16 tests) 4ms
+ ✓ src/design-system/__tests__/lintRules.test.ts (32 tests) 6ms
+ ✓ src/design-system/__tests__/a11y.test.ts (24 tests) 6ms
+ ✓ src/design-system/__tests__/containerScale.test.ts (23 tests) 5ms
+ ✓ src/design-system/__tests__/elevation.test.ts (25 tests) 6ms
+ ✓ src/features/launches/__tests__/launchReportView.test.ts (7 tests) 38ms
+ ✓ src/features/launches/__tests__/metricComparison.test.ts (3 tests) 15ms
+ ✓ src/features/launches/__tests__/environmentScope.test.ts (2 tests) 2ms
+ ✓ src/features/launches/__tests__/baselineDialogState.test.ts (3 tests) 2ms
+
+ Test Files  54 passed (54)
+      Tests  868 passed (868)
+   Start at  10:42:45
+   Duration  22.11s (transform 2.94s, setup 9.13s, collect 39.66s, tests 57.61s, environment 27.09s, prepare 5.36s)
+
+Running Console build...
+
+> argus-console@0.2.0 build /Users/hosea/.codex/worktrees/2047/Argus/services/console
+> tsc -b && vite build
+
+vite v6.4.3 building for production...
+transforming...
+✓ 1707 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.52 kB │ gzip:   0.33 kB
+dist/assets/index-DO02k5tl.css   62.07 kB │ gzip:  11.08 kB
+dist/assets/index-B2TyjQnS.js   671.94 kB │ gzip: 195.52 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.50s
+Console frontend validation: OK
+[7/8] Run local behavior tests
+........................................................................ [  4%]
+........................................................................ [  9%]
+........................................................................ [ 14%]
+........................................................................ [ 18%]
+........................................................................ [ 23%]
+........................................................................ [ 28%]
+........................................................................ [ 33%]
+........................................................................ [ 37%]
+........................................................................ [ 42%]
+........................................................................ [ 47%]
+........................................................................ [ 51%]
+........................................................................ [ 56%]
+........................................................................ [ 61%]
+........................................................................ [ 66%]
+........................................................................ [ 70%]
+........................................................................ [ 75%]
+........................................................................ [ 80%]
+........................................................................ [ 84%]
+........................................................................ [ 89%]
+........................................................................ [ 94%]
+........................................................................ [ 99%]
+...............                                                          [100%]
+=============================== warnings summary ===============================
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /Users/hosea/work/ai-eval/Argus/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../../work/ai-eval/Argus/.venv/lib/python3.12/site-packages/sqlalchemy/sql/schema.py:4296: 4 warnings
+tests/test_agent_registry_contract.py: 86 warnings
+tests/test_api_endpoints.py: 128 warnings
+tests/test_api_results_s3.py: 181 warnings
+tests/test_async_api_launches_s2.py: 23 warnings
+tests/test_control_plane_read_model.py: 63 warnings
+tests/test_credential_resources.py: 351 warnings
+tests/test_dataset_resolver.py: 10 warnings
+tests/test_idempotency_and_atomic_lock.py: 59 warnings
+tests/test_issue183_baseline_environment.py: 120 warnings
+tests/test_issue183_comparison_environment.py: 27 warnings
+tests/test_issue183_launch_baseline_projection.py: 482 warnings
+tests/test_issue183_launch_environment.py: 6 warnings
+tests/test_issue_215_managed_evaluation.py: 156 warnings
+tests/test_issue_216_managed_scores.py: 506 warnings
+tests/test_issue_22_launch_item_consistency.py: 86 warnings
+tests/test_issue_49_cross_issue_acceptance.py: 115 warnings
+tests/test_issue_7_cli.py: 75 warnings
+tests/test_issue_7_release_gates.py: 89 warnings
+tests/test_issue_80_evaluator_versioning.py: 2 warnings
+tests/test_issue_81_frozen_execution_identity.py: 97 warnings
+tests/test_issue_81_sqlite_foreign_keys.py: 2 warnings
+tests/test_issue_82_typed_results.py: 56 warnings
+tests/test_issue_84_eval_only_retry.py: 131 warnings
+tests/test_issue_85_snapshot_revision.py: 209 warnings
+tests/test_issue_86_comparability.py: 74 warnings
+tests/test_issue_87_langfuse_projection.py: 78 warnings
+tests/test_langfuse_link_reconciliation.py: 256 warnings
+tests/test_langfuse_links.py: 172 warnings
+tests/test_langfuse_managed_observation.py: 5 warnings
+tests/test_langfuse_run_scores_s3.py: 163 warnings
+tests/test_langfuse_usage_scores.py: 83 warnings
+tests/test_launch_manifest_freeze.py: 47 warnings
+tests/test_orchestrator_and_worker_s2.py: 31 warnings
+tests/test_pr125_launch_detail_contract.py: 74 warnings
+tests/test_pr17_review_fixes.py: 16 warnings
+tests/test_pr17_review_regressions.py: 81 warnings
+tests/test_pr17_round4_audit.py: 197 warnings
+tests/test_real_llm_agent_integration.py: 61 warnings
+tests/test_registry.py: 4 warnings
+tests/test_result_outputs.py: 15 warnings
+tests/test_run_result_s3.py: 77 warnings
+tests/test_runner_identity.py: 26 warnings
+tests/test_sync_observation_parent.py: 14 warnings
+tests/test_trajectory_agent_profile.py: 13 warnings
+tests/test_trajectory_storage_schema.py: 468 warnings
+tests/test_unified_execution.py: 130 warnings
+tests/test_yaml_security_and_fail_closed.py: 10 warnings
+  /Users/hosea/work/ai-eval/Argus/.venv/lib/python3.12/site-packages/sqlalchemy/sql/schema.py:4296: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return util.wrap_callable(lambda ctx: fn(), fn)  # type: ignore[call-arg, no-any-return, no-untyped-call]  # noqa: E501
+
+tests/test_api_endpoints.py: 24 warnings
+tests/test_async_api_launches_s2.py: 18 warnings
+tests/test_control_plane_read_model.py: 18 warnings
+tests/test_credential_resources.py: 19 warnings
+tests/test_dataset_resolver.py: 12 warnings
+tests/test_idempotency_and_atomic_lock.py: 42 warnings
+tests/test_issue183_launch_baseline_projection.py: 6 warnings
+tests/test_issue183_launch_environment.py: 6 warnings
+tests/test_issue_215_managed_evaluation.py: 48 warnings
+tests/test_issue_216_managed_scores.py: 306 warnings
+tests/test_issue_22_launch_item_consistency.py: 12 warnings
+tests/test_issue_80_evaluator_versioning.py: 6 warnings
+tests/test_issue_81_frozen_execution_identity.py: 84 warnings
+tests/test_issue_85_snapshot_revision.py: 12 warnings
+tests/test_issue_86_comparability.py: 18 warnings
+tests/test_launch_manifest_freeze.py: 54 warnings
+tests/test_real_llm_agent_integration.py: 15 warnings
+tests/test_run_result_s3.py: 6 warnings
+tests/test_runner_identity.py: 5 warnings
+tests/test_unified_execution.py: 24 warnings
+  /Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/manifest.py:423: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    created_at=datetime.utcnow(),
+
+tests/test_api_endpoints.py: 24 warnings
+tests/test_async_api_launches_s2.py: 18 warnings
+tests/test_control_plane_read_model.py: 18 warnings
+tests/test_credential_resources.py: 19 warnings
+tests/test_dataset_resolver.py: 12 warnings
+tests/test_idempotency_and_atomic_lock.py: 42 warnings
+tests/test_issue183_launch_baseline_projection.py: 6 warnings
+tests/test_issue183_launch_environment.py: 6 warnings
+tests/test_issue_215_managed_evaluation.py: 48 warnings
+tests/test_issue_216_managed_scores.py: 306 warnings
+tests/test_issue_22_launch_item_consistency.py: 12 warnings
+tests/test_issue_80_evaluator_versioning.py: 6 warnings
+tests/test_issue_81_frozen_execution_identity.py: 84 warnings
+tests/test_issue_85_snapshot_revision.py: 12 warnings
+tests/test_issue_86_comparability.py: 18 warnings
+tests/test_launch_manifest_freeze.py: 54 warnings
+tests/test_real_llm_agent_integration.py: 15 warnings
+tests/test_run_result_s3.py: 6 warnings
+tests/test_runner_identity.py: 5 warnings
+tests/test_unified_execution.py: 24 warnings
+  /Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/manifest.py:424: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    updated_at=datetime.utcnow(),
+
+tests/test_api_endpoints.py: 5 warnings
+tests/test_control_plane_read_model.py: 1 warning
+tests/test_credential_resources.py: 11 warnings
+tests/test_idempotency_and_atomic_lock.py: 2 warnings
+tests/test_issue_22_launch_item_consistency.py: 1 warning
+tests/test_unified_execution.py: 4 warnings
+  /Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/manifest.py:48: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    .values(status="RUNNING", started_at=datetime.utcnow())
+
+tests/test_api_endpoints.py: 12 warnings
+tests/test_control_plane_read_model.py: 6 warnings
+tests/test_credential_resources.py: 15 warnings
+tests/test_issue_22_launch_item_consistency.py: 6 warnings
+tests/test_sync_observation_parent.py: 2 warnings
+tests/test_unified_execution.py: 18 warnings
+  /Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/execution.py:79: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at = datetime.utcnow()
+
+tests/test_api_endpoints.py: 12 warnings
+tests/test_control_plane_read_model.py: 6 warnings
+tests/test_credential_resources.py: 16 warnings
+tests/test_issue_22_launch_item_consistency.py: 6 warnings
+tests/test_unified_execution.py: 18 warnings
+  /Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/execution.py:128: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=datetime.utcnow(),
+
+tests/test_api_endpoints.py: 12 warnings
+tests/test_control_plane_read_model.py: 6 warnings
+tests/test_credential_resources.py: 16 warnings
+tests/test_issue_22_launch_item_consistency.py: 6 warnings
+tests/test_unified_execution.py: 18 warnings
+  /Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/execution.py:165: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=datetime.utcnow(),
+
+tests/test_api_endpoints.py: 12 warnings
+tests/test_control_plane_read_model.py: 6 warnings
+tests/test_credential_resources.py: 15 warnings
+tests/test_issue_22_launch_item_consistency.py: 6 warnings
+tests/test_sync_observation_parent.py: 2 warnings
+tests/test_unified_execution.py: 18 warnings
+  /Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/execution.py:297: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at = datetime.utcnow()
+
+tests/test_api_endpoints.py: 3 warnings
+tests/test_control_plane_read_model.py: 1 warning
+tests/test_credential_resources.py: 11 warnings
+tests/test_issue_22_launch_item_consistency.py: 1 warning
+tests/test_unified_execution.py: 4 warnings
+  /Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/execution.py:618: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = datetime.utcnow()
+
+tests/test_api_endpoints.py::test_run_launch_crash_fails_gracefully
+  /Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/execution.py:682: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = datetime.utcnow()
+
+tests/test_api_results_s3.py: 21 warnings
+tests/test_credential_resources.py: 2 warnings
+tests/test_issue183_baseline_environment.py: 10 warnings
+tests/test_issue183_comparison_environment.py: 2 warnings
+tests/test_issue183_launch_baseline_projection.py: 57 warnings
+tests/test_issue_22_launch_item_consistency.py: 2 warnings
+tests/test_issue_49_cross_issue_acceptance.py: 7 warnings
+tests/test_issue_7_cli.py: 6 warnings
+tests/test_issue_7_release_gates.py: 2 warnings
+tests/test_issue_82_typed_results.py: 1 warning
+tests/test_issue_84_eval_only_retry.py: 4 warnings
+tests/test_issue_85_snapshot_revision.py: 19 warnings
+tests/test_langfuse_run_scores_s3.py: 11 warnings
+tests/test_langfuse_usage_scores.py: 4 warnings
+tests/test_pr125_launch_detail_contract.py: 7 warnings
+tests/test_pr17_review_regressions.py: 5 warnings
+tests/test_real_llm_agent_integration.py: 5 warnings
+tests/test_result_outputs.py: 2 warnings
+tests/test_run_result_s3.py: 8 warnings
+  /Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/result_snapshots.py:260: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    created_at=datetime.utcnow(),
+
+tests/test_api_results_s3.py: 21 warnings
+tests/test_credential_resources.py: 2 warnings
+tests/test_issue183_baseline_environment.py: 10 warnings
+tests/test_issue183_comparison_environment.py: 2 warnings
+tests/test_issue183_launch_baseline_projection.py: 57 warnings
+tests/test_issue_22_launch_item_consistency.py: 2 warnings
+tests/test_issue_49_cross_issue_acceptance.py: 7 warnings
+tests/test_issue_7_cli.py: 6 warnings
+tests/test_issue_7_release_gates.py: 2 warnings
+tests/test_issue_82_typed_results.py: 1 warning
+tests/test_issue_84_eval_only_retry.py: 4 warnings
+tests/test_issue_85_snapshot_revision.py: 19 warnings
+tests/test_langfuse_run_scores_s3.py: 11 warnings
+tests/test_langfuse_usage_scores.py: 4 warnings
+tests/test_pr125_launch_detail_contract.py: 7 warnings
+tests/test_pr17_review_regressions.py: 5 warnings
+tests/test_real_llm_agent_integration.py: 5 warnings
+tests/test_result_outputs.py: 2 warnings
+tests/test_run_result_s3.py: 8 warnings
+  /Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/result_snapshots.py:288: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    next_retry_at=datetime.utcnow(),
+
+tests/test_api_results_s3.py: 1 warning
+tests/test_issue183_launch_baseline_projection.py: 2 warnings
+tests/test_issue_49_cross_issue_acceptance.py: 1 warning
+tests/test_issue_85_snapshot_revision.py: 4 warnings
+tests/test_run_result_s3.py: 2 warnings
+  /Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/baselines.py:117: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    updated_at=datetime.utcnow(),
+
+tests/test_issue183_baseline_environment.py::test_invalid_legacy_binding_retains_revision_and_can_be_repaired
+tests/test_issue183_launch_baseline_projection.py::test_binding_pointer_moves_but_frozen_candidate_reference_does_not
+tests/test_issue_85_snapshot_revision.py::test_switching_baseline_does_not_move_an_existing_candidate
+tests/test_run_result_s3.py::test_new_launch_freezes_the_current_environment_baseline
+  /Users/hosea/.codex/worktrees/2047/Argus/services/eval-runner/app/baselines.py:109: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    binding.updated_at = datetime.utcnow()
+
+tests/test_issue_7_cli.py::test_cli_wait_against_real_api_and_database[2-0]
+tests/test_issue_7_cli.py::test_cli_wait_against_real_api_and_database[1-1]
+tests/test_issue_7_cli.py::test_cli_freezes_completed_retry_before_gate_and_preserves_the_previous_pass
+  /Users/hosea/.codex/worktrees/2047/Argus/services/argus-cli/src/argus_cli/cli.py:173: StarletteDeprecationWarning: You should not use the 'timeout' argument with the TestClient. See https://github.com/Kludex/starlette/issues/1108 for more information.
+    response = client.request(method, args.api_url.rstrip("/") + path, timeout=min(10, remaining), **kwargs)
+
+tests/test_real_llm_agent.py::test_usage_extraction_never_fabricates[float-token-invalid]
+  /Users/hosea/work/ai-eval/Argus/.venv/lib/python3.12/site-packages/pydantic/main.py:520: UserWarning: Pydantic serializer warnings:
+    PydanticSerializationUnexpectedValue(Expected `int` - serialized value may not be as expected [field_name='prompt_tokens', input_value=3.5, input_type=float])
+    return self.__pydantic_serializer__.to_python(
+
+tests/test_real_llm_agent.py::test_usage_extraction_never_fabricates[string-token-invalid]
+  /Users/hosea/work/ai-eval/Argus/.venv/lib/python3.12/site-packages/pydantic/main.py:520: UserWarning: Pydantic serializer warnings:
+    PydanticSerializationUnexpectedValue(Expected `int` - serialized value may not be as expected [field_name='prompt_tokens', input_value='3', input_type=str])
+    return self.__pydantic_serializer__.to_python(
+
+tests/test_real_llm_agent.py::test_invalid_provider_response_maps_to_502_invalid_response[non-string-content]
+  /Users/hosea/work/ai-eval/Argus/.venv/lib/python3.12/site-packages/pydantic/main.py:520: UserWarning: Pydantic serializer warnings:
+    PydanticSerializationUnexpectedValue(Expected `str` - serialized value may not be as expected [field_name='content', input_value=[{'type': 'tool_use'}], input_type=list])
+    return self.__pydantic_serializer__.to_python(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1527 passed, 31 deselected, 7279 warnings in 45.05s
+S4 real ingestion is a separate mandatory gate: make trajectory-test
+[8/8] Docker Compose validation
+docker compose config: OK
+Validation complete.

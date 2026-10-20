@@ -1,0 +1,28 @@
+{
+  "status": "PASS",
+  "launch_id": "33969c21-e67c-4282-89c1-3498aeeaa8dc",
+  "item_id": "b6c920e7-d950-412d-990e-466c92cd0b41",
+  "trace_id": "47c0a6bd069c57989b84536c1a299327",
+  "observation_id": "8df5997b4fbb53ef",
+  "score_ids": [
+    "8c66eceb-635d-52af-9c2d-f32216495a7a",
+    "867fb112-3be4-57de-9d72-6bd3b8cb323e"
+  ],
+  "values": [
+    true,
+    true
+  ],
+  "external_sources": [
+    "EVAL",
+    "EVAL"
+  ],
+  "effective_result_count": 2,
+  "http_attempts": 1,
+  "score_write_requests": 0,
+  "quality_conclusion": "unknown",
+  "releasable": false,
+  "at": "2026-10-20T02:36:32.088221+00:00",
+  "implementation_ref": "f08f5f2acf76a97f8f550a235c1479dc27b66929",
+  "collector_sha256": "c9ebfeff562378c27d9eb1d53971a2e9cb69d2f7c754d87dcf89966bfe326a05",
+  "client_sha256": "040bc95af220d5c70b3bcca7f961fb3014a50c33fd88e1e13fc84ec995df0533"
+}

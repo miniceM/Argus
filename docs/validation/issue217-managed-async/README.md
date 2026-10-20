@@ -75,20 +75,28 @@ ARGUS_MANAGED_SCORE_DEADLINE_SECONDS=1800
    将开启新代际收集，不会再次调用 Agent。
 5. 误重跑执行（新 dispatch）后旧收集任务自动丢弃，无需清理。
 
-## 4. 真实联调步骤（待执行，需凭据）
+## 4. 真实联调（已执行，PASS，2026-10-20）
 
-```bash
-# 1. 参考 #216 起隔离 Runner（独立 SQLite、单 Worker、otel 策略、独立环境）
-# 2. 在 Langfuse 为本次环境创建两条 100% 采样 Rule（LLM Judge + Code），
-#    目标 remote-agent-http / TOOL，仅本次 environment。
-# 3. 发起 Managed Launch，确认 Agent 成功后 Item 为 pending/evaluating。
-# 4. 等待 Rule 出分（或先缺分观察 pending + 退避），确认自动收敛到
-#    succeeded/recovered，无人工介入；记录 Trace/Observation/Score ID。
-# 5. 暂停并清理本次自有 Rule，不修改 #214 既有 Rule。
-# 6. 将 receipt 存入 evidence/live-async-convergence/（脱敏）。
-```
+脚本：`real_async_convergence.py --execute`（默认 dry run；重跑会产生真实模型费用）。
 
-**重新执行真实联调会产生模型费用；默认测试均为 Mock。**
+- 隔离 Runner：当前源码（含 #217）、独立 SQLite、单 Worker（并发 1）、
+  `ARGUS_DATASET_SOURCE=langfuse`、`ARGUS_LANGFUSE_RUN_ITEM_STRATEGY=otel`、
+  `LANGFUSE_TRACING_ENVIRONMENT=issue217-20261020t0745z`，后台循环运行（非 test 模式）。
+- 自有 Rule 两条（100% 采样，目标 `remote-agent-http / TOOL`，仅本次 environment），
+  沿用 #214 合成 Dataset 与 Evaluator（LLM Judge + Code）；Flowise 原生 Calculator Agent，
+  `max_retries=0`；无 SDK、无 `POST /scores`、未改 #214 既有 Rule，退出时两条自有 Rule 均已暂停。
+- 时间线（[timeline](evidence/live-async-convergence/timeline.json)，零手动 collect）：
+  - t+18s：HTTP 成功，`eval_status=pending`、`quality=unknown`、`evaluation_status=evaluating`、generation 1；
+  - t+33s：仍 pending，generation 3（缺分期两次自动有界重试）；
+  - t+48s：自动收敛 `eval_status=succeeded`、`quality=pass`、`evaluation_status=recovered`。
+- 全程 `attempt_count=1`（评分重试永不调用业务 Agent）；
+  审计显示 Argus POST 仅建 Agent/版本/Launch/Run，Langfuse POST 仅建两条 Rule，
+  `collect` 调用 0 次（见 [request-audit](evidence/live-async-convergence/request-audit.json)）。
+- 终态（[items-after](evidence/live-async-convergence/items-after.json)）：
+  冻结 `quality_evaluation.conclusion=pass、releasable=true`（Judge/Code 均为 true），
+  Trace `0feb4fe4…`、Observation `1a979795…`、两条 `source=EVAL` 的 BOOLEAN Score 已采纳；
+  只读诊断端点仍投影 `unknown`（与 #216 实测一致，为既有端点语义，非 #217 范围，不改）。
+- 结论：[receipt PASS](evidence/live-async-convergence/receipt.json)；凭据已脱敏，无泄露。
 
 ## 5. Mock 证据索引
 

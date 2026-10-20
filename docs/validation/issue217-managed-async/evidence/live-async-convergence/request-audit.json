@@ -1,0 +1,149 @@
+[
+  {
+    "service": "langfuse",
+    "method": "GET",
+    "path": "/api/public/v2/evaluators/cmvf082z1002uad0gkb42lwel",
+    "status": 200,
+    "at": "2026-10-20T07:44:49.585109+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "POST",
+    "path": "/api/public/v2/evaluation-rules",
+    "status": 201,
+    "at": "2026-10-20T07:44:51.989612+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "GET",
+    "path": "/api/public/v2/evaluators/cmvf083f50034ad0gbpddxpar",
+    "status": 200,
+    "at": "2026-10-20T07:44:54.284482+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "POST",
+    "path": "/api/public/v2/evaluation-rules",
+    "status": 201,
+    "at": "2026-10-20T07:44:56.708777+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/agents",
+    "status": 201,
+    "at": "2026-10-20T07:44:56.757780+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/agent-versions",
+    "status": 201,
+    "at": "2026-10-20T07:44:56.768080+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches",
+    "status": 201,
+    "at": "2026-10-20T07:44:57.242936+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/experiment-launches/27b8cfd4-8b3e-4216-833f-c225e2fbc4ec/run",
+    "status": 202,
+    "at": "2026-10-20T07:44:57.251340+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/27b8cfd4-8b3e-4216-833f-c225e2fbc4ec/items",
+    "status": 200,
+    "at": "2026-10-20T07:44:57.257579+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/27b8cfd4-8b3e-4216-833f-c225e2fbc4ec/items",
+    "status": 200,
+    "at": "2026-10-20T07:45:00.272910+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/27b8cfd4-8b3e-4216-833f-c225e2fbc4ec/items",
+    "status": 200,
+    "at": "2026-10-20T07:45:03.288140+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/27b8cfd4-8b3e-4216-833f-c225e2fbc4ec/items",
+    "status": 200,
+    "at": "2026-10-20T07:45:06.309294+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/27b8cfd4-8b3e-4216-833f-c225e2fbc4ec/items",
+    "status": 200,
+    "at": "2026-10-20T07:45:09.319978+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/27b8cfd4-8b3e-4216-833f-c225e2fbc4ec/items",
+    "status": 200,
+    "at": "2026-10-20T07:45:12.351317+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/27b8cfd4-8b3e-4216-833f-c225e2fbc4ec/items",
+    "status": 200,
+    "at": "2026-10-20T07:45:15.365526+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/27b8cfd4-8b3e-4216-833f-c225e2fbc4ec/items",
+    "status": 200,
+    "at": "2026-10-20T07:45:30.383615+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/27b8cfd4-8b3e-4216-833f-c225e2fbc4ec/items",
+    "status": 200,
+    "at": "2026-10-20T07:45:45.415084+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/27b8cfd4-8b3e-4216-833f-c225e2fbc4ec/items/da1b4dea-ce92-4b63-b1bd-24e5ceaa897e/managed-scores",
+    "status": 200,
+    "at": "2026-10-20T07:45:45.426143+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/27b8cfd4-8b3e-4216-833f-c225e2fbc4ec/items",
+    "status": 200,
+    "at": "2026-10-20T07:45:45.436500+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvgdocb3000iad0e4a03jav0",
+    "status": 200,
+    "at": "2026-10-20T07:45:47.895919+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvgdofxo000gad0grdirxxbw",
+    "status": 200,
+    "at": "2026-10-20T07:45:50.317938+00:00"
+  }
+]

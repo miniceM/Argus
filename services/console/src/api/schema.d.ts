@@ -1713,6 +1713,12 @@ export interface components {
         /** ExperimentLaunchCreateRequest */
         ExperimentLaunchCreateRequest: {
             /**
+             * Evaluation Source
+             * @description builtin（默认）或 langfuse_managed（显式选择）；远程 Rule 遵循 latest，不冻结执行实现
+             */
+            evaluation_source?: string | null;
+            managed_evaluation?: components["schemas"]["ManagedEvaluationContract"] | null;
+            /**
              * Name
              * @description Optional experiment name
              */
@@ -2026,6 +2032,46 @@ export interface components {
             overall: string;
             item_trace: components["schemas"]["LangfuseSyncScopeResponse"];
             run_score: components["schemas"]["LangfuseSyncScopeResponse"];
+        };
+        /** ManagedEvaluationContract */
+        ManagedEvaluationContract: {
+            /** Project Id */
+            project_id: string;
+            /** Environment */
+            environment: string;
+            target: components["schemas"]["ManagedObservationTarget"];
+            /** Scores */
+            scores: components["schemas"]["ManagedScoreExpectation"][];
+        };
+        /** ManagedObservationTarget */
+        ManagedObservationTarget: {
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
+        };
+        /** ManagedScoreExpectation */
+        ManagedScoreExpectation: {
+            /** Name */
+            name: string;
+            /**
+             * Data Type
+             * @description numeric / boolean / categorical / text；text 仅为可选证据
+             */
+            data_type: string;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
+            /** Rule Id */
+            rule_id: string;
+            /** Evaluator Id */
+            evaluator_id?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /** Category Values */
+            category_values?: string[] | null;
         };
         /** OutputSideResponse */
         OutputSideResponse: {

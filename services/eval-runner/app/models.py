@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .managed_evaluation import ManagedEvaluationContract
 from .security import validate_credential_ref, validate_endpoint_url
 from .trajectory.schema import Identity
 
@@ -317,6 +318,8 @@ class AgentVersionArchiveRequest(BaseModel):
 
 
 class ExperimentLaunchCreateRequest(BaseModel):
+    evaluation_source: str | None = Field(default=None, description="builtin（默认）或 langfuse_managed（显式选择）；远程 Rule 遵循 latest，不冻结执行实现")
+    managed_evaluation: ManagedEvaluationContract | None = None
     name: str | None = Field(default=None, description="Optional experiment name")
     agent_id: str
     agent_version: str

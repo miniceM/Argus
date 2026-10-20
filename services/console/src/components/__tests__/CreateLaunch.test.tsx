@@ -594,3 +594,44 @@ describe("CreateLaunch quality policy editor (Issue #83)", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /创建评测任务/ })).toBeEnabled());
   });
 });
+
+describe("Issue #215 Managed 选择", () => {
+  beforeEach(() => { vi.clearAllMocks(); setupApiMocks(); });
+  afterEach(() => cleanup());
+
+  it("默认 Builtin，显式 Managed 提交外部契约而非本地 Evaluator", async () => {
+    vi.mocked(api.POST).mockResolvedValue({ data: { id: "managed-215" } } as never);
+    renderCreateLaunch();
+    const source = await screen.findByLabelText("评测来源 (Evaluation Source)");
+    expect(source).toHaveValue("builtin");
+    fireEvent.change(source, { target: { value: "langfuse_managed" } });
+    expect(screen.getByText(/待收集评分，暂不可用于正式发布/)).toBeInTheDocument();
+    expect(screen.queryByTestId("quality-policy-editor")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Langfuse Project ID"), { target: { value: "project-215" } });
+    fireEvent.change(screen.getByLabelText("Score 名称 1"), { target: { value: "correctness" } });
+    fireEvent.change(screen.getByLabelText("Rule ID 1"), { target: { value: "rule-215" } });
+    const submit = screen.getByRole("button", { name: /创建评测任务/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+    await waitFor(() => expect(api.POST).toHaveBeenCalled());
+    const request = (vi.mocked(api.POST).mock.calls as unknown as [string, { body: Record<string, unknown> }][])[0][1].body;
+    expect(request).toMatchObject({ evaluation_source: "langfuse_managed", managed_evaluation: {
+      project_id: "project-215", environment: "production", target: { name: "remote-agent-http", type: "TOOL" },
+      scores: [{ name: "correctness", rule_id: "rule-215", data_type: "boolean", required: true }],
+    }, quality_policy: { rules: [{ evaluator_id: "correctness", result_type: "boolean", operator: "==", expected_value: true }] } });
+    expect(request).not.toHaveProperty("evaluator_selections");
+  });
+
+  it("显示服务端可读错误，不静默回退 Builtin", async () => {
+    vi.mocked(api.POST).mockResolvedValue({ error: { detail: {
+      code: "MANAGED_PROJECT_MISMATCH", message: "所选 project 与服务端不一致", recovery: "请重新选择项目",
+    } } } as never);
+    renderCreateLaunch();
+    fireEvent.change(await screen.findByLabelText("评测来源 (Evaluation Source)"), { target: { value: "langfuse_managed" } });
+    const submit = screen.getByRole("button", { name: /创建评测任务/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+    expect(await screen.findByText(/所选 project 与服务端不一致/)).toBeInTheDocument();
+    expect(screen.getByLabelText("评测来源 (Evaluation Source)")).toHaveValue("langfuse_managed");
+  });
+});

@@ -5020,6 +5020,28 @@
       },
       "ExperimentLaunchCreateRequest": {
         "properties": {
+          "evaluation_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluation Source",
+            "description": "builtin（默认）或 langfuse_managed（显式选择）；远程 Rule 遵循 latest，不冻结执行实现"
+          },
+          "managed_evaluation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManagedEvaluationContract"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "name": {
             "anyOf": [
               {
@@ -5760,6 +5782,124 @@
         ],
         "title": "LangfuseSyncStatusResponse",
         "description": "Sync state that never lets one scope hide a broken one (Issue #87)."
+      },
+      "ManagedEvaluationContract": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "target": {
+            "$ref": "#/components/schemas/ManagedObservationTarget"
+          },
+          "scores": {
+            "items": {
+              "$ref": "#/components/schemas/ManagedScoreExpectation"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Scores"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id",
+          "environment",
+          "target",
+          "scores"
+        ],
+        "title": "ManagedEvaluationContract"
+      },
+      "ManagedObservationTarget": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "ManagedObservationTarget"
+      },
+      "ManagedScoreExpectation": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "data_type": {
+            "type": "string",
+            "title": "Data Type",
+            "description": "numeric / boolean / categorical / text；text 仅为可选证据"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": true
+          },
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "evaluator_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluator Id"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "category_values": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Values"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "data_type",
+          "rule_id"
+        ],
+        "title": "ManagedScoreExpectation"
       },
       "OutputSideResponse": {
         "properties": {

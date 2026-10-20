@@ -1,0 +1,51 @@
+{
+  "agent_id": "banking-agent",
+  "agent_version": "v1",
+  "dataset_name": "banking-agent-regression",
+  "environment": "production",
+  "evaluation_source": "langfuse_managed",
+  "managed_evaluation": {
+    "project_id": "issue215-contract-test-project",
+    "environment": "production",
+    "target": {
+      "name": "remote-agent-http",
+      "type": "TOOL"
+    },
+    "scores": [
+      {
+        "name": "correctness",
+        "data_type": "boolean",
+        "required": true,
+        "rule_id": "issue215-existing-rule-reference",
+        "evaluator_id": "issue215-existing-evaluator-reference"
+      },
+      {
+        "name": "accuracy",
+        "data_type": "numeric",
+        "required": true,
+        "rule_id": "issue215-second-rule-reference"
+      }
+    ]
+  },
+  "quality_policy": {
+    "rules": [
+      {
+        "evaluator_id": "correctness",
+        "result_type": "boolean",
+        "required": true,
+        "critical": false,
+        "operator": "==",
+        "expected_value": true
+      },
+      {
+        "evaluator_id": "accuracy",
+        "result_type": "numeric",
+        "required": true,
+        "critical": false,
+        "operator": ">=",
+        "threshold": 0.8
+      }
+    ]
+  },
+  "max_concurrency": 1
+}

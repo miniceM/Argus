@@ -708,6 +708,11 @@ def manifest_measurement_digest(manifest: dict[str, Any] | None) -> str:
     decision.
     """
     manifest = manifest or {}
+    if manifest.get("evaluation_source") == "langfuse_managed":
+        # 采纳条件身份不等于远程实现版本；每次按内容重算，不信任已存摘要。
+        contract = dict(manifest.get("managed_evaluation") or {})
+        contract.pop("acceptance_digest", None)
+        return canonical_digest(contract)
     return canonical_digest(
         {
             "schema_version": str(manifest.get("schema_version") or ""),
@@ -824,6 +829,10 @@ def evaluate_frozen_item(
         build_result,
         failed_result,
     )
+    from .managed_evaluation import evaluation_source
+
+    if evaluation_source(manifest) == "langfuse_managed":
+        return summarize_typed_results([], [], manifest=manifest)
 
     registry = registry or default_evaluator_registry
     executors = executors if executors is not None else build_executor_registry(registry)
@@ -969,8 +978,14 @@ def summarize_typed_results(
     one.
     """
     from .evaluator_results import project_legacy_scores
+    from .managed_evaluation import evaluation_source
     from .quality_policy import evaluate_quality_policy
 
+    managed = evaluation_source(manifest) == "langfuse_managed"
+    if managed:
+        # #215 仅配置；不得从本地评分或调用方传入值伪造远程采纳证据。
+        typed_results = []
+        plan = []
     typed_results = list(typed_results)
     if verification_status is None:
         verification_status = manifest_contract_status(manifest)
@@ -1015,6 +1030,10 @@ def summarize_typed_results(
     else:
         eval_status = "succeeded"
         eval_error = None
+
+    if managed:
+        eval_status = "failed"
+        eval_error = "LANGFUSE_MANAGED_SCORES_PENDING: 待收集评分，暂不可用于正式发布。"
 
     return FrozenItemEvaluation(
         scores=scores,

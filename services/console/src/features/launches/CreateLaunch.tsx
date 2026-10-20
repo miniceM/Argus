@@ -1,3 +1,4 @@
+import { ManagedEvaluationFields, newManagedDraft } from "./ManagedEvaluationFields";
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -64,6 +65,9 @@ const diagnosticDefaults = (evaluators: EvaluatorResponse[]): SelectionMap =>
 
 export const CreateLaunch: React.FC = () => {
   const navigate = useNavigate();
+  const [evaluationSource, setEvaluationSource] = useState("builtin");
+  const [managedDraft, setManagedDraft] = useState(newManagedDraft);
+  const isManaged = evaluationSource === "langfuse_managed";
 
   // Form State
   const [launchName, setLaunchName] = useState<string>("");
@@ -268,11 +272,11 @@ export const CreateLaunch: React.FC = () => {
       }
 
       const selectedIds = selectedEvaluatorIds;
-      if (selectedIds.length === 0) {
+      if (!isManaged && selectedIds.length === 0) {
         throw new Error("请至少选择一个评测指标 (Evaluator)");
       }
 
-      if (hasInvalidSelection) {
+      if (!isManaged && hasInvalidSelection) {
         const detail = staleSelections
           .map((item) => `${item.id}@${item.version}：${item.reason}`)
           .join("；");
@@ -284,7 +288,7 @@ export const CreateLaunch: React.FC = () => {
       const ruleDetail = ruleIssues
         .map((issue) => (issue.evaluatorId ? `${issue.evaluatorId}：${issue.message}` : issue.message))
         .join("；");
-      if (ruleDetail && selectedIds.length > 0) {
+      if (!isManaged && ruleDetail && selectedIds.length > 0) {
         throw new Error(`质量判定规则不合法，无法创建任务。${ruleDetail}`);
       }
 
@@ -302,9 +306,12 @@ export const CreateLaunch: React.FC = () => {
           dataset_name: datasetName.trim(),
           dataset_version: finalDatasetVersion,
           environment: environment.trim() || "production",
-          evaluator_selections,
+          ...(isManaged ? {
+            evaluation_source: evaluationSource,
+            managed_evaluation: { ...managedDraft.contract, environment: environment.trim() || "production" },
+            quality_policy: { rules: managedDraft.rules },
+          } : { evaluator_selections, quality_policy: toQualityPolicyRequest(ruleDrafts) }),
           max_concurrency: concurrency,
-          quality_policy: toQualityPolicyRequest(ruleDrafts),
         },
       });
 
@@ -541,6 +548,14 @@ export const CreateLaunch: React.FC = () => {
           </div>
         </div>
 
+        <Field label="评测来源 (Evaluation Source)">
+          {(field) => <select id={field.id} className="ui-control" aria-label="评测来源 (Evaluation Source)" value={evaluationSource}
+            onChange={(event) => { setEvaluationSource(event.target.value); setFormError(null); }}>
+            <option value="builtin">Builtin Evaluation（默认）</option>
+            <option value="langfuse_managed">Langfuse Managed Evaluation</option>
+          </select>}
+        </Field>
+        {isManaged ? <ManagedEvaluationFields value={managedDraft} onChange={(next) => { setManagedDraft(next); setFormError(null); }} /> : <>
         {/* Section 3: Evaluators */}
         <div className="space-y-4">
           <div className="flex items-center justify-between border-b border-border pb-2">
@@ -848,6 +863,7 @@ export const CreateLaunch: React.FC = () => {
           )}
         </div>
 
+        </>}
         {/* Section 5: Concurrency Execution Policy */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 border-b border-border pb-2">
@@ -886,7 +902,7 @@ export const CreateLaunch: React.FC = () => {
           </Link>
           <Button
             type="submit"
-            disabled={createMutation.isPending || !selectedAgentVersion || hasInvalidSelection || hasInvalidRules}
+            disabled={createMutation.isPending || !selectedAgentVersion || (!isManaged && (hasInvalidSelection || hasInvalidRules))}
             className="text-xs"
           >
             <Rocket className="w-3.5 h-3.5" />

@@ -1,0 +1,51 @@
+{
+  "request": {
+    "endpoint": "http://127.0.0.1:18091/api/v1/prediction/8b8d2606-379c-42c4-9ac9-08dcbf9490e8",
+    "protocol": "HTTP_JSON",
+    "method": "POST",
+    "request_mapping": {
+      "question": "input.question",
+      "streaming": "input.streaming"
+    },
+    "usage_cost_mapping": null,
+    "timeout_seconds": 150.0,
+    "max_retries": 0,
+    "rate_limit_per_minute": 600,
+    "max_concurrency": 1,
+    "trace_propagation": "W3C",
+    "is_idempotent": false,
+    "artifact_ref": "docker:flowiseai/flowise@sha256:cf880b17b1290fbaebebc76c33954bde67b3775aff95feec72a1d060cc81e43d",
+    "agent_id": "issue217-20261020t074446z",
+    "version": "v1",
+    "environment": "issue217-20261020t0745z"
+  },
+  "response": {
+    "id": "f638862d-76be-4bce-8800-b39be871d246",
+    "agent_id": "issue217-20261020t074446z",
+    "version": "v1",
+    "spec_digest": "07ac95e4f8118f439dc9e3e25a06cf3fdba3838e36f2584533f0195785108550",
+    "artifact_ref": "docker:flowiseai/flowise@sha256:cf880b17b1290fbaebebc76c33954bde67b3775aff95feec72a1d060cc81e43d",
+    "endpoint": "http://127.0.0.1:18091/api/v1/prediction/8b8d2606-379c-42c4-9ac9-08dcbf9490e8",
+    "protocol": "HTTP_JSON",
+    "method": "POST",
+    "request_mapping": {
+      "question": "input.question",
+      "streaming": "input.streaming"
+    },
+    "usage_cost_mapping": null,
+    "request_schema": null,
+    "response_schema": null,
+    "credential_ref": null,
+    "credential_id": null,
+    "timeout_seconds": 150.0,
+    "max_retries": 0,
+    "rate_limit_per_minute": 600,
+    "max_concurrency": 1,
+    "trace_propagation": "W3C",
+    "is_idempotent": false,
+    "environment": "issue217-20261020t0745z",
+    "trajectory_source_profile_id": null,
+    "is_active": true,
+    "created_at": "2026-10-20T07:44:56.765408"
+  }
+}

@@ -26,6 +26,17 @@ from .queue import QueueAdapter
 from .registry import AgentVersionSpec, map_request
 from .runner_identity import RunnerIdentity, current_runner_identity, validate_runner_identity
 
+
+def _managed_slot_count() -> int:
+    """托管评分收集独立并发槽（默认 4），非法配置回退默认。"""
+    import os
+
+    try:
+        value = int(float(os.getenv("ARGUS_MANAGED_SCORE_CONCURRENCY", "4")))
+    except (TypeError, ValueError):
+        return 4
+    return value if value >= 1 else 4
+
 try:
     from opentelemetry.propagate import inject
 except Exception:
@@ -50,6 +61,9 @@ class ExecutionWorker:
         self.worker_id = worker_id or f"worker-{uuid.uuid4().hex[:8]}"
         self.runner_identity = runner_identity or current_runner_identity()
         self.local_concurrency = asyncio.Semaphore(10)
+        # #217 P2：托管评分远端读取耗时久，独立限流，不与 HTTP 执行共用
+        # 本地槽，避免评分等待饿死业务 Agent 执行。
+        self.managed_concurrency = asyncio.Semaphore(_managed_slot_count())
         self.heartbeat_interval = 5.0
 
     def poll_queue(self, count: int = 10, block_ms: int = 1000) -> list[tuple[str, str, int, str]]:
@@ -868,6 +882,61 @@ class ExecutionWorker:
                             observation_id=obs_id,
                         )
 
+                        from .managed_evaluation import evaluation_source as _managed_source
+
+                        if _managed_source(manifest) == "langfuse_managed":
+                            # #217：执行与评测解耦。HTTP 已成功，评分异步等待。
+                            # permit 已在上方释放，此后永不持有 Agent 并发额度。
+                            if lease_lost.is_set():
+                                return False
+                            # 本地冻结 QualityPolicy 判定（无远端调用），保持
+                            # #215 的 UNKNOWN / 不可发布语义。
+                            def _managed_pending_decision():
+                                result = evaluate_frozen_item(
+                                    manifest,
+                                    output=inv_res.body,
+                                    expected_output=expected_output,
+                                )
+                                decision = result.quality_decision
+                                return decision.payload() if decision is not None else None
+
+                            pending_quality = await asyncio.to_thread(_managed_pending_decision)
+                            self.finalize_execution_and_attempt(
+                                item_id=item_id,
+                                generation=generation,
+                                lease_token=token,
+                                target_item_status="SUCCEEDED",
+                                target_eval_status="pending",
+                                target_quality_conclusion="unknown",
+                                current_attempt_id=current_attempt_id,
+                                attempt_updates=att_updates,
+                                scores={},
+                                typed_results=[],
+                                quality_evaluation=pending_quality,
+                                eval_error="LANGFUSE_MANAGED_SCORES_PENDING: Agent 已成功，Langfuse 正在评分，暂不可用于正式发布。",
+                                trace_id=trace_id,
+                                trace_url=trace_url,
+                                observation_id=obs_id,
+                                launch_id=launch_id,
+                                dataset_item_id=claim_info["dataset_item_id"],
+                                dataset_version=dataset_version,
+                                dataset_run_name=dataset_run_name,
+                                dataset_source=dataset_source,
+                            )
+                            # 首轮评分收集与执行终态解耦：复用评测租约/代际，不再调 Agent。
+                            from .managed_score_recovery import submit_managed_collection
+
+                            await asyncio.to_thread(
+                                submit_managed_collection,
+                                self.db_mgr,
+                                self.queue,
+                                item_id=item_id,
+                                worker_id=self.worker_id,
+                            )
+                            # 执行消息已终态，必须确认，否则 Redis 会重投并再次调用 Agent。
+                            self.queue.ack(message_id)
+                            return True
+
                         # Successful execution -> evaluate quality (ASYNC offloaded via asyncio.to_thread)
                         def _do_evaluation():
                             # Issue #81: shared frozen evaluation boundary; no per-id lookup.
@@ -1092,6 +1161,34 @@ class ExecutionWorker:
             # no-op here and the message is simply acked.
             outcome = await asyncio.to_thread(
                 recover_evaluation,
+                self.db_mgr,
+                item_id=item_id,
+                evaluation_generation=evaluation_generation,
+                worker_id=self.worker_id,
+            )
+            if not outcome.get("claimed"):
+                self.queue.ack(message_id)
+                return False
+            self.queue.ack(message_id)
+            return bool(outcome.get("finalized"))
+
+    async def execute_managed_message(
+        self,
+        message_id: str,
+        item_id: str,
+        evaluation_generation: int,
+    ) -> bool:
+        """#217：托管评分收集。只读 Langfuse Scores，复用原 Agent Output。
+
+        永不调用业务 Agent，永不申请/持有 Agent HTTP 并发 permit；
+        多 Worker 经评测租约 + 代际 CAS  fencing，迟到结果直接丢弃。
+        使用独立于 HTTP 执行的本地限流槽。
+        """
+        async with self.managed_concurrency:
+            from .managed_score_recovery import recover_managed_scores
+
+            outcome = await asyncio.to_thread(
+                recover_managed_scores,
                 self.db_mgr,
                 item_id=item_id,
                 evaluation_generation=evaluation_generation,

@@ -1,0 +1,1 @@
+{"concurrent_same_generation": {"adopted_results": 1, "audit_rows": 1, "finalized": 1, "workers": 4}, "evidence_kind": "mock", "late_old_generation": {"adopted_results": 1, "current_value_preserved": true, "late_finalized": false}, "note": "多 Worker 经评测租约 CAS 单采纳；旧代迟到经代际/CAS 丢弃；取消经 EVALUATION_CANCELLED 丢弃。"}

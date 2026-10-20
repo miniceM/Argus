@@ -410,6 +410,12 @@ class LaunchOrchestrator:
             WORK_TYPE_EVALUATION,
         )
         from .execution_checkpoint import CheckpointUnavailableError, load_recoverable_checkpoint
+        from .managed_score_recovery import (
+            MANAGED_PENDING_MESSAGE,
+            WORK_TYPE_MANAGED,
+            _open_collection_cycle,
+            is_managed_manifest,
+        )
 
         now = datetime.now(UTC)
         is_pg = self.db_mgr.engine.dialect.name == "postgresql"
@@ -452,13 +458,22 @@ class LaunchOrchestrator:
             candidates = session.scalars(item_stmt).all()
 
             manifest = launch.manifest or {}
+            managed = is_managed_manifest(manifest)
+            managed_items: list[tuple[str, int]] = []
             for it in candidates:
                 item_id = it.id
                 # Already being re-evaluated: idempotent no-op (double-click).
                 if it.evaluation_status == EVALUATION_RUNNING:
                     already_running.append(item_id)
                     continue
-                if (it.eval_status or "").lower() not in RECOVERABLE_EVAL_STATUSES:
+                if managed:
+                    # #217：Managed 等待态 pending 亦可手动重提；终态失败亦可重提。
+                    if (it.eval_status or "").lower() not in (
+                        "pending",
+                        *RECOVERABLE_EVAL_STATUSES,
+                    ):
+                        continue
+                elif (it.eval_status or "").lower() not in RECOVERABLE_EVAL_STATUSES:
                     continue
                 # Validate the recoverable artifact *before* dispatching, so a
                 # missing/expired/corrupt checkpoint is a clear refusal, not a
@@ -468,7 +483,9 @@ class LaunchOrchestrator:
                         session,
                         item_execution_id=item_id,
                         dispatch_generation=it.dispatch_generation,
-                        manifest=manifest,
+                        # Managed 用 manifest=None：Builtin binding 口径不适用托管收集，
+                        # 契约校验下沉到 Collector（acceptance_digest + 强来源核验）。
+                        manifest=None if managed else manifest,
                         now=now,
                     )
                 except CheckpointUnavailableError as exc:
@@ -483,16 +500,18 @@ class LaunchOrchestrator:
                     )
                     continue
 
-                it.evaluation_generation = (it.evaluation_generation or 0) + 1
-                it.evaluation_status = EVALUATION_RUNNING
-                it.evaluation_error = None
-                it.evaluation_lease_owner = None
-                it.evaluation_lease_token = None
-                it.evaluation_lease_expires_at = None
-                it.evaluation_started_at = now
-                it.evaluation_completed_at = None
+                # 周期字段写入与 submit_managed_collection 共用 helper，防双路径漂移；
+                # started_at 重置沿用既有语义（Managed/Builtin 均重置，代际单调防旧）。
+                _open_collection_cycle(
+                    it, now=now,
+                    pending_message=MANAGED_PENDING_MESSAGE if managed else None,
+                    reset_cycle_start=True,
+                )
                 it.updated_at = now
-                dispatch_items.append((item_id, it.evaluation_generation))
+                if managed:
+                    managed_items.append((item_id, it.evaluation_generation))
+                else:
+                    dispatch_items.append((item_id, it.evaluation_generation))
                 submitted.append(item_id)
 
             if not submitted and not already_running:
@@ -509,6 +528,8 @@ class LaunchOrchestrator:
 
         if dispatch_items:
             self.queue.enqueue_items(dispatch_items, work_type=WORK_TYPE_EVALUATION)
+        if managed_items:
+            self.queue.enqueue_items(managed_items, work_type=WORK_TYPE_MANAGED)
 
         return {
             "launch": launch,

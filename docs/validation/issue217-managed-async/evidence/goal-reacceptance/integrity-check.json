@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "scope": "all evidence added in this reacceptance",
+  "files_scanned": 45,
+  "checks": [
+    "JSON parse",
+    "exact current Langfuse credential absence",
+    "token-shaped secret absence",
+    "nine lifecycle source hashes equal final live run"
+  ],
+  "no_credential_values_logged": true,
+  "initial_scan_findings": [
+    {
+      "file": "docs/validation/issue217-managed-async/evidence/live-pr225-goal-restart/langfuse-observations-readback.json",
+      "credential_kinds": [
+        "LANGFUSE_PUBLIC_KEY"
+      ]
+    }
+  ],
+  "note": "One manually saved historical readback included SDK public-key metadata; redacted and removed from the branch history by replacing only the agent-owned latest documentation commit. Secret key was not present."
+}

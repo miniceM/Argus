@@ -1,0 +1,44 @@
+{
+  "baseline_subset": {
+    "commit": "3f31c8df13fc4232ed55dd1b1cca1499e57003f2",
+    "scope": "当时新增的25个边界参数；不是全部当前55参数",
+    "failed": 19,
+    "passed": 4,
+    "skipped": 2,
+    "failed_cases": [
+      "test_expired_deadline_never_reads_remote[sqlite]",
+      "test_expired_deadline_never_reads_remote[postgresql]",
+      "test_deadline_during_fetch_rejects_late_score[sqlite]",
+      "test_deadline_during_fetch_rejects_late_score[postgresql]",
+      "test_retry_after_is_respected_and_duplicate_cannot_skip_backoff[sqlite]",
+      "test_retry_after_is_respected_and_duplicate_cannot_skip_backoff[postgresql]",
+      "test_cancel_during_backoff_settles_without_agent_rerun[sqlite]",
+      "test_cancel_during_backoff_settles_without_agent_rerun[postgresql]",
+      "test_stale_worker_does_not_corrupt_winning_attempt_audit[sqlite]",
+      "test_stale_worker_does_not_corrupt_winning_attempt_audit[postgresql]",
+      "test_reconciler_scan_cannot_clear_newly_renewed_lease[postgresql]",
+      "test_crashed_collections_consume_budget[sqlite]",
+      "test_crashed_collections_consume_budget[postgresql]",
+      "test_infinite_attempt_config_is_safe[inf]",
+      "test_infinite_attempt_config_is_safe[-inf]",
+      "test_infinite_attempt_config_is_safe[Infinity]",
+      "test_infinite_attempt_config_is_safe[1e309]",
+      "test_live_dispatcher_managed_wait_does_not_block_http",
+      "test_two_postgresql_reconcilers_advance_one_generation[postgresql]"
+    ],
+    "log_sha256": "eafb894d52e72234f9317cee5bb43bfc68cfa5b89bb15bcc4abf91d1e88ebc83"
+  },
+  "claim_before_attempt_regression": {
+    "before_commit": "84386f82b4e7a36890551123bb595d256e9855dd",
+    "red": {
+      "failed": 2,
+      "reason": "Reconciler 补最小 attempt 后未 flush；两库 max_attempts=1 仍 evaluating",
+      "log_sha256": "2447bb435c06632fdb0b69468393c889173ee620174f3dbe56b21884a98a7975"
+    },
+    "after_commit": "e9f69edd87212bb99b96f42257afb5169dfca74c",
+    "green": {
+      "passed": 2,
+      "log_sha256": "d6f6d469bdac594cc3a1e960fdcdefe61aad3e5c52c70081db3afce70635e6bb"
+    }
+  }
+}

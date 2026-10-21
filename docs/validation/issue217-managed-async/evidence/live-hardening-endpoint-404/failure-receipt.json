@@ -1,0 +1,9 @@
+{
+  "status": "FAIL",
+  "reason": "AGENT_ENDPOINT_HTTP_404",
+  "source_commit": "592a9178ca207ffe11e454f47e76c6eaffdaa595",
+  "http_attempts": 1,
+  "agent_automatically_retried": false,
+  "owned_rules_paused": true,
+  "boundary": "验收夹具错误地将旧 Flowise Flow ID 指向了另一套 19091 服务；非评分生命周期失败。"
+}

@@ -1,0 +1,29 @@
+{
+  "status": "PASS",
+  "functional_commit": "e9f69edd87212bb99b96f42257afb5169dfca74c",
+  "checked_at": "2026-10-20T12:04:20.406957+00:00",
+  "command": "PATH=<verified-node22-bin>:$PATH TEST_POSTGRES_URL=<isolated-postgresql> make validate",
+  "python": "3.12.11",
+  "node": "22.22.0",
+  "postgresql_enabled": true,
+  "steps": {
+    "configuration": "PASS",
+    "compile_and_ruff": "PASS",
+    "zero_eval_sdk_and_w3c": "PASS",
+    "openapi_and_console_schema_drift": "PASS",
+    "console_typecheck": "PASS",
+    "console_vitest": {
+      "files": 54,
+      "passed": 868
+    },
+    "console_build": "PASS",
+    "pytest": {
+      "passed": 1612,
+      "skipped": 2,
+      "deselected": 31
+    },
+    "compose_config": "PASS"
+  },
+  "skip_reason": "仅两个 PG 专用竞争用例的 SQLite 参数；PG 参数已执行通过。31 个 trajectory_local 按既有门禁排除，S4 由当前 PR-head CI 独立验证。",
+  "raw_log_sha256": "9d21452521fa130c1987d24d3307352646efcea506b87f0a1584122af7f2a41b"
+}

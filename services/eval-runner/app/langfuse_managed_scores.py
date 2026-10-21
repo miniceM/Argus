@@ -387,11 +387,24 @@ class ManagedScoreCollector:
             or exp <= datetime.now(UTC)
         ):
             return "LEASE_LOST"
+        now = datetime.now(UTC)
+        if fence.get("cycle_deadline") is not None and now >= fence["cycle_deadline"]:
+            return "MANAGED_SCORES_DEADLINE_EXCEEDED"
+        if fence.get("collection_deadline") is not None and now >= fence["collection_deadline"]:
+            return "TIMEOUT"
         return None
 
     def _save(self, ctx, contract, decisions, retry_after=None, *, fence=None):
         report = []
         with self.db.get_session() as session:
+            # 与取消/终结共用 Launch → Item 锁序；避免取消在检查后插入、
+            # 或与其他持有 Launch 锁的完成路径形成锁反转。
+            session.execute(
+                update(ExperimentLaunchRecord)
+                .where(ExperimentLaunchRecord.id == ctx["launch_id"])
+                .values(id=ExperimentLaunchRecord.id)
+            )
+            session.expire_all()
             # UPDATE 在 PostgreSQL / SQLite 均取得写锁；再读 Context 防 TOCTOU 和旧 generation。
             item = session.get(ExperimentItemExecutionRecord, ctx["item_execution_id"])
             _check(item is not None and item.launch_id == ctx["launch_id"], "ITEM_NOT_FOUND")

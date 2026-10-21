@@ -195,6 +195,8 @@ def replay_experiment_item(
     credentials: Any,
     timeout_seconds: float = 30.0,
     start_unix_nano: int | None = None,
+    span_name: str = _REPLAY_SPAN_NAME,
+    attributes: list[tuple[str, str]] | None = None,
 ) -> tuple[int, bytes]:
     """Replay one existing Argus trace as a Langfuse v4 run item."""
     payload = build_experiment_replay_request(
@@ -206,6 +208,8 @@ def replay_experiment_item(
         run_name=run_name,
         dataset_version=dataset_version,
         start_unix_nano=start_unix_nano,
+        span_name=span_name,
+        attributes=attributes,
     )
     return post_langfuse_projection(payload, credentials=credentials, timeout_seconds=timeout_seconds)
 

@@ -1,0 +1,31 @@
+[
+  {
+    "id": "5133e55f63c0ce86",
+    "traceId": "7bbffff21aa767dbbcb1bb3b6704a7fb",
+    "name": "remote-agent-http",
+    "type": "TOOL",
+    "projectId": "cmu5a6fj500aoad0jvrckiypb",
+    "environment": "issue217-hardening-20261020t113145z",
+    "input": "{\"agent\": \"issue217-20261020t113146z:v1\", \"request\": {\"question\": \"Compute (135 + 287) * 3. You must call calculator.\", \"streaming\": false}}",
+    "output": "{\"text\": \"1266\", \"question\": \"Compute (135 + 287) * 3. You must call calculator.\", \"chatId\": \"26bd8d70-9c1e-4a98-a3b3-51996a171ca2\", \"chatMessageId\": \"d55ce47c-a864-42f8-9e7a-141e5a2556b7\", \"executionId\": \"5ab3d2f6-f6ee-4893-8436-f5329c4d3d4e\", \"agentFlowExecutedData\": [{\"nodeId\": \"startAgentflow_0\", \"nodeLabel\": \"Start\", \"data\": {\"id\": \"startAgentflow_0\", \"name\": \"startAgentflow\", \"input\": {\"question\": \"Compute (135 + 287) * 3. You must call calculator.\"}, \"output\": {\"question\": \"Compute (135 + 287) * 3. You must call calculator.\"}, \"state\": {}}, \"previousNodeIds\": [], \"status\": \"FINISHED\"}, {\"nodeId\": \"agentAgentflow_0\", \"nodeLabel\": \"QnA\", \"data\": {\"id\": \"agentAgentflow_0\", \"name\": \"agentAgentflow\", \"input\": {\"messages\": [{\"role\": \"system\", \"content\": \"You are a calculator agent. You MUST use the calculator tool to compute every arithmetic expression. Return only the numeric final result, without explanation.\"}, {\"role\": \"user\", \"content\": \"Compute (135 + 287) * 3. You must call calculator.\"}, {\"role\": \"assistant\", \"content\": \"\", \"tool_calls\": [{\"name\": \"calculator\", \"args\": {\"input\": \"(135 + 287) * 3\"}, \"type\": \"tool_call\", \"id\": \"call_f860ef3e34d141acb03dab53\"}], \"additional_kwargs\": {\"tool_calls\": [{\"id\": \"call_f860ef3e34d141acb03dab53\", \"type\": \"function\", \"function\": {\"name\": \"calculator\", \"arguments\": \"{\\\"input\\\":\\\"(135 + 287) * 3\\\"}\"}}]}, \"usage_metadata\": {\"output_tokens\": 46, \"input_tokens\": 372, \"total_tokens\": 418, \"input_token_details\": {\"cache_read\": 256}, \"output_token_details\": {\"reasoning\": 0}}, \"id\": \"gw-f283724097e-4f5c6d\"}, {\"role\": \"tool\", \"content\": \"1266\", \"tool_call_id\": \"call_f860ef3e34d141acb03dab53\", \"name\": \"calculator\", \"additional_kwargs\": {}}], \"agentModel\": \"chatOpenAI\", \"agentTools\": [{\"agentSelectedTool\": \"calculator\", \"agentSelectedToolRequiresHumanInput\": false, \"agentSelectedToolConfig\": {\"agentSelectedTool\": \"calculator\"}}], \"agentKnowledgeDocumentStores\": [], \"agentEnableMemory\": false, \"agentMemoryType\": \"allMessages\", \"agentReturnResponseAs\": \"userMessage\", \"agentModelConfig\": {\"cache\": \"\", \"modelName\": \"deepseek-v4.1-flash\", \"temperature\": 0, \"streaming\": false, \"maxTokens\": 1000, \"topP\": \"\", \"frequencyPenalty\": \"\", \"presencePenalty\": \"\", \"timeout\": 90000, \"strictToolCalling\": \"\", \"stopSequence\": \"\", \"basepath\": \"https://opencode.ai/zen/go/v1\", \"proxyUrl\": \"\", \"baseOptions\": \"{\\\"x-opencode-session\\\": \\\"argus-flowise-p0-20261019\\\"}\", \"allowImageUploads\": \"\", \"imageResolution\": \"low\", \"reasoningEffort\": \"\", \"agentModel\": \"chatOpenAI\", \"maxRetries\": 0}}, \"output\": {\"content\": \"1266\", \"timeMetadata\": {\"start\": 1792495916945, \"end\": 1792495919900, \"delta\": 2955}, \"calledTools\": [], \"usageMetadata\": {\"output_tokens\": 4, \"input_tokens\": 431, \"total_tokens\": 1288, \"input_token_details\": {\"cache_read\": 0}, \"output_token_details\": {\"reasoning\": 0}, \"tool_call_tokens\": 853}, \"responseMetadata\": {\"tokenUsage\": {\"promptTokens\": 431, \"completionTokens\": 4, \"totalTokens\": 435}, \"finish_reason\": \"stop\", \"model_provider\": \"openai\", \"model_name\": \"deepseek-v4.1-flash\"}, \"usedTools\": [{\"tool\": \"calculator\", \"toolInput\": {\"input\": \"(135 + 287) * 3\"}, \"toolOutput\": \"1266\"}], \"availableTools\": [{\"name\": \"calculator\", \"description\": \"Useful for getting the result of a math expression. The input to this tool should be a valid mathematical expression that could be executed by a simple calculator.\", \"schema\": {\"type\": \"object\", \"properties\": {\"input\": {\"type\": \"string\"}}, \"additionalProperties\": false}, \"toolNode\": {\"label\": \"Calculator\", \"name\": \"calculator\"}}]}, \"state\": {}, \"chatHistory\": [{\"role\": \"user\", \"content\": \"Compute (135 + 287) * 3. You must call calculator.\"}, {\"role\": \"user\", \"content\": \"1266\", \"name\": \"qna\", \"additional_kwargs\": {\"usedTools\": [{\"tool\": \"calculator\", \"toolInput\": {\"input\": \"(135 + 287) * 3\"}, \"toolOutput\": \"1266\"}]}}]}, \"previousNodeIds\": [\"startAgentflow_0\"], \"status\": \"FINISHED\"}], \"sessionId\": \"26bd8d70-9c1e-4a98-a3b3-51996a171ca2\"}",
+    "startTime": "2026-10-20T11:32:01.142Z",
+    "endTime": "2026-10-20T11:32:01.142Z",
+    "metadata": {
+      "argus_checkpoint_digest": "sha256:5097d463501befb0eaebd6d16a43a5649df06e05bd27da407c107bf36887ae12",
+      "generation": 1,
+      "item_id": "696ea11c-e3d7-44dd-960d-efdfc9c9f949",
+      "launch_id": "2e3a3f4f-a4a6-499d-bd26-fcc9c9cbf194",
+      "scope.version": "1.0.0",
+      "scope.name": "argus-eval-runner",
+      "resourceAttributes.service.name": "argus-eval-runner",
+      "attributes.langfuse.environment": "issue217-hardening-20261020t113145z",
+      "attributes.langfuse.observation.type": "tool",
+      "attributes.langfuse.experiment.item.version": "2026-10-20T11:31:56.130139+00:00",
+      "attributes.langfuse.experiment.item.root_observation_id": "5133e55f63c0ce86",
+      "attributes.langfuse.experiment.item.id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+      "attributes.langfuse.experiment.dataset.id": "cmvf080gu001iad0i4ctjw5l4",
+      "attributes.langfuse.experiment.name": "argus-2e3a3f4f-a4a",
+      "attributes.langfuse.experiment.id": "f422cda3-438d-5bd2-9c99-98246858dbf3"
+    }
+  }
+]

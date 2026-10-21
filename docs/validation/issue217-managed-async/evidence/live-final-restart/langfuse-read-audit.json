@@ -1,0 +1,25 @@
+[
+  {
+    "method": "GET",
+    "path": "/api/public/v2/observations",
+    "query": {
+      "traceId": "fc572ffa134c8a9d88435ea083b95562",
+      "fields": "core,basic,io,metadata,trace_context",
+      "limit": 100
+    },
+    "status": 200
+  },
+  {
+    "method": "GET",
+    "path": "/api/public/v3/scores",
+    "query": {
+      "traceId": "fc572ffa134c8a9d88435ea083b95562",
+      "observationId": "0f6434fb1a3e9076",
+      "source": "EVAL",
+      "fields": "details,subject",
+      "name": "",
+      "limit": 100
+    },
+    "status": 200
+  }
+]

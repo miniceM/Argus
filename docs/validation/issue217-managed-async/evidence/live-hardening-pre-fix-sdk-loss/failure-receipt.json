@@ -1,0 +1,14 @@
+{
+  "status": "FAIL",
+  "reason": "SDK_OBSERVATION_LOST_BEFORE_EXPORT",
+  "source_commit": "592a9178ca207ffe11e454f47e76c6eaffdaa595",
+  "http_attempts": 1,
+  "item": {
+    "execution_status": "succeeded",
+    "eval_status": "pending",
+    "evaluation_generation": 8,
+    "evaluation_error": "OBSERVATION_AMBIGUOUS_OR_MISSING: 托管评分未齐，300.0s 后自动重试，不会再次调用 Agent。"
+  },
+  "owned_rules_paused": true,
+  "notes": "受控 SIGKILL 发生在 HTTP 成功后、SDK 完整 TOOL 导出前；原 Outbox 仅恢复关联 SPAN。此缺口已转为本 PR 的 Checkpoint → 完整 Observation 恢复测试。没有补写 Score，没有重新调用 Agent。"
+}

@@ -1,0 +1,33 @@
+[
+  {
+    "id": "b4bcd45c-98c0-4ac7-9d47-067d6c079ef0",
+    "launch_id": "3f949075-1de9-4207-a0a5-42863f6d083d",
+    "dataset_item_id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+    "execution_status": "failed",
+    "eval_status": "skipped",
+    "quality_conclusion": "unknown",
+    "execution_error": "Client error 404",
+    "eval_error": null,
+    "trace_id": "68c63ea290aae759525da7983af92009",
+    "observation_id": "5b80e56ba494c6cd",
+    "langfuse_trace_url": "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/68c63ea290aae759525da7983af92009",
+    "final_attempt_id": "2301605a-270e-4bfb-aec4-2765040dd1b5",
+    "scores": null,
+    "evaluation_results": [],
+    "quality_evaluation": null,
+    "evaluation_status": "none",
+    "evaluation_generation": 0,
+    "evaluation_error": null,
+    "evaluation_reused_output_digest": null,
+    "evaluation_recoverable": false,
+    "attempt_count": 1,
+    "final_attempt_http_status": 404,
+    "final_attempt_latency_ms": 258,
+    "queued_at": "2026-10-20T11:03:46.041424",
+    "available_at": null,
+    "lease_owner": null,
+    "dispatch_generation": 1,
+    "started_at": "2026-10-20T11:03:46.070020",
+    "completed_at": "2026-10-20T11:03:46.784989"
+  }
+]

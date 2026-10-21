@@ -1,0 +1,289 @@
+{
+  "functional_commit": "e9f69edd87212bb99b96f42257afb5169dfca74c",
+  "command": ".venv/bin/python -m pytest -q tests/test_issue_217_lifecycle_boundaries.py --junitxml=<isolated-output>",
+  "postgresql_enabled": true,
+  "counts": {
+    "PASS": 53,
+    "SKIP": 2
+  },
+  "total": 55,
+  "cases": [
+    {
+      "name": "test_expired_deadline_never_reads_remote[sqlite]",
+      "status": "PASS",
+      "duration_s": 0.25
+    },
+    {
+      "name": "test_expired_deadline_never_reads_remote[postgresql]",
+      "status": "PASS",
+      "duration_s": 0.51
+    },
+    {
+      "name": "test_deadline_during_fetch_rejects_late_score[sqlite]",
+      "status": "PASS",
+      "duration_s": 0.122
+    },
+    {
+      "name": "test_deadline_during_fetch_rejects_late_score[postgresql]",
+      "status": "PASS",
+      "duration_s": 0.415
+    },
+    {
+      "name": "test_retry_after_is_respected_and_duplicate_cannot_skip_backoff[sqlite]",
+      "status": "PASS",
+      "duration_s": 0.089
+    },
+    {
+      "name": "test_retry_after_is_respected_and_duplicate_cannot_skip_backoff[postgresql]",
+      "status": "PASS",
+      "duration_s": 0.557
+    },
+    {
+      "name": "test_cancel_during_backoff_settles_without_agent_rerun[sqlite]",
+      "status": "PASS",
+      "duration_s": 0.107
+    },
+    {
+      "name": "test_cancel_during_backoff_settles_without_agent_rerun[postgresql]",
+      "status": "PASS",
+      "duration_s": 0.492
+    },
+    {
+      "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[sqlite]",
+      "status": "PASS",
+      "duration_s": 0.096
+    },
+    {
+      "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[postgresql]",
+      "status": "PASS",
+      "duration_s": 0.443
+    },
+    {
+      "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[sqlite]",
+      "status": "SKIP",
+      "duration_s": 0.034,
+      "reason": "MVCC interleaving requires PostgreSQL"
+    },
+    {
+      "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[postgresql]",
+      "status": "PASS",
+      "duration_s": 0.524
+    },
+    {
+      "name": "test_crashed_collections_consume_budget[sqlite]",
+      "status": "PASS",
+      "duration_s": 0.081
+    },
+    {
+      "name": "test_crashed_collections_consume_budget[postgresql]",
+      "status": "PASS",
+      "duration_s": 0.396
+    },
+    {
+      "name": "test_infinite_attempt_config_is_safe[inf]",
+      "status": "PASS",
+      "duration_s": 0.0
+    },
+    {
+      "name": "test_infinite_attempt_config_is_safe[-inf]",
+      "status": "PASS",
+      "duration_s": 0.0
+    },
+    {
+      "name": "test_infinite_attempt_config_is_safe[Infinity]",
+      "status": "PASS",
+      "duration_s": 0.0
+    },
+    {
+      "name": "test_infinite_attempt_config_is_safe[1e309]",
+      "status": "PASS",
+      "duration_s": 0.0
+    },
+    {
+      "name": "test_multiworker_single_adoption_on_both_databases[sqlite]",
+      "status": "PASS",
+      "duration_s": 0.101
+    },
+    {
+      "name": "test_multiworker_single_adoption_on_both_databases[postgresql]",
+      "status": "PASS",
+      "duration_s": 0.432
+    },
+    {
+      "name": "test_live_dispatcher_managed_wait_does_not_block_http",
+      "status": "PASS",
+      "duration_s": 0.07
+    },
+    {
+      "name": "test_timed_out_thread_cannot_overwrite_new_generation[sqlite]",
+      "status": "PASS",
+      "duration_s": 0.144
+    },
+    {
+      "name": "test_timed_out_thread_cannot_overwrite_new_generation[postgresql]",
+      "status": "PASS",
+      "duration_s": 0.531
+    },
+    {
+      "name": "test_two_postgresql_reconcilers_advance_one_generation[sqlite]",
+      "status": "SKIP",
+      "duration_s": 0.036,
+      "reason": "row-lock interleaving requires PostgreSQL"
+    },
+    {
+      "name": "test_two_postgresql_reconcilers_advance_one_generation[postgresql]",
+      "status": "PASS",
+      "duration_s": 0.36
+    },
+    {
+      "name": "test_managed_outbox_restores_scorable_observation_from_checkpoint[sqlite]",
+      "status": "PASS",
+      "duration_s": 0.088
+    },
+    {
+      "name": "test_managed_outbox_restores_scorable_observation_from_checkpoint[postgresql]",
+      "status": "PASS",
+      "duration_s": 0.409
+    },
+    {
+      "name": "test_managed_collection_waits_for_durable_observation_publication[sqlite-PENDING]",
+      "status": "PASS",
+      "duration_s": 0.082
+    },
+    {
+      "name": "test_managed_collection_waits_for_durable_observation_publication[sqlite-SYNCED]",
+      "status": "PASS",
+      "duration_s": 0.117
+    },
+    {
+      "name": "test_managed_collection_waits_for_durable_observation_publication[sqlite-FAILED]",
+      "status": "PASS",
+      "duration_s": 0.122
+    },
+    {
+      "name": "test_managed_collection_waits_for_durable_observation_publication[sqlite-SKIPPED]",
+      "status": "PASS",
+      "duration_s": 0.084
+    },
+    {
+      "name": "test_managed_collection_waits_for_durable_observation_publication[postgresql-PENDING]",
+      "status": "PASS",
+      "duration_s": 0.481
+    },
+    {
+      "name": "test_managed_collection_waits_for_durable_observation_publication[postgresql-SYNCED]",
+      "status": "PASS",
+      "duration_s": 0.396
+    },
+    {
+      "name": "test_managed_collection_waits_for_durable_observation_publication[postgresql-FAILED]",
+      "status": "PASS",
+      "duration_s": 0.479
+    },
+    {
+      "name": "test_managed_collection_waits_for_durable_observation_publication[postgresql-SKIPPED]",
+      "status": "PASS",
+      "duration_s": 0.369
+    },
+    {
+      "name": "test_managed_sdk_and_outbox_have_one_scorable_publisher[sqlite-otel]",
+      "status": "PASS",
+      "duration_s": 0.075
+    },
+    {
+      "name": "test_managed_sdk_and_outbox_have_one_scorable_publisher[sqlite-legacy]",
+      "status": "PASS",
+      "duration_s": 0.06
+    },
+    {
+      "name": "test_managed_sdk_and_outbox_have_one_scorable_publisher[postgresql-otel]",
+      "status": "PASS",
+      "duration_s": 0.336
+    },
+    {
+      "name": "test_managed_sdk_and_outbox_have_one_scorable_publisher[postgresql-legacy]",
+      "status": "PASS",
+      "duration_s": 0.376
+    },
+    {
+      "name": "test_managed_projection_refuses_corrupt_checkpoint[sqlite]",
+      "status": "PASS",
+      "duration_s": 0.08
+    },
+    {
+      "name": "test_managed_projection_refuses_corrupt_checkpoint[postgresql]",
+      "status": "PASS",
+      "duration_s": 0.622
+    },
+    {
+      "name": "test_projection_failure_resubmit_has_one_new_budget_without_agent[sqlite]",
+      "status": "PASS",
+      "duration_s": 0.093
+    },
+    {
+      "name": "test_projection_failure_resubmit_has_one_new_budget_without_agent[postgresql]",
+      "status": "PASS",
+      "duration_s": 0.411
+    },
+    {
+      "name": "test_transient_score_failure_retries_then_converges_without_agent[sqlite-RATE_LIMITED]",
+      "status": "PASS",
+      "duration_s": 0.105
+    },
+    {
+      "name": "test_transient_score_failure_retries_then_converges_without_agent[sqlite-UPSTREAM_UNAVAILABLE]",
+      "status": "PASS",
+      "duration_s": 0.083
+    },
+    {
+      "name": "test_transient_score_failure_retries_then_converges_without_agent[sqlite-TIMEOUT]",
+      "status": "PASS",
+      "duration_s": 0.081
+    },
+    {
+      "name": "test_transient_score_failure_retries_then_converges_without_agent[postgresql-RATE_LIMITED]",
+      "status": "PASS",
+      "duration_s": 0.411
+    },
+    {
+      "name": "test_transient_score_failure_retries_then_converges_without_agent[postgresql-UPSTREAM_UNAVAILABLE]",
+      "status": "PASS",
+      "duration_s": 0.565
+    },
+    {
+      "name": "test_transient_score_failure_retries_then_converges_without_agent[postgresql-TIMEOUT]",
+      "status": "PASS",
+      "duration_s": 0.435
+    },
+    {
+      "name": "test_auth_failure_stops_unknown_without_agent[sqlite-AUTHENTICATION_FAILED]",
+      "status": "PASS",
+      "duration_s": 0.088
+    },
+    {
+      "name": "test_auth_failure_stops_unknown_without_agent[sqlite-AUTHORIZATION_FAILED]",
+      "status": "PASS",
+      "duration_s": 0.078
+    },
+    {
+      "name": "test_auth_failure_stops_unknown_without_agent[postgresql-AUTHENTICATION_FAILED]",
+      "status": "PASS",
+      "duration_s": 0.379
+    },
+    {
+      "name": "test_auth_failure_stops_unknown_without_agent[postgresql-AUTHORIZATION_FAILED]",
+      "status": "PASS",
+      "duration_s": 0.509
+    },
+    {
+      "name": "test_late_attempt_start_cannot_spend_new_manual_cycle_budget[sqlite]",
+      "status": "PASS",
+      "duration_s": 0.182
+    },
+    {
+      "name": "test_late_attempt_start_cannot_spend_new_manual_cycle_budget[postgresql]",
+      "status": "PASS",
+      "duration_s": 0.425
+    }
+  ]
+}

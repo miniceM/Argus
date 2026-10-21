@@ -35,6 +35,7 @@ from test_issue_216_managed_scores import Remote  # noqa: E402
 from test_issue_217_managed_async import (  # noqa: E402
     _good_score,
     _item,
+    _make_collection_due,
     _managed_manifest,
     _observation_for,
     _run_managed_http,
@@ -182,7 +183,7 @@ def test_adopt_then_conflict_blocks_finalize_and_recovers(setup_runtime, monkeyp
         "app.managed_score_recovery.get_managed_score_client",
         lambda: Remote(obs, [copy.deepcopy(score_a)]),
     )
-    item2 = _item(db_mgr, item_id)
+    item2 = _make_collection_due(db_mgr, item_id)
     with patch("app.worker.RemoteAgentExecutor.invoke_once", new_callable=AsyncMock) as mock:
         mock.side_effect = AssertionError("must not call agent")
         outcome2 = recover_managed_scores(
@@ -462,7 +463,7 @@ def test_manual_resubmit_gets_fresh_budget(setup_runtime, monkeypatch):
     assert recover_managed_scores(
         db_mgr, item_id=item_id, evaluation_generation=old_gen, worker_id="w1"
     )["finalized"] is False
-    item2 = _item(db_mgr, item_id)
+    item2 = _make_collection_due(db_mgr, item_id)
     exhausted = recover_managed_scores(
         db_mgr, item_id=item_id,
         evaluation_generation=item2.evaluation_generation, worker_id="w1",
@@ -494,7 +495,7 @@ def test_manual_resubmit_gets_fresh_budget(setup_runtime, monkeypatch):
         "app.managed_score_recovery.get_managed_score_client",
         lambda: Remote(obs, [copy.deepcopy(good)]),
     )
-    item4 = _item(db_mgr, item_id)
+    item4 = _make_collection_due(db_mgr, item_id)
     with patch("app.worker.RemoteAgentExecutor.invoke_once", new_callable=AsyncMock) as mock:
         mock.side_effect = AssertionError("must not call agent")
         out = recover_managed_scores(
@@ -630,7 +631,7 @@ def test_fresh_cycle_backoff_starts_small(setup_runtime, monkeypatch):
         db_mgr, item_id=item_id, evaluation_generation=item.evaluation_generation,
         worker_id="w1",
     )["finalized"] is False
-    item2 = _item(db_mgr, item_id)
+    item2 = _make_collection_due(db_mgr, item_id)
     exhausted = recover_managed_scores(
         db_mgr, item_id=item_id,
         evaluation_generation=item2.evaluation_generation, worker_id="w1",

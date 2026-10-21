@@ -1,0 +1,64 @@
+{
+  "request": {
+    "name": "issue217-20261020t113146z-llm_as_judge",
+    "enabled": true,
+    "sampling": 1,
+    "filter": [
+      {
+        "type": "stringOptions",
+        "column": "environment",
+        "operator": "any of",
+        "value": [
+          "issue217-hardening-20261020t113145z"
+        ]
+      },
+      {
+        "type": "stringOptions",
+        "column": "name",
+        "operator": "any of",
+        "value": [
+          "remote-agent-http"
+        ]
+      }
+    ],
+    "evaluatorAssignments": [
+      {
+        "evaluatorId": "cmvf082z1002uad0gkb42lwel",
+        "variableMapping": null
+      }
+    ]
+  },
+  "response": {
+    "id": "cmvgls9670012ad0kuqpamhva",
+    "name": "issue217-20261020t113146z-llm_as_judge",
+    "createdBy": null,
+    "enabled": true,
+    "sampling": 1,
+    "filter": [
+      {
+        "type": "stringOptions",
+        "column": "environment",
+        "operator": "any of",
+        "value": [
+          "issue217-hardening-20261020t113145z"
+        ]
+      },
+      {
+        "type": "stringOptions",
+        "column": "name",
+        "operator": "any of",
+        "value": [
+          "remote-agent-http"
+        ]
+      }
+    ],
+    "evaluatorAssignments": [
+      {
+        "evaluatorId": "cmvf082z1002uad0gkb42lwel",
+        "variableMapping": null
+      }
+    ],
+    "createdAt": "2026-10-20T11:31:51.535Z",
+    "updatedAt": "2026-10-20T11:31:51.535Z"
+  }
+}

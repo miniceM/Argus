@@ -18,6 +18,7 @@ nor the execution attempt:
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -79,6 +80,8 @@ def claim_evaluation(
     evaluation_generation: int,
     worker_id: str,
     lease_seconds: int = 60,
+    allow_expired: bool = True,
+    respect_available_at: bool = False,
 ) -> dict[str, Any] | None:
     """Take the fenced evaluation lease for one generation, or return ``None``.
 
@@ -91,15 +94,18 @@ def claim_evaluation(
     token = str(uuid.uuid4())
 
     with db_mgr.get_session() as session:
+        lease_free = ExperimentItemExecutionRecord.evaluation_lease_token.is_(None)
+        if allow_expired:
+            lease_free = lease_free | (
+                ExperimentItemExecutionRecord.evaluation_lease_expires_at.is_(None)
+            ) | (ExperimentItemExecutionRecord.evaluation_lease_expires_at <= now)
         stmt = (
             update(ExperimentItemExecutionRecord)
             .where(
                 ExperimentItemExecutionRecord.id == item_id,
                 ExperimentItemExecutionRecord.evaluation_generation == evaluation_generation,
                 ExperimentItemExecutionRecord.evaluation_status == EVALUATION_RUNNING,
-                (ExperimentItemExecutionRecord.evaluation_lease_token.is_(None))
-                | (ExperimentItemExecutionRecord.evaluation_lease_expires_at.is_(None))
-                | (ExperimentItemExecutionRecord.evaluation_lease_expires_at <= now),
+                lease_free,
             )
             .values(
                 evaluation_lease_owner=worker_id,
@@ -108,6 +114,11 @@ def claim_evaluation(
                 updated_at=now,
             )
         )
+        if respect_available_at:
+            stmt = stmt.where(
+                ExperimentItemExecutionRecord.available_at.is_(None)
+                | (ExperimentItemExecutionRecord.available_at <= now)
+            )
         res = session.execute(stmt)
         if res.rowcount != 1:
             session.rollback()
@@ -121,6 +132,7 @@ def claim_evaluation(
             "lease_token": token,
             "evaluation_generation": evaluation_generation,
             "lease_expires_at": expires_at,
+            "dispatch_generation": item.dispatch_generation,
         }
 
 
@@ -173,6 +185,7 @@ def _close_attempt(
     target_bindings: list[str] | None = None,
     reused_output_digest: str = "",
     worker_id: str | None = None,
+    lease_token: str | None = None,
 ) -> None:
     """Close an evaluation attempt, inserting a minimal row if none exists.
 
@@ -181,15 +194,30 @@ def _close_attempt(
     generation whose start was never recorded under this process.
     """
     now = now or _now()
-    res = session.execute(
-        update(EvaluationAttemptRecord)
-        .where(
-            EvaluationAttemptRecord.item_execution_id == item_id,
-            EvaluationAttemptRecord.evaluation_generation == evaluation_generation,
-        )
-        .values(status=status, error_type=error_type, error_message=error_message, completed_at=now)
+    stmt = update(EvaluationAttemptRecord).where(
+        EvaluationAttemptRecord.item_execution_id == item_id,
+        EvaluationAttemptRecord.evaluation_generation == evaluation_generation,
     )
-    if res.rowcount == 0 and launch_id:
+    if lease_token is not None:
+        # Managed：旧持有者不能把接管者的成功审计改为 discarded。
+        stmt = stmt.where(
+            EvaluationAttemptRecord.lease_token == lease_token,
+            EvaluationAttemptRecord.status == "running",
+        )
+    res = session.execute(
+        stmt.values(status=status, error_type=error_type, error_message=error_message, completed_at=now)
+    )
+    exists = session.scalar(select(EvaluationAttemptRecord.id).where(
+        EvaluationAttemptRecord.item_execution_id == item_id,
+        EvaluationAttemptRecord.evaluation_generation == evaluation_generation,
+    )) if res.rowcount == 0 and launch_id else None
+    if res.rowcount == 0 and lease_token is not None:
+        # 保留可解释的拒绝事件；不能为了记录迟到收尾而篡改有效审计。
+        logging.getLogger(__name__).info(
+            "Evaluation attempt close rejected: item=%s generation=%s requested_status=%s reason=%s",
+            item_id, evaluation_generation, status, error_type or "ALREADY_SETTLED_OR_LEASE_LOST",
+        )
+    if res.rowcount == 0 and launch_id and exists is None:
         session.add(
             EvaluationAttemptRecord(
                 id=f"ea_{uuid.uuid4().hex[:24]}",
@@ -200,6 +228,7 @@ def _close_attempt(
                 target_bindings=list(target_bindings or []),
                 reused_output_digest=reused_output_digest or "",
                 worker_id=worker_id,
+                lease_token=lease_token,
                 error_type=error_type,
                 error_message=error_message,
                 started_at=now,

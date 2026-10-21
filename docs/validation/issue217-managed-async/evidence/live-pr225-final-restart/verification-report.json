@@ -1,0 +1,10 @@
+{
+  "status": "PASS",
+  "source_commit": "3ce3fcfc491da44e7f7df47f66adf275d9197963",
+  "verified_at": "2026-10-21T01:38:48.501157+00:00",
+  "independent_agent_requests": 1,
+  "native_eval_scores": 2,
+  "complete_tool_observations": 1,
+  "owned_rules_paused": 2,
+  "no_additional_agent_or_score_writes": true
+}

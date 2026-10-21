@@ -400,14 +400,14 @@ class ExecutionReconciler:
         A crashed evaluation worker leaves the item ``evaluating`` with a stale
         lease. The stored Agent output is untouched, so recovery simply re-dispatches
         the same evaluation generation; the fenced claim guarantees at most one
-        effective run and no duplicate Agent call.
+        effective run and no duplicate Agent call. Managed 收集单独推进新代际、
+        消耗崩溃轮次预算并退避；Builtin 保留同代恢复行为。
         """
         from .evaluation_recovery import EVALUATION_RUNNING, WORK_TYPE_EVALUATION
-        from .managed_score_recovery import WORK_TYPE_MANAGED, is_managed_manifest
+        from .managed_score_recovery import is_managed_manifest, reconcile_managed_interruption
 
         now = datetime.now(UTC)
         reenqueue_eval: list[tuple[str, int]] = []
-        reenqueue_managed: list[tuple[str, int]] = []
         recovered = 0
 
         with self.db_mgr.get_session() as session:
@@ -419,7 +419,7 @@ class ExecutionReconciler:
                     ExperimentItemExecutionRecord.evaluation_status == EVALUATION_RUNNING,
                     ExperimentItemExecutionRecord.evaluation_lease_expires_at.isnot(None),
                     ExperimentItemExecutionRecord.evaluation_lease_expires_at <= now_sql,
-                )
+                ).order_by(ExperimentItemExecutionRecord.launch_id, ExperimentItemExecutionRecord.id)
             ).all()
             launch_cache: dict[str, Any] = {}
 
@@ -429,42 +429,9 @@ class ExecutionReconciler:
                     launch = session.get(ExperimentLaunchRecord, it.launch_id)
                     launch_cache[it.launch_id] = launch
                 manifest = (launch.manifest if launch else {}) or {}
-                if is_managed_manifest(manifest) and launch is not None and (
-                    launch.cancel_requested_at
-                    or launch.status in ("CANCELLING", "CANCELLED")
-                ):
-                    # 已取消 Launch 的 Managed 等待不得重新入队：终态归属取消
-                    # 流程，此处直接关闭 attempt，不复活评分收集（Builtin 分支不动）。
-                    from .evaluation_recovery import EVALUATION_FAILED
-
-                    it.evaluation_status = EVALUATION_FAILED
-                    it.evaluation_error = (
-                        "EVALUATION_CANCELLED: 评测任务已取消，托管评分不再收集。"
-                    )
-                    it.eval_status = "failed"
-                    it.eval_error = "EVALUATION_CANCELLED: 评测任务已取消。"
-                    it.quality_conclusion = "unknown"
-                    it.evaluation_lease_owner = None
-                    it.evaluation_lease_token = None
-                    it.evaluation_lease_expires_at = None
-                    it.evaluation_completed_at = now
-                    it.updated_at = now
-                    session.execute(
-                        update(EvaluationAttemptRecord)
-                        .where(
-                            EvaluationAttemptRecord.item_execution_id == it.id,
-                            EvaluationAttemptRecord.evaluation_generation
-                            == it.evaluation_generation,
-                            EvaluationAttemptRecord.status == "running",
-                        )
-                        .values(
-                            status="failed",
-                            error_type="EVALUATION_CANCELLED",
-                            error_message="Launch cancelled; managed collection not revived.",
-                            completed_at=now,
-                        )
-                    )
-                    recovered += 1
+                if is_managed_manifest(manifest):
+                    if reconcile_managed_interruption(session, it):
+                        recovered += 1
                     continue
                 it.evaluation_lease_owner = None
                 it.evaluation_lease_token = None
@@ -486,18 +453,13 @@ class ExecutionReconciler:
                         completed_at=now,
                     )
                 )
-                if is_managed_manifest(manifest):
-                    reenqueue_managed.append((it.id, it.evaluation_generation))
-                else:
-                    reenqueue_eval.append((it.id, it.evaluation_generation))
+                reenqueue_eval.append((it.id, it.evaluation_generation))
                 recovered += 1
 
             session.commit()
 
         if reenqueue_eval:
             self.queue.enqueue_items(reenqueue_eval, work_type=WORK_TYPE_EVALUATION)
-        if reenqueue_managed:
-            self.queue.enqueue_items(reenqueue_managed, work_type=WORK_TYPE_MANAGED)
 
         return recovered
 
@@ -507,7 +469,7 @@ class ExecutionReconciler:
         仅处理执行已成功、评测等待中、无租约且已到期的 Managed Item；
         取消中的 Launch 永不入队；Builtin 的 evaluating 由原有路径处理。
         """
-        from .managed_score_recovery import WORK_TYPE_MANAGED, is_managed_manifest
+        from .managed_score_recovery import WORK_TYPE_MANAGED, is_managed_manifest, reconcile_managed_interruption
 
         due: list[tuple[str, int]] = []
         with self.db_mgr.get_session() as session:
@@ -515,6 +477,7 @@ class ExecutionReconciler:
             now_sql = func.clock_timestamp() if is_pg else func.now()
             rows = session.scalars(
                 select(ExperimentItemExecutionRecord)
+                .join(ExperimentLaunchRecord, ExperimentLaunchRecord.id == ExperimentItemExecutionRecord.launch_id)
                 .where(
                     ExperimentItemExecutionRecord.execution_status == "succeeded",
                     ExperimentItemExecutionRecord.eval_status == "pending",
@@ -523,8 +486,11 @@ class ExecutionReconciler:
                     (
                         (ExperimentItemExecutionRecord.available_at.is_(None))
                         | (ExperimentItemExecutionRecord.available_at <= now_sql)
+                        | ExperimentLaunchRecord.cancel_requested_at.isnot(None)
+                        | ExperimentLaunchRecord.status.in_(("CANCELLING", "CANCELLED"))
                     ),
                 )
+                .order_by(ExperimentItemExecutionRecord.launch_id, ExperimentItemExecutionRecord.id)
                 .limit(limit * 2)
             ).all()
             launch_cache: dict[str, Any] = {}
@@ -535,10 +501,10 @@ class ExecutionReconciler:
                 if launch is None:
                     launch = session.get(ExperimentLaunchRecord, row.launch_id)
                     launch_cache[row.launch_id] = launch
-                if launch is None or launch.cancel_requested_at or launch.status in (
-                    "CANCELLING",
-                    "CANCELLED",
-                ):
+                if launch is None:
+                    continue
+                if launch.cancel_requested_at or launch.status in ("CANCELLING", "CANCELLED"):
+                    reconcile_managed_interruption(session, row, require_expired=False)
                     continue
                 if not is_managed_manifest((launch.manifest if launch else {}) or {}):
                     continue
@@ -559,7 +525,7 @@ class ExecutionReconciler:
         ``submit_managed_collection`` 补交。取消中的 Launch 永不补交；
         终态失败（``evaluation=failed``）不在此列，不复活。
         """
-        from .managed_score_recovery import is_managed_manifest
+        from .managed_score_recovery import is_managed_manifest, reconcile_managed_interruption
 
         candidate_ids: list[str] = []
         with self.db_mgr.get_session() as session:
@@ -570,6 +536,7 @@ class ExecutionReconciler:
                     ExperimentItemExecutionRecord.eval_status == "pending",
                     ExperimentItemExecutionRecord.evaluation_status == "none",
                 )
+                .order_by(ExperimentItemExecutionRecord.launch_id, ExperimentItemExecutionRecord.id)
                 .limit(limit * 2)
             ).all()
             launch_cache: dict[str, Any] = {}
@@ -580,15 +547,16 @@ class ExecutionReconciler:
                 if launch is None:
                     launch = session.get(ExperimentLaunchRecord, row.launch_id)
                     launch_cache[row.launch_id] = launch
-                if launch is None or launch.cancel_requested_at or launch.status in (
-                    "CANCELLING",
-                    "CANCELLED",
-                ):
+                if launch is None:
+                    continue
+                if launch.cancel_requested_at or launch.status in ("CANCELLING", "CANCELLED"):
+                    # HTTP 已提交、首轮评分未提交即中断的取消窗口同样必须 settled。
+                    reconcile_managed_interruption(session, row, require_expired=False)
                     continue
                 if not is_managed_manifest((launch.manifest if launch else {}) or {}):
                     continue
                 candidate_ids.append(row.id)
-            session.rollback()
+            session.commit()
         from .managed_score_recovery import submit_managed_collection
 
         submitted = 0

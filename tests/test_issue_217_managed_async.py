@@ -89,7 +89,7 @@ def _managed_manifest():
     }
 
 
-def _run_managed_http(setup_runtime, manifest, body):
+def _run_managed_http(setup_runtime, manifest, body, *, lf_client=None):
     from app.executor import SingleInvocationResult
 
     db_mgr, queue, limiter, orchestrator, worker, _rec = setup_runtime
@@ -100,7 +100,7 @@ def _run_managed_http(setup_runtime, manifest, body):
     msg = queue.read_group("m217", count=1)[0]
 
     async def _run():
-        with patch("app.worker.get_langfuse_client_safe", return_value=None):
+        with patch("app.worker.get_langfuse_client_safe", return_value=lf_client):
             with patch("app.worker.RemoteAgentExecutor.invoke_once", new_callable=AsyncMock) as mock:
                 mock.return_value = SingleInvocationResult(
                     status_code=200, body=body, raw_response="{}",
@@ -166,6 +166,15 @@ def _good_score(trace_id, obs_id, **patch):
     return row
 
 
+def _make_collection_due(db_mgr, item_id):
+    """显式推进持久化退避时间；不绕过 Worker 的 available_at 门禁。"""
+    from datetime import timedelta
+
+    with db_mgr.get_session() as session:
+        session.get(Item, item_id).available_at = datetime.now(UTC) - timedelta(seconds=1)
+    return _item(db_mgr, item_id)
+
+
 def test_http_success_decouple_pending_and_enqueue_managed(setup_runtime):
     manifest = _managed_manifest()
     db_mgr, queue, _, _, _, _, item_id, calls, ok = _run_managed_http(
@@ -218,7 +227,7 @@ def test_delayed_score_converges_without_recalling_agent(setup_runtime, monkeypa
         "app.managed_score_recovery.get_managed_score_client",
         lambda: Remote(obs, [good]),
     )
-    item2 = _item(db_mgr, item_id)
+    item2 = _make_collection_due(db_mgr, item_id)
     outcome2 = recover_managed_scores(
         db_mgr, item_id=item_id,
         evaluation_generation=item2.evaluation_generation, worker_id="w1",
@@ -263,7 +272,7 @@ def test_rate_limit_retry_bounded_and_unknown(setup_runtime, monkeypatch):
         evaluation_generation=item.evaluation_generation, worker_id="w1",
     )
     assert first["finalized"] is False
-    second_item = _item(db_mgr, item_id)
+    second_item = _make_collection_due(db_mgr, item_id)
     second = recover_managed_scores(
         db_mgr, item_id=item_id,
         evaluation_generation=second_item.evaluation_generation, worker_id="w1",
@@ -564,10 +573,13 @@ def test_lease_expiry_crash_recovers_and_converges(setup_runtime, monkeypatch):
 
     rec = ExecutionReconciler(db_mgr, queue, setup_runtime[2])
     assert rec.reconcile_expired_evaluation_leases() == 1
+    resumed = _make_collection_due(db_mgr, item_id)
+    assert resumed.evaluation_generation > item.evaluation_generation
+    assert rec.reconcile_managed_collections() == 1
     msgs = queue.read_group("crash217", count=10)
     managed = [m for m in msgs if m[1] == item_id and m[3] == WORK_TYPE_MANAGED]
     assert managed
-    # 同代重入：attempt 复活，不崩溃；迟到分到达后收敛，不调 Agent。
+    # 崩溃消耗旧代预算，新代接管；旧线程不可复活，新分到达后收敛，不调 Agent。
     good = _good_score(trace_id, obs_id, id="crash217")
     monkeypatch.setattr(
         "app.managed_score_recovery.get_managed_score_client",
@@ -662,7 +674,7 @@ def test_manual_retry_resubmits_managed_pending(setup_runtime, monkeypatch):
     # 终态失败后可手动重提新一轮
     monkeypatch.setenv("ARGUS_MANAGED_SCORE_MAX_ATTEMPTS", "1")
     # 构造终态：先将当前代际耗尽
-    cur = _item(db_mgr, item_id)
+    cur = _make_collection_due(db_mgr, item_id)
     last = recover_managed_scores(
         db_mgr, item_id=item_id,
         evaluation_generation=cur.evaluation_generation, worker_id="w1",

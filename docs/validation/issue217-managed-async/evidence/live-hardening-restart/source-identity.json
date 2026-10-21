@@ -1,0 +1,15 @@
+{
+  "functional_commit": "a9de722ff9997865550e652473b02ae15b840f41",
+  "checked_at": "2026-10-20T11:40:10.345876+00:00",
+  "source_hashes": {
+    "managed_score_recovery.py": "4bcbe9bb2347ffd8b472a0e15fe6b2a2eccaf70f0365b6cded0f704fe8bf05fd",
+    "worker.py": "446c9ed5e3e9c70874033e1b13c977f79ccb388f00399e28f6767b25069f216f",
+    "main.py": "1616cb8506b57bbda69eba39b838777f4ecce1161b97abdbd1c9e3826d33d59d",
+    "evaluation_recovery.py": "d7984e1bc5adba4e559091b0d266753bb8559097ceeb518c2ac5e25e6ab56864",
+    "langfuse_managed_scores.py": "fe7778e4b2de68f95be6b7affe1970a1638df1b3a6617fa67f5913a167d36797",
+    "langfuse_run_items.py": "ecfb4a26cdb1982faa211d508debe69ab841835ddefb38d544742f6ab309bfbd",
+    "langfuse_sync.py": "9a5d4be1aa84884bb6590e3d05cc79a3c1b85ba18e931c460cf7e5193bcfca50",
+    "langfuse_otel_projection.py": "03f29de77f0810409d516023abaa39c16c3fc4dc92361b4137e33a51a141a660",
+    "reconciler.py": "826d74382c7d033dda64be429838126c800128e317cdf5214de70baad9a49282"
+  }
+}

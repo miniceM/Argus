@@ -326,7 +326,7 @@ class LaunchService:
                 "version": f"{policy.policy_id}@{policy.version}",
             },
             "aggregation_comparison": {
-                "digest": aggregation_comparison_digest(),
+                "digest": aggregation_comparison_digest(managed=managed_contract is not None),
                 "version": manifest["comparison"]["comparison_policy_version"],
             },
         }

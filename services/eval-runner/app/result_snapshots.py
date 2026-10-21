@@ -63,6 +63,7 @@ def build_result_items(
         }
         result.append({
             "dataset_item_id": item.dataset_item_id,
+            **({"item_execution_id": item.id} if launch.manifest.get("evaluation_source") == "langfuse_managed" else {}),
             "case_digest": _canonical_digest(item_content) if item_content is not None else None,
             "execution_status": item.execution_status.lower(),
             "eval_status": item.eval_status.lower(),
@@ -87,6 +88,13 @@ def build_result_items(
             "output_ref": {"trace_id": item.trace_id, "observation_id": item.observation_id}
             if item.trace_id else None,
         })
+    if launch.manifest.get("evaluation_source") == "langfuse_managed":
+        from .managed_quality import managed_quality_decision
+        for frozen in result:
+            decision, reasons = managed_quality_decision(launch.manifest, frozen, launch.id)
+            frozen["quality_conclusion"] = decision.conclusion
+            frozen["quality_evaluation"] = decision.payload()
+            frozen["managed_evidence_reasons"] = reasons
     return result
 
 
@@ -142,7 +150,9 @@ def evaluate_snapshot_evidence(items: list[dict[str, Any]]) -> tuple[str, list[s
             f"{len(unknown_quality)}/{len(items)} 个用例质量结论为 UNKNOWN（证据不足）"
             f" ({len(unknown_quality)}/{len(items)} cases are UNKNOWN)"
         )
-    return (EVIDENCE_COMPLETE if not reasons else EVIDENCE_DIAGNOSTIC), reasons
+    for item in items:
+        reasons.extend(item.get("managed_evidence_reasons") or [])
+    return (EVIDENCE_COMPLETE if not reasons else EVIDENCE_DIAGNOSTIC), list(dict.fromkeys(reasons))
 
 
 
@@ -243,7 +253,7 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
         return existing
 
     evaluator_specs = launch.manifest.get("evaluators", [])
-    summary = aggregate_run(result_items, evaluator_specs)
+    summary = aggregate_run(result_items, evaluator_specs, manifest=launch.manifest)
     latest_revision = session.scalar(select(func.max(RunResultSnapshotRecord.revision)).where(
         RunResultSnapshotRecord.launch_id == launch.id
     )) or 0

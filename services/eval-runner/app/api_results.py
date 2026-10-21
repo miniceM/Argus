@@ -11,6 +11,7 @@ from .comparison_contracts import assess_comparability
 from .costs import compare_costs
 from .db_models import ExperimentLaunchRecord, RunResultSnapshotRecord
 from .environment_contracts import comparison_environment_reasons
+from .managed_quality import evaluation_specs
 from .models import (
     ComparisonComparability,
     ComparisonContractDimension,
@@ -343,8 +344,8 @@ def get_launch_comparison(
             candidate_snapshot.manifest,
         )
         environment_errors = comparison_environment_reasons(baseline_snapshot.manifest, candidate_snapshot.manifest) if baseline_snapshot else []
-        evaluator_specs = candidate_snapshot.manifest.get("evaluators", [])
-        baseline_evaluators = baseline_snapshot.manifest.get("evaluators", []) if baseline_snapshot else []
+        evaluator_specs = evaluation_specs(candidate_snapshot.manifest)
+        baseline_evaluators = evaluation_specs(baseline_snapshot.manifest) if baseline_snapshot else []
         diffs: list[dict[str, Any]] = []
         comparable_baseline: list[dict[str, Any]] = []
         comparable_candidate: list[dict[str, Any]] = []
@@ -399,8 +400,8 @@ def get_launch_comparison(
             "classification_counts": dict(classification_counts),
         }
         if baseline_snapshot:
-            baseline_common = aggregate_run(comparable_baseline, baseline_evaluators)
-            candidate_common = aggregate_run(comparable_candidate, evaluator_specs)
+            baseline_common = aggregate_run(comparable_baseline, baseline_evaluators, manifest=baseline_snapshot.manifest)
+            candidate_common = aggregate_run(comparable_candidate, evaluator_specs, manifest=candidate_snapshot.manifest)
             summary["comparable_cohort"] = {
                 "baseline": baseline_common,
                 "candidate": candidate_common,
@@ -515,8 +516,8 @@ def get_comparison_case(
                 diff = compare_case_results(
                     baseline_case,
                     candidate_case,
-                    evaluator_specs=candidate_snapshot.manifest.get("evaluators", []),
-                    baseline_evaluators=baseline_snapshot.manifest.get("evaluators", []),
+                    evaluator_specs=evaluation_specs(candidate_snapshot.manifest),
+                    baseline_evaluators=evaluation_specs(baseline_snapshot.manifest),
                 )
                 classification, reason = diff["classification"], diff.get("reason")
 

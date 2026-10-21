@@ -126,10 +126,15 @@ def _usage_summary(items: list[dict[str, Any]], total: int) -> dict[str, Any]:
     }
 
 
-def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, Any]]) -> dict[str, Any]:
+def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, Any]], *,
+                  manifest: dict[str, Any] | None = None) -> dict[str, Any]:
     """Build deterministic run-level metrics without conflating execution and quality failures."""
+    managed = (manifest or {}).get("evaluation_source") == "langfuse_managed"
+    if managed:
+        from .managed_quality import evaluation_specs
+        evaluator_specs = evaluation_specs(manifest)
     evaluator_specs = _item_evaluator_specs(evaluator_specs)
-    total = len(items)
+    total = max(len(items), len((manifest.get("dataset") or {}).get("items") or [])) if managed else len(items)
     evaluated = [
         item
         for item in items
@@ -150,6 +155,8 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
     quality_unknown_count = sum(
         str(item.get("quality_conclusion", "")).lower() not in {"pass", "fail"} for item in items
     )
+    if managed:
+        quality_unknown_count = total - quality_pass_count - quality_fail_count
     decided_count = quality_pass_count + quality_fail_count
     execution_errors = sum(
         str(item.get("execution_status", "")).lower() in {"failed", "timed_out"} for item in items
@@ -267,12 +274,30 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
     if cost_reason is None and total and cost_case_count < total:
         cost_reason = "PARTIAL_COST_COVERAGE"
 
+    managed_coverage = {}
+    if managed:
+        required = [s["name"] for s in manifest["managed_evaluation"]["scores"] if s.get("required", True)]
+        counts = {name: sum(
+            any(r.get("evaluator_id") == name and r.get("status") == "succeeded"
+                and r.get("value") is not None for r in item.get("evaluation_results", []))
+            and f"MANAGED_SCORE_UNVERIFIED:{name}" not in item.get("managed_evidence_reasons", [])
+            and "MANAGED_CONTRACT_INVALID" not in item.get("managed_evidence_reasons", [])
+            for item in items) for name in required}
+        denominator = total * len(required)
+        managed_coverage = {
+            "required_score_count": denominator,
+            "verified_required_score_count": sum(counts.values()),
+            "required_score_coverage": sum(counts.values()) / denominator if denominator else None,
+            "score_coverage": {name: count / total if total else None for name, count in counts.items()},
+            "pass_rate_denominator": total,
+        }
     return {
+        **managed_coverage,
         "total_cases": total,
         "evaluated_cases": len(evaluated),
         "passed_cases": passed,
         "failed_quality_cases": sum(str(item.get("quality_conclusion", "")).lower() == "fail" for item in evaluated),
-        "pass_rate": passed / len(evaluated) if evaluated else None,
+        "pass_rate": (passed / total if total else None) if managed else (passed / len(evaluated) if evaluated else None),
         "evaluation_coverage": len(evaluated) / total if total else None,
         # Issue #83: named denominators. `decided_pass_rate` is PASS/(PASS+FAIL)
         # — an UNKNOWN case leaves the denominator instead of dragging it down —
@@ -401,6 +426,11 @@ def compare_case_results(
         return result
     if any(str(item.get("eval_status", "")).lower() != "succeeded" for item in (baseline, candidate)):
         result.update(classification="NOT_COMPARABLE", reason="EVALUATION_NOT_COMPLETED")
+        return result
+    from .managed_quality import managed_case_comparison_reason
+    managed_reason = managed_case_comparison_reason(baseline, candidate, evaluator_specs)
+    if managed_reason:
+        result.update(classification="NOT_COMPARABLE", reason=managed_reason)
         return result
     baseline_scores, baseline_non_numeric = _comparable_values(baseline)
     candidate_scores, candidate_non_numeric = _comparable_values(candidate)

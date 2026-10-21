@@ -859,9 +859,7 @@ def _finalize_success(
     """
     from .db_models import ExperimentItemExecutionRecord, ExperimentLaunchRecord
     from .evaluation_result_store import result_from_record
-    from .evaluator_binding import manifest_quality_policy
     from .evaluator_results import project_legacy_scores
-    from .quality_policy import evaluate_quality_policy
 
     is_pg = db_mgr.engine.dialect.name == "postgresql"
     now = _now()
@@ -940,8 +938,14 @@ def _finalize_success(
             return RecoveryOutcome(claimed=True, finalized=False, reason="COMPLETION_RACE")
         adopted_rows = list(_adopted_by_name(session, item_id).values())
         adopted = [result_from_record(row) for row in adopted_rows]
-        policy = manifest_quality_policy(manifest)
-        decision = evaluate_quality_policy(adopted, policy, decided_by="QUALITY_POLICY")
+        from .managed_quality import managed_quality_decision
+        decision, _ = managed_quality_decision(manifest, {
+            "item_execution_id": item.id, "dataset_item_id": item.dataset_item_id,
+            "execution_status": "succeeded", "eval_status": "succeeded",
+            "dispatch_generation": item.dispatch_generation, "final_attempt_id": item.final_attempt_id,
+            "trace_id": item.trace_id, "observation_id": item.observation_id,
+            "evaluation_results": [r.to_payload() for r in adopted],
+        }, launch_id)
         # 锁内计算也可能耗时：在发布结论前再次校验即时租约和周期上界。
         now = _now()
         if now >= cycle_start + timedelta(seconds=get_retry_config()["deadline"]):

@@ -310,6 +310,10 @@ class ManagedScoreCollector:
                     **ctx,
                     "score": _score_evidence(row),
                     "observed_at": datetime.now(UTC).isoformat(),
+                    "observation_io_digests": {
+                        k: canonical_output_digest(_parse_io(obs.get(k))).removeprefix("sha256:")
+                        for k in ("input", "output")
+                    },
                     "observation": {
                         k: obs[k] for k in ("id", "traceId", "name", "type", "projectId", "environment", "startTime")
                     },
@@ -335,7 +339,7 @@ class ManagedScoreCollector:
                         definition_digest=contract["acceptance_digest"],
                         executor_type="langfuse_managed",
                         manifest_schema_version=ctx["manifest_schema_version"],
-                        contract_status="MANAGED_DIAGNOSTIC_ONLY",
+                        contract_status="MANAGED_SCORE_VERIFIED",
                     ),
                     evidence=evidence,
                 )

@@ -61,13 +61,19 @@ AGGREGATION_CONTRACT: dict[str, Any] = {
 }
 
 
-def aggregation_comparison_digest() -> str:
+def aggregation_comparison_digest(*, managed: bool = False) -> str:
     """Digest of the comparison semantics themselves.
 
     Changing the denominator, the coverage requirement or the classification
     algorithm changes this digest, and therefore any comparison that spans the
     change is no longer formal.
     """
+    if managed:
+        return canonical_digest({**AGGREGATION_CONTRACT,
+            "pass_rate_denominator": "all_cases_including_unknown",
+            "required_score_coverage": "verified_required_scores_over_cases_times_required_scores",
+            "managed_comparison": "adopted_external_version_references_required",
+        })
     return canonical_digest(AGGREGATION_CONTRACT)
 
 

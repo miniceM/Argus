@@ -438,6 +438,7 @@ class ExecutionWorker:
                 # The frozen policy identity travels with the projection so a
                 # Langfuse score can be traced back to the decision rules used.
                 launch_row = session.get(ExperimentLaunchRecord, launch_id)
+                payload_scores["_evaluation_source"] = (launch_row.manifest or {}).get("evaluation_source", "builtin")
                 frozen_policy = (launch_row.manifest or {}).get("quality_policy") or {}
                 payload_scores["_policy_digest"] = frozen_policy.get("policy_digest")
                 # Issue 198 S6.6: the platform token metric travels with the

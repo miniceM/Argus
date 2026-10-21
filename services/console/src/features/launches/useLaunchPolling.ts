@@ -37,6 +37,7 @@ export const backfillKeyFor = (launch: LangfuseLinkLaunch): string | null => {
 export interface LaunchPollingDecision {
   executionActive: boolean;
   syncActive: boolean;
+  evaluationActive: boolean;
   backfilling: boolean;
   shouldPoll: boolean;
 }
@@ -57,6 +58,7 @@ export const evaluateLaunchPolling = (
 ): LaunchPollingDecision => {
   let executionActive = false;
   let syncActive = false;
+  let evaluationActive = false;
   let backfilling = false;
   const seen = new Set<string>();
 
@@ -64,6 +66,7 @@ export const evaluateLaunchPolling = (
     if (!launch) continue;
     const launchId = launch.id ?? "";
     seen.add(launchId);
+    evaluationActive ||= (launch.progress?.evaluating ?? 0) > 0;
 
     if (isLaunchExecutionActive(launch.status) || isLaunchSyncActive(launch.langfuse_sync_status)) {
       executionActive = executionActive || isLaunchExecutionActive(launch.status);
@@ -108,7 +111,8 @@ export const evaluateLaunchPolling = (
     executionActive,
     syncActive,
     backfilling,
-    shouldPoll: executionActive || syncActive || backfilling,
+    evaluationActive,
+    shouldPoll: executionActive || evaluationActive || syncActive || backfilling,
   };
 };
 

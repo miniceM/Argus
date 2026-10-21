@@ -258,7 +258,7 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
   return (
     <div className="space-y-3">
       {/* 顶栏面包屑与快捷状态 */}
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
         <Link
           to="/launches"
           className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors font-medium"
@@ -266,7 +266,8 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>返回评测列表</span>
         </Link>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span>OTLP 同步（实时，非评分结论）</span>
           <SyncStatusBadge
             status={launch.langfuse_sync_status}
             data-testid="langfuse-sync-badge"

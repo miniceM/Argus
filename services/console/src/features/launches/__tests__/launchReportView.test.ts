@@ -153,3 +153,11 @@ describe("launchReportView pure functions", () => {
     expect(projected.trace_url).toBeNull();
   });
 });
+
+describe("Managed 历史诊断冻结", () => {
+  it("保留当前 Snapshot 的证据缺失原因，不关联实时 Item ID", () => {
+    const row = projectFrozenCase({ dataset_item_id: "case", item_execution_id: "mutable-id", execution_status: "succeeded", eval_status: "failed", managed_evidence_reasons: ["REQUIRED_SCORE_MISSING:code"] });
+    expect(row.id).toBeNull();
+    expect(row.eval_error).toBe("REQUIRED_SCORE_MISSING:code");
+  });
+});

@@ -82,7 +82,7 @@ const Scope: React.FC<{ label: string; scope: GeneratedSync["item_trace"]; testI
  * Langfuse outage never changes the Argus result — so the two facts are rendered
  * as two facts, each with its own scope and reason.
  */
-export const LangfuseSyncPanel: React.FC<{ sync: LangfuseSync }> = ({ sync }) => {
+export const LangfuseSyncPanel: React.FC<{ sync: LangfuseSync; managed?: boolean }> = ({ sync, managed = false }) => {
   if (!sync) return null;
   const overallTone = toneFor(sync.overall);
   const OverallIcon = ICONS[sync.overall] ?? Clock;
@@ -97,10 +97,10 @@ export const LangfuseSyncPanel: React.FC<{ sync: LangfuseSync }> = ({ sync }) =>
           Langfuse 同步：{OVERALL_LABELS[sync.overall] ?? sync.overall}
         </span>
       </div>
-      <Scope label="Item / Trace 评分" scope={sync.item_trace} testId="langfuse-sync-item-trace" />
+      <Scope label={managed ? "Item / Trace 观测" : "Item / Trace 评分"} scope={sync.item_trace} testId="langfuse-sync-item-trace" />
       <Scope label="Run Score 汇总" scope={sync.run_score} testId="langfuse-sync-run-score" />
       <p className="text-micro text-muted-foreground" data-testid="langfuse-sync-disclaimer">
-        Langfuse 是 Argus 冻结结果的单向分析投影；同步失败不会改变上方质量结论、结果修订或 digest。
+        {managed ? "OTLP 同步不代表托管评分完成。外部 EVAL Score 由 Argus 按冻结条件采纳，不会重复回写；同步失败不会改变已冻结的质量结论、结果修订或 digest。" : "Langfuse 是 Argus 冻结结果的单向分析投影；同步失败不会改变上方质量结论、结果修订或 digest。"}
       </p>
     </div>
   );

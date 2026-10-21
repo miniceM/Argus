@@ -84,3 +84,10 @@ describe("LangfuseSyncPanel (Issue #87)", () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+it("Managed 报告解释观测同步与外部 Score 采纳的独立方向，不声称所有 Score 单向投影", () => {
+  render(<LangfuseSyncPanel sync={sync()} managed />);
+  expect(screen.getByTestId("langfuse-sync-item-trace")).toHaveTextContent("Item / Trace 观测");
+  expect(screen.getByTestId("langfuse-sync-disclaimer")).toHaveTextContent("不代表托管评分完成");
+  expect(screen.getByTestId("langfuse-sync-disclaimer")).toHaveTextContent("不会重复回写");
+});

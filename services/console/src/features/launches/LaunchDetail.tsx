@@ -18,6 +18,7 @@ import { ErrorState, LoadingState } from "../../components/StateViews";
 import { Button } from "../../components/ui/Primitives";
 import { Modal } from "../../components/ui/Overlay";
 
+import { ManagedEvaluationNotice, isItemEvaluationActive } from "./ManagedEvaluationPanel";
 import { LaunchHeader } from "./LaunchHeader";
 import { LaunchKpiOverview } from "./LaunchKpiOverview";
 import { ExecutionProgressPanel } from "./ExecutionProgressPanel";
@@ -251,7 +252,7 @@ export const LaunchDetail: React.FC = () => {
       const current = query.state.data as ItemExecution[] | undefined;
       if (
         Array.isArray(current) &&
-        current.some((i) => (i.evaluation_status || "").toLowerCase() === "evaluating")
+        current.some((i) => isItemEvaluationActive(i))
       ) {
         return 1500;
       }
@@ -311,7 +312,7 @@ export const LaunchDetail: React.FC = () => {
   // window finishes; active execution/evaluation remains on the live read model.
   const refreshSnapshots = useSnapshotDirectoryRefresh(snapshotsQuery);
   const evaluationActive = rawItemsList.some(
-    (item) => (item.evaluation_status || "").toLowerCase() === "evaluating",
+    (item) => isItemEvaluationActive(item),
   );
   const executionActive = Boolean(launch && isLaunchExecutionActive(launch.status));
   const { isDiscovering, startDiscovery: startSnapshotRevisionDiscovery } = useSnapshotRevisionDiscovery({
@@ -540,7 +541,7 @@ export const LaunchDetail: React.FC = () => {
   });
 
   // 5. Comparison & Summary data for KPI & Tab 1
-  const manifest = (launch?.manifest || {}) as any;
+  const manifest = (targetSnapshotId ? detailSnapshot?.manifest ?? {} : launch?.manifest ?? {}) as any;
   const manifestAgent = manifest.agent || {};
   const agentId = manifestAgent.id || launch?.agent_id || "";
   const environment = launch?.environment || "";
@@ -966,6 +967,7 @@ export const LaunchDetail: React.FC = () => {
         </button>
       </div>
 
+      <ManagedEvaluationNotice manifest={manifest} />
       {/* 5. 三大核心 Tab 面板 */}
       {currentTab === "compare" && (
         <div
@@ -977,6 +979,7 @@ export const LaunchDetail: React.FC = () => {
             launchId={launch.id}
             snapshotId={effectiveSnapshotId}
             environment={environment}
+            evaluationSource={manifest.evaluation_source}
             candidateQualityConclusion={effectiveSnapshotId ? frozenQualityConclusion : null}
             summary={
               summaryQuery.data?.launch_id === launchId &&
@@ -1016,6 +1019,7 @@ export const LaunchDetail: React.FC = () => {
               snapshotId={effectiveSnapshotId}
               items={items}
               manifestDataset={manifest.dataset}
+              evaluationManifest={manifest}
               currentFilter={casesFilter}
               onFilterChange={setCasesFilter}
               expandedCaseId={expandedCaseId}
@@ -1057,7 +1061,7 @@ export const LaunchDetail: React.FC = () => {
         progress={launch.progress}
         cancelRequestedAt={launch.cancel_requested_at}
         statusReason={launch.status_reason}
-        isEvaluating={Array.isArray(rawItems) && rawItems.some((i) => (i.evaluation_status || "").toLowerCase() === "evaluating")}
+        isEvaluating={Array.isArray(rawItems) && rawItems.some((i) => isItemEvaluationActive(i))}
       />
 
       {/* 6. 模态框：设为 Baseline 二次确认弹窗 */}

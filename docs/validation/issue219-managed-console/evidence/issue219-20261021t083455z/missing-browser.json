@@ -1,0 +1,16 @@
+{
+  "status": "PASS",
+  "launch_id": "dda672de-023d-40bf-97c1-0a490e5e2944",
+  "snapshot_id": "e678f8c9-dd72-4e53-9827-91fb2965327e",
+  "gate_id": "9f867ccf-0b8a-4de2-a590-ed972cacd99e",
+  "expected": "UNKNOWN",
+  "report_url": "http://127.0.0.1:56081/launches/dda672de-023d-40bf-97c1-0a490e5e2944?tab=compare&snapshot_id=e678f8c9-dd72-4e53-9827-91fb2965327e&gate_id=9f867ccf-0b8a-4de2-a590-ed972cacd99e",
+  "panel_text": "Langfuse Managed Score\nAgent 执行：succeeded\n评分失败\n质量结论：UNKNOWN\n\n必要评分 1 / 2 已采纳\n\n历史冻结证据（只读）；远程后续重评不会改变本报告。缺少必要评分保持 UNKNOWN，不作为零分或质量 FAIL。\n\nMANAGED_SCORE_UNVERIFIED:issue214-20261019t084028z-code；MANAGED_COLLECTION_NOT_COMPLETED\n\nissue214-20261019t084028z-judge\nboolean\n必要评分\n\nRule：cmvhuwpkz001iad0kh4jwab8b；Evaluator：cmvf082z1002uad0gkb42lwel\n\nissue214-20261019t084028z-judge\n布尔\n成功\n取值\nfalse\n证据 (Evidence)\n绑定 sha256:1171c7556e886184abe815c15d96fd9188d3c23e06c43867e03a50a0f1864125\n契约 MANAGED_SCORE_VERIFIED\n\nsource=EVAL；Score ID：4739008b-c18d-5837-bf6e-f6a2ddbb7856；dataType=BOOLEAN\n\n查看 Score 所在 Observation（Langfuse）\nissue214-20261019t084028z-code\nboolean\n必要评分\n\nRule：cmvhuwt82000rad0mzkoht7g6；Evaluator：cmvf083f50034ad0gbpddxpar\n\nSCORE_MISSING：尚无已核验的采纳结果。请检查 Rule 范围、source=EVAL、类型和身份归属；修复后仅重试评测。\n\nLangfuse Evaluator / Rule 遵循当前 latest；远程执行实现并未冻结。Argus 仅冻结本次实际采纳的 Score、采纳条件与质量判断规则。",
+  "gate_text": "UNKNOWN · 不可发布\n\nGate ID：9f867ccf-0b8a-4de2-a590-ed972cacd99e；Snapshot：e678f8c9-dd72-4e53-9827-91fb2965327e · revision 1\n\nReleasePolicy：issue219-20261021t083455z@1.0.0；digest：sha256:c25a3de3be16f3edb56e4e538798265afb72bf4255348e3902d401e3938270de\n\n结果 digest：059d045b699203632d36a4ab7be39d974d5c7d80c62e9f43e9ab88539d04cf30\n\n原因：CANDIDATE_EVIDENCE_INCOMPLETE；CANDIDATE_MANAGED_EVIDENCE_INCOMPLETE\n\nquality：UNKNOWN；实际 未记录；CANDIDATE_EVIDENCE_INCOMPLETE\ncoverage：UNKNOWN；实际 未记录；CANDIDATE_EVIDENCE_INCOMPLETE\n固定 Gate 报告",
+  "score_links": [
+    "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/b3bacc47961658212d597fb3c5eb4c54?observation=4f04674bc0963bf7"
+  ],
+  "pending_observed": true,
+  "network_mocking": false,
+  "injection": "HTTP wrong output plus own Code Rule disabled"
+}

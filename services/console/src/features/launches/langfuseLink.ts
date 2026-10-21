@@ -8,6 +8,7 @@
 
 export interface LangfuseLinkLaunch {
   id?: string;
+  progress?: { evaluating?: number } | null;
   status?: string | null;
   langfuse_sync_status?: string | null;
   langfuse_experiment_id?: string | null;

@@ -1,4 +1,5 @@
 import React from "react";
+import { isSafeLangfuseUrl } from "./langfuseLink";
 import { Badge } from "../../components/Badge";
 import { Panel } from "../../components/ui/Primitives";
 import {
@@ -60,8 +61,8 @@ const DetailResult: React.FC<{ result: EvaluationResult }> = ({ result }) => {
       data-result-type={result.result_type}
       data-result-status={result.status}
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-sm font-semibold text-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-mono text-sm font-semibold text-foreground break-all">
           {result.evaluator_id}
         </span>
         <span className="flex items-center gap-1.5">
@@ -167,7 +168,7 @@ export const EvaluationResultPanel: React.FC<{
 }> = ({ results, traceUrl }) => (
   <Panel title="评测结果 (Evaluation Results)" className="p-4">
     <EvaluationResultList results={results} variant="detail" />
-    {traceUrl && (
+    {isSafeLangfuseUrl(traceUrl) && (
       <a
         href={traceUrl}
         target="_blank"

@@ -1,0 +1,17 @@
+[1/7] Parse YAML/JSON
+configuration parse: OK
+[2/7] Compile Python sources and check code quality
+All checks passed!
+[3/7] Verify zero evaluation-SDK dependency in Demo Agent and Real LLM Agent
+[4/7] Verify runner contains remote experiment + W3C propagation
+[5/7] Verify OpenAPI specification is up to date
+[6/8] Verify Console Frontend (contract sync, typecheck, unit tests, build)
+ Test Files  56 passed (56)
+      Tests  888 passed (888)
+[7/8] Run local behavior tests
+SKIPPED [1] tests/test_issue_217_lifecycle_boundaries.py:191: MVCC interleaving requires PostgreSQL
+SKIPPED [1] tests/test_issue_217_lifecycle_boundaries.py:354: row-lock interleaving requires PostgreSQL
+1667 passed, 2 skipped, 31 deselected, 8824 warnings in 68.52s (0:01:08)
+[8/8] Docker Compose validation
+docker compose config: OK
+Validation complete.

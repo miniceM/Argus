@@ -1,0 +1,495 @@
+{
+  "launch_id": "4a7194eb-481f-43d4-aa1c-d88082168752",
+  "snapshot_id": "5314bc24-1ae5-4bb7-839b-aa313b4a43c7",
+  "revision": 1,
+  "created_at": "2026-10-21T03:04:08.158020",
+  "source_result_digest": "28a80bf9bb28dacdd434a6f66f43f3e304147c8aefb583c86d3dcd6494830c1b",
+  "manifest_digest": "425252455ac1e76d68b88a59608210e752fc08d04622092828c1d79cdc92cc89",
+  "evidence_state": "COMPLETE",
+  "evidence_reasons": [],
+  "releasable": true,
+  "manifest": {
+    "schema_version": "1.2",
+    "dataset": {
+      "source": "langfuse",
+      "dataset_name": "issue214-20261019t084028z",
+      "dataset_id": "cmvf080gu001iad0i4ctjw5l4",
+      "dataset_version": "2026-10-21T03:03:55.580716+00:00",
+      "snapshot_digest": "58d7eff0c9f4d1b5b84895c5ce434d8114a2b9921bc869defcbacb6dff1bf4c3",
+      "items_count": 1,
+      "items": [
+        {
+          "id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+          "input": {
+            "question": "Compute (135 + 287) * 3. You must call calculator.",
+            "streaming": false
+          },
+          "expected_output": {
+            "answer": "1266"
+          },
+          "metadata": {
+            "issue": 214,
+            "purpose": "synthetic calculator task"
+          }
+        }
+      ]
+    },
+    "comparison": {
+      "environment": "issue218-20261021t030256z",
+      "baseline_snapshot_id": null,
+      "baseline_binding_revision": null,
+      "baseline_resolution": "none",
+      "comparison_policy_version": "comparison-v1"
+    },
+    "agent": {
+      "agent_id": "issue217-20261021t030259z",
+      "version": "v2",
+      "agent_version_id": "b438e1ed-db77-4903-b044-6f40c9e7e1c6",
+      "endpoint": "http://127.0.0.1:52743/invoke",
+      "protocol": "HTTP_JSON",
+      "method": "POST",
+      "request_mapping": {
+        "question": "input.question",
+        "streaming": "input.streaming"
+      },
+      "usage_cost_mapping": null,
+      "credential_ref": null,
+      "credential_id": null,
+      "spec_digest": "a018e60d2be116b3510cc015e544ceacc5002b5a71a449a5e81697169cab8d70",
+      "artifact_ref": "docker:flowiseai/flowise@sha256:cf880b17b1290fbaebebc76c33954bde67b3775aff95feec72a1d060cc81e43d",
+      "is_idempotent": false,
+      "environment": "issue218-20261021t030256z"
+    },
+    "evaluators": [],
+    "quality_policy": {
+      "policy_id": "langfuse-managed",
+      "version": "1.0",
+      "schema_version": "1.0",
+      "rules": [
+        {
+          "evaluator_id": "issue214-20261019t084028z-judge",
+          "operator": "==",
+          "threshold": null,
+          "expected_value": true,
+          "result_type": "boolean",
+          "required": true,
+          "critical": false,
+          "unknown_handling": "unknown_not_releasable",
+          "note": null
+        },
+        {
+          "evaluator_id": "issue214-20261019t084028z-code",
+          "operator": "==",
+          "threshold": null,
+          "expected_value": true,
+          "result_type": "boolean",
+          "required": true,
+          "critical": false,
+          "unknown_handling": "unknown_not_releasable",
+          "note": null
+        }
+      ],
+      "unknown_handling": "unknown_not_releasable",
+      "description": null,
+      "policy_digest": "sha256:3a58a1493f0ec4e75d689901b81be8f399fd91ca02cd3d703980e96fb9241418"
+    },
+    "measurement_digest": "sha256:76d1d71ad3fb9d689ca2fbde2e0b16d9999615d0bf784394adbf5b3c1089cc0e",
+    "runner": {
+      "runner_version": "0.2.0",
+      "build_id": "4d9346116ffe56deeb576cad73be0f3d22a9ccdb",
+      "mapping_engine_version": "sha256-mapping-engine-v1"
+    },
+    "execution_policy": {
+      "max_concurrency": 1,
+      "timeout_seconds": 150.0,
+      "max_retries": 0,
+      "rate_limit_per_minute": 600
+    },
+    "evaluation_source": "langfuse_managed",
+    "managed_evaluation": {
+      "project_id": "cmu5a6fj500aoad0jvrckiypb",
+      "environment": "issue218-20261021t030256z",
+      "target": {
+        "name": "remote-agent-http",
+        "type": "TOOL"
+      },
+      "scores": [
+        {
+          "name": "issue214-20261019t084028z-judge",
+          "data_type": "boolean",
+          "required": true,
+          "rule_id": "cmvhj1t65005lad0e0am5nifu",
+          "evaluator_id": "cmvf082z1002uad0gkb42lwel"
+        },
+        {
+          "name": "issue214-20261019t084028z-code",
+          "data_type": "boolean",
+          "required": true,
+          "rule_id": "cmvhj1wpi005qad0efj1v0ecc",
+          "evaluator_id": "cmvf083f50034ad0gbpddxpar"
+        }
+      ],
+      "schema_version": "1.0",
+      "source": "EVAL",
+      "execution_semantics": "langfuse_latest",
+      "acceptance_digest": "sha256:76d1d71ad3fb9d689ca2fbde2e0b16d9999615d0bf784394adbf5b3c1089cc0e"
+    },
+    "contract_digests": {
+      "schema_version": "comparison-contract-1",
+      "measurement": {
+        "digest": "sha256:76d1d71ad3fb9d689ca2fbde2e0b16d9999615d0bf784394adbf5b3c1089cc0e",
+        "version": "1.2"
+      },
+      "quality_policy": {
+        "digest": "sha256:3a58a1493f0ec4e75d689901b81be8f399fd91ca02cd3d703980e96fb9241418",
+        "version": "langfuse-managed@1.0"
+      },
+      "aggregation_comparison": {
+        "digest": "sha256:a0fc53a4d1d8debce35d01e7ac09996331b7597295ce85cd8b69f9deb3464073",
+        "version": "comparison-v1"
+      }
+    }
+  },
+  "versions": {
+    "dataset": {
+      "name": "issue214-20261019t084028z",
+      "version": "2026-10-21T03:03:55.580716+00:00",
+      "digest": "58d7eff0c9f4d1b5b84895c5ce434d8114a2b9921bc869defcbacb6dff1bf4c3"
+    },
+    "agent": {
+      "id": "issue217-20261021t030259z",
+      "version": "v2",
+      "spec_digest": "a018e60d2be116b3510cc015e544ceacc5002b5a71a449a5e81697169cab8d70",
+      "artifact_ref": "docker:flowiseai/flowise@sha256:cf880b17b1290fbaebebc76c33954bde67b3775aff95feec72a1d060cc81e43d"
+    },
+    "evaluators": [],
+    "runner": {
+      "runner_version": "0.2.0",
+      "build_id": "4d9346116ffe56deeb576cad73be0f3d22a9ccdb",
+      "mapping_engine_version": "sha256-mapping-engine-v1"
+    },
+    "environment": "issue218-20261021t030256z"
+  },
+  "summary": {
+    "total_cost": null,
+    "cost_per_case": null,
+    "cost_currency": null,
+    "cost_case_count": 0,
+    "cost_coverage": 0.0,
+    "cost_source": null,
+    "cost_scope": null,
+    "cost_policy_version": null,
+    "cost_partial": true,
+    "cost_unavailable_reason": "INCOMPLETE_ATTEMPT_COST",
+    "usage_tokens_per_case": null,
+    "usage_input_tokens_per_case": null,
+    "usage_output_tokens_per_case": null,
+    "usage_case_count": 0,
+    "usage_coverage": 0.0,
+    "usage_partial": true,
+    "usage_unavailable_reason": "COST_NOT_RECORDED",
+    "required_score_count": 2,
+    "verified_required_score_count": 2,
+    "required_score_coverage": 1.0,
+    "score_coverage": {
+      "issue214-20261019t084028z-judge": 1.0,
+      "issue214-20261019t084028z-code": 1.0
+    },
+    "pass_rate_denominator": 1,
+    "total_cases": 1,
+    "evaluated_cases": 1,
+    "passed_cases": 0,
+    "failed_quality_cases": 1,
+    "pass_rate": 0.0,
+    "evaluation_coverage": 1.0,
+    "quality_pass_count": 0,
+    "quality_fail_count": 1,
+    "quality_unknown_count": 0,
+    "decided_case_count": 1,
+    "decided_pass_rate": 0.0,
+    "decision_coverage": 1.0,
+    "execution_error_count": 0,
+    "execution_error_rate": 0.0,
+    "evaluator_error_count": 0,
+    "critical_failure_count": 0,
+    "score_means": {
+      "issue214-20261019t084028z-judge": null,
+      "issue214-20261019t084028z-code": null
+    },
+    "score_counts": {
+      "issue214-20261019t084028z-judge": 0,
+      "issue214-20261019t084028z-code": 0
+    },
+    "score_result_types": {
+      "issue214-20261019t084028z-judge": "boolean",
+      "issue214-20261019t084028z-code": "boolean"
+    },
+    "p95_latency_ms": 1.0,
+    "usage_tokens_total": null
+  },
+  "items": [
+    {
+      "dataset_item_id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+      "item_execution_id": "b03e3c62-3abf-4749-8596-62b82253d1cb",
+      "case_digest": "95f20f8827f27a2ab13eb8738132cfe4aff15875020f06016a5a1fa308222894",
+      "execution_status": "succeeded",
+      "eval_status": "succeeded",
+      "quality_conclusion": "fail",
+      "scores": {},
+      "evaluation_results": [
+        {
+          "evaluator_id": "issue214-20261019t084028z-code",
+          "evaluator_version": null,
+          "result_type": "boolean",
+          "status": "succeeded",
+          "value": false,
+          "normalized_value": null,
+          "comment": null,
+          "evidence": {
+            "launch_id": "4a7194eb-481f-43d4-aa1c-d88082168752",
+            "item_execution_id": "b03e3c62-3abf-4749-8596-62b82253d1cb",
+            "dataset_item_id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+            "trace_id": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+            "observation_id": "6197f96f12bf420d",
+            "dispatch_generation": 1,
+            "evaluation_generation": 3,
+            "final_attempt_id": "ffef5ee3-d3aa-46d2-8896-13e522a728b3",
+            "manifest_digest": "sha256:425252455ac1e76d68b88a59608210e752fc08d04622092828c1d79cdc92cc89",
+            "manifest_schema_version": "1.2",
+            "acceptance_digest": "sha256:76d1d71ad3fb9d689ca2fbde2e0b16d9999615d0bf784394adbf5b3c1089cc0e",
+            "checkpoint_id": "cp_3799fa5263ad4434b87bf4a7",
+            "output_digest": "sha256:c9d6b860217600e5fd585ffecdac8aa4f1836a44674e68bc5dcce0e6764b8ce4",
+            "input_digest": "sha256:d78b83dac632afdad275b01179ffc3a0919d1228e5b39004d28d02f253e9d714",
+            "score": {
+              "id": "bd9733ce-e692-5d0a-8cb1-766331815f6c",
+              "projectId": "cmu5a6fj500aoad0jvrckiypb",
+              "name": "issue214-20261019t084028z-code",
+              "dataType": "BOOLEAN",
+              "value": false,
+              "source": "EVAL",
+              "subject": {
+                "kind": "observation",
+                "id": "6197f96f12bf420d",
+                "traceId": "f3543b0d4f69b2f27e2d5ec3633b6fc7"
+              },
+              "environment": "issue218-20261021t030256z",
+              "timestamp": "2026-10-21T03:03:56.801Z",
+              "createdAt": "2026-10-21T03:03:57.000Z",
+              "updatedAt": "2026-10-21T03:03:56.900Z",
+              "configId": null,
+              "metadata": {
+                "evaluation_rule_id": "cmvhj1wpi005qad0efj1v0ecc",
+                "job_configuration_id": "cmvhj1wpi005qad0efj1v0ecc",
+                "evaluation_rule_assignment_id": "cmvhj1wpi005sad0ef8jnz5z6",
+                "evaluator_id": "cmvf083f50034ad0gbpddxpar",
+                "evaluator_version_id": "cmvf083f50036ad0ggpilrl84",
+                "job_execution_id": "99d0736a90935fd9314c34b8764284e3",
+                "target_trace_id": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+                "target_observation_id": "6197f96f12bf420d",
+                "dispatcher_name": "aws-lambda",
+                "code_eval_runtime": "PYTHON",
+                "input_sha256": "84977285e9c8c1dff9b282682caf64a6542631869404851751d5cf117993a21e",
+                "output_sha256": "c9d6b860217600e5fd585ffecdac8aa4f1836a44674e68bc5dcce0e6764b8ce4"
+              }
+            },
+            "observed_at": "2026-10-21T03:04:08.133072+00:00",
+            "observation_io_digests": {
+              "input": "84977285e9c8c1dff9b282682caf64a6542631869404851751d5cf117993a21e",
+              "output": "c9d6b860217600e5fd585ffecdac8aa4f1836a44674e68bc5dcce0e6764b8ce4"
+            },
+            "observation": {
+              "id": "6197f96f12bf420d",
+              "traceId": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+              "name": "remote-agent-http",
+              "type": "TOOL",
+              "projectId": "cmu5a6fj500aoad0jvrckiypb",
+              "environment": "issue218-20261021t030256z",
+              "startTime": "2026-10-21T03:03:56.145Z"
+            },
+            "score_url": "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/f3543b0d4f69b2f27e2d5ec3633b6fc7?observation=6197f96f12bf420d"
+          },
+          "duration_ms": null,
+          "error_code": null,
+          "error_message": null,
+          "provenance": {
+            "binding_id": "sha256:76d1d71ad3fb9d689ca2fbde2e0b16d9999615d0bf784394adbf5b3c1089cc0e",
+            "evaluator_id": "issue214-20261019t084028z-code",
+            "evaluator_version": null,
+            "definition_digest": "sha256:76d1d71ad3fb9d689ca2fbde2e0b16d9999615d0bf784394adbf5b3c1089cc0e",
+            "executor_type": "langfuse_managed",
+            "manifest_schema_version": "1.2",
+            "contract_status": "MANAGED_SCORE_VERIFIED"
+          }
+        },
+        {
+          "evaluator_id": "issue214-20261019t084028z-judge",
+          "evaluator_version": null,
+          "result_type": "boolean",
+          "status": "succeeded",
+          "value": false,
+          "normalized_value": null,
+          "comment": null,
+          "evidence": {
+            "launch_id": "4a7194eb-481f-43d4-aa1c-d88082168752",
+            "item_execution_id": "b03e3c62-3abf-4749-8596-62b82253d1cb",
+            "dataset_item_id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+            "trace_id": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+            "observation_id": "6197f96f12bf420d",
+            "dispatch_generation": 1,
+            "evaluation_generation": 3,
+            "final_attempt_id": "ffef5ee3-d3aa-46d2-8896-13e522a728b3",
+            "manifest_digest": "sha256:425252455ac1e76d68b88a59608210e752fc08d04622092828c1d79cdc92cc89",
+            "manifest_schema_version": "1.2",
+            "acceptance_digest": "sha256:76d1d71ad3fb9d689ca2fbde2e0b16d9999615d0bf784394adbf5b3c1089cc0e",
+            "checkpoint_id": "cp_3799fa5263ad4434b87bf4a7",
+            "output_digest": "sha256:c9d6b860217600e5fd585ffecdac8aa4f1836a44674e68bc5dcce0e6764b8ce4",
+            "input_digest": "sha256:d78b83dac632afdad275b01179ffc3a0919d1228e5b39004d28d02f253e9d714",
+            "score": {
+              "id": "bcc598ad-dd82-52be-82f6-69add32762f7",
+              "projectId": "cmu5a6fj500aoad0jvrckiypb",
+              "name": "issue214-20261019t084028z-judge",
+              "dataType": "BOOLEAN",
+              "value": false,
+              "source": "EVAL",
+              "subject": {
+                "kind": "observation",
+                "id": "6197f96f12bf420d",
+                "traceId": "f3543b0d4f69b2f27e2d5ec3633b6fc7"
+              },
+              "environment": "issue218-20261021t030256z",
+              "timestamp": "2026-10-21T03:03:58.610Z",
+              "createdAt": "2026-10-21T03:03:59.000Z",
+              "updatedAt": "2026-10-21T03:03:59.243Z",
+              "configId": null,
+              "metadata": {
+                "evaluation_rule_id": "cmvhj1t65005lad0e0am5nifu",
+                "job_configuration_id": "cmvhj1t65005lad0e0am5nifu",
+                "evaluation_rule_assignment_id": "cmvhj1t65005nad0ejs0t4f9j",
+                "evaluator_id": "cmvf082z1002uad0gkb42lwel",
+                "evaluator_version_id": "cmvf082z1002wad0g6y71t1r8",
+                "job_execution_id": "6c7a67add3876865664d63a66de5a046",
+                "target_trace_id": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+                "target_observation_id": "6197f96f12bf420d"
+              }
+            },
+            "observed_at": "2026-10-21T03:04:08.132702+00:00",
+            "observation_io_digests": {
+              "input": "84977285e9c8c1dff9b282682caf64a6542631869404851751d5cf117993a21e",
+              "output": "c9d6b860217600e5fd585ffecdac8aa4f1836a44674e68bc5dcce0e6764b8ce4"
+            },
+            "observation": {
+              "id": "6197f96f12bf420d",
+              "traceId": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+              "name": "remote-agent-http",
+              "type": "TOOL",
+              "projectId": "cmu5a6fj500aoad0jvrckiypb",
+              "environment": "issue218-20261021t030256z",
+              "startTime": "2026-10-21T03:03:56.145Z"
+            },
+            "score_url": "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/f3543b0d4f69b2f27e2d5ec3633b6fc7?observation=6197f96f12bf420d"
+          },
+          "duration_ms": null,
+          "error_code": null,
+          "error_message": null,
+          "provenance": {
+            "binding_id": "sha256:76d1d71ad3fb9d689ca2fbde2e0b16d9999615d0bf784394adbf5b3c1089cc0e",
+            "evaluator_id": "issue214-20261019t084028z-judge",
+            "evaluator_version": null,
+            "definition_digest": "sha256:76d1d71ad3fb9d689ca2fbde2e0b16d9999615d0bf784394adbf5b3c1089cc0e",
+            "executor_type": "langfuse_managed",
+            "manifest_schema_version": "1.2",
+            "contract_status": "MANAGED_SCORE_VERIFIED"
+          }
+        }
+      ],
+      "quality_evaluation": {
+        "conclusion": "fail",
+        "policy_id": "langfuse-managed",
+        "policy_version": "1.0",
+        "policy_digest": "sha256:3a58a1493f0ec4e75d689901b81be8f399fd91ca02cd3d703980e96fb9241418",
+        "decided_by": "QUALITY_POLICY",
+        "releasable": true,
+        "unknown_reasons": [],
+        "rules": [
+          {
+            "evaluator_id": "issue214-20261019t084028z-judge",
+            "result_type": "boolean",
+            "required": true,
+            "critical": false,
+            "operator": "==",
+            "expected": true,
+            "observed_value": false,
+            "observed_status": "succeeded",
+            "conclusion": "fail",
+            "reason_code": "QUALITY_RULE_VIOLATED",
+            "explanation": "必要指标 'issue214-20261019t084028z-judge' 违反规则：实际值 false 与期望 true 不一致。"
+          },
+          {
+            "evaluator_id": "issue214-20261019t084028z-code",
+            "result_type": "boolean",
+            "required": true,
+            "critical": false,
+            "operator": "==",
+            "expected": true,
+            "observed_value": false,
+            "observed_status": "succeeded",
+            "conclusion": "fail",
+            "reason_code": "QUALITY_RULE_VIOLATED",
+            "explanation": "必要指标 'issue214-20261019t084028z-code' 违反规则：实际值 false 与期望 true 不一致。"
+          }
+        ]
+      },
+      "latency_ms": 1,
+      "usage": {
+        "input_tokens": null,
+        "output_tokens": null,
+        "total_tokens": null
+      },
+      "cost": {
+        "amount": null,
+        "currency": null,
+        "source": null,
+        "scope": "launch_case_total",
+        "policy_version": "case-cost-v1",
+        "measurement_scope": null,
+        "complete": false,
+        "unavailable_reason": "INCOMPLETE_ATTEMPT_COST"
+      },
+      "cost_evidence": {
+        "policy_version": "case-cost-v1",
+        "attempt_count": 1,
+        "recorded_attempt_count": 0,
+        "dispatch_generations": [
+          1
+        ],
+        "attempts": [
+          {
+            "attempt_id": "ffef5ee3-d3aa-46d2-8896-13e522a728b3",
+            "attempt_no": 1,
+            "dispatch_generation": 1,
+            "amount": null,
+            "currency": null,
+            "source": null,
+            "measurement_scope": null,
+            "usage": {
+              "input_tokens": null,
+              "output_tokens": null,
+              "total_tokens": null
+            },
+            "unavailable_reason": "COST_NOT_RECORDED"
+          }
+        ]
+      },
+      "final_attempt_id": "ffef5ee3-d3aa-46d2-8896-13e522a728b3",
+      "dispatch_generation": 1,
+      "trace_id": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+      "trace_url": "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/f3543b0d4f69b2f27e2d5ec3633b6fc7",
+      "observation_id": "6197f96f12bf420d",
+      "output_ref": {
+        "trace_id": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+        "observation_id": "6197f96f12bf420d"
+      },
+      "managed_evidence_reasons": []
+    }
+  ]
+}

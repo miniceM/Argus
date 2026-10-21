@@ -1,0 +1,61 @@
+{
+  "decision": "PASS",
+  "releasable": true,
+  "engine_version": "release-gate-v4",
+  "candidate_snapshot_id": "53409979-aec9-439d-85ee-70dcafc4b23d",
+  "baseline_snapshot_id": null,
+  "reason_codes": [],
+  "rules": [
+    {
+      "id": "quality",
+      "metric": "pass_rate",
+      "operator": ">=",
+      "threshold": 1.0,
+      "actual": 1.0,
+      "conclusion": "PASS",
+      "reason": "THRESHOLD_SATISFIED"
+    },
+    {
+      "id": "coverage",
+      "metric": "evaluation_coverage",
+      "operator": ">=",
+      "threshold": 1.0,
+      "actual": 1.0,
+      "conclusion": "PASS",
+      "reason": "THRESHOLD_SATISFIED"
+    }
+  ],
+  "id": "4928d67f-6f8c-4296-9ba1-59e47addfb08",
+  "created_at": "2026-10-21T03:03:50.723788Z",
+  "policy": {
+    "name": "issue218-20261021t030256z",
+    "version": "1.0.0",
+    "agent_id": "issue217-20261021t030259z",
+    "environment": "issue218-20261021t030256z",
+    "block_critical_failures": true,
+    "rules": [
+      {
+        "id": "quality",
+        "metric": "pass_rate",
+        "operator": ">=",
+        "threshold": 1.0
+      },
+      {
+        "id": "coverage",
+        "metric": "evaluation_coverage",
+        "operator": ">=",
+        "threshold": 1.0
+      }
+    ]
+  },
+  "policy_digest": "sha256:1cdeb7489d11d3f073b62483790cf1b005c5b7e98e14437def1b6ab3edb5fd1e",
+  "candidate_launch_id": "1f6eddad-bb04-4fff-bb65-2849715bb9cc",
+  "candidate_revision": 1,
+  "candidate_manifest_digest": "96f24d2d844aa391e1ef209cb05d7bbc09f3e8b37b23154d9a90e30fc9a367e3",
+  "candidate_source_result_digest": "4f634836bd1cb4e6e85bf2cc1fcdefb09fcd6ed00d6c6d646dd32fd1ddb07c14",
+  "baseline_revision": null,
+  "baseline_manifest_digest": null,
+  "baseline_source_result_digest": null,
+  "report_url": "http://localhost:18083/launches/1f6eddad-bb04-4fff-bb65-2849715bb9cc?snapshot_id=53409979-aec9-439d-85ee-70dcafc4b23d",
+  "comparison_url": "http://localhost:18083/launches/1f6eddad-bb04-4fff-bb65-2849715bb9cc?snapshot_id=53409979-aec9-439d-85ee-70dcafc4b23d&tab=comparison"
+}

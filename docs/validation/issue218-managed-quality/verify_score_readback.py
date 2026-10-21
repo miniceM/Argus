@@ -34,7 +34,16 @@ def main():
             for item in frozen["items"]:
                 for expected in contract["scores"]:
                     time.sleep(2.2)
-                    rows = client.scores_for(item["trace_id"], item["observation_id"], expected["name"])
+                    # 不加 source 筛选：API 来源的重复回写也必须被发现。
+                    rows = client._pages(
+                        "/api/public/v3/scores",
+                        {
+                            "traceId": item["trace_id"],
+                            "observationId": item["observation_id"],
+                            "name": expected["name"],
+                            "fields": "details,subject",
+                        },
+                    )
                     rows = [r for r in rows if r.get("name") == expected["name"]]
                     adopted = [r for r in item["evaluation_results"] if r["evaluator_id"] == expected["name"]]
                     if label == "missing" and expected["name"].endswith("-code"):

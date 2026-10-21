@@ -1,0 +1,105 @@
+{
+  "launch_id": "1f6eddad-bb04-4fff-bb65-2849715bb9cc",
+  "snapshot_id": "53409979-aec9-439d-85ee-70dcafc4b23d",
+  "revision": 1,
+  "created_at": "2026-10-21T03:03:42.032718",
+  "manifest_digest": "96f24d2d844aa391e1ef209cb05d7bbc09f3e8b37b23154d9a90e30fc9a367e3",
+  "source_result_digest": "4f634836bd1cb4e6e85bf2cc1fcdefb09fcd6ed00d6c6d646dd32fd1ddb07c14",
+  "evidence_state": "COMPLETE",
+  "evidence_reasons": [],
+  "versions": {
+    "dataset": {
+      "name": "issue214-20261019t084028z",
+      "version": "2026-10-21T03:03:09.230230+00:00",
+      "digest": "58d7eff0c9f4d1b5b84895c5ce434d8114a2b9921bc869defcbacb6dff1bf4c3"
+    },
+    "agent": {
+      "id": "issue217-20261021t030259z",
+      "version": "v1",
+      "spec_digest": "d71d9a597879fd000619a6f002d66e826059276317b6a6309aff9fa28d97137c",
+      "artifact_ref": "docker:flowiseai/flowise@sha256:cf880b17b1290fbaebebc76c33954bde67b3775aff95feec72a1d060cc81e43d"
+    },
+    "evaluators": [],
+    "runner": {
+      "runner_version": "0.2.0",
+      "build_id": "4d9346116ffe56deeb576cad73be0f3d22a9ccdb",
+      "mapping_engine_version": "sha256-mapping-engine-v1"
+    },
+    "environment": "issue218-20261021t030256z"
+  },
+  "summary": {
+    "total_cost": null,
+    "cost_per_case": null,
+    "cost_currency": null,
+    "cost_case_count": 0,
+    "cost_coverage": 0.0,
+    "cost_source": null,
+    "cost_scope": null,
+    "cost_policy_version": null,
+    "cost_partial": true,
+    "cost_unavailable_reason": "INCOMPLETE_ATTEMPT_COST",
+    "usage_tokens_per_case": null,
+    "usage_input_tokens_per_case": null,
+    "usage_output_tokens_per_case": null,
+    "usage_case_count": 0,
+    "usage_coverage": 0.0,
+    "usage_partial": true,
+    "usage_unavailable_reason": "COST_NOT_RECORDED",
+    "required_score_count": 2,
+    "verified_required_score_count": 2,
+    "required_score_coverage": 1.0,
+    "score_coverage": {
+      "issue214-20261019t084028z-judge": 1.0,
+      "issue214-20261019t084028z-code": 1.0
+    },
+    "pass_rate_denominator": 1,
+    "total_cases": 1,
+    "evaluated_cases": 1,
+    "passed_cases": 1,
+    "failed_quality_cases": 0,
+    "pass_rate": 1.0,
+    "evaluation_coverage": 1.0,
+    "quality_pass_count": 1,
+    "quality_fail_count": 0,
+    "quality_unknown_count": 0,
+    "decided_case_count": 1,
+    "decided_pass_rate": 1.0,
+    "decision_coverage": 1.0,
+    "execution_error_count": 0,
+    "execution_error_rate": 0.0,
+    "evaluator_error_count": 0,
+    "critical_failure_count": 0,
+    "score_means": {
+      "issue214-20261019t084028z-judge": null,
+      "issue214-20261019t084028z-code": null
+    },
+    "score_counts": {
+      "issue214-20261019t084028z-judge": 0,
+      "issue214-20261019t084028z-code": 0
+    },
+    "score_result_types": {
+      "issue214-20261019t084028z-judge": "boolean",
+      "issue214-20261019t084028z-code": "boolean"
+    },
+    "p95_latency_ms": 18530.0,
+    "usage_tokens_total": null
+  },
+  "langfuse_score_sync_status": "SYNCED",
+  "langfuse_sync": {
+    "overall": "SYNCED",
+    "item_trace": {
+      "status": "SYNCED",
+      "reason": null,
+      "task_count": 1,
+      "failed_count": 0,
+      "pending_count": 0
+    },
+    "run_score": {
+      "status": "SYNCED",
+      "reason": null,
+      "task_count": 1,
+      "failed_count": 0,
+      "pending_count": 0
+    }
+  }
+}

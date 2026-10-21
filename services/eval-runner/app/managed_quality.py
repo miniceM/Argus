@@ -198,7 +198,15 @@ def evaluation_specs(manifest: dict) -> list[dict]:
     """仅为既有 Aggregator 提供 Score 类型/方向，不伪造外部 Evaluator 版本。"""
     if evaluation_source(manifest) != "langfuse_managed":
         return manifest.get("evaluators") or []
-    rules = {r["evaluator_id"]: r for r in (manifest.get("quality_policy") or {}).get("rules", [])}
+    policy = manifest.get("quality_policy")
+    policy_rules = policy.get("rules", []) if isinstance(policy, dict) else []
+    rules = {
+        r["evaluator_id"]: r
+        for r in policy_rules or []
+        if isinstance(r, dict) and isinstance(r.get("evaluator_id"), str)
+    }
+    managed = manifest.get("managed_evaluation")
+    managed_scores = managed.get("scores", []) if isinstance(managed, dict) else []
     return [
         dict(
             id=s["name"],
@@ -208,7 +216,8 @@ def evaluation_specs(manifest: dict) -> list[dict]:
             executor_type="langfuse_managed",
             direction="lower_is_better" if rules.get(s["name"], {}).get("operator") == "<=" else "higher_is_better",
         )
-        for s in (manifest.get("managed_evaluation") or {}).get("scores", [])
+        for s in managed_scores or []
+        if isinstance(s, dict) and isinstance(s.get("name"), str) and isinstance(s.get("data_type"), str)
     ]
 
 

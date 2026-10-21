@@ -684,40 +684,64 @@ def test_finalize_cannot_publish_success_after_deadline_inside_policy(runtime, m
     assert len(rows(db, ExecutionAttemptRecord, item_id)) == 1
 
 
-def test_timed_out_collectors_still_count_towards_process_inflight_budget(monkeypatch):
-    """超时 caller 退场不等于远端线程退出，不能逃逸 Managed 在途上限。"""
+def _drain_collection_slots(timeout_seconds: float = 15.0) -> None:
+    """等待其他测试遗留的在途收集线程退出，消除进程级槽位计数的测试间干扰。"""
+    import time
+
+    from app import managed_score_recovery as recovery
+
+    deadline = time.time() + timeout_seconds
+    while recovery._collection_inflight > 0 and time.time() < deadline:
+        time.sleep(0.01)
+
+
+def test_timed_out_collectors_release_slot_and_count_abandoned(monkeypatch):
+    """超时 caller 退场即归还槽位并计数抛弃；迟到线程退出不再重复递减。
+
+    旧语义（超时仍占位）会让 4 次 hang 永久饿死收集；迟到写入安全仍由
+    租约围栏保证，此处只断言槽位会计，不放行任何迟到写入。
+    """
     import threading
 
     from app import managed_score_recovery as recovery
     from app.langfuse_managed_scores import ManagedScoreCollector
 
+    _drain_collection_slots()
     monkeypatch.setenv("ARGUS_MANAGED_SCORE_CONCURRENCY", "1")
     entered, release, finished = threading.Event(), threading.Event(), threading.Event()
     calls = []
 
     def collect(*args, **kwargs):
         calls.append(1)
-        entered.set()
-        try:
-            assert release.wait(5)
-            return {"decisions": []}
-        finally:
-            finished.set()
+        if len(calls) == 1:  # 仅首轮 hung 住，后续轮次立即返回
+            entered.set()
+            try:
+                assert release.wait(10)
+            finally:
+                finished.set()
+        return {"decisions": []}
 
     monkeypatch.setattr(ManagedScoreCollector, "collect", collect)
+    abandoned_before = recovery._collection_abandoned_total
     try:
         first = recovery._collect_with_timeout(
             None, lambda: object(), "launch", "first", fence={}, timeout_seconds=0.02,
         )
         assert entered.is_set() and first["decisions"][0]["reason"] == "TIMEOUT"
+        # 超时即归还：同一进程槽位可被下一轮立即复用，不再 COLLECTOR_BUSY。
+        assert recovery._collection_inflight == 0
+        assert recovery._collection_abandoned_total == abandoned_before + 1
+        release.set()
+        assert finished.wait(10)
         second = recovery._collect_with_timeout(
-            None, lambda: object(), "launch", "second", fence={}, timeout_seconds=0.02,
+            None, lambda: object(), "launch", "second", fence={}, timeout_seconds=5,
         )
-        assert len(calls) == 1
-        assert second["decisions"][0]["reason"] == "COLLECTOR_BUSY"
+        assert len(calls) == 2
+        assert second == {"decisions": []}
     finally:
         release.set()
-        assert finished.wait(5)
+        assert finished.wait(10)
+    assert recovery._collection_inflight == 0
 
 
 @pytest.mark.parametrize("raw", ["inf", "-inf", "Infinity", "NaN", "1e309", "bad", "-1", "0"])

@@ -449,23 +449,28 @@ class ManagedScoreCollector:
                     }
                 )
                 audit_id = "mse_" + audit_key.removeprefix("sha256:")[:56]
-                if session.get(ManagedScoreEvidenceRecord, audit_id) is None:
-                    session.add(
-                        ManagedScoreEvidenceRecord(
-                            id=audit_id,
-                            launch_id=ctx["launch_id"],
-                            item_execution_id=ctx["item_execution_id"],
-                            dispatch_generation=ctx["dispatch_generation"],
-                            score_name=name,
-                            score_id=raw.get("id")
-                            if raw and isinstance(raw.get("id"), str) and len(raw["id"]) <= 128
-                            else None,
-                            decision="ADOPTED" if decision == "ALREADY_ADOPTED" else decision,
-                            reason=reason,
-                            evidence=payload,
-                        )
-                    )
-                    session.flush()
+                try:
+                    with session.begin_nested():
+                        if session.get(ManagedScoreEvidenceRecord, audit_id) is None:
+                            session.add(
+                                ManagedScoreEvidenceRecord(
+                                    id=audit_id,
+                                    launch_id=ctx["launch_id"],
+                                    item_execution_id=ctx["item_execution_id"],
+                                    dispatch_generation=ctx["dispatch_generation"],
+                                    score_name=name,
+                                    score_id=raw.get("id")
+                                    if raw and isinstance(raw.get("id"), str) and len(raw["id"]) <= 128
+                                    else None,
+                                    decision="ADOPTED" if decision == "ALREADY_ADOPTED" else decision,
+                                    reason=reason,
+                                    evidence=payload,
+                                )
+                            )
+                            session.flush()
+                except IntegrityError:
+                    # 并发重复采纳：胜者已写入同一审计行，忽略冲突保留报告。
+                    pass
                 score_id = raw.get("id") if raw else None
                 score_id = score_id if isinstance(score_id, str) and len(score_id) <= 128 else None
                 report.append(
@@ -486,6 +491,20 @@ class ManagedScoreCollector:
             "decisions": report,
         }
 
+    @staticmethod
+    def _same_identity(existing, ctx, result) -> bool:
+        """已存行与本次采纳是否为同一原始 Score（代际/租约豁免）。"""
+        proof = existing.evidence or {}
+        return (
+            existing.executor_type == "langfuse_managed"
+            and proof.get("score") == result.evidence["score"]
+            and all(
+                proof.get(k) == ctx[k]
+                for k in ctx
+                if k not in RESULT_IDENTITY_EXCLUDED_CTX_FIELDS
+            )
+        )
+
     def _insert_result(self, session, ctx, contract, result):
         existing = session.scalar(
             select(EvaluationResultRecord).where(
@@ -494,17 +513,7 @@ class ManagedScoreCollector:
             )
         )
         if existing:
-            proof = existing.evidence or {}
-            same = (
-                existing.executor_type == "langfuse_managed"
-                and proof.get("score") == result.evidence["score"]
-                and all(
-                    proof.get(k) == ctx[k]
-                    for k in ctx
-                    if k not in RESULT_IDENTITY_EXCLUDED_CTX_FIELDS
-                )
-            )
-            return ("ALREADY_ADOPTED", "VERIFIED") if same else ("REJECTED", "RESULT_CONFLICT")
+            return ("ALREADY_ADOPTED", "VERIFIED") if self._same_identity(existing, ctx, result) else ("REJECTED", "RESULT_CONFLICT")
         row = EvaluationResultRecord(
             id="er_"
             + canonical_digest({"item": ctx["item_execution_id"], "name": result.evaluator_id}).removeprefix("sha256:")[
@@ -532,7 +541,19 @@ class ManagedScoreCollector:
                 session.add(row)
                 session.flush()
         except IntegrityError:
-            return "REJECTED", "SCORE_ALREADY_CLAIMED"
+            # 并发落败或外部唯一键冲突：保存点已回滚，重查后区分。
+            # 同一证据 → ALREADY_ADOPTED；同名异值 → RESULT_CONFLICT；
+            # (item,name) 查无但外部键冲突 → 跨 Item 复用，拒绝。
+            session.expire_all()
+            winner = session.scalar(
+                select(EvaluationResultRecord).where(
+                    EvaluationResultRecord.item_execution_id == ctx["item_execution_id"],
+                    EvaluationResultRecord.evaluator_id == result.evaluator_id,
+                )
+            )
+            if winner is None:
+                return "REJECTED", "SCORE_ALREADY_CLAIMED"
+            return ("ALREADY_ADOPTED", "VERIFIED") if self._same_identity(winner, ctx, result) else ("REJECTED", "RESULT_CONFLICT")
         return "ADOPTED", "VERIFIED"
 
     def diagnostics(self, launch_id, item_id):

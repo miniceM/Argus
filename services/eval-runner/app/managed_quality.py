@@ -12,7 +12,12 @@ from .quality_policy import QualityPolicy
 
 
 def managed_contract(manifest: dict[str, Any]) -> tuple[dict, QualityPolicy]:
-    """复验冻结的采纳口径与质量策略，不查询当前 Langfuse Rule。"""
+    """复验冻结的采纳口径与质量策略，不查询当前 Langfuse Rule。
+
+    托管目标当前仅支持 remote-agent-http/TOOL（与
+    langfuse_managed_scores._context 的校验值耦合，#218 范围内
+    不扩展其他 Agent 类型；新增目标需同步两处并补契约测试）。
+    """
     contract = copy.deepcopy(manifest.get("managed_evaluation") or {})
     digest = contract.pop("acceptance_digest", None)
     if (
@@ -55,7 +60,17 @@ def managed_contract(manifest: dict[str, Any]) -> tuple[dict, QualityPolicy]:
 
 
 def _verified_result(result: dict, expected: dict, contract: dict, manifest: dict, item: dict, launch_id: str):
-    """检查原始 Score、TypedResult、采纳身份三者一致；不重新执行 Judge。"""
+    """检查原始 Score、TypedResult、采纳身份三者一致；不重新执行 Judge。
+
+    只有 ``MANAGED_SCORE_VERIFIED`` 可作为可发布证据：#216 的
+    ``MANAGED_DIAGNOSTIC_ONLY`` 是诊断采纳（未参与 QualityPolicy），
+    追认为 PASS 会违反 fail-closed。
+
+    代际隔离不在此处复验：采纳时以租约/代际围栏 + 按 evaluator
+    upsert + 行锁内「报告背书已采纳行」保证单调，Snapshot 复验改为
+    钉死 dispatch/attempt/trace 谱系（Snapshot item 不携带
+    evaluation_generation，见 result_snapshots.build_result_items）。
+    """
     from .langfuse_managed_scores import _utc
 
     evidence = result.get("evidence") or {}
@@ -72,7 +87,7 @@ def _verified_result(result: dict, expected: dict, contract: dict, manifest: dic
         provenance.get("definition_digest") == digest,
         provenance.get("evaluator_id") == expected["name"],
         provenance.get("evaluator_version") is None,
-        provenance.get("contract_status") in {"MANAGED_SCORE_VERIFIED", "MANAGED_DIAGNOSTIC_ONLY"},
+        provenance.get("contract_status") == "MANAGED_SCORE_VERIFIED",
         provenance.get("manifest_schema_version") == manifest.get("schema_version"),
         evidence.get("acceptance_digest") == digest,
         evidence.get("manifest_digest") == canonical_digest(manifest),

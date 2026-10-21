@@ -134,6 +134,8 @@ class ManagedScoreCollector:
         }
         contract = copy.deepcopy(launch.manifest.get("managed_evaluation", {}))
         digest = contract.pop("acceptance_digest", None)
+        # 托管目标与 managed_quality.managed_contract 同值耦合：
+        # #218 范围内仅 remote-agent-http/TOOL，新增目标需同步两处。
         _check(
             digest
             and canonical_digest(contract) == digest

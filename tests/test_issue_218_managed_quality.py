@@ -371,6 +371,113 @@ def test_stored_gate_is_immutable_and_idempotent(setup_runtime, monkeypatch):
     assert create_release_gate(request).model_dump() == first.model_dump()
 
 
+def test_diagnostic_only_evidence_never_passes(setup_runtime, monkeypatch):
+    """P1-1 回归：MANAGED_DIAGNOSTIC_ONLY 是 #216 诊断采纳，不可作为可发布证据。"""
+    from app.managed_quality import managed_quality_decision
+
+    _, snapshot, _, _ = collect218(setup_runtime, monkeypatch)
+    item = copy.deepcopy(snapshot.items[0])
+    for result in item["evaluation_results"]:
+        result["provenance"]["contract_status"] = "MANAGED_DIAGNOSTIC_ONLY"
+    decision, reasons = managed_quality_decision(snapshot.manifest, item, snapshot.launch_id)
+    assert decision.conclusion == "unknown", (decision, reasons)
+    assert any("MANAGED_SCORE_UNVERIFIED" in r for r in reasons)
+
+
+def test_execution_failure_during_collection_never_finalizes_success(setup_runtime, monkeypatch):
+    """P1-2 回归：收集期间执行变失败，迟到 Score 不得终结为成功结论。"""
+    import app.managed_score_recovery as recovery
+    from app.db_models import ExperimentItemExecutionRecord
+
+    manifest = manifest218()
+    db, _, _, _, _, launch_id, item_id, calls, ok = _run_managed_http(setup_runtime, manifest, {"answer": "ok"})
+    assert calls == 1 and ok
+    with db.get_session() as session:
+        session.get(ExperimentLaunchRecord, launch_id).status = "COMPLETED"
+    obs, trace, observation = _observation_for(db, item_id)
+    rows = []
+    for name in ("correctness", "code"):
+        row = _good_score(
+            trace,
+            observation,
+            id=f"s218-{name}",
+            name=name,
+            value=True,
+            dataType=next(
+                s["data_type"].upper() for s in manifest["managed_evaluation"]["scores"] if s["name"] == name
+            ),
+        )
+        if name == "code":
+            row["metadata"].update(evaluation_rule_id="rule-code", evaluator_id="evaluator-code")
+        rows.append(row)
+    remote = NamedRemote(obs, rows)
+    monkeypatch.setattr("app.managed_score_recovery.get_managed_score_client", lambda: remote)
+    monkeypatch.setenv("ARGUS_MANAGED_SCORE_MAX_ATTEMPTS", "1")
+
+    real_is_complete = recovery.is_complete
+    flipped = {"done": False}
+
+    def flip_then_check(session, item_id_arg, manifest=None):
+        # 模拟采纳完成后、终结前执行被标记失败（取消/重跑竞态）：
+        # 第一次 is_complete（收集后判定点）翻转，_finalize_success
+        # 行锁内必须看到失败并拒绝终结。
+        if not flipped["done"]:
+            flipped["done"] = True
+            with db.get_session() as flip_session:
+                flip_session.get(ExperimentItemExecutionRecord, item_id_arg).execution_status = "failed"
+                flip_session.commit()
+        return real_is_complete(session, item_id_arg, manifest)
+
+    monkeypatch.setattr(recovery, "is_complete", flip_then_check)
+
+    item = _item(db, item_id)
+    outcome = recover_managed_scores(
+        db, item_id=item_id, evaluation_generation=item.evaluation_generation, worker_id="w218exec"
+    )
+    assert outcome["reason"] == "EXECUTION_NOT_SUCCEEDED", outcome
+    current = _item(db, item_id)
+    assert current.eval_status == "failed" and current.quality_conclusion == "unknown"
+    with db.get_session() as session:
+        snapshot = session.scalar(
+            select(RunResultSnapshotRecord)
+            .where(RunResultSnapshotRecord.launch_id == launch_id)
+            .order_by(RunResultSnapshotRecord.revision.desc())
+        )
+    assert snapshot.evidence_state == "DIAGNOSTIC"
+    assert evaluate_gate(policy(), snapshot).decision == "UNKNOWN"
+
+
+@pytest.mark.parametrize("order", ["builtin_first", "managed_first"])
+def test_builtin_and_managed_modes_are_never_formally_comparable(setup_runtime, monkeypatch, order):
+    """P2-2 回归：跨测量模式比较恒为 NOT_COMPARABLE，不得误读为回归/改进。"""
+    _, snapshot, _, _ = collect218(setup_runtime, monkeypatch)
+    builtin_manifest = copy.deepcopy(snapshot.manifest)
+    builtin_manifest.pop("managed_evaluation", None)
+    builtin_manifest["contract_digests"] = {
+        **copy.deepcopy(builtin_manifest["contract_digests"]),
+        "aggregation_comparison": {"digest": aggregation_comparison_digest()},
+    }
+    sides = {"builtin": builtin_manifest, "managed": snapshot.manifest}
+    first, second = ("builtin", "managed") if order == "builtin_first" else ("managed", "builtin")
+    verdict = assess_comparability(sides[first], sides[second])
+    assert not verdict.comparable
+    assert "AGGREGATION_COMPARISON_CHANGED" in verdict.reason_codes
+
+
+def test_scores_page_failure_never_releases(setup_runtime, monkeypatch):
+    """P5 回归：scores_for 分页失败/超时只产生 UNKNOWN，不伪造结论。"""
+    from app.langfuse_scores_client import ScoresReadError
+
+    def failing_scores_for(self, *args, **kwargs):
+        raise ScoresReadError("REMOTE_UNAVAILABLE")
+
+    monkeypatch.setattr(NamedRemote, "scores_for", failing_scores_for)
+    _, snapshot, _, _ = collect218(setup_runtime, monkeypatch)
+    assert snapshot.evidence_state == "DIAGNOSTIC"
+    result = evaluate_gate(policy(), snapshot)
+    assert result.decision == "UNKNOWN" and not result.releasable
+
+
 def test_late_required_score_requires_new_revision_and_never_rewrites_diagnostic(setup_runtime, monkeypatch):
     from app.db_models import ExecutionAttemptRecord
 

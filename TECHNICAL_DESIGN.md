@@ -748,6 +748,9 @@ API 完整类型以 [OpenAPI](docs/openapi.json) 为准；[创建请求和 Froze
 仅在冻结采纳契约与 QualityPolicy 一致，且每项 required Score 的类型、值、原始
 `source=EVAL` / subject / Rule / Evaluator / job metadata、Checkpoint/Manifest
 归属全部可核验时，复用现有 QualityPolicy 形成 PASS 或真实质量 FAIL。
+采纳身份必须为 `MANAGED_SCORE_VERIFIED`（#216 诊断采纳
+`MANAGED_DIAGNOSTIC_ONLY` 不可作为可发布证据）；终结时在行锁内复验
+执行仍为成功，否则迟到 Score 不得终结（`EXECUTION_NOT_SUCCEEDED`）。
 缺分、冲突、类型错误或未成功收敛一律 UNKNOWN；质量 FAIL 与评测执行失败分离。
 
 Result Snapshot 冻结实际采纳的 Score、采纳时 Observation IO 摘要、逐规则决策和
@@ -760,7 +763,10 @@ Managed 统计的 `pass_rate = PASS / 全部冻结 Dataset 用例`，未决用�
 用例不退出分母；另保留原有具名 `decided_pass_rate`、`decision_coverage`。
 `required_score_coverage` 以「全部用例 × required Score 数」为分母，并保存逐 Score
 覆盖率。Builtin 维持原有统计契约；Managed 使用独立的 aggregation digest，防止把
-新旧口径混作正式可比结果。这些指标沿用现有 summary 的扩展字段，不新建 API 体系。
+新旧口径混作正式可比结果。跨模式比较（builtin 基线 vs 托管候选，或反之）
+恒为 `NOT_COMPARABLE`（`AGGREGATION_COMPARISON_CHANGED`），不得误读为回归
+或改进；见 `test_builtin_and_managed_modes_are_never_formally_comparable`。
+这些指标沿用现有 summary 的扩展字段，不新建 API 体系。
 
 Baseline 比较继续核对 Measurement / QualityPolicy / Aggregation 三维契约。
 相同 Rule ID 不证明 `latest` 执行实现相同；只有冻结 Score 的可信 metadata 中可用且

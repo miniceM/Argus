@@ -170,8 +170,11 @@ def test_frozen_gate_rechecks_adoption_not_complete_label(setup_runtime, monkeyp
         item["evaluation_results"].pop()
     else:
         item["evaluation_results"].append(copy.deepcopy(result))
+    # 模拟“新冻结的内容本身证据不可信”，而不只触发 digest 失配保护。
+    snapshot.source_result_digest = canonical_digest(snapshot.items).removeprefix("sha256:")
     gate = evaluate_gate(policy(), snapshot)
     assert gate.decision == "UNKNOWN" and not gate.releasable
+    assert "CANDIDATE_MANAGED_EVIDENCE_INCOMPLETE" in gate.reason_codes
 
 
 def test_snapshot_revision_and_old_gate_survive_later_results(setup_runtime, monkeypatch):
@@ -366,3 +369,37 @@ def test_stored_gate_is_immutable_and_idempotent(setup_runtime, monkeypatch):
     remote.scores.clear()
     assert get_release_gate(first.id).model_dump() == first.model_dump()
     assert create_release_gate(request).model_dump() == first.model_dump()
+
+
+def test_late_required_score_requires_new_revision_and_never_rewrites_diagnostic(setup_runtime, monkeypatch):
+    from app.db_models import ExecutionAttemptRecord
+
+    db, diagnostic, remote, item_id = collect218(setup_runtime, monkeypatch, values=(True, None))
+    assert diagnostic.evidence_state == "DIAGNOSTIC"
+    old_digest = diagnostic.source_result_digest
+    old_gate = evaluate_gate(policy(), diagnostic).model_dump()
+    observation = remote.observation
+    late = _good_score(observation["traceId"], observation["id"], id="late-code", name="code")
+    late["metadata"].update(evaluation_rule_id="rule-code", evaluator_id="evaluator-code")
+    remote.scores.append(late)
+    outcome = setup_runtime[3].retry_failed_evaluations(diagnostic.launch_id)
+    assert outcome["submitted"] == [item_id]
+    current = _item(db, item_id)
+    result = recover_managed_scores(
+        db, item_id=item_id, evaluation_generation=current.evaluation_generation, worker_id="late218"
+    )
+    assert result["finalized"] and result["quality_conclusion"] == "pass"
+    with db.get_session() as session:
+        snapshots = list(
+            session.scalars(
+                select(RunResultSnapshotRecord)
+                .where(RunResultSnapshotRecord.launch_id == diagnostic.launch_id)
+                .order_by(RunResultSnapshotRecord.revision)
+            )
+        )
+        assert len(snapshots) == 2
+        assert snapshots[0].id == diagnostic.id and snapshots[0].source_result_digest == old_digest
+        assert evaluate_gate(policy(), snapshots[0]).model_dump() == old_gate
+        assert snapshots[1].revision == diagnostic.revision + 1
+        assert evaluate_gate(policy(), snapshots[1]).decision == "PASS"
+        assert len(list(session.scalars(select(ExecutionAttemptRecord)))) == 1

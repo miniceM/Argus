@@ -741,6 +741,38 @@ API 完整类型以 [OpenAPI](docs/openapi.json) 为准；[创建请求和 Froze
 - provenance 为 MANAGED_DIAGNOSTIC_ONLY，未创建远程实现版本锁；不重算 QualityPolicy、回写 Snapshot、触发出站 Score 或修改 Release Gate。正式质量闭环仍属 #218。
 - API 的唯一契约来源为 docs/openapi.json；可复现操作、当前上游证据可用性限制及真实验收见 [Issue #216 验收记录](docs/validation/issue216-managed-scores/README.md)。
 
+#### 8.3.10 托管 Score 的冻结质量决策（Issue #218）
+
+#216 的诊断阶段由 #217 异步收敛、#218 质量闭环向前推进；历史快照不回填。
+新的已核验结果使用 `MANAGED_SCORE_VERIFIED`，仍不代表冻结了外部执行版本。
+仅在冻结采纳契约与 QualityPolicy 一致，且每项 required Score 的类型、值、原始
+`source=EVAL` / subject / Rule / Evaluator / job metadata、Checkpoint/Manifest
+归属全部可核验时，复用现有 QualityPolicy 形成 PASS 或真实质量 FAIL。
+缺分、冲突、类型错误或未成功收敛一律 UNKNOWN；质量 FAIL 与评测执行失败分离。
+
+Result Snapshot 冻结实际采纳的 Score、采纳时 Observation IO 摘要、逐规则决策和
+三维 contract digest；Gate 仅复验这份 Frozen Snapshot 的 digest/证据，不读当前
+Langfuse、活动 TypedResult 或 Checkpoint。已过保留期限的 Checkpoint 不会使历史报告
+漂移。迟到评分需要显式恢复后生成新 revision，旧 Snapshot / 已保存 Gate 不更新。
+`COMPLETE` 仅表示可用作正式判定证据，不表示发布通过；Gate 仅 PASS 才可发布。
+
+Managed 统计的 `pass_rate = PASS / 全部冻结 Dataset 用例`，未决用例和缺少执行行的
+用例不退出分母；另保留原有具名 `decided_pass_rate`、`decision_coverage`。
+`required_score_coverage` 以「全部用例 × required Score 数」为分母，并保存逐 Score
+覆盖率。Builtin 维持原有统计契约；Managed 使用独立的 aggregation digest，防止把
+新旧口径混作正式可比结果。这些指标沿用现有 summary 的扩展字段，不新建 API 体系。
+
+Baseline 比较继续核对 Measurement / QualityPolicy / Aggregation 三维契约。
+相同 Rule ID 不证明 `latest` 执行实现相同；只有冻结 Score 的可信 metadata 中可用且
+相同的外部 `evaluator_version_id` 引用才能支持正式相对比较。缺失引用时
+`MANAGED_EXECUTION_VERSION_UNVERIFIED`，引用变化时 `MEASUREMENT_CHANGED`，均
+NOT_COMPARABLE / Gate UNKNOWN。这只是比较已采纳事实，不复制 Langfuse 版本管理，
+也不承诺能重新执行历史 Judge。绝对 Gate 不需要伪造外部版本。
+
+外部原始托管 Score 禁止通过 Item outbox 再写回；Builtin 原有单向投影不变。
+平台独立 usage 指标、Run 聚合指标仍按原有出站契约处理，不冒充原始 Score。
+完整矩阵与真实双评分 → Gate 的证据见 [Issue #218 验收记录](docs/validation/issue218-managed-quality/README.md)。
+
 ### 8.4 ExperimentItemExecution
 
 表示单个 Dataset Item 的执行状态：

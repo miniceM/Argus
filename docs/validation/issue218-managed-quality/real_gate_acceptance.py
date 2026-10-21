@@ -53,6 +53,9 @@ def main():
         "release_gates.py",
         "langfuse_managed_scores.py",
         "langfuse_sync.py",
+        "api_results.py",
+        "manifest.py",
+        "worker.py",
     ]
     source_hashes = {
         f: hashlib.sha256((ROOT / "services/eval-runner/app" / f).read_bytes()).hexdigest() for f in source_files
@@ -251,7 +254,7 @@ def main():
             while time.monotonic() < deadline:
                 rows = request(argus, "GET", path + "/items")
                 timeline.append(rows)
-                if rows and rows[0]["evaluation_status"] in ("recovered", "recovery_failed"):
+                if rows and rows[0]["evaluation_status"] in ("recovered", "failed"):
                     break
                 time.sleep(5)
             else:

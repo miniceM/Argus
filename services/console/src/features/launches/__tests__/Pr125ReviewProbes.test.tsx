@@ -442,6 +442,13 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     const original = (api.GET as any).getMockImplementation();
     (api.GET as any).mockImplementation((path: string, options?: any) => {
       if (path in overrides) return Promise.resolve(overrides[path]);
+      // 测量/策略探针变更 Manifest 时，同步其目标 Snapshot 的冻结 fixture。
+      // 显式提供的历史 Manifest 始终优先，不能让实时 Launch 覆盖它。
+      if (path === "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}" &&
+        overrides["/api/v1/experiment-launches/{launch_id}"]?.data?.manifest) {
+        return Promise.resolve(original(path, options)).then((response: any) => ({ ...response,
+          data: { ...response.data, manifest: overrides["/api/v1/experiment-launches/{launch_id}"].data.manifest } }));
+      }
       return original(path, options);
     });
   };

@@ -40,6 +40,7 @@ export function ManagedEvaluationFields({ value, onChange }: {
   return <section className="space-y-4" aria-label="Langfuse Managed 配置">
     <p className="text-sm text-timeout" role="note">待收集评分，暂不可用于正式发布。执行成功不等于质量 PASS。</p>
     <p className="text-xs text-muted-foreground">只冻结 Score 采纳条件；Langfuse Rule 使用 Evaluator 当前 latest，远程执行实现并未冻结。不在 Argus 编辑或执行 Evaluator。</p>
+    <p className="text-xs text-muted-foreground">Managed 需要服务端 Langfuse 凭据、OTLP 同步与既有 Evaluation Rule。不要在此粘贴密钥。未配置 Langfuse 时请选择 Builtin；不会阻塞原有内置评测。</p>
     <Field label="Langfuse Project ID">{(field) => <TextInput id={field.id} aria-label="Langfuse Project ID" value={value.contract.project_id}
       onChange={(e) => onChange({ ...value, contract: { ...value.contract, project_id: e.target.value } })} />}</Field>
     <p className="text-xs text-muted-foreground">目标 Observation：remote-agent-http / TOOL；source=EVAL；environment 与上方 Launch 环境相同。请填写 Langfuse 中已有的 Rule ID 和 Score 名称，引用不会在此创建新 Rule。</p>

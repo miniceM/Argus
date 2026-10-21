@@ -9,25 +9,7 @@
 
 import type { BadgeTone } from "../../components/Badge";
 
-export type EvaluationResult = {
-  evaluator_id: string;
-  evaluator_version?: string | null;
-  result_type: string;
-  status: string;
-  value?: unknown;
-  normalized_value?: number | null;
-  comment?: string | null;
-  evidence?: Record<string, unknown> | null;
-  duration_ms?: number | null;
-  error_code?: string | null;
-  error_message?: string | null;
-  provenance?: {
-    binding_id?: string | null;
-    definition_digest?: string | null;
-    manifest_schema_version?: string | null;
-    contract_status?: string | null;
-  } | null;
-};
+export type EvaluationResult = import("../../api/schema").components["schemas"]["EvaluationResultResponse"];
 
 export type ResultTone = BadgeTone;
 

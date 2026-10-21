@@ -457,6 +457,13 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
         }
         return Promise.resolve(response);
       }
+      // 测量/策略探针变更 Manifest 时，同步其目标 Snapshot 的冻结 fixture。
+      // 显式提供的历史 Manifest 始终优先，不能让实时 Launch 覆盖它。
+      if (path === "/api/v1/experiment-launches/{launch_id}/result-snapshots/{snapshot_id}" &&
+        overrides["/api/v1/experiment-launches/{launch_id}"]?.data?.manifest) {
+        return Promise.resolve(original(path, options)).then((response: any) => ({ ...response,
+          data: { ...response.data, manifest: overrides["/api/v1/experiment-launches/{launch_id}"].data.manifest } }));
+      }
       return original(path, options);
     });
   };
@@ -1068,7 +1075,8 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     expect(region).toHaveTextContent("frozen-rule-215");
     expect(region).toHaveTextContent("0.8");
     expect(region).toHaveTextContent("远程执行实现并未冻结");
-    expect(region).toHaveTextContent("待收集评分，暂不可用于正式发布");
+    expect(region).toHaveTextContent("评分尚未冻结；请查看用例中的采纳进度");
+    expect(region).not.toHaveTextContent("待收集评分，暂不可用于正式发布");
   });
 
   it("REVIEW: frozen policy renders all strict and inclusive numeric operators", () => {

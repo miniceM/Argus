@@ -4,6 +4,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { formatApiError } from "../../../api/errors";
 import { Button } from "../../../components/ui/Primitives";
 import { ComparisonCaseDrawer } from "../ComparisonCaseDrawer";
+import { ReleaseGatePanel } from "../ReleaseGatePanel";
 import { LangfuseSyncPanel } from "../langfuseSyncStatus";
 import { comparisonPagesQueryOptions } from "../launchComparisonQueries";
 import { readRegressionCount } from "../LaunchKpiOverview";
@@ -188,6 +189,7 @@ interface GateComparisonTabProps {
   launchId: string;
   snapshotId: string | null;
   environment: string;
+  evaluationSource?: string;
   summary: RunSummary | null | undefined;
   /** Frozen PASS/FAIL/UNKNOWN conclusion for the currently selected Candidate snapshot. */
   candidateQualityConclusion?: string | null;
@@ -221,6 +223,7 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
   launchId,
   snapshotId,
   environment,
+  evaluationSource,
   summary,
   candidateQualityConclusion,
   activeBaseline,
@@ -560,6 +563,7 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
 
   return (
     <div className="space-y-6">
+      <ReleaseGatePanel key={`${launchId}-${snapshotId}`} launchId={launchId} snapshotId={snapshotId} />
       {/* 错误提示横幅 (Alert) */}
       {comparisonQuery.isError && (
         <div
@@ -995,7 +999,7 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
       )}
 
       {summary?.langfuse_sync && (
-        <LangfuseSyncPanel sync={summary.langfuse_sync} />
+        <LangfuseSyncPanel sync={summary.langfuse_sync} managed={evaluationSource === "langfuse_managed"} />
       )}
 
       {costExplanations.length > 0 && (

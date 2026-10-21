@@ -1,0 +1,7 @@
+{
+  "initial_supervisor_status": "FAIL",
+  "reason": "Readback selected by id alone; real API returned both TOOL and differently named transport SPAN with that id.",
+  "production_convergence": "PASS; existing receipt and restart-proof retained unchanged",
+  "correction": "Require exact id + remote-agent-http + TOOL; full input/output required; reverify read-only, no new Agent requests.",
+  "production_source_changed": false
+}

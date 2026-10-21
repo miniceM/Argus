@@ -1,0 +1,53 @@
+{
+  "status": "PASS",
+  "source_commit": "3ce3fcfc491da44e7f7df47f66adf275d9197963",
+  "database_reused": true,
+  "crashed_at": "2026-10-21T01:38:06.971325+00:00",
+  "restored_at": "2026-10-21T01:38:07.744796+00:00",
+  "before": {
+    "id": "72e5bb8c-9173-4b5f-832b-61c8caf6e79e",
+    "execution_status": "succeeded",
+    "eval_status": "pending",
+    "evaluation_status": "evaluating",
+    "evaluation_generation": 2,
+    "evaluation_lease_expires_at": null,
+    "trace_id": "54aa238d9bf3a2717f3a1bea3a0701f4",
+    "observation_id": "f96a92ddb14fa59e",
+    "http_attempts": 1,
+    "checkpoint_digest": "sha256:0f58279af5cbfc5cc25a933e2771758f5ef9a1ed92634b5053ea55e69f7e911a",
+    "outbox": [
+      {
+        "status": "SYNCED",
+        "attempts": 1,
+        "scores_payload": "{\"_dataset_source\": \"langfuse\", \"_policy_digest\": \"sha256:3a58a1493f0ec4e75d689901b81be8f399fd91ca02cd3d703980e96fb9241418\", \"_managed_observation_cycle\": \"2026-10-21T01:38:05.677815+00:00\", \"_dataset_run_id\": \"56730256-2ec0-54ec-b047-420e44db6ed2\", \"_managed_observation_digest\": \"sha256:0f58279af5cbfc5cc25a933e2771758f5ef9a1ed92634b5053ea55e69f7e911a\"}"
+      }
+    ]
+  },
+  "after": {
+    "id": "72e5bb8c-9173-4b5f-832b-61c8caf6e79e",
+    "execution_status": "succeeded",
+    "eval_status": "succeeded",
+    "evaluation_status": "recovered",
+    "evaluation_generation": 3,
+    "evaluation_lease_expires_at": null,
+    "trace_id": "54aa238d9bf3a2717f3a1bea3a0701f4",
+    "observation_id": "f96a92ddb14fa59e",
+    "http_attempts": 1,
+    "checkpoint_digest": "sha256:0f58279af5cbfc5cc25a933e2771758f5ef9a1ed92634b5053ea55e69f7e911a",
+    "outbox": [
+      {
+        "status": "SYNCED",
+        "attempts": 1,
+        "scores_payload": "{\"_dataset_source\": \"langfuse\", \"_policy_digest\": \"sha256:3a58a1493f0ec4e75d689901b81be8f399fd91ca02cd3d703980e96fb9241418\", \"_managed_observation_cycle\": \"2026-10-21T01:38:05.677815+00:00\", \"_dataset_run_id\": \"56730256-2ec0-54ec-b047-420e44db6ed2\", \"_managed_observation_digest\": \"sha256:0f58279af5cbfc5cc25a933e2771758f5ef9a1ed92634b5053ea55e69f7e911a\"}"
+      }
+    ]
+  },
+  "independent_agent_requests": 1,
+  "agent_request_audit": [
+    {
+      "at": "2026-10-21T01:38:00.909084+00:00",
+      "status": 200
+    }
+  ],
+  "existing_services_modified": false
+}

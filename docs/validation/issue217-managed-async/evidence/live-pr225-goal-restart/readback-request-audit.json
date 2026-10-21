@@ -1,0 +1,38 @@
+[
+  {
+    "method": "GET",
+    "path": "/api/public/v2/observations",
+    "query": {
+      "traceId": "2cab7c0f349dc037817fbd2290c99568",
+      "fields": "core,basic,io,metadata,trace_context",
+      "limit": 100
+    },
+    "status": 200
+  },
+  {
+    "method": "GET",
+    "path": "/api/public/v3/scores",
+    "query": {
+      "traceId": "2cab7c0f349dc037817fbd2290c99568",
+      "observationId": "12b970cc8d5e2960",
+      "source": "EVAL",
+      "fields": "details,subject",
+      "name": "issue214-20261019t084028z-code",
+      "limit": 100
+    },
+    "status": 200
+  },
+  {
+    "method": "GET",
+    "path": "/api/public/v3/scores",
+    "query": {
+      "traceId": "2cab7c0f349dc037817fbd2290c99568",
+      "observationId": "12b970cc8d5e2960",
+      "source": "EVAL",
+      "fields": "details,subject",
+      "name": "issue214-20261019t084028z-judge",
+      "limit": 100
+    },
+    "status": 200
+  }
+]

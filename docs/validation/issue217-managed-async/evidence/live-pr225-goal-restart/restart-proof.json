@@ -1,0 +1,53 @@
+{
+  "status": "PASS",
+  "source_commit": "b8bca1d1fe2d138305d15debbd612e21f95b522d",
+  "database_reused": true,
+  "crashed_at": "2026-10-21T01:19:56.854237+00:00",
+  "restored_at": "2026-10-21T01:19:58.141584+00:00",
+  "before": {
+    "id": "90662b2f-e5fa-42f4-8043-b98f78275dc7",
+    "execution_status": "succeeded",
+    "eval_status": "pending",
+    "evaluation_status": "evaluating",
+    "evaluation_generation": 2,
+    "evaluation_lease_expires_at": null,
+    "trace_id": "2cab7c0f349dc037817fbd2290c99568",
+    "observation_id": "12b970cc8d5e2960",
+    "http_attempts": 1,
+    "checkpoint_digest": "sha256:a32204098661e0820c9c4365fdac0add38a04dfbc1d93ad4c0fd81bc19ee7111",
+    "outbox": [
+      {
+        "status": "PENDING",
+        "attempts": 0,
+        "scores_payload": "{\"_dataset_source\": \"langfuse\", \"_policy_digest\": \"sha256:3a58a1493f0ec4e75d689901b81be8f399fd91ca02cd3d703980e96fb9241418\", \"_managed_observation_cycle\": \"2026-10-21T01:19:56.217177+00:00\"}"
+      }
+    ]
+  },
+  "after": {
+    "id": "90662b2f-e5fa-42f4-8043-b98f78275dc7",
+    "execution_status": "succeeded",
+    "eval_status": "succeeded",
+    "evaluation_status": "recovered",
+    "evaluation_generation": 3,
+    "evaluation_lease_expires_at": null,
+    "trace_id": "2cab7c0f349dc037817fbd2290c99568",
+    "observation_id": "12b970cc8d5e2960",
+    "http_attempts": 1,
+    "checkpoint_digest": "sha256:a32204098661e0820c9c4365fdac0add38a04dfbc1d93ad4c0fd81bc19ee7111",
+    "outbox": [
+      {
+        "status": "SYNCED",
+        "attempts": 1,
+        "scores_payload": "{\"_dataset_source\": \"langfuse\", \"_policy_digest\": \"sha256:3a58a1493f0ec4e75d689901b81be8f399fd91ca02cd3d703980e96fb9241418\", \"_managed_observation_cycle\": \"2026-10-21T01:19:56.217177+00:00\", \"_dataset_run_id\": \"6b76a030-fb30-5aab-8dde-cd572f92c221\", \"_managed_observation_digest\": \"sha256:a32204098661e0820c9c4365fdac0add38a04dfbc1d93ad4c0fd81bc19ee7111\"}"
+      }
+    ]
+  },
+  "independent_agent_requests": 1,
+  "agent_request_audit": [
+    {
+      "at": "2026-10-21T01:19:41.697206+00:00",
+      "status": 200
+    }
+  ],
+  "existing_services_modified": false
+}

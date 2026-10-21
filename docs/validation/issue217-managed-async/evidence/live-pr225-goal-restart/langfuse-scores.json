@@ -1,0 +1,65 @@
+[
+  {
+    "id": "bdeedf18-fdb1-5dd6-a24d-7200b28d30d5",
+    "projectId": "cmu5a6fj500aoad0jvrckiypb",
+    "name": "issue214-20261019t084028z-code",
+    "source": "EVAL",
+    "timestamp": "2026-10-21T01:19:59.527Z",
+    "environment": "issue217-pr225-20261021t011930z",
+    "createdAt": "2026-10-21T01:20:00.000Z",
+    "updatedAt": "2026-10-21T01:19:59.687Z",
+    "comment": "Native HTTP text checked by Langfuse managed Python runtime; expected constant 1266 is smoke rubric only",
+    "configId": null,
+    "metadata": {
+      "input_sha256": "12503f8c99cbd46490540a2ce2a4d2a17b86b5513448bf5cbd450947794350e8",
+      "output_sha256": "a32204098661e0820c9c4365fdac0add38a04dfbc1d93ad4c0fd81bc19ee7111",
+      "experiment_context_present": true,
+      "job_execution_id": "1f4f7551d48155f573837c2624fb7e07",
+      "job_configuration_id": "cmvhfcuhl001had0gzuizqhm0",
+      "evaluation_rule_id": "cmvhfcuhl001had0gzuizqhm0",
+      "evaluation_rule_assignment_id": "cmvhfcuhl001jad0g1nlwnvfe",
+      "evaluator_version_id": "cmvf083f50036ad0ggpilrl84",
+      "evaluator_id": "cmvf083f50034ad0gbpddxpar",
+      "target_trace_id": "2cab7c0f349dc037817fbd2290c99568",
+      "target_observation_id": "12b970cc8d5e2960",
+      "dispatcher_name": "aws-lambda",
+      "code_eval_runtime": "PYTHON"
+    },
+    "subject": {
+      "kind": "observation",
+      "id": "12b970cc8d5e2960",
+      "traceId": "2cab7c0f349dc037817fbd2290c99568"
+    },
+    "dataType": "BOOLEAN",
+    "value": true
+  },
+  {
+    "id": "3c5d9609-b83b-5bd7-b8ff-4d596774c280",
+    "projectId": "cmu5a6fj500aoad0jvrckiypb",
+    "name": "issue214-20261019t084028z-judge",
+    "source": "EVAL",
+    "timestamp": "2026-10-21T01:20:00.745Z",
+    "environment": "issue217-pr225-20261021t011930z",
+    "createdAt": "2026-10-21T01:20:01.000Z",
+    "updatedAt": "2026-10-21T01:20:00.897Z",
+    "comment": "The expression (135 + 287) * 3 equals 422 * 3 = 1266, so the agent's answer is correct.",
+    "configId": null,
+    "metadata": {
+      "job_execution_id": "0a2ee8d63a9d837a572660cd956c6b3b",
+      "job_configuration_id": "cmvhfcqwd001cad0gcpa8euos",
+      "evaluation_rule_id": "cmvhfcqwd001cad0gcpa8euos",
+      "evaluation_rule_assignment_id": "cmvhfcqwd001ead0gbhpwxt1t",
+      "evaluator_version_id": "cmvf082z1002wad0g6y71t1r8",
+      "evaluator_id": "cmvf082z1002uad0gkb42lwel",
+      "target_trace_id": "2cab7c0f349dc037817fbd2290c99568",
+      "target_observation_id": "12b970cc8d5e2960"
+    },
+    "subject": {
+      "kind": "observation",
+      "id": "12b970cc8d5e2960",
+      "traceId": "2cab7c0f349dc037817fbd2290c99568"
+    },
+    "dataType": "BOOLEAN",
+    "value": true
+  }
+]

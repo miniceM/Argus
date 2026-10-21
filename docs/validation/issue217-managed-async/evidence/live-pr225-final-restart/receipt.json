@@ -1,0 +1,25 @@
+{
+  "status": "PASS",
+  "mode": "automatic-convergence-without-manual-collect",
+  "environment": "issue217-final-20261021t013748z",
+  "launch_id": "0afb064d-1f0d-443a-8c8f-bb6ec9f3a5d1",
+  "item_id": "72e5bb8c-9173-4b5f-832b-61c8caf6e79e",
+  "trace_id": "54aa238d9bf3a2717f3a1bea3a0701f4",
+  "observation_id": "f96a92ddb14fa59e",
+  "rule_ids": [
+    "cmvhg0ane0007ad0e0o9yq1de",
+    "cmvhg0ef6000vad0doiiorwxg"
+  ],
+  "score_ids": [
+    "6b3cb296-25b3-52f7-a93b-2670eaa4dfb0",
+    "8a9db8ee-e344-5dcd-ab24-7d4b3f10c921"
+  ],
+  "effective_result_count": 2,
+  "http_attempts": 1,
+  "score_write_requests": 0,
+  "manual_collect_calls": 0,
+  "eval_status": "succeeded",
+  "quality_conclusion": "pass",
+  "at": "2026-10-21T01:38:37.068252+00:00",
+  "recovery_sha256": "bc7ced251838ba0cd48e6eb3d743838d1c1dd55ae76c3b5dae1b2f349ab757de"
+}

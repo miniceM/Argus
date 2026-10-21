@@ -1,0 +1,2389 @@
+{
+  "recorded_at": "2026-10-21T01:49:51.095305+00:00",
+  "functional_commit": "3ce3fcfc491da44e7f7df47f66adf275d9197963",
+  "source_hashes": {
+    "services/eval-runner/app/managed_score_recovery.py": "bc7ced251838ba0cd48e6eb3d743838d1c1dd55ae76c3b5dae1b2f349ab757de",
+    "services/eval-runner/app/worker.py": "2df70201c3f396eef2638eaf90076a2e4f23479e6c7eb92c22428597113a1d00",
+    "services/eval-runner/app/main.py": "7abd94155f0b01f58231f31c40aaea3104b7ed2dd1af85a357842cb55e3bb790",
+    "services/eval-runner/app/evaluation_recovery.py": "aaca1ef051fd87c0e9a16e5a8f3c26bc43778b57eedfd0c9300848047a309cba",
+    "services/eval-runner/app/langfuse_managed_scores.py": "fe7778e4b2de68f95be6b7affe1970a1638df1b3a6617fa67f5913a167d36797",
+    "services/eval-runner/app/langfuse_run_items.py": "ecfb4a26cdb1982faa211d508debe69ab841835ddefb38d544742f6ab309bfbd",
+    "services/eval-runner/app/langfuse_sync.py": "9a5d4be1aa84884bb6590e3d05cc79a3c1b85ba18e931c460cf7e5193bcfca50",
+    "services/eval-runner/app/langfuse_otel_projection.py": "03f29de77f0810409d516023abaa39c16c3fc4dc92361b4137e33a51a141a660",
+    "services/eval-runner/app/reconciler.py": "0bb769da7454e4ce4f2f905dea9d887385fa5740e2bd672cc7d73a356897a17d"
+  },
+  "postgresql": {
+    "image": "postgres:17-alpine",
+    "isolation": "owned container + loopback-only random port + dedicated database + unique schema per case",
+    "production_database_used": false
+  },
+  "python": "3.12.11",
+  "node": "22.22.0",
+  "pnpm": "10.5.2",
+  "runs": [
+    {
+      "name": "original-replay",
+      "source_commit": "85424e3ee4b22e946ca10ab0787ab92f5a07d931",
+      "command": "Original adversarial probe, unchanged, replayed with current repository fixtures",
+      "junit_sha256": "b7a202ccfb2748108d071e2264be177e0bfe03e3ed9960070e5cf2f7cb0d1ada",
+      "counts": {
+        "PASS": 33,
+        "FAIL": 2,
+        "ERROR": 0,
+        "SKIP": 2
+      },
+      "cases": [
+        {
+          "name": "test_expired_deadline_never_reads_remote[sqlite]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_expired_deadline_never_reads_remote[postgresql]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_deadline_during_fetch_rejects_late_score[sqlite]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_deadline_during_fetch_rejects_late_score[postgresql]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_retry_after_is_respected_and_duplicate_cannot_skip_backoff[sqlite]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_retry_after_is_respected_and_duplicate_cannot_skip_backoff[postgresql]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_during_backoff_settles_without_agent_rerun[sqlite]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_during_backoff_settles_without_agent_rerun[postgresql]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[sqlite]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[postgresql]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[sqlite]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[postgresql]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_crashed_collections_consume_budget[sqlite]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "FAIL"
+        },
+        {
+          "name": "test_crashed_collections_consume_budget[postgresql]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "FAIL"
+        },
+        {
+          "name": "test_infinite_attempt_config_is_safe[inf]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_infinite_attempt_config_is_safe[-inf]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_infinite_attempt_config_is_safe[Infinity]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_infinite_attempt_config_is_safe[1e309]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[sqlite]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[postgresql]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_live_dispatcher_managed_wait_does_not_block_http",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[sqlite]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[postgresql]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_outbox_restores_scorable_observation_from_checkpoint[sqlite]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_outbox_restores_scorable_observation_from_checkpoint[postgresql]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[sqlite-RATE_LIMITED]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[sqlite-UPSTREAM_UNAVAILABLE]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[sqlite-TIMEOUT]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[postgresql-RATE_LIMITED]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[postgresql-UPSTREAM_UNAVAILABLE]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[postgresql-TIMEOUT]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_auth_failure_stops_unknown_without_agent[sqlite-AUTHENTICATION_FAILED]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_auth_failure_stops_unknown_without_agent[sqlite-AUTHORIZATION_FAILED]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_auth_failure_stops_unknown_without_agent[postgresql-AUTHENTICATION_FAILED]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_auth_failure_stops_unknown_without_agent[postgresql-AUTHORIZATION_FAILED]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_future_generation_cannot_skip_persisted_backoff[sqlite]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        },
+        {
+          "name": "test_future_generation_cannot_skip_persisted_backoff[postgresql]",
+          "class": "tests.test_pr224_review_replay",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "additional-red",
+      "source_commit": "85424e3ee4b22e946ca10ab0787ab92f5a07d931",
+      "command": "pytest lifecycle boundaries -k submission_gap|same_lease_success|inside_policy",
+      "junit_sha256": "781f1341c6fe14ac59c717033f2aa22e2688d1a58b5c6d88f969a644e65ba543",
+      "counts": {
+        "PASS": 0,
+        "FAIL": 6,
+        "ERROR": 0,
+        "SKIP": 0
+      },
+      "cases": [
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "FAIL"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "FAIL"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "FAIL"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "FAIL"
+        },
+        {
+          "name": "test_finalize_cannot_publish_success_after_deadline_inside_policy[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "FAIL"
+        },
+        {
+          "name": "test_finalize_cannot_publish_success_after_deadline_inside_policy[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "FAIL"
+        }
+      ]
+    },
+    {
+      "name": "inflight-red",
+      "source_commit": "85424e3ee4b22e946ca10ab0787ab92f5a07d931",
+      "command": "pytest lifecycle boundaries -k process_inflight_budget",
+      "junit_sha256": "2ffa33d39475d42db1164c116954c6357e43b75d8455e9d6bbc0a075e8c09962",
+      "counts": {
+        "PASS": 0,
+        "FAIL": 1,
+        "ERROR": 0,
+        "SKIP": 0
+      },
+      "cases": [
+        {
+          "name": "test_timed_out_collectors_still_count_towards_process_inflight_budget",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "FAIL"
+        }
+      ]
+    },
+    {
+      "name": "config-red",
+      "source_commit": "85424e3ee4b22e946ca10ab0787ab92f5a07d931",
+      "command": "pytest lifecycle boundaries -k concurrency_config",
+      "junit_sha256": "1c9091514312462caad3fd0d8f02e887b5fb648aaa85bd52faf9ab28303e8106",
+      "counts": {
+        "PASS": 4,
+        "FAIL": 5,
+        "ERROR": 0,
+        "SKIP": 0
+      },
+      "cases": [
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[inf]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "FAIL"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[-inf]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "FAIL"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[Infinity]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "FAIL"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[NaN]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[1e309]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "FAIL"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[bad]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[-1]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[0]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_has_finite_upper_bound",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "FAIL"
+        }
+      ]
+    },
+    {
+      "name": "hardening-green",
+      "source_commit": "b8bca1d1fe2d138305d15debbd612e21f95b522d",
+      "command": "pytest tests/test_issue_217_lifecycle_boundaries.py tests/test_issue_217_managed_async.py tests/test_issue_217_managed_review.py",
+      "junit_sha256": "9c913bfeaac79a4d779becdf8acd5de903337d3c3f3dca66c2414331b1133dd9",
+      "counts": {
+        "PASS": 103,
+        "FAIL": 0,
+        "ERROR": 0,
+        "SKIP": 2
+      },
+      "cases": [
+        {
+          "name": "test_expired_deadline_never_reads_remote[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_expired_deadline_never_reads_remote[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_deadline_during_fetch_rejects_late_score[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_deadline_during_fetch_rejects_late_score[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_retry_after_is_respected_and_duplicate_cannot_skip_backoff[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_retry_after_is_respected_and_duplicate_cannot_skip_backoff[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_during_backoff_settles_without_agent_rerun[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_during_backoff_settles_without_agent_rerun[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_crashed_collections_consume_budget[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_crashed_collections_consume_budget[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_infinite_attempt_config_is_safe[inf]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_infinite_attempt_config_is_safe[-inf]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_infinite_attempt_config_is_safe[Infinity]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_infinite_attempt_config_is_safe[1e309]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_live_dispatcher_managed_wait_does_not_block_http",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_outbox_restores_scorable_observation_from_checkpoint[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_outbox_restores_scorable_observation_from_checkpoint[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[sqlite-PENDING]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[sqlite-SYNCED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[sqlite-FAILED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[sqlite-SKIPPED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[postgresql-PENDING]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[postgresql-SYNCED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[postgresql-FAILED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[postgresql-SKIPPED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_sdk_and_outbox_have_one_scorable_publisher[sqlite-otel]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_sdk_and_outbox_have_one_scorable_publisher[sqlite-legacy]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_sdk_and_outbox_have_one_scorable_publisher[postgresql-otel]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_sdk_and_outbox_have_one_scorable_publisher[postgresql-legacy]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_projection_refuses_corrupt_checkpoint[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_projection_refuses_corrupt_checkpoint[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_projection_failure_resubmit_has_one_new_budget_without_agent[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_projection_failure_resubmit_has_one_new_budget_without_agent[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[sqlite-RATE_LIMITED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[sqlite-UPSTREAM_UNAVAILABLE]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[sqlite-TIMEOUT]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[postgresql-RATE_LIMITED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[postgresql-UPSTREAM_UNAVAILABLE]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[postgresql-TIMEOUT]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_auth_failure_stops_unknown_without_agent[sqlite-AUTHENTICATION_FAILED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_auth_failure_stops_unknown_without_agent[sqlite-AUTHORIZATION_FAILED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_auth_failure_stops_unknown_without_agent[postgresql-AUTHENTICATION_FAILED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_auth_failure_stops_unknown_without_agent[postgresql-AUTHORIZATION_FAILED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_late_attempt_start_cannot_spend_new_manual_cycle_budget[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_late_attempt_start_cannot_spend_new_manual_cycle_budget[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_finalize_cannot_publish_success_after_deadline_inside_policy[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_finalize_cannot_publish_success_after_deadline_inside_policy[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_collectors_still_count_towards_process_inflight_budget",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[inf]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[-inf]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[Infinity]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[NaN]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[1e309]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[bad]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[-1]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[0]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_has_finite_upper_bound",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_future_generation_cannot_skip_persisted_backoff[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_future_generation_cannot_skip_persisted_backoff[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_http_success_decouple_pending_and_enqueue_managed",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_delayed_score_converges_without_recalling_agent",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_rate_limit_retry_bounded_and_unknown",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_concurrent_workers_single_adoption",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_late_generation_cannot_overwrite",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_retry_never_calls_agent_and_releases_permit",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_discards_late_collection",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_fault_injection_5xx_timeout_auth",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_reconciler_enqueues_due_and_skips_future_or_cancelled",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_http_acks_invocation_message",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_lease_expiry_crash_recovers_and_converges",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_client_unconfigured_terminal_unknown",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_submit_guards_and_idempotency",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_manual_retry_resubmits_managed_pending",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_lease_collect_writes_no_valid_result",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_superseded_generation_collect_writes_nothing",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_adopt_then_conflict_blocks_finalize_and_recovers",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_round_cleanly_adopted_helper",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_idempotent_reread_same_score",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stored_complete_but_round_read_failure_not_complete",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_during_fetch_never_succeeds",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_expired_lease_fail_discards_without_marking",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_finalize_crash_gap_compensated_by_reconciler",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancelled_launch_expired_lease_not_requeued",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_duplicate_redelivery_single_effective_run",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_manual_resubmit_gets_fresh_budget",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_retry_config_sanitizes_invalid_values",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_score_client_closed_and_managed_slots_separate",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_collection_only_reads_never_creates_remote_jobs",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_hanging_remote_bounded_by_collect_timeout",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_fresh_cycle_backoff_starts_small",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_finalize_rejects_diverged_report",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "races-1",
+      "source_commit": "b8bca1d1fe2d138305d15debbd612e21f95b522d",
+      "command": "pytest lifecycle boundaries -k reconciler_scan|two_postgresql_reconcilers|multiworker_single|stale_worker|same_lease_success|submission_gap|timed_out_thread|process_inflight_budget",
+      "junit_sha256": "69042588f682e9aa2125f0a541a8f8c6fc34ce7524e89bf683c3d6c9c7b3513e",
+      "counts": {
+        "PASS": 13,
+        "FAIL": 0,
+        "ERROR": 0,
+        "SKIP": 2
+      },
+      "cases": [
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_collectors_still_count_towards_process_inflight_budget",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "races-2",
+      "source_commit": "b8bca1d1fe2d138305d15debbd612e21f95b522d",
+      "command": "pytest lifecycle boundaries -k reconciler_scan|two_postgresql_reconcilers|multiworker_single|stale_worker|same_lease_success|submission_gap|timed_out_thread|process_inflight_budget",
+      "junit_sha256": "18f670e8e2ed4513f5fe70161cab68f137a41ff3f99bcb3068a45b83feb6fd35",
+      "counts": {
+        "PASS": 13,
+        "FAIL": 0,
+        "ERROR": 0,
+        "SKIP": 2
+      },
+      "cases": [
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_collectors_still_count_towards_process_inflight_budget",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "races-3",
+      "source_commit": "b8bca1d1fe2d138305d15debbd612e21f95b522d",
+      "command": "pytest lifecycle boundaries -k reconciler_scan|two_postgresql_reconcilers|multiworker_single|stale_worker|same_lease_success|submission_gap|timed_out_thread|process_inflight_budget",
+      "junit_sha256": "a843982615172af62b2702dc6fa58ee70dbe26d1423b2d62df2ef5c3acea8d83",
+      "counts": {
+        "PASS": 13,
+        "FAIL": 0,
+        "ERROR": 0,
+        "SKIP": 2
+      },
+      "cases": [
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_collectors_still_count_towards_process_inflight_budget",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "races-4",
+      "source_commit": "b8bca1d1fe2d138305d15debbd612e21f95b522d",
+      "command": "pytest lifecycle boundaries -k reconciler_scan|two_postgresql_reconcilers|multiworker_single|stale_worker|same_lease_success|submission_gap|timed_out_thread|process_inflight_budget",
+      "junit_sha256": "047cc294783fa19e9ff3123a8bb5387ceae5b0f81208fe3cdee8e1619fe22f1f",
+      "counts": {
+        "PASS": 13,
+        "FAIL": 0,
+        "ERROR": 0,
+        "SKIP": 2
+      },
+      "cases": [
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_collectors_still_count_towards_process_inflight_budget",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "races-5",
+      "source_commit": "b8bca1d1fe2d138305d15debbd612e21f95b522d",
+      "command": "pytest lifecycle boundaries -k reconciler_scan|two_postgresql_reconcilers|multiworker_single|stale_worker|same_lease_success|submission_gap|timed_out_thread|process_inflight_budget",
+      "junit_sha256": "3fc07549090be0ecf0cd4662d63a94b01fdf6b7887b99a29adfe85a9a264bbc2",
+      "counts": {
+        "PASS": 13,
+        "FAIL": 0,
+        "ERROR": 0,
+        "SKIP": 2
+      },
+      "cases": [
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_collectors_still_count_towards_process_inflight_budget",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "default-executor-red",
+      "source_commit": "b8bca1d1fe2d138305d15debbd612e21f95b522d",
+      "command": "pytest lifecycle boundaries -k default_executor",
+      "junit_sha256": "337da46919f95afa40faeab38a40f54f13e2448406b1901a36e3a3f9db29aafc",
+      "counts": {
+        "PASS": 0,
+        "FAIL": 1,
+        "ERROR": 0,
+        "SKIP": 0
+      },
+      "cases": [
+        {
+          "name": "test_live_dispatcher_isolates_managed_from_default_executor",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "FAIL"
+        }
+      ]
+    },
+    {
+      "name": "final-hardening",
+      "source_commit": "3ce3fcfc491da44e7f7df47f66adf275d9197963",
+      "command": "pytest tests/test_issue_217_lifecycle_boundaries.py tests/test_issue_217_managed_async.py tests/test_issue_217_managed_review.py",
+      "junit_sha256": "7abbed97014d9798afcd9d361a215e365d73d849e0816c44216348a9c20f653a",
+      "counts": {
+        "PASS": 104,
+        "FAIL": 0,
+        "ERROR": 0,
+        "SKIP": 2
+      },
+      "cases": [
+        {
+          "name": "test_expired_deadline_never_reads_remote[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_expired_deadline_never_reads_remote[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_deadline_during_fetch_rejects_late_score[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_deadline_during_fetch_rejects_late_score[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_retry_after_is_respected_and_duplicate_cannot_skip_backoff[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_retry_after_is_respected_and_duplicate_cannot_skip_backoff[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_during_backoff_settles_without_agent_rerun[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_during_backoff_settles_without_agent_rerun[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_crashed_collections_consume_budget[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_crashed_collections_consume_budget[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_infinite_attempt_config_is_safe[inf]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_infinite_attempt_config_is_safe[-inf]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_infinite_attempt_config_is_safe[Infinity]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_infinite_attempt_config_is_safe[1e309]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_live_dispatcher_managed_wait_does_not_block_http",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_outbox_restores_scorable_observation_from_checkpoint[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_outbox_restores_scorable_observation_from_checkpoint[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[sqlite-PENDING]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[sqlite-SYNCED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[sqlite-FAILED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[sqlite-SKIPPED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[postgresql-PENDING]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[postgresql-SYNCED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[postgresql-FAILED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_collection_waits_for_durable_observation_publication[postgresql-SKIPPED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_sdk_and_outbox_have_one_scorable_publisher[sqlite-otel]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_sdk_and_outbox_have_one_scorable_publisher[sqlite-legacy]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_sdk_and_outbox_have_one_scorable_publisher[postgresql-otel]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_sdk_and_outbox_have_one_scorable_publisher[postgresql-legacy]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_projection_refuses_corrupt_checkpoint[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_projection_refuses_corrupt_checkpoint[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_projection_failure_resubmit_has_one_new_budget_without_agent[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_projection_failure_resubmit_has_one_new_budget_without_agent[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[sqlite-RATE_LIMITED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[sqlite-UPSTREAM_UNAVAILABLE]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[sqlite-TIMEOUT]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[postgresql-RATE_LIMITED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[postgresql-UPSTREAM_UNAVAILABLE]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_transient_score_failure_retries_then_converges_without_agent[postgresql-TIMEOUT]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_auth_failure_stops_unknown_without_agent[sqlite-AUTHENTICATION_FAILED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_auth_failure_stops_unknown_without_agent[sqlite-AUTHORIZATION_FAILED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_auth_failure_stops_unknown_without_agent[postgresql-AUTHENTICATION_FAILED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_auth_failure_stops_unknown_without_agent[postgresql-AUTHORIZATION_FAILED]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_late_attempt_start_cannot_spend_new_manual_cycle_budget[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_late_attempt_start_cannot_spend_new_manual_cycle_budget[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_finalize_cannot_publish_success_after_deadline_inside_policy[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_finalize_cannot_publish_success_after_deadline_inside_policy[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_collectors_still_count_towards_process_inflight_budget",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[inf]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[-inf]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[Infinity]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[NaN]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[1e309]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[bad]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[-1]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_safely_falls_back[0]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_concurrency_config_has_finite_upper_bound",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_future_generation_cannot_skip_persisted_backoff[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_future_generation_cannot_skip_persisted_backoff[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_live_dispatcher_isolates_managed_from_default_executor",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_http_success_decouple_pending_and_enqueue_managed",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_delayed_score_converges_without_recalling_agent",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_rate_limit_retry_bounded_and_unknown",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_concurrent_workers_single_adoption",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_late_generation_cannot_overwrite",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_retry_never_calls_agent_and_releases_permit",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_discards_late_collection",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_fault_injection_5xx_timeout_auth",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_reconciler_enqueues_due_and_skips_future_or_cancelled",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_managed_http_acks_invocation_message",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_lease_expiry_crash_recovers_and_converges",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_client_unconfigured_terminal_unknown",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_submit_guards_and_idempotency",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_manual_retry_resubmits_managed_pending",
+          "class": "tests.test_issue_217_managed_async",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_lease_collect_writes_no_valid_result",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_superseded_generation_collect_writes_nothing",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_adopt_then_conflict_blocks_finalize_and_recovers",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_round_cleanly_adopted_helper",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_idempotent_reread_same_score",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stored_complete_but_round_read_failure_not_complete",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_during_fetch_never_succeeds",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_expired_lease_fail_discards_without_marking",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_finalize_crash_gap_compensated_by_reconciler",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancelled_launch_expired_lease_not_requeued",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_duplicate_redelivery_single_effective_run",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_manual_resubmit_gets_fresh_budget",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_retry_config_sanitizes_invalid_values",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_score_client_closed_and_managed_slots_separate",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_collection_only_reads_never_creates_remote_jobs",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_hanging_remote_bounded_by_collect_timeout",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_fresh_cycle_backoff_starts_small",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        },
+        {
+          "name": "test_finalize_rejects_diverged_report",
+          "class": "tests.test_issue_217_managed_review",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "final-races-1",
+      "source_commit": "3ce3fcfc491da44e7f7df47f66adf275d9197963",
+      "command": "pytest lifecycle boundaries -k reconciler_scan|two_postgresql_reconcilers|multiworker_single|stale_worker|same_lease_success|submission_gap|timed_out_thread|process_inflight_budget|default_executor",
+      "junit_sha256": "911b3293e081b1ca29145089b16259b57b471925860b49671b6ec34d07c9c9b7",
+      "counts": {
+        "PASS": 14,
+        "FAIL": 0,
+        "ERROR": 0,
+        "SKIP": 2
+      },
+      "cases": [
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_collectors_still_count_towards_process_inflight_budget",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_live_dispatcher_isolates_managed_from_default_executor",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "final-races-2",
+      "source_commit": "3ce3fcfc491da44e7f7df47f66adf275d9197963",
+      "command": "pytest lifecycle boundaries -k reconciler_scan|two_postgresql_reconcilers|multiworker_single|stale_worker|same_lease_success|submission_gap|timed_out_thread|process_inflight_budget|default_executor",
+      "junit_sha256": "a9c396f58f1c8ed2119911323c9d515919d5c7b88e013517b504c4de11a0ad5f",
+      "counts": {
+        "PASS": 14,
+        "FAIL": 0,
+        "ERROR": 0,
+        "SKIP": 2
+      },
+      "cases": [
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_collectors_still_count_towards_process_inflight_budget",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_live_dispatcher_isolates_managed_from_default_executor",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "final-races-3",
+      "source_commit": "3ce3fcfc491da44e7f7df47f66adf275d9197963",
+      "command": "pytest lifecycle boundaries -k reconciler_scan|two_postgresql_reconcilers|multiworker_single|stale_worker|same_lease_success|submission_gap|timed_out_thread|process_inflight_budget|default_executor",
+      "junit_sha256": "d9384c970f8a83e85c8ba32b6f374b5e55c97baf71c2efab8251fbf742312519",
+      "counts": {
+        "PASS": 14,
+        "FAIL": 0,
+        "ERROR": 0,
+        "SKIP": 2
+      },
+      "cases": [
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_collectors_still_count_towards_process_inflight_budget",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_live_dispatcher_isolates_managed_from_default_executor",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "final-races-4",
+      "source_commit": "3ce3fcfc491da44e7f7df47f66adf275d9197963",
+      "command": "pytest lifecycle boundaries -k reconciler_scan|two_postgresql_reconcilers|multiworker_single|stale_worker|same_lease_success|submission_gap|timed_out_thread|process_inflight_budget|default_executor",
+      "junit_sha256": "f45e5ceee478ae9e37d50ff962f05f11f26b21c9c5756fc68ce84f98e5df4060",
+      "counts": {
+        "PASS": 14,
+        "FAIL": 0,
+        "ERROR": 0,
+        "SKIP": 2
+      },
+      "cases": [
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_collectors_still_count_towards_process_inflight_budget",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_live_dispatcher_isolates_managed_from_default_executor",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "name": "final-races-5",
+      "source_commit": "3ce3fcfc491da44e7f7df47f66adf275d9197963",
+      "command": "pytest lifecycle boundaries -k reconciler_scan|two_postgresql_reconcilers|multiworker_single|stale_worker|same_lease_success|submission_gap|timed_out_thread|process_inflight_budget|default_executor",
+      "junit_sha256": "de475c4bc23dc107bcf80123fe0c8197183f4cead74aa42ddc7d98d474a7494c",
+      "counts": {
+        "PASS": 14,
+        "FAIL": 0,
+        "ERROR": 0,
+        "SKIP": 2
+      },
+      "cases": [
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_stale_worker_does_not_corrupt_winning_attempt_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_reconciler_scan_cannot_clear_newly_renewed_lease[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_multiworker_single_adoption_on_both_databases[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_thread_cannot_overwrite_new_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "SKIP"
+        },
+        {
+          "name": "test_two_postgresql_reconcilers_advance_one_generation[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_cancel_in_http_success_submission_gap_settles[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[sqlite]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_replayed_failure_cannot_rewrite_same_lease_success_audit[postgresql]",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_timed_out_collectors_still_count_towards_process_inflight_budget",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        },
+        {
+          "name": "test_live_dispatcher_isolates_managed_from_default_executor",
+          "class": "tests.test_issue_217_lifecycle_boundaries",
+          "status": "PASS"
+        }
+      ]
+    }
+  ],
+  "make_validate": {
+    "source_commit": "3ce3fcfc491da44e7f7df47f66adf275d9197963",
+    "status": "PASS",
+    "python_passed": 1631,
+    "skipped": 2,
+    "deselected": 31,
+    "console_files": 54,
+    "console_tests": 868,
+    "openapi_drift": false,
+    "compose": "PASS",
+    "log_sha256": "9190abbf9abe576d8d55ac7d69996211b7485871215438203e49473842e21ae3"
+  },
+  "trajectory": {
+    "source_commit": "3ce3fcfc491da44e7f7df47f66adf275d9197963",
+    "prepare": "PASS",
+    "test": "PASS",
+    "passed": 31,
+    "log_sha256": "7321450e7b087a297d8db15bae1a5e5f851e7a83db2569bfabeb2086dce8eed8"
+  },
+  "evidence_notes": [
+    "Original probe retained: crash-budget case expects next worker EXHAUSTED, but reaper already persisted EXHAUSTED/failed so next claim correctly returns NOT_CLAIMABLE. Formal test asserts persistent terminal status, exact budget and no Agent rerun.",
+    "Initial probe outside repository had fixture-discovery errors; those are not counted as product RED and original-replay uses repository fixtures.",
+    "SQLite skips are only the two PostgreSQL-only row-lock/MVCC interleavings; PostgreSQL counterparts were executed and passed.",
+    "Live supervisor initially rejected transport SPAN sharing an id with the TOOL. Exact id+name+type read-only revalidation passed with no production source change or new Agent request.",
+    "Executor starvation additionally reproduced at b8bca1d and fixed in 3ce3fcf. All current local gates and a new real Langfuse/Agent/SIGKILL/restart were rerun at 3ce3fcf; older b8bca1d live evidence is not final acceptance."
+  ]
+}

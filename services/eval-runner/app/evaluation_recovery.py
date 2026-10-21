@@ -18,6 +18,7 @@ nor the execution attempt:
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -199,7 +200,10 @@ def _close_attempt(
     )
     if lease_token is not None:
         # Managed：旧持有者不能把接管者的成功审计改为 discarded。
-        stmt = stmt.where(EvaluationAttemptRecord.lease_token == lease_token)
+        stmt = stmt.where(
+            EvaluationAttemptRecord.lease_token == lease_token,
+            EvaluationAttemptRecord.status == "running",
+        )
     res = session.execute(
         stmt.values(status=status, error_type=error_type, error_message=error_message, completed_at=now)
     )
@@ -207,6 +211,12 @@ def _close_attempt(
         EvaluationAttemptRecord.item_execution_id == item_id,
         EvaluationAttemptRecord.evaluation_generation == evaluation_generation,
     )) if res.rowcount == 0 and launch_id else None
+    if res.rowcount == 0 and lease_token is not None:
+        # 保留可解释的拒绝事件；不能为了记录迟到收尾而篡改有效审计。
+        logging.getLogger(__name__).info(
+            "Evaluation attempt close rejected: item=%s generation=%s requested_status=%s reason=%s",
+            item_id, evaluation_generation, status, error_type or "ALREADY_SETTLED_OR_LEASE_LOST",
+        )
     if res.rowcount == 0 and launch_id and exists is None:
         session.add(
             EvaluationAttemptRecord(

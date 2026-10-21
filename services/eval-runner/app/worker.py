@@ -33,9 +33,9 @@ def _managed_slot_count() -> int:
 
     try:
         value = int(float(os.getenv("ARGUS_MANAGED_SCORE_CONCURRENCY", "4")))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return 4
-    return value if value >= 1 else 4
+    return min(value, 100) if value >= 1 else 4
 
 try:
     from opentelemetry.propagate import inject

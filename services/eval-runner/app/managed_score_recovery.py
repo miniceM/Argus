@@ -30,6 +30,7 @@ Release Gate。
 from __future__ import annotations
 
 import os
+import threading
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -51,6 +52,11 @@ from .evaluation_recovery import (
 )
 
 WORK_TYPE_MANAGED = "MANAGED_SCORE"
+
+# Caller 超时不能终止阻塞 I/O 线程。直到线程真实退出才归还在途预算，
+# 使用非阻塞认领，既不累积等待协程，也不产生无界后台线程。
+_collection_slots_lock = threading.Lock()
+_collection_inflight = 0
 
 MANAGED_PENDING_CODE = "LANGFUSE_MANAGED_SCORES_PENDING"
 MANAGED_PENDING_MESSAGE = "LANGFUSE_MANAGED_SCORES_PENDING: Agent 已成功，Langfuse 正在评分，暂不可用于正式发布。"
@@ -181,8 +187,9 @@ def reconcile_managed_interruption(session, observed, *, require_expired: bool =
     from .db_models import ExperimentLaunchRecord as Launch
 
     item_id, launch_id = observed.id, observed.launch_id
-    generation, token, dispatch = (
-        observed.evaluation_generation, observed.evaluation_lease_token, observed.dispatch_generation
+    generation, token, dispatch, observed_status = (
+        observed.evaluation_generation, observed.evaluation_lease_token, observed.dispatch_generation,
+        observed.evaluation_status,
     )
     is_pg = session.bind.dialect.name == "postgresql"
     if not is_pg:
@@ -199,10 +206,16 @@ def reconcile_managed_interruption(session, observed, *, require_expired: bool =
     now = _now()
     if not item or not launch or not is_managed_manifest(launch.manifest):
         return False
-    if (item.evaluation_status != EVALUATION_RUNNING or item.evaluation_generation != generation
+    cancelled = bool(launch.cancel_requested_at or launch.status in ("CANCELLING", "CANCELLED"))
+    submission_gap = (
+        cancelled and not require_expired and item.evaluation_status == "none"
+        and item.execution_status == "succeeded" and item.eval_status == "pending"
+    )
+    if (item.evaluation_status != observed_status
+            or (item.evaluation_status != EVALUATION_RUNNING and not submission_gap)
+            or item.evaluation_generation != generation
             or item.evaluation_lease_token != token or item.dispatch_generation != dispatch):
         return False
-    cancelled = bool(launch.cancel_requested_at or launch.status in ("CANCELLING", "CANCELLED"))
     expiry = _as_utc(item.evaluation_lease_expires_at)
     if require_expired and (expiry is None or expiry > now):
         return False
@@ -444,12 +457,21 @@ def _collect_with_timeout(db_mgr, client_factory, launch_id: str, item_id: str, 
     主线程超时后不再触碰该连接（无跨线程 close 竞态），迟到写入
     仍由租约围栏保证无效。未配置客户端同样经报告归一终态，不烧退避。
     """
-    import threading
+    from .worker import _managed_slot_count
+
+    global _collection_inflight
+    if timeout_seconds <= 0:
+        return {"decisions": [{"reason": "TIMEOUT"}], "retry_after": None}
+    with _collection_slots_lock:
+        if _collection_inflight >= _managed_slot_count():
+            return {"decisions": [{"reason": "COLLECTOR_BUSY"}], "retry_after": None}
+        _collection_inflight += 1
 
     box: dict[str, Any] = {}
     worker_error: list[BaseException] = []
 
     def _run() -> None:
+        global _collection_inflight
         from .langfuse_managed_scores import ManagedScoreCollector
         from .langfuse_scores_client import ScoresV3Client as _ScoresV3Client
 
@@ -474,9 +496,17 @@ def _collect_with_timeout(db_mgr, client_factory, launch_id: str, item_id: str, 
                         pass
         except BaseException as exc:  # noqa: BLE001 - 与外层异常归一保持一致
             worker_error.append(exc)
+        finally:
+            with _collection_slots_lock:
+                _collection_inflight -= 1
 
     thread = threading.Thread(target=_run, name=f"managed-collect-{item_id[:8]}", daemon=True)
-    thread.start()
+    try:
+        thread.start()
+    except BaseException:
+        with _collection_slots_lock:
+            _collection_inflight -= 1
+        raise
     thread.join(timeout=timeout_seconds)
     if thread.is_alive():
         return {
@@ -912,6 +942,17 @@ def _finalize_success(
         adopted = [result_from_record(row) for row in adopted_rows]
         policy = manifest_quality_policy(manifest)
         decision = evaluate_quality_policy(adopted, policy, decided_by="QUALITY_POLICY")
+        # 锁内计算也可能耗时：在发布结论前再次校验即时租约和周期上界。
+        now = _now()
+        if now >= cycle_start + timedelta(seconds=get_retry_config()["deadline"]):
+            session.rollback()
+            return _fail_managed(
+                db_mgr, claim, error_code=MANAGED_DEADLINE_CODE,
+                error_message="托管评分终结时已超时，质量保持 UNKNOWN。", launch_id=launch_id,
+            )
+        if lease_exp <= now:
+            session.rollback()
+            return RecoveryOutcome(claimed=True, finalized=False, reason="SUPERSEDED_OR_LEASE_LOST")
         item.eval_status = "succeeded"
         item.eval_error = None
         item.quality_conclusion = decision.conclusion

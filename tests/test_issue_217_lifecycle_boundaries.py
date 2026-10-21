@@ -587,3 +587,169 @@ def test_late_attempt_start_cannot_spend_new_manual_cycle_budget(runtime, monkey
                                   worker_id="current", client_factory=lambda: Remote(obs, [good]))
     assert done["finalized"] and done["eval_status"] == "succeeded"
     assert len(rows(db, ExecutionAttemptRecord, item_id)) == 1
+
+
+def test_cancel_in_http_success_submission_gap_settles(runtime):
+    """HTTP 已持久成功但首轮提交前崩溃，取消也必须 settled。"""
+    from app.db_models import ExperimentItemExecutionRecord as Item
+    from app.db_models import RunResultSnapshotRecord as Snapshot
+
+    db, launch_id, item_id, _, _ = start(runtime)
+    with db.get_session() as session:
+        item = session.get(Item, item_id)
+        item.evaluation_status = "none"
+        item.evaluation_generation = 0
+        item.evaluation_started_at = None
+        item.available_at = None
+    runtime[3].cancel_launch(launch_id)
+    runtime[5].run_reconcile_cycle()
+    final = _item(db, item_id)
+    assert final.execution_status == "succeeded"
+    assert final.eval_status == final.evaluation_status == "failed"
+    assert "EVALUATION_CANCELLED" in final.evaluation_error
+    assert final.quality_conclusion == "unknown"
+    assert final.available_at is None and final.evaluation_lease_token is None
+    assert len(rows(db, ExecutionAttemptRecord, item_id)) == 1
+
+    with db.get_session() as session:
+        snapshot = session.scalar(select(Snapshot).where(Snapshot.launch_id == launch_id)
+                                  .order_by(Snapshot.revision.desc()))
+        assert snapshot is not None
+        assert snapshot.items[0]["eval_status"] == "failed"
+        assert snapshot.items[0]["quality_conclusion"] == "unknown"
+
+
+def test_replayed_failure_cannot_rewrite_same_lease_success_audit(runtime):
+    """即使晚到收尾带原胜出 token，已成功 attempt 也不可改写。"""
+    from app import managed_score_recovery as recovery
+
+    db, launch_id, item_id, obs, good = start(runtime)
+    claim_seen = []
+    original_claim = recovery.claim_evaluation
+
+    def claim(*args, **kwargs):
+        result = original_claim(*args, **kwargs)
+        claim_seen.append(result)
+        return result
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(recovery, "claim_evaluation", claim)
+        result = recover_managed_scores(
+            db, item_id=item_id, evaluation_generation=1, worker_id="winner",
+            client_factory=lambda: Remote(obs, [good]),
+        )
+    assert result["reason"] == "MANAGED_SCORES_ADOPTED"
+    before = rows(db, EvaluationAttemptRecord, item_id)[0]
+    rejected = _fail_managed(
+        db, claim_seen[0], launch_id=launch_id,
+        error_code="LATE_FAILURE", error_message="迟到重复收尾",
+    )
+    assert rejected["reason"] == "SUPERSEDED_OR_LEASE_LOST"
+    after = rows(db, EvaluationAttemptRecord, item_id)[0]
+    assert (after.status, after.completed_at, after.error_type) == (
+        before.status, before.completed_at, before.error_type,
+    )
+    assert after.status == "succeeded"
+    assert _item(db, item_id).quality_conclusion == "pass"
+    assert len(rows(db, ExecutionAttemptRecord, item_id)) == 1
+
+
+def test_finalize_cannot_publish_success_after_deadline_inside_policy(runtime, monkeypatch):
+    """锁内计算质量结论期间跨 Deadline，写入前仍需拒绝 PASS。"""
+    from app import managed_score_recovery as recovery
+    from app import quality_policy
+    from app.db_models import ExperimentItemExecutionRecord as Item
+
+    db, _, item_id, obs, good = start(runtime)
+    clock = [datetime.now(UTC)]
+    monkeypatch.setattr(recovery, "_now", lambda: clock[0])
+    monkeypatch.setenv("ARGUS_MANAGED_SCORE_DEADLINE_SECONDS", "1")
+    with db.get_session() as session:
+        session.get(Item, item_id).evaluation_started_at = clock[0]
+    evaluate = quality_policy.evaluate_quality_policy
+
+    def delayed(*args, **kwargs):
+        decision = evaluate(*args, **kwargs)
+        clock[0] += timedelta(seconds=2)
+        return decision
+
+    monkeypatch.setattr(quality_policy, "evaluate_quality_policy", delayed)
+    result = recover_managed_scores(
+        db, item_id=item_id, evaluation_generation=1, worker_id="late-policy",
+        client_factory=lambda: Remote(obs, [good]),
+    )
+    assert result["reason"] == "MANAGED_SCORES_DEADLINE_EXCEEDED"
+    final = _item(db, item_id)
+    assert final.eval_status == "failed" and final.quality_conclusion == "unknown"
+    assert len(rows(db, ExecutionAttemptRecord, item_id)) == 1
+
+
+def test_timed_out_collectors_still_count_towards_process_inflight_budget(monkeypatch):
+    """超时 caller 退场不等于远端线程退出，不能逃逸 Managed 在途上限。"""
+    import threading
+
+    from app import managed_score_recovery as recovery
+    from app.langfuse_managed_scores import ManagedScoreCollector
+
+    monkeypatch.setenv("ARGUS_MANAGED_SCORE_CONCURRENCY", "1")
+    entered, release, finished = threading.Event(), threading.Event(), threading.Event()
+    calls = []
+
+    def collect(*args, **kwargs):
+        calls.append(1)
+        entered.set()
+        try:
+            assert release.wait(5)
+            return {"decisions": []}
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(ManagedScoreCollector, "collect", collect)
+    try:
+        first = recovery._collect_with_timeout(
+            None, lambda: object(), "launch", "first", fence={}, timeout_seconds=0.02,
+        )
+        assert entered.is_set() and first["decisions"][0]["reason"] == "TIMEOUT"
+        second = recovery._collect_with_timeout(
+            None, lambda: object(), "launch", "second", fence={}, timeout_seconds=0.02,
+        )
+        assert len(calls) == 1
+        assert second["decisions"][0]["reason"] == "COLLECTOR_BUSY"
+    finally:
+        release.set()
+        assert finished.wait(5)
+
+
+@pytest.mark.parametrize("raw", ["inf", "-inf", "Infinity", "NaN", "1e309", "bad", "-1", "0"])
+def test_managed_concurrency_config_safely_falls_back(raw, monkeypatch):
+    from app.worker import _managed_slot_count
+
+    monkeypatch.setenv("ARGUS_MANAGED_SCORE_CONCURRENCY", raw)
+    assert _managed_slot_count() == 4
+
+
+def test_managed_concurrency_config_has_finite_upper_bound(monkeypatch):
+    from app.worker import _managed_slot_count
+
+    monkeypatch.setenv("ARGUS_MANAGED_SCORE_CONCURRENCY", "1e308")
+    assert _managed_slot_count() == 100
+
+
+def test_future_generation_cannot_skip_persisted_backoff(runtime):
+    """正式保留原独立探针：提前消息不能凭下一代身份绕过 available_at。"""
+    db, _, item_id, obs, good = start(runtime)
+    first = recover_managed_scores(
+        db, item_id=item_id, evaluation_generation=1, worker_id="first",
+        client_factory=lambda: Remote(obs, []),
+    )
+    assert first["reason"] == "RETRY_SCHEDULED"
+    waiting = _item(db, item_id)
+    assert waiting.available_at.replace(tzinfo=UTC) > datetime.now(UTC)
+    factory = Mock(return_value=Remote(obs, [good]))
+    early = recover_managed_scores(
+        db, item_id=item_id, evaluation_generation=waiting.evaluation_generation,
+        worker_id="premature", client_factory=factory,
+    )
+    assert not early["claimed"]
+    factory.assert_not_called()
+    assert len(rows(db, ExecutionAttemptRecord, item_id)) == 1

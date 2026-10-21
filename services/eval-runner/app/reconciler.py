@@ -525,7 +525,7 @@ class ExecutionReconciler:
         ``submit_managed_collection`` 补交。取消中的 Launch 永不补交；
         终态失败（``evaluation=failed``）不在此列，不复活。
         """
-        from .managed_score_recovery import is_managed_manifest
+        from .managed_score_recovery import is_managed_manifest, reconcile_managed_interruption
 
         candidate_ids: list[str] = []
         with self.db_mgr.get_session() as session:
@@ -536,6 +536,7 @@ class ExecutionReconciler:
                     ExperimentItemExecutionRecord.eval_status == "pending",
                     ExperimentItemExecutionRecord.evaluation_status == "none",
                 )
+                .order_by(ExperimentItemExecutionRecord.launch_id, ExperimentItemExecutionRecord.id)
                 .limit(limit * 2)
             ).all()
             launch_cache: dict[str, Any] = {}
@@ -546,15 +547,16 @@ class ExecutionReconciler:
                 if launch is None:
                     launch = session.get(ExperimentLaunchRecord, row.launch_id)
                     launch_cache[row.launch_id] = launch
-                if launch is None or launch.cancel_requested_at or launch.status in (
-                    "CANCELLING",
-                    "CANCELLED",
-                ):
+                if launch is None:
+                    continue
+                if launch.cancel_requested_at or launch.status in ("CANCELLING", "CANCELLED"):
+                    # HTTP 已提交、首轮评分未提交即中断的取消窗口同样必须 settled。
+                    reconcile_managed_interruption(session, row, require_expired=False)
                     continue
                 if not is_managed_manifest((launch.manifest if launch else {}) or {}):
                     continue
                 candidate_ids.append(row.id)
-            session.rollback()
+            session.commit()
         from .managed_score_recovery import submit_managed_collection
 
         submitted = 0

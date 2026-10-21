@@ -1,0 +1,109 @@
+{
+  "launch_id": "83e2ee30-0bd5-45f5-b78e-3d8fd74e01a2",
+  "snapshot_id": "ff52fdf6-7e71-4cd6-bcef-ecb550d95034",
+  "revision": 1,
+  "created_at": "2026-10-21T03:06:45.768889",
+  "manifest_digest": "602c1b607bddc426a6076dc64021bc5beac062d607c2cc518f7d9fe85caf791a",
+  "source_result_digest": "d616e0967b7378c9c01ce3495702c437a1a4759af1e1fa63f4c2614628a44cbb",
+  "evidence_state": "DIAGNOSTIC",
+  "evidence_reasons": [
+    "1/1 个用例评测失败或未产出结果 (1/1 cases have no usable evaluation result)",
+    "MANAGED_SCORE_UNVERIFIED:issue214-20261019t084028z-code",
+    "MANAGED_COLLECTION_NOT_COMPLETED"
+  ],
+  "versions": {
+    "dataset": {
+      "name": "issue214-20261019t084028z",
+      "version": "2026-10-21T03:04:13.501428+00:00",
+      "digest": "58d7eff0c9f4d1b5b84895c5ce434d8114a2b9921bc869defcbacb6dff1bf4c3"
+    },
+    "agent": {
+      "id": "issue217-20261021t030259z",
+      "version": "v2",
+      "spec_digest": "a018e60d2be116b3510cc015e544ceacc5002b5a71a449a5e81697169cab8d70",
+      "artifact_ref": "docker:flowiseai/flowise@sha256:cf880b17b1290fbaebebc76c33954bde67b3775aff95feec72a1d060cc81e43d"
+    },
+    "evaluators": [],
+    "runner": {
+      "runner_version": "0.2.0",
+      "build_id": "4d9346116ffe56deeb576cad73be0f3d22a9ccdb",
+      "mapping_engine_version": "sha256-mapping-engine-v1"
+    },
+    "environment": "issue218-20261021t030256z"
+  },
+  "summary": {
+    "total_cost": null,
+    "cost_per_case": null,
+    "cost_currency": null,
+    "cost_case_count": 0,
+    "cost_coverage": 0.0,
+    "cost_source": null,
+    "cost_scope": null,
+    "cost_policy_version": null,
+    "cost_partial": true,
+    "cost_unavailable_reason": "INCOMPLETE_ATTEMPT_COST",
+    "usage_tokens_per_case": null,
+    "usage_input_tokens_per_case": null,
+    "usage_output_tokens_per_case": null,
+    "usage_case_count": 0,
+    "usage_coverage": 0.0,
+    "usage_partial": true,
+    "usage_unavailable_reason": "COST_NOT_RECORDED",
+    "required_score_count": 2,
+    "verified_required_score_count": 1,
+    "required_score_coverage": 0.5,
+    "score_coverage": {
+      "issue214-20261019t084028z-judge": 1.0,
+      "issue214-20261019t084028z-code": 0.0
+    },
+    "pass_rate_denominator": 1,
+    "total_cases": 1,
+    "evaluated_cases": 0,
+    "passed_cases": 0,
+    "failed_quality_cases": 0,
+    "pass_rate": 0.0,
+    "evaluation_coverage": 0.0,
+    "quality_pass_count": 0,
+    "quality_fail_count": 0,
+    "quality_unknown_count": 1,
+    "decided_case_count": 0,
+    "decided_pass_rate": null,
+    "decision_coverage": 0.0,
+    "execution_error_count": 0,
+    "execution_error_rate": 0.0,
+    "evaluator_error_count": 1,
+    "critical_failure_count": 0,
+    "score_means": {
+      "issue214-20261019t084028z-judge": null,
+      "issue214-20261019t084028z-code": null
+    },
+    "score_counts": {
+      "issue214-20261019t084028z-judge": 0,
+      "issue214-20261019t084028z-code": 0
+    },
+    "score_result_types": {
+      "issue214-20261019t084028z-judge": "boolean",
+      "issue214-20261019t084028z-code": "boolean"
+    },
+    "p95_latency_ms": 7.0,
+    "usage_tokens_total": null
+  },
+  "langfuse_score_sync_status": "SYNCED",
+  "langfuse_sync": {
+    "overall": "SYNCED",
+    "item_trace": {
+      "status": "SYNCED",
+      "reason": null,
+      "task_count": 1,
+      "failed_count": 0,
+      "pending_count": 0
+    },
+    "run_score": {
+      "status": "SYNCED",
+      "reason": null,
+      "task_count": 1,
+      "failed_count": 0,
+      "pending_count": 0
+    }
+  }
+}

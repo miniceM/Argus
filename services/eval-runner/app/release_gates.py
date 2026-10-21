@@ -12,6 +12,7 @@ from .baselines import normalize_environment
 from .comparison_contracts import aggregation_comparison_digest, assess_comparability
 from .environment_contracts import comparison_environment_reasons
 from .evaluator_binding import canonical_digest
+from .managed_quality import evaluation_specs, managed_contract, managed_quality_decision
 from .runner_identity import RunnerIdentity
 
 ENGINE_VERSION = "release-gate-v4"
@@ -102,7 +103,7 @@ def frozen_environment(snapshot) -> str | None:
 
 
 def _summary(snapshot) -> dict[str, Any]:
-    summary = aggregate_run(snapshot.items, snapshot.manifest.get("evaluators", []))
+    summary = aggregate_run(snapshot.items, snapshot.manifest.get("evaluators", []), manifest=snapshot.manifest)
     if any((latency := _finite(item.get("latency_ms"))) is None or latency < 0 for item in snapshot.items):
         summary["p95_latency_ms"] = None
     # S3.1 的逐规则 critical 证据比旧数字阈值聚合更精确（也支持布尔与分类）。
@@ -131,7 +132,8 @@ def _evidence_reasons(snapshot, label: str) -> list[str]:
     if not provenance.comparable:
         reasons.extend(provenance.reason_codes)
     frozen_aggregation = snapshot.manifest.get("contract_digests", {}).get("aggregation_comparison", {}).get("digest")
-    if frozen_aggregation and frozen_aggregation != aggregation_comparison_digest():
+    if frozen_aggregation and frozen_aggregation != aggregation_comparison_digest(
+            managed=snapshot.manifest.get("evaluation_source") == "langfuse_managed"):
         reasons.append("AGGREGATION_CONTRACT_UNSUPPORTED")
     dataset = snapshot.manifest.get("dataset", {})
     def frozen_version(value):
@@ -142,9 +144,24 @@ def _evidence_reasons(snapshot, label: str) -> list[str]:
     agent = snapshot.manifest.get("agent") or {}
     if agent.get("agent_id") != snapshot.agent_id or not frozen_version(agent.get("version")):
         reasons.append("AGENT_IDENTITY_UNKNOWN")
-    evaluators = snapshot.manifest.get("evaluators") or []
-    if not evaluators or any(not spec.get("id") or not frozen_version(spec.get("version")) for spec in evaluators):
-        reasons.append("EVALUATOR_IDENTITY_UNKNOWN")
+    if snapshot.manifest.get("evaluation_source") == "langfuse_managed":
+        if (snapshot.manifest_digest != canonical_digest(snapshot.manifest).removeprefix("sha256:")
+                or snapshot.source_result_digest != canonical_digest(snapshot.items).removeprefix("sha256:")):
+            reasons.append(f"{label}_FROZEN_DIGEST_MISMATCH")
+        try:
+            managed_contract(snapshot.manifest)
+        except (ValueError, KeyError, TypeError, AttributeError):
+            reasons.append(f"{label}_MANAGED_CONTRACT_INVALID")
+        for item in snapshot.items:
+            decision, invalid = managed_quality_decision(snapshot.manifest, item, snapshot.launch_id)
+            if (invalid or decision.conclusion == "unknown"
+                    or decision.conclusion != item.get("quality_conclusion")
+                    or decision.payload() != item.get("quality_evaluation")):
+                reasons.append(f"{label}_MANAGED_EVIDENCE_INCOMPLETE")
+    else:
+        evaluators = snapshot.manifest.get("evaluators") or []
+        if not evaluators or any(not spec.get("id") or not frozen_version(spec.get("version")) for spec in evaluators):
+            reasons.append("EVALUATOR_IDENTITY_UNKNOWN")
     runner = snapshot.manifest.get("runner") or {}
     identity = RunnerIdentity(runner.get("runner_version", ""), runner.get("build_id", ""), runner.get("mapping_engine_version", ""))
     if not identity.is_reliable or not frozen_version(identity.runner_version):
@@ -172,8 +189,8 @@ def _comparison(candidate, baseline) -> tuple[dict[str, Any], list[str]]:
         reasons.append("COMPARISON_COVERAGE_INCOMPLETE")
     differences = [compare_case_results(
         before.get(case_id), after.get(case_id),
-        baseline_evaluators=baseline.manifest.get("evaluators", []),
-        evaluator_specs=candidate.manifest.get("evaluators", []),
+        baseline_evaluators=evaluation_specs(baseline.manifest),
+        evaluator_specs=evaluation_specs(candidate.manifest),
     ) for case_id in sorted(before.keys() | after.keys())]
     reasons.extend(diff.get("reason", "CASE_NOT_COMPARABLE") for diff in differences
                    if diff["classification"] == "NOT_COMPARABLE")

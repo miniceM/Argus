@@ -1,0 +1,63 @@
+{
+  "decision": "FAIL",
+  "releasable": false,
+  "engine_version": "release-gate-v4",
+  "candidate_snapshot_id": "5314bc24-1ae5-4bb7-839b-aa313b4a43c7",
+  "baseline_snapshot_id": null,
+  "reason_codes": [
+    "THRESHOLD_VIOLATED"
+  ],
+  "rules": [
+    {
+      "id": "quality",
+      "metric": "pass_rate",
+      "operator": ">=",
+      "threshold": 1.0,
+      "actual": 0.0,
+      "conclusion": "FAIL",
+      "reason": "THRESHOLD_VIOLATED"
+    },
+    {
+      "id": "coverage",
+      "metric": "evaluation_coverage",
+      "operator": ">=",
+      "threshold": 1.0,
+      "actual": 1.0,
+      "conclusion": "PASS",
+      "reason": "THRESHOLD_SATISFIED"
+    }
+  ],
+  "id": "c47715ff-07ae-44b8-9864-bf037ae754e3",
+  "created_at": "2026-10-21T03:04:10.978027Z",
+  "policy": {
+    "name": "issue218-20261021t030256z",
+    "version": "1.0.0",
+    "agent_id": "issue217-20261021t030259z",
+    "environment": "issue218-20261021t030256z",
+    "block_critical_failures": true,
+    "rules": [
+      {
+        "id": "quality",
+        "metric": "pass_rate",
+        "operator": ">=",
+        "threshold": 1.0
+      },
+      {
+        "id": "coverage",
+        "metric": "evaluation_coverage",
+        "operator": ">=",
+        "threshold": 1.0
+      }
+    ]
+  },
+  "policy_digest": "sha256:1cdeb7489d11d3f073b62483790cf1b005c5b7e98e14437def1b6ab3edb5fd1e",
+  "candidate_launch_id": "4a7194eb-481f-43d4-aa1c-d88082168752",
+  "candidate_revision": 1,
+  "candidate_manifest_digest": "425252455ac1e76d68b88a59608210e752fc08d04622092828c1d79cdc92cc89",
+  "candidate_source_result_digest": "28a80bf9bb28dacdd434a6f66f43f3e304147c8aefb583c86d3dcd6494830c1b",
+  "baseline_revision": null,
+  "baseline_manifest_digest": null,
+  "baseline_source_result_digest": null,
+  "report_url": "http://localhost:18083/launches/4a7194eb-481f-43d4-aa1c-d88082168752?snapshot_id=5314bc24-1ae5-4bb7-839b-aa313b4a43c7",
+  "comparison_url": "http://localhost:18083/launches/4a7194eb-481f-43d4-aa1c-d88082168752?snapshot_id=5314bc24-1ae5-4bb7-839b-aa313b4a43c7&tab=comparison"
+}

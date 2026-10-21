@@ -290,12 +290,20 @@ def _project_scores(
     generation = int(payload.get("dispatch_generation") or 1)
     typed = scores.get("_typed_results")
 
+    if scores.get("_evaluation_source") == "langfuse_managed":
+        return _append_platform_usage_score(
+            [], payload, scores=scores, snapshot_id=snapshot_id, revision=revision,
+        )
+
     if isinstance(typed, list) and typed:
         projected = []
         for entry in typed:
             if not isinstance(entry, dict):
                 continue
             provenance = entry.get("provenance") or {}
+            # 外部原始 Score 已由 Langfuse 持有，绝不能作为 Argus 新 Score 回写。
+            if provenance.get("executor_type") == "langfuse_managed":
+                continue
             score = project_typed_result(
                 entry,
                 item_id=item_id,

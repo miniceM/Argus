@@ -1,0 +1,413 @@
+[
+  [
+    {
+      "id": "b03e3c62-3abf-4749-8596-62b82253d1cb",
+      "launch_id": "4a7194eb-481f-43d4-aa1c-d88082168752",
+      "dataset_item_id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+      "execution_status": "queued",
+      "eval_status": "pending",
+      "quality_conclusion": "unknown",
+      "execution_error": null,
+      "eval_error": null,
+      "trace_id": null,
+      "observation_id": null,
+      "langfuse_trace_url": null,
+      "final_attempt_id": null,
+      "scores": null,
+      "evaluation_results": [],
+      "quality_evaluation": null,
+      "evaluation_status": "none",
+      "evaluation_generation": 0,
+      "evaluation_error": null,
+      "evaluation_reused_output_digest": null,
+      "evaluation_recoverable": false,
+      "attempt_count": 0,
+      "final_attempt_http_status": null,
+      "final_attempt_latency_ms": null,
+      "queued_at": "2026-10-21T03:03:55.912464",
+      "available_at": null,
+      "lease_owner": null,
+      "dispatch_generation": 1,
+      "started_at": null,
+      "completed_at": null
+    }
+  ],
+  [
+    {
+      "id": "b03e3c62-3abf-4749-8596-62b82253d1cb",
+      "launch_id": "4a7194eb-481f-43d4-aa1c-d88082168752",
+      "dataset_item_id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+      "execution_status": "succeeded",
+      "eval_status": "pending",
+      "quality_conclusion": "unknown",
+      "execution_error": null,
+      "eval_error": "LANGFUSE_MANAGED_SCORES_PENDING: Agent 已成功，Langfuse 正在评分，暂不可用于正式发布。",
+      "trace_id": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+      "observation_id": "6197f96f12bf420d",
+      "langfuse_trace_url": "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/f3543b0d4f69b2f27e2d5ec3633b6fc7",
+      "final_attempt_id": "ffef5ee3-d3aa-46d2-8896-13e522a728b3",
+      "scores": {},
+      "evaluation_results": [],
+      "quality_evaluation": {
+        "conclusion": "unknown",
+        "policy_id": "langfuse-managed",
+        "policy_version": "1.0",
+        "policy_digest": "sha256:3a58a1493f0ec4e75d689901b81be8f399fd91ca02cd3d703980e96fb9241418",
+        "decided_by": "QUALITY_POLICY",
+        "releasable": false,
+        "unknown_reasons": [
+          "必要指标 'issue214-20261019t084028z-judge' 没有结果，证据不足，无法判定通过或不通过。",
+          "必要指标 'issue214-20261019t084028z-code' 没有结果，证据不足，无法判定通过或不通过。"
+        ],
+        "rules": [
+          {
+            "evaluator_id": "issue214-20261019t084028z-judge",
+            "result_type": "boolean",
+            "required": true,
+            "critical": false,
+            "operator": "==",
+            "expected": true,
+            "observed_value": null,
+            "observed_status": null,
+            "conclusion": "unknown",
+            "reason_code": "QUALITY_EVIDENCE_MISSING",
+            "explanation": "必要指标 'issue214-20261019t084028z-judge' 没有结果，证据不足，无法判定通过或不通过。"
+          },
+          {
+            "evaluator_id": "issue214-20261019t084028z-code",
+            "result_type": "boolean",
+            "required": true,
+            "critical": false,
+            "operator": "==",
+            "expected": true,
+            "observed_value": null,
+            "observed_status": null,
+            "conclusion": "unknown",
+            "reason_code": "QUALITY_EVIDENCE_MISSING",
+            "explanation": "必要指标 'issue214-20261019t084028z-code' 没有结果，证据不足，无法判定通过或不通过。"
+          }
+        ]
+      },
+      "evaluation_status": "evaluating",
+      "evaluation_generation": 3,
+      "evaluation_error": "OBSERVATION_AMBIGUOUS_OR_MISSING: 托管评分未齐，6.0s 后自动重试，不会再次调用 Agent。",
+      "evaluation_reused_output_digest": null,
+      "evaluation_recoverable": true,
+      "attempt_count": 1,
+      "final_attempt_http_status": 200,
+      "final_attempt_latency_ms": 1,
+      "queued_at": "2026-10-21T03:03:55.912464",
+      "available_at": "2026-10-21T03:04:06.693699",
+      "lease_owner": null,
+      "dispatch_generation": 1,
+      "started_at": "2026-10-21T03:03:55.962548",
+      "completed_at": "2026-10-21T03:03:56.147749"
+    }
+  ],
+  [
+    {
+      "id": "b03e3c62-3abf-4749-8596-62b82253d1cb",
+      "launch_id": "4a7194eb-481f-43d4-aa1c-d88082168752",
+      "dataset_item_id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+      "execution_status": "succeeded",
+      "eval_status": "pending",
+      "quality_conclusion": "unknown",
+      "execution_error": null,
+      "eval_error": "LANGFUSE_MANAGED_SCORES_PENDING: Agent 已成功，Langfuse 正在评分，暂不可用于正式发布。",
+      "trace_id": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+      "observation_id": "6197f96f12bf420d",
+      "langfuse_trace_url": "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/f3543b0d4f69b2f27e2d5ec3633b6fc7",
+      "final_attempt_id": "ffef5ee3-d3aa-46d2-8896-13e522a728b3",
+      "scores": {},
+      "evaluation_results": [],
+      "quality_evaluation": {
+        "conclusion": "unknown",
+        "policy_id": "langfuse-managed",
+        "policy_version": "1.0",
+        "policy_digest": "sha256:3a58a1493f0ec4e75d689901b81be8f399fd91ca02cd3d703980e96fb9241418",
+        "decided_by": "QUALITY_POLICY",
+        "releasable": false,
+        "unknown_reasons": [
+          "必要指标 'issue214-20261019t084028z-judge' 没有结果，证据不足，无法判定通过或不通过。",
+          "必要指标 'issue214-20261019t084028z-code' 没有结果，证据不足，无法判定通过或不通过。"
+        ],
+        "rules": [
+          {
+            "evaluator_id": "issue214-20261019t084028z-judge",
+            "result_type": "boolean",
+            "required": true,
+            "critical": false,
+            "operator": "==",
+            "expected": true,
+            "observed_value": null,
+            "observed_status": null,
+            "conclusion": "unknown",
+            "reason_code": "QUALITY_EVIDENCE_MISSING",
+            "explanation": "必要指标 'issue214-20261019t084028z-judge' 没有结果，证据不足，无法判定通过或不通过。"
+          },
+          {
+            "evaluator_id": "issue214-20261019t084028z-code",
+            "result_type": "boolean",
+            "required": true,
+            "critical": false,
+            "operator": "==",
+            "expected": true,
+            "observed_value": null,
+            "observed_status": null,
+            "conclusion": "unknown",
+            "reason_code": "QUALITY_EVIDENCE_MISSING",
+            "explanation": "必要指标 'issue214-20261019t084028z-code' 没有结果，证据不足，无法判定通过或不通过。"
+          }
+        ]
+      },
+      "evaluation_status": "evaluating",
+      "evaluation_generation": 3,
+      "evaluation_error": "OBSERVATION_AMBIGUOUS_OR_MISSING: 托管评分未齐，6.0s 后自动重试，不会再次调用 Agent。",
+      "evaluation_reused_output_digest": null,
+      "evaluation_recoverable": true,
+      "attempt_count": 1,
+      "final_attempt_http_status": 200,
+      "final_attempt_latency_ms": 1,
+      "queued_at": "2026-10-21T03:03:55.912464",
+      "available_at": "2026-10-21T03:04:06.693699",
+      "lease_owner": null,
+      "dispatch_generation": 1,
+      "started_at": "2026-10-21T03:03:55.962548",
+      "completed_at": "2026-10-21T03:03:56.147749"
+    }
+  ],
+  [
+    {
+      "id": "b03e3c62-3abf-4749-8596-62b82253d1cb",
+      "launch_id": "4a7194eb-481f-43d4-aa1c-d88082168752",
+      "dataset_item_id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+      "execution_status": "succeeded",
+      "eval_status": "succeeded",
+      "quality_conclusion": "fail",
+      "execution_error": null,
+      "eval_error": null,
+      "trace_id": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+      "observation_id": "6197f96f12bf420d",
+      "langfuse_trace_url": "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/f3543b0d4f69b2f27e2d5ec3633b6fc7",
+      "final_attempt_id": "ffef5ee3-d3aa-46d2-8896-13e522a728b3",
+      "scores": {},
+      "evaluation_results": [
+        {
+          "evaluator_id": "issue214-20261019t084028z-code",
+          "evaluator_version": null,
+          "result_type": "boolean",
+          "status": "succeeded",
+          "value": false,
+          "normalized_value": null,
+          "comment": null,
+          "evidence": {
+            "launch_id": "4a7194eb-481f-43d4-aa1c-d88082168752",
+            "item_execution_id": "b03e3c62-3abf-4749-8596-62b82253d1cb",
+            "dataset_item_id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+            "trace_id": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+            "observation_id": "6197f96f12bf420d",
+            "dispatch_generation": 1,
+            "evaluation_generation": 3,
+            "final_attempt_id": "ffef5ee3-d3aa-46d2-8896-13e522a728b3",
+            "manifest_digest": "sha256:425252455ac1e76d68b88a59608210e752fc08d04622092828c1d79cdc92cc89",
+            "manifest_schema_version": "1.2",
+            "acceptance_digest": "sha256:76d1d71ad3fb9d689ca2fbde2e0b16d9999615d0bf784394adbf5b3c1089cc0e",
+            "checkpoint_id": "cp_3799fa5263ad4434b87bf4a7",
+            "output_digest": "sha256:c9d6b860217600e5fd585ffecdac8aa4f1836a44674e68bc5dcce0e6764b8ce4",
+            "input_digest": "sha256:d78b83dac632afdad275b01179ffc3a0919d1228e5b39004d28d02f253e9d714",
+            "score": {
+              "id": "bd9733ce-e692-5d0a-8cb1-766331815f6c",
+              "projectId": "cmu5a6fj500aoad0jvrckiypb",
+              "name": "issue214-20261019t084028z-code",
+              "dataType": "BOOLEAN",
+              "value": false,
+              "source": "EVAL",
+              "subject": {
+                "kind": "observation",
+                "id": "6197f96f12bf420d",
+                "traceId": "f3543b0d4f69b2f27e2d5ec3633b6fc7"
+              },
+              "environment": "issue218-20261021t030256z",
+              "timestamp": "2026-10-21T03:03:56.801Z",
+              "createdAt": "2026-10-21T03:03:57.000Z",
+              "updatedAt": "2026-10-21T03:03:56.900Z",
+              "configId": null,
+              "metadata": {
+                "evaluation_rule_id": "cmvhj1wpi005qad0efj1v0ecc",
+                "job_configuration_id": "cmvhj1wpi005qad0efj1v0ecc",
+                "evaluation_rule_assignment_id": "cmvhj1wpi005sad0ef8jnz5z6",
+                "evaluator_id": "cmvf083f50034ad0gbpddxpar",
+                "evaluator_version_id": "cmvf083f50036ad0ggpilrl84",
+                "job_execution_id": "99d0736a90935fd9314c34b8764284e3",
+                "target_trace_id": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+                "target_observation_id": "6197f96f12bf420d",
+                "dispatcher_name": "aws-lambda",
+                "code_eval_runtime": "PYTHON",
+                "input_sha256": "84977285e9c8c1dff9b282682caf64a6542631869404851751d5cf117993a21e",
+                "output_sha256": "c9d6b860217600e5fd585ffecdac8aa4f1836a44674e68bc5dcce0e6764b8ce4"
+              }
+            },
+            "observed_at": "2026-10-21T03:04:08.133072+00:00",
+            "observation_io_digests": {
+              "input": "84977285e9c8c1dff9b282682caf64a6542631869404851751d5cf117993a21e",
+              "output": "c9d6b860217600e5fd585ffecdac8aa4f1836a44674e68bc5dcce0e6764b8ce4"
+            },
+            "observation": {
+              "id": "6197f96f12bf420d",
+              "traceId": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+              "name": "remote-agent-http",
+              "type": "TOOL",
+              "projectId": "cmu5a6fj500aoad0jvrckiypb",
+              "environment": "issue218-20261021t030256z",
+              "startTime": "2026-10-21T03:03:56.145Z"
+            },
+            "score_url": "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/f3543b0d4f69b2f27e2d5ec3633b6fc7?observation=6197f96f12bf420d"
+          },
+          "duration_ms": null,
+          "error_code": null,
+          "error_message": null,
+          "provenance": {
+            "binding_id": "sha256:76d1d71ad3fb9d689ca2fbde2e0b16d9999615d0bf784394adbf5b3c1089cc0e",
+            "evaluator_id": "issue214-20261019t084028z-code",
+            "evaluator_version": null,
+            "definition_digest": "sha256:76d1d71ad3fb9d689ca2fbde2e0b16d9999615d0bf784394adbf5b3c1089cc0e",
+            "executor_type": "langfuse_managed",
+            "manifest_schema_version": "1.2",
+            "contract_status": "MANAGED_SCORE_VERIFIED"
+          }
+        },
+        {
+          "evaluator_id": "issue214-20261019t084028z-judge",
+          "evaluator_version": null,
+          "result_type": "boolean",
+          "status": "succeeded",
+          "value": false,
+          "normalized_value": null,
+          "comment": null,
+          "evidence": {
+            "launch_id": "4a7194eb-481f-43d4-aa1c-d88082168752",
+            "item_execution_id": "b03e3c62-3abf-4749-8596-62b82253d1cb",
+            "dataset_item_id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+            "trace_id": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+            "observation_id": "6197f96f12bf420d",
+            "dispatch_generation": 1,
+            "evaluation_generation": 3,
+            "final_attempt_id": "ffef5ee3-d3aa-46d2-8896-13e522a728b3",
+            "manifest_digest": "sha256:425252455ac1e76d68b88a59608210e752fc08d04622092828c1d79cdc92cc89",
+            "manifest_schema_version": "1.2",
+            "acceptance_digest": "sha256:76d1d71ad3fb9d689ca2fbde2e0b16d9999615d0bf784394adbf5b3c1089cc0e",
+            "checkpoint_id": "cp_3799fa5263ad4434b87bf4a7",
+            "output_digest": "sha256:c9d6b860217600e5fd585ffecdac8aa4f1836a44674e68bc5dcce0e6764b8ce4",
+            "input_digest": "sha256:d78b83dac632afdad275b01179ffc3a0919d1228e5b39004d28d02f253e9d714",
+            "score": {
+              "id": "bcc598ad-dd82-52be-82f6-69add32762f7",
+              "projectId": "cmu5a6fj500aoad0jvrckiypb",
+              "name": "issue214-20261019t084028z-judge",
+              "dataType": "BOOLEAN",
+              "value": false,
+              "source": "EVAL",
+              "subject": {
+                "kind": "observation",
+                "id": "6197f96f12bf420d",
+                "traceId": "f3543b0d4f69b2f27e2d5ec3633b6fc7"
+              },
+              "environment": "issue218-20261021t030256z",
+              "timestamp": "2026-10-21T03:03:58.610Z",
+              "createdAt": "2026-10-21T03:03:59.000Z",
+              "updatedAt": "2026-10-21T03:03:59.243Z",
+              "configId": null,
+              "metadata": {
+                "evaluation_rule_id": "cmvhj1t65005lad0e0am5nifu",
+                "job_configuration_id": "cmvhj1t65005lad0e0am5nifu",
+                "evaluation_rule_assignment_id": "cmvhj1t65005nad0ejs0t4f9j",
+                "evaluator_id": "cmvf082z1002uad0gkb42lwel",
+                "evaluator_version_id": "cmvf082z1002wad0g6y71t1r8",
+                "job_execution_id": "6c7a67add3876865664d63a66de5a046",
+                "target_trace_id": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+                "target_observation_id": "6197f96f12bf420d"
+              }
+            },
+            "observed_at": "2026-10-21T03:04:08.132702+00:00",
+            "observation_io_digests": {
+              "input": "84977285e9c8c1dff9b282682caf64a6542631869404851751d5cf117993a21e",
+              "output": "c9d6b860217600e5fd585ffecdac8aa4f1836a44674e68bc5dcce0e6764b8ce4"
+            },
+            "observation": {
+              "id": "6197f96f12bf420d",
+              "traceId": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+              "name": "remote-agent-http",
+              "type": "TOOL",
+              "projectId": "cmu5a6fj500aoad0jvrckiypb",
+              "environment": "issue218-20261021t030256z",
+              "startTime": "2026-10-21T03:03:56.145Z"
+            },
+            "score_url": "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/f3543b0d4f69b2f27e2d5ec3633b6fc7?observation=6197f96f12bf420d"
+          },
+          "duration_ms": null,
+          "error_code": null,
+          "error_message": null,
+          "provenance": {
+            "binding_id": "sha256:76d1d71ad3fb9d689ca2fbde2e0b16d9999615d0bf784394adbf5b3c1089cc0e",
+            "evaluator_id": "issue214-20261019t084028z-judge",
+            "evaluator_version": null,
+            "definition_digest": "sha256:76d1d71ad3fb9d689ca2fbde2e0b16d9999615d0bf784394adbf5b3c1089cc0e",
+            "executor_type": "langfuse_managed",
+            "manifest_schema_version": "1.2",
+            "contract_status": "MANAGED_SCORE_VERIFIED"
+          }
+        }
+      ],
+      "quality_evaluation": {
+        "conclusion": "fail",
+        "policy_id": "langfuse-managed",
+        "policy_version": "1.0",
+        "policy_digest": "sha256:3a58a1493f0ec4e75d689901b81be8f399fd91ca02cd3d703980e96fb9241418",
+        "decided_by": "QUALITY_POLICY",
+        "releasable": true,
+        "unknown_reasons": [],
+        "rules": [
+          {
+            "evaluator_id": "issue214-20261019t084028z-judge",
+            "result_type": "boolean",
+            "required": true,
+            "critical": false,
+            "operator": "==",
+            "expected": true,
+            "observed_value": false,
+            "observed_status": "succeeded",
+            "conclusion": "fail",
+            "reason_code": "QUALITY_RULE_VIOLATED",
+            "explanation": "必要指标 'issue214-20261019t084028z-judge' 违反规则：实际值 false 与期望 true 不一致。"
+          },
+          {
+            "evaluator_id": "issue214-20261019t084028z-code",
+            "result_type": "boolean",
+            "required": true,
+            "critical": false,
+            "operator": "==",
+            "expected": true,
+            "observed_value": false,
+            "observed_status": "succeeded",
+            "conclusion": "fail",
+            "reason_code": "QUALITY_RULE_VIOLATED",
+            "explanation": "必要指标 'issue214-20261019t084028z-code' 违反规则：实际值 false 与期望 true 不一致。"
+          }
+        ]
+      },
+      "evaluation_status": "recovered",
+      "evaluation_generation": 3,
+      "evaluation_error": null,
+      "evaluation_reused_output_digest": null,
+      "evaluation_recoverable": true,
+      "attempt_count": 1,
+      "final_attempt_http_status": 200,
+      "final_attempt_latency_ms": 1,
+      "queued_at": "2026-10-21T03:03:55.912464",
+      "available_at": null,
+      "lease_owner": null,
+      "dispatch_generation": 1,
+      "started_at": "2026-10-21T03:03:55.962548",
+      "completed_at": "2026-10-21T03:03:56.147749"
+    }
+  ]
+]

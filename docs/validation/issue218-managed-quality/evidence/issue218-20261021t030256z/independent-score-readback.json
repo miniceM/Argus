@@ -1,0 +1,276 @@
+{
+  "status": "PASS",
+  "method": "independent read-only ScoresV3Client GET",
+  "checks": [
+    {
+      "scenario": "pass",
+      "snapshot_id": "53409979-aec9-439d-85ee-70dcafc4b23d",
+      "score_name": "issue214-20261019t084028z-judge",
+      "rows": [
+        {
+          "id": "db78e74c-ad9c-541c-a073-02028dd9e597",
+          "projectId": "cmu5a6fj500aoad0jvrckiypb",
+          "name": "issue214-20261019t084028z-judge",
+          "dataType": "BOOLEAN",
+          "value": true,
+          "source": "EVAL",
+          "subject": {
+            "kind": "observation",
+            "id": "26afaf7a19da1da6",
+            "traceId": "e0cae644f1dc1c5386e145fe990368d1"
+          },
+          "environment": "issue218-20261021t030256z",
+          "timestamp": "2026-10-21T03:03:32.822Z",
+          "createdAt": "2026-10-21T03:03:33.000Z",
+          "updatedAt": "2026-10-21T03:03:32.928Z",
+          "configId": null,
+          "metadata": {
+            "evaluation_rule_id": "cmvhj1t65005lad0e0am5nifu",
+            "job_configuration_id": "cmvhj1t65005lad0e0am5nifu",
+            "evaluation_rule_assignment_id": "cmvhj1t65005nad0ejs0t4f9j",
+            "evaluator_id": "cmvf082z1002uad0gkb42lwel",
+            "evaluator_version_id": "cmvf082z1002wad0g6y71t1r8",
+            "job_execution_id": "725f263533731ef262d7b27e691ede09",
+            "target_trace_id": "e0cae644f1dc1c5386e145fe990368d1",
+            "target_observation_id": "26afaf7a19da1da6"
+          }
+        }
+      ],
+      "matches_frozen_adoption": true
+    },
+    {
+      "scenario": "pass",
+      "snapshot_id": "53409979-aec9-439d-85ee-70dcafc4b23d",
+      "score_name": "issue214-20261019t084028z-code",
+      "rows": [
+        {
+          "id": "8136afc7-76e2-52b7-9fd6-28206a2be79a",
+          "projectId": "cmu5a6fj500aoad0jvrckiypb",
+          "name": "issue214-20261019t084028z-code",
+          "dataType": "BOOLEAN",
+          "value": true,
+          "source": "EVAL",
+          "subject": {
+            "kind": "observation",
+            "id": "26afaf7a19da1da6",
+            "traceId": "e0cae644f1dc1c5386e145fe990368d1"
+          },
+          "environment": "issue218-20261021t030256z",
+          "timestamp": "2026-10-21T03:03:31.419Z",
+          "createdAt": "2026-10-21T03:03:32.000Z",
+          "updatedAt": "2026-10-21T03:03:31.560Z",
+          "configId": null,
+          "metadata": {
+            "evaluation_rule_id": "cmvhj1wpi005qad0efj1v0ecc",
+            "job_configuration_id": "cmvhj1wpi005qad0efj1v0ecc",
+            "evaluation_rule_assignment_id": "cmvhj1wpi005sad0ef8jnz5z6",
+            "evaluator_id": "cmvf083f50034ad0gbpddxpar",
+            "evaluator_version_id": "cmvf083f50036ad0ggpilrl84",
+            "job_execution_id": "b0186ae0a4006a8f3378f22a7f9ddc98",
+            "target_trace_id": "e0cae644f1dc1c5386e145fe990368d1",
+            "target_observation_id": "26afaf7a19da1da6",
+            "dispatcher_name": "aws-lambda",
+            "code_eval_runtime": "PYTHON",
+            "input_sha256": "77826f481b25e2526f6b39e47b2f6bea2d438cccd249d5f3e953cc3fa617a962",
+            "output_sha256": "0aec68b889d646824a3bfd6d3e9d6ecac396629280b39606100928c207ba0a3b"
+          }
+        }
+      ],
+      "matches_frozen_adoption": true
+    },
+    {
+      "scenario": "fail",
+      "snapshot_id": "5314bc24-1ae5-4bb7-839b-aa313b4a43c7",
+      "score_name": "issue214-20261019t084028z-judge",
+      "rows": [
+        {
+          "id": "bcc598ad-dd82-52be-82f6-69add32762f7",
+          "projectId": "cmu5a6fj500aoad0jvrckiypb",
+          "name": "issue214-20261019t084028z-judge",
+          "dataType": "BOOLEAN",
+          "value": false,
+          "source": "EVAL",
+          "subject": {
+            "kind": "observation",
+            "id": "6197f96f12bf420d",
+            "traceId": "f3543b0d4f69b2f27e2d5ec3633b6fc7"
+          },
+          "environment": "issue218-20261021t030256z",
+          "timestamp": "2026-10-21T03:03:58.610Z",
+          "createdAt": "2026-10-21T03:03:59.000Z",
+          "updatedAt": "2026-10-21T03:03:59.243Z",
+          "configId": null,
+          "metadata": {
+            "evaluation_rule_id": "cmvhj1t65005lad0e0am5nifu",
+            "job_configuration_id": "cmvhj1t65005lad0e0am5nifu",
+            "evaluation_rule_assignment_id": "cmvhj1t65005nad0ejs0t4f9j",
+            "evaluator_id": "cmvf082z1002uad0gkb42lwel",
+            "evaluator_version_id": "cmvf082z1002wad0g6y71t1r8",
+            "job_execution_id": "6c7a67add3876865664d63a66de5a046",
+            "target_trace_id": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+            "target_observation_id": "6197f96f12bf420d"
+          }
+        }
+      ],
+      "matches_frozen_adoption": true
+    },
+    {
+      "scenario": "fail",
+      "snapshot_id": "5314bc24-1ae5-4bb7-839b-aa313b4a43c7",
+      "score_name": "issue214-20261019t084028z-code",
+      "rows": [
+        {
+          "id": "bd9733ce-e692-5d0a-8cb1-766331815f6c",
+          "projectId": "cmu5a6fj500aoad0jvrckiypb",
+          "name": "issue214-20261019t084028z-code",
+          "dataType": "BOOLEAN",
+          "value": false,
+          "source": "EVAL",
+          "subject": {
+            "kind": "observation",
+            "id": "6197f96f12bf420d",
+            "traceId": "f3543b0d4f69b2f27e2d5ec3633b6fc7"
+          },
+          "environment": "issue218-20261021t030256z",
+          "timestamp": "2026-10-21T03:03:56.801Z",
+          "createdAt": "2026-10-21T03:03:57.000Z",
+          "updatedAt": "2026-10-21T03:03:56.900Z",
+          "configId": null,
+          "metadata": {
+            "evaluation_rule_id": "cmvhj1wpi005qad0efj1v0ecc",
+            "job_configuration_id": "cmvhj1wpi005qad0efj1v0ecc",
+            "evaluation_rule_assignment_id": "cmvhj1wpi005sad0ef8jnz5z6",
+            "evaluator_id": "cmvf083f50034ad0gbpddxpar",
+            "evaluator_version_id": "cmvf083f50036ad0ggpilrl84",
+            "job_execution_id": "99d0736a90935fd9314c34b8764284e3",
+            "target_trace_id": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+            "target_observation_id": "6197f96f12bf420d",
+            "dispatcher_name": "aws-lambda",
+            "code_eval_runtime": "PYTHON",
+            "input_sha256": "84977285e9c8c1dff9b282682caf64a6542631869404851751d5cf117993a21e",
+            "output_sha256": "c9d6b860217600e5fd585ffecdac8aa4f1836a44674e68bc5dcce0e6764b8ce4"
+          }
+        }
+      ],
+      "matches_frozen_adoption": true
+    },
+    {
+      "scenario": "missing",
+      "snapshot_id": "ff52fdf6-7e71-4cd6-bcef-ecb550d95034",
+      "score_name": "issue214-20261019t084028z-judge",
+      "rows": [
+        {
+          "id": "59fe27f8-53dd-5aff-a446-b8ded9ca8c68",
+          "projectId": "cmu5a6fj500aoad0jvrckiypb",
+          "name": "issue214-20261019t084028z-judge",
+          "dataType": "BOOLEAN",
+          "value": false,
+          "source": "EVAL",
+          "subject": {
+            "kind": "observation",
+            "id": "0e1c0b11c6abd7a7",
+            "traceId": "e9ff979427c045fdc291715a7996543e"
+          },
+          "environment": "issue218-20261021t030256z",
+          "timestamp": "2026-10-21T03:04:18.455Z",
+          "createdAt": "2026-10-21T03:04:19.000Z",
+          "updatedAt": "2026-10-21T03:04:18.573Z",
+          "configId": null,
+          "metadata": {
+            "evaluation_rule_id": "cmvhj1t65005lad0e0am5nifu",
+            "job_configuration_id": "cmvhj1t65005lad0e0am5nifu",
+            "evaluation_rule_assignment_id": "cmvhj1t65005nad0ejs0t4f9j",
+            "evaluator_id": "cmvf082z1002uad0gkb42lwel",
+            "evaluator_version_id": "cmvf082z1002wad0g6y71t1r8",
+            "job_execution_id": "6257d461e94083af550c1e07804b0e39",
+            "target_trace_id": "e9ff979427c045fdc291715a7996543e",
+            "target_observation_id": "0e1c0b11c6abd7a7"
+          }
+        }
+      ],
+      "matches_frozen_adoption": true
+    },
+    {
+      "scenario": "missing",
+      "snapshot_id": "ff52fdf6-7e71-4cd6-bcef-ecb550d95034",
+      "score_name": "issue214-20261019t084028z-code",
+      "rows": [],
+      "matches_frozen_adoption": true
+    }
+  ],
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/public/v3/scores",
+      "query": {
+        "traceId": "e0cae644f1dc1c5386e145fe990368d1",
+        "observationId": "26afaf7a19da1da6",
+        "name": "issue214-20261019t084028z-judge",
+        "fields": "details,subject",
+        "limit": 100
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v3/scores",
+      "query": {
+        "traceId": "e0cae644f1dc1c5386e145fe990368d1",
+        "observationId": "26afaf7a19da1da6",
+        "name": "issue214-20261019t084028z-code",
+        "fields": "details,subject",
+        "limit": 100
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v3/scores",
+      "query": {
+        "traceId": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+        "observationId": "6197f96f12bf420d",
+        "name": "issue214-20261019t084028z-judge",
+        "fields": "details,subject",
+        "limit": 100
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v3/scores",
+      "query": {
+        "traceId": "f3543b0d4f69b2f27e2d5ec3633b6fc7",
+        "observationId": "6197f96f12bf420d",
+        "name": "issue214-20261019t084028z-code",
+        "fields": "details,subject",
+        "limit": 100
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v3/scores",
+      "query": {
+        "traceId": "e9ff979427c045fdc291715a7996543e",
+        "observationId": "0e1c0b11c6abd7a7",
+        "name": "issue214-20261019t084028z-judge",
+        "fields": "details,subject",
+        "limit": 100
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v3/scores",
+      "query": {
+        "traceId": "e9ff979427c045fdc291715a7996543e",
+        "observationId": "0e1c0b11c6abd7a7",
+        "name": "issue214-20261019t084028z-code",
+        "fields": "details,subject",
+        "limit": 100
+      },
+      "status": 200
+    }
+  ],
+  "score_write_requests": 0
+}

@@ -694,7 +694,7 @@ def _fail_managed(
     error_message: str,
     launch_id: str | None = None,
 ) -> RecoveryOutcome:
-    """终态失败：保持执行成功、质量 UNKNOWN，关闭重试，不伪造分数。"""
+    """终态失败：不改执行状态、评测失败、质量 UNKNOWN，关闭重试，不伪造分数。"""
     from .db_models import ExperimentItemExecutionRecord, ExperimentLaunchRecord
 
     is_pg = db_mgr.engine.dialect.name == "postgresql"
@@ -859,9 +859,7 @@ def _finalize_success(
     """
     from .db_models import ExperimentItemExecutionRecord, ExperimentLaunchRecord
     from .evaluation_result_store import result_from_record
-    from .evaluator_binding import manifest_quality_policy
     from .evaluator_results import project_legacy_scores
-    from .quality_policy import evaluate_quality_policy
 
     is_pg = db_mgr.engine.dialect.name == "postgresql"
     now = _now()
@@ -910,6 +908,17 @@ def _finalize_success(
             )
             session.commit()
             return RecoveryOutcome(claimed=True, finalized=False, reason="DISPATCH_SUPERSEDED")
+        if item.execution_status != "succeeded":
+            # 收集期间执行已失败/超时/取消：迟到 Score 不得终结为成功
+            # 结论。终态失败路径保持执行状态原样，评测失败、质量 UNKNOWN。
+            session.rollback()
+            return _fail_managed(
+                db_mgr,
+                claim,
+                error_code="EXECUTION_NOT_SUCCEEDED",
+                error_message="Agent 执行未成功，托管评分不得终结为成功结论；质量保持 UNKNOWN。",
+                launch_id=launch_id,
+            )
         if _launch_cancelled(session, launch_id):
             # 远程查询期间取消：迟到结果绝不能诞生新的成功结论，
             # 终态归属取消流程，不在此处写入。
@@ -940,8 +949,17 @@ def _finalize_success(
             return RecoveryOutcome(claimed=True, finalized=False, reason="COMPLETION_RACE")
         adopted_rows = list(_adopted_by_name(session, item_id).values())
         adopted = [result_from_record(row) for row in adopted_rows]
-        policy = manifest_quality_policy(manifest)
-        decision = evaluate_quality_policy(adopted, policy, decided_by="QUALITY_POLICY")
+        from .managed_quality import managed_quality_decision
+        # execution_status 已在上锁内复验为 succeeded（真实值）；
+        # eval_status 的 succeeded 是本函数即将写入的终态迁移，此处
+        # 合成传入以表达终态（此时库内仍为 pending）。
+        decision, _ = managed_quality_decision(manifest, {
+            "item_execution_id": item.id, "dataset_item_id": item.dataset_item_id,
+            "execution_status": item.execution_status, "eval_status": "succeeded",
+            "dispatch_generation": item.dispatch_generation, "final_attempt_id": item.final_attempt_id,
+            "trace_id": item.trace_id, "observation_id": item.observation_id,
+            "evaluation_results": [r.to_payload() for r in adopted],
+        }, launch_id)
         # 锁内计算也可能耗时：在发布结论前再次校验即时租约和周期上界。
         now = _now()
         if now >= cycle_start + timedelta(seconds=get_retry_config()["deadline"]):

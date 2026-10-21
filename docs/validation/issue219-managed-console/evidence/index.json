@@ -1,0 +1,54 @@
+{
+  "source_commit": "72b0861d4c4b9be49caf830bebe8082c857365fc",
+  "kind": "local-tests-and-network-mock-ui-not-live-flowise",
+  "files": {
+    "local-validation.json": {
+      "sha256": "96962a9c70f1ad26247147713777f28c022d3ecebc913cd3e1698bed689a1241",
+      "bytes": 4735
+    },
+    "mock-ui/frozen-fail.png": {
+      "sha256": "9f462484a56aba5e97eef13fa51bf7e64628a9366f1018e00cb18528a6eae657",
+      "bytes": 139509
+    },
+    "mock-ui/frozen-gate-pass.png": {
+      "sha256": "7e6f14c257e5ce237bfa6f70d15ae2062416a432266e05634657be4c4b34fdd0",
+      "bytes": 43469
+    },
+    "mock-ui/frozen-unknown.png": {
+      "sha256": "5145f5f36d462f1b6ffd937212bfe86c4cdf2aba624a680b6610e9c99eb6c305",
+      "bytes": 137136
+    },
+    "mock-ui/gate-360.png": {
+      "sha256": "7ebd031f6d90121ae0c32dcea4e113f7eed7827c213ca84c725b06006e879ccb",
+      "bytes": 44056
+    },
+    "mock-ui/gate-390.png": {
+      "sha256": "fe33011e688baf3b7df982ccf522487b187d36edbe040a38d2042d819ea081f7",
+      "bytes": 43372
+    },
+    "mock-ui/managed-360.png": {
+      "sha256": "7a481f09ab705a96c4ae3ce2faaabc60f74d3b6bb65f9c5f16b658185950bdae",
+      "bytes": 82015
+    },
+    "mock-ui/managed-390.png": {
+      "sha256": "8252507bf79a7f567b648fc7267385c093b44cd39593d1286560265087b1f781",
+      "bytes": 82472
+    },
+    "mock-ui/managed-pending.png": {
+      "sha256": "8ad97b2d4a2a25ea4de78f1bb3e7ac6887295b2efb41944726a2c02c076964b1",
+      "bytes": 139065
+    },
+    "playwright-local.log": {
+      "sha256": "4c755b32ce47d748a45858b1f1ba8c3906bce61797038033a6fe8b5bbf4b3760",
+      "bytes": 26192
+    },
+    "trajectory-local-summary.txt": {
+      "sha256": "7dcdfed00f3c9eb7e5709b78e7573e0c262d2ec6fa4d170ec9edc6c0ade07cb2",
+      "bytes": 340
+    },
+    "validate-local-summary.txt": {
+      "sha256": "64f86a698a3853e020faaefe5d5b4429e4bb3da04a0a2c4d08bdd7fb37929ca4",
+      "bytes": 829
+    }
+  }
+}

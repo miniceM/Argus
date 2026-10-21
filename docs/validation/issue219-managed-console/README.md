@@ -2,7 +2,7 @@
 
 ## 当前结论
 
-**Goal 尚未完成。** 当前工作基于合并 #218 后的 `0f721a7`，分支
+**Goal 尚未完成。** 当前实现提交 `72b0861`，基于合并 #218 后的 `0f721a7`，分支
 `codex/issue219-managed-console`。以下结果只证明明确列出的范围；真实 Flowise
 全链路、最终完整回归和独立 PR 仍须以本分支新增证据关闭，不能以 #213～#218
 旧证据冒充本次验收。
@@ -37,6 +37,23 @@
 首轮新 Playwright 的 6 项失败来自 fixture 漏填必需 `system/info.build_id`，
 导致 AppShell 读取 undefined；补齐 API 真实必需字段后 6/6 通过。随后修正 mock
 Snapshot 的 `EVIDENCE_COMPLETE` 为服务端实际 `COMPLETE`，避免把假诊断报告当正式证据。
+
+## 已归档本地证据
+
+- [结构化结果与精确源码哈希](evidence/local-validation.json)
+- [完整 Playwright 输出](evidence/playwright-local.log)
+- [make validate 结果摘录](evidence/validate-local-summary.txt)
+- [独立 S4 结果摘录](evidence/trajectory-local-summary.txt)
+- [文件 SHA-256 索引](evidence/index.json)
+- 网络替身截图：[等待评分](evidence/mock-ui/managed-pending.png)、
+  [冻结质量 FAIL](evidence/mock-ui/frozen-fail.png)、
+  [缺分 UNKNOWN](evidence/mock-ui/frozen-unknown.png)、
+  [固定 Gate PASS](evidence/mock-ui/frozen-gate-pass.png)、
+  [360px Score](evidence/mock-ui/managed-360.png)、
+  [360px Gate](evidence/mock-ui/gate-360.png)。
+
+截图已目视检查；手机用例在 360/390×844 下执行控件几何、键盘与 axe 验收，
+仅截图时扩大高度以完整显示单个 Score 面板，不把长截图冒充固定高度首屏。
 
 ## #212 父 Issue 验收覆盖矩阵
 

@@ -1,0 +1,37 @@
+{
+  "status": "PASS",
+  "source_commit": "2a14d9d42d1e6188e9399c69be719797359233a1",
+  "environment": "issue219-20261021t083455z",
+  "browser_network_mocking": false,
+  "manual_collect_requests": 0,
+  "score_write_requests": 0,
+  "rule_ids": [
+    "cmvhuwpkz001iad0kh4jwab8b",
+    "cmvhuwt82000rad0mzkoht7g6"
+  ],
+  "scenarios": [
+    {
+      "label": "pass",
+      "launch_id": "61b065da-48de-46da-9348-f888acad12e7",
+      "snapshot_id": "2b5907b7-b922-4634-84b6-6560f57fc7e2",
+      "gate_id": "b9733567-fa32-4d83-832e-bdc6cc6e6c2c",
+      "decision": "PASS"
+    },
+    {
+      "label": "fail",
+      "launch_id": "d7675d54-37cc-46d8-98ba-b87b40c19273",
+      "snapshot_id": "3ad4779b-c553-4afb-9ec0-d9d4f9762feb",
+      "gate_id": "61eb6056-d595-47a6-91b5-9c8f21bc297f",
+      "decision": "FAIL"
+    },
+    {
+      "label": "missing",
+      "launch_id": "dda672de-023d-40bf-97c1-0a490e5e2944",
+      "snapshot_id": "e678f8c9-dd72-4e53-9827-91fb2965327e",
+      "gate_id": "9f867ccf-0b8a-4de2-a590-ed972cacd99e",
+      "decision": "UNKNOWN"
+    }
+  ],
+  "historical_api_and_console_unchanged": true,
+  "timestamp": "2026-10-21T08:39:51.752083+00:00"
+}

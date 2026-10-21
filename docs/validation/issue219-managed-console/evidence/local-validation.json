@@ -1,5 +1,5 @@
 {
-  "status": "LOCAL_GATES_PASS_GOAL_INCOMPLETE",
+  "status": "LOCAL_AND_REAL_CONSOLE_PASS_REMOTE_CI_PENDING",
   "source_commit": "72b0861d4c4b9be49caf830bebe8082c857365fc",
   "source_sha256": {
     "services/console/e2e/issue-219-managed-experience.spec.ts": "570ef66c1e1235e31b4f3649469281fe08a973b7aedafb6ec8da172f2c0c7b94",
@@ -37,7 +37,7 @@
       "passed": 888
     },
     "python": {
-      "passed": 1667,
+      "passed": 1669,
       "skipped": 2,
       "deselected": 31
     },
@@ -76,5 +76,9 @@
   },
   "live_flowise_e2e": "NOT_RUN_FOR_THIS_BRANCH",
   "pull_request": "NOT_CREATED",
-  "goal_complete": false
+  "goal_complete": false,
+  "real_console_receipt": "issue219-20261021t083455z/receipt.json",
+  "builtin_http_receipt": "builtin-http-regression.json",
+  "final_validate_log": "validate-final.log",
+  "final_validate_scope": "same UI/backend sources; two new harness guard unit tests"
 }

@@ -1,0 +1,355 @@
+./scripts/validate.sh
+[1/7] Parse YAML/JSON
+configuration parse: OK
+[2/7] Compile Python sources and check code quality
+All checks passed!
+[3/7] Verify zero evaluation-SDK dependency in Demo Agent and Real LLM Agent
+[4/7] Verify runner contains remote experiment + W3C propagation
+[5/7] Verify OpenAPI specification is up to date
+OpenAPI specification exported to: /Users/hosea/.codex/worktrees/3e2d/Argus/docs/openapi.json
+[6/8] Verify Console Frontend (contract sync, typecheck, unit tests, build)
+Checking Console OpenAPI TypeScript contract sync...
+
+> argus-console@0.2.0 api:generate /Users/hosea/.codex/worktrees/3e2d/Argus/services/console
+> openapi-typescript ../../docs/openapi.json -o src/api/schema.d.ts
+
+✨ openapi-typescript 7.13.0
+🚀 ../../docs/openapi.json → src/api/schema.d.ts [98.9ms]
+Running Console design token lint...
+
+> argus-console@0.2.0 lint:tokens /Users/hosea/.codex/worktrees/3e2d/Argus/services/console
+> node scripts/lint-tokens.mjs
+
+Design Token Lint: all files use semantic tokens.
+Running Console typecheck...
+
+> argus-console@0.2.0 typecheck /Users/hosea/.codex/worktrees/3e2d/Argus/services/console
+> tsc --noEmit
+
+Running Console unit tests...
+
+> argus-console@0.2.0 test /Users/hosea/.codex/worktrees/3e2d/Argus/services/console
+> vitest run
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vite.config.ts:14:25). Use `import.meta.dirname` instead
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.3 /Users/hosea/.codex/worktrees/3e2d/Argus/services/console
+
+Not implemented: navigation to another Document
+
+ Test Files  56 passed (56)
+      Tests  888 passed (888)
+   Start at  16:36:17
+   Duration  23.94s (tests 49%, environment 35%, setup 6%, import 6%, transform 4%, worker 1%)
+
+Environment  jsdom was created 56 times · 53.75s total, 35% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+Running Console build...
+
+> argus-console@0.2.0 build /Users/hosea/.codex/worktrees/3e2d/Argus/services/console
+> tsc -b && vite build
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vite.config.ts:14:25). Use `import.meta.dirname` instead
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 2022 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.51 kB │ gzip:   0.34 kB
+dist/assets/index-BM0apnRd.css   62.25 kB │ gzip:  11.14 kB
+dist/assets/index-66BV_Glh.js   664.07 kB │ gzip: 191.87 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 300ms
+Console frontend validation: OK
+[7/8] Run local behavior tests
+........................................................................ [  4%]
+........................................................................ [  8%]
+........................................................................ [ 12%]
+........................................................................ [ 17%]
+........................................................................ [ 21%]
+........................................................................ [ 25%]
+................................s............s.......................... [ 30%]
+........................................................................ [ 34%]
+........................................................................ [ 38%]
+........................................................................ [ 43%]
+........................................................................ [ 47%]
+........................................................................ [ 51%]
+........................................................................ [ 56%]
+........................................................................ [ 60%]
+........................................................................ [ 64%]
+........................................................................ [ 68%]
+........................................................................ [ 73%]
+........................................................................ [ 77%]
+........................................................................ [ 81%]
+........................................................................ [ 86%]
+........................................................................ [ 90%]
+........................................................................ [ 94%]
+........................................................................ [ 99%]
+...............                                                          [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /Users/hosea/.codex/worktrees/3e2d/Argus/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/schema.py:4296: 4 warnings
+tests/test_agent_registry_contract.py: 86 warnings
+tests/test_api_endpoints.py: 128 warnings
+tests/test_api_results_s3.py: 181 warnings
+tests/test_async_api_launches_s2.py: 23 warnings
+tests/test_control_plane_read_model.py: 63 warnings
+tests/test_credential_resources.py: 351 warnings
+tests/test_dataset_resolver.py: 10 warnings
+tests/test_idempotency_and_atomic_lock.py: 61 warnings
+tests/test_issue183_baseline_environment.py: 120 warnings
+tests/test_issue183_comparison_environment.py: 27 warnings
+tests/test_issue183_launch_baseline_projection.py: 482 warnings
+tests/test_issue183_launch_environment.py: 6 warnings
+tests/test_issue_215_managed_evaluation.py: 156 warnings
+tests/test_issue_216_managed_scores.py: 568 warnings
+tests/test_issue_217_lifecycle_boundaries.py: 547 warnings
+tests/test_issue_217_managed_async.py: 128 warnings
+tests/test_issue_217_managed_review.py: 175 warnings
+tests/test_issue_218_managed_quality.py: 542 warnings
+tests/test_issue_22_launch_item_consistency.py: 86 warnings
+tests/test_issue_49_cross_issue_acceptance.py: 113 warnings
+tests/test_issue_7_cli.py: 75 warnings
+tests/test_issue_7_release_gates.py: 89 warnings
+tests/test_issue_80_evaluator_versioning.py: 2 warnings
+tests/test_issue_81_frozen_execution_identity.py: 97 warnings
+tests/test_issue_81_sqlite_foreign_keys.py: 2 warnings
+tests/test_issue_82_typed_results.py: 56 warnings
+tests/test_issue_84_eval_only_retry.py: 131 warnings
+tests/test_issue_85_snapshot_revision.py: 209 warnings
+tests/test_issue_86_comparability.py: 74 warnings
+tests/test_issue_87_langfuse_projection.py: 78 warnings
+tests/test_langfuse_link_reconciliation.py: 256 warnings
+tests/test_langfuse_links.py: 172 warnings
+tests/test_langfuse_managed_observation.py: 5 warnings
+tests/test_langfuse_run_scores_s3.py: 163 warnings
+tests/test_langfuse_usage_scores.py: 83 warnings
+tests/test_launch_manifest_freeze.py: 47 warnings
+tests/test_orchestrator_and_worker_s2.py: 31 warnings
+tests/test_pr125_launch_detail_contract.py: 74 warnings
+tests/test_pr17_review_fixes.py: 16 warnings
+tests/test_pr17_review_regressions.py: 81 warnings
+tests/test_pr17_round4_audit.py: 197 warnings
+tests/test_real_llm_agent_integration.py: 61 warnings
+tests/test_registry.py: 4 warnings
+tests/test_result_outputs.py: 15 warnings
+tests/test_run_result_s3.py: 77 warnings
+tests/test_runner_identity.py: 26 warnings
+tests/test_sync_observation_parent.py: 14 warnings
+tests/test_trajectory_agent_profile.py: 13 warnings
+tests/test_trajectory_storage_schema.py: 470 warnings
+tests/test_unified_execution.py: 130 warnings
+tests/test_yaml_security_and_fail_closed.py: 10 warnings
+  /Users/hosea/.codex/worktrees/3e2d/Argus/.venv/lib/python3.12/site-packages/sqlalchemy/sql/schema.py:4296: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return util.wrap_callable(lambda ctx: fn(), fn)  # type: ignore[call-arg, no-any-return, no-untyped-call]  # noqa: E501
+
+tests/test_api_endpoints.py: 24 warnings
+tests/test_async_api_launches_s2.py: 18 warnings
+tests/test_control_plane_read_model.py: 18 warnings
+tests/test_credential_resources.py: 19 warnings
+tests/test_dataset_resolver.py: 12 warnings
+tests/test_idempotency_and_atomic_lock.py: 42 warnings
+tests/test_issue183_launch_baseline_projection.py: 6 warnings
+tests/test_issue183_launch_environment.py: 6 warnings
+tests/test_issue_215_managed_evaluation.py: 48 warnings
+tests/test_issue_216_managed_scores.py: 306 warnings
+tests/test_issue_22_launch_item_consistency.py: 12 warnings
+tests/test_issue_80_evaluator_versioning.py: 6 warnings
+tests/test_issue_81_frozen_execution_identity.py: 84 warnings
+tests/test_issue_85_snapshot_revision.py: 12 warnings
+tests/test_issue_86_comparability.py: 18 warnings
+tests/test_launch_manifest_freeze.py: 54 warnings
+tests/test_real_llm_agent_integration.py: 15 warnings
+tests/test_run_result_s3.py: 6 warnings
+tests/test_runner_identity.py: 5 warnings
+tests/test_unified_execution.py: 24 warnings
+  /Users/hosea/.codex/worktrees/3e2d/Argus/services/eval-runner/app/manifest.py:423: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    created_at=datetime.utcnow(),
+
+tests/test_api_endpoints.py: 24 warnings
+tests/test_async_api_launches_s2.py: 18 warnings
+tests/test_control_plane_read_model.py: 18 warnings
+tests/test_credential_resources.py: 19 warnings
+tests/test_dataset_resolver.py: 12 warnings
+tests/test_idempotency_and_atomic_lock.py: 42 warnings
+tests/test_issue183_launch_baseline_projection.py: 6 warnings
+tests/test_issue183_launch_environment.py: 6 warnings
+tests/test_issue_215_managed_evaluation.py: 48 warnings
+tests/test_issue_216_managed_scores.py: 306 warnings
+tests/test_issue_22_launch_item_consistency.py: 12 warnings
+tests/test_issue_80_evaluator_versioning.py: 6 warnings
+tests/test_issue_81_frozen_execution_identity.py: 84 warnings
+tests/test_issue_85_snapshot_revision.py: 12 warnings
+tests/test_issue_86_comparability.py: 18 warnings
+tests/test_launch_manifest_freeze.py: 54 warnings
+tests/test_real_llm_agent_integration.py: 15 warnings
+tests/test_run_result_s3.py: 6 warnings
+tests/test_runner_identity.py: 5 warnings
+tests/test_unified_execution.py: 24 warnings
+  /Users/hosea/.codex/worktrees/3e2d/Argus/services/eval-runner/app/manifest.py:424: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    updated_at=datetime.utcnow(),
+
+tests/test_api_endpoints.py: 5 warnings
+tests/test_control_plane_read_model.py: 1 warning
+tests/test_credential_resources.py: 11 warnings
+tests/test_idempotency_and_atomic_lock.py: 2 warnings
+tests/test_issue_22_launch_item_consistency.py: 1 warning
+tests/test_unified_execution.py: 4 warnings
+  /Users/hosea/.codex/worktrees/3e2d/Argus/services/eval-runner/app/manifest.py:48: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    .values(status="RUNNING", started_at=datetime.utcnow())
+
+tests/test_api_endpoints.py: 12 warnings
+tests/test_control_plane_read_model.py: 6 warnings
+tests/test_credential_resources.py: 15 warnings
+tests/test_issue_22_launch_item_consistency.py: 6 warnings
+tests/test_sync_observation_parent.py: 2 warnings
+tests/test_unified_execution.py: 18 warnings
+  /Users/hosea/.codex/worktrees/3e2d/Argus/services/eval-runner/app/execution.py:79: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at = datetime.utcnow()
+
+tests/test_api_endpoints.py: 12 warnings
+tests/test_control_plane_read_model.py: 6 warnings
+tests/test_credential_resources.py: 16 warnings
+tests/test_issue_22_launch_item_consistency.py: 6 warnings
+tests/test_unified_execution.py: 18 warnings
+  /Users/hosea/.codex/worktrees/3e2d/Argus/services/eval-runner/app/execution.py:128: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=datetime.utcnow(),
+
+tests/test_api_endpoints.py: 12 warnings
+tests/test_control_plane_read_model.py: 6 warnings
+tests/test_credential_resources.py: 16 warnings
+tests/test_issue_22_launch_item_consistency.py: 6 warnings
+tests/test_unified_execution.py: 18 warnings
+  /Users/hosea/.codex/worktrees/3e2d/Argus/services/eval-runner/app/execution.py:165: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=datetime.utcnow(),
+
+tests/test_api_endpoints.py: 12 warnings
+tests/test_control_plane_read_model.py: 6 warnings
+tests/test_credential_resources.py: 15 warnings
+tests/test_issue_22_launch_item_consistency.py: 6 warnings
+tests/test_sync_observation_parent.py: 2 warnings
+tests/test_unified_execution.py: 18 warnings
+  /Users/hosea/.codex/worktrees/3e2d/Argus/services/eval-runner/app/execution.py:297: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at = datetime.utcnow()
+
+tests/test_api_endpoints.py: 3 warnings
+tests/test_control_plane_read_model.py: 1 warning
+tests/test_credential_resources.py: 11 warnings
+tests/test_issue_22_launch_item_consistency.py: 1 warning
+tests/test_unified_execution.py: 4 warnings
+  /Users/hosea/.codex/worktrees/3e2d/Argus/services/eval-runner/app/execution.py:618: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = datetime.utcnow()
+
+tests/test_api_endpoints.py::test_run_launch_crash_fails_gracefully
+  /Users/hosea/.codex/worktrees/3e2d/Argus/services/eval-runner/app/execution.py:682: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = datetime.utcnow()
+
+tests/test_api_results_s3.py: 21 warnings
+tests/test_credential_resources.py: 2 warnings
+tests/test_issue183_baseline_environment.py: 10 warnings
+tests/test_issue183_comparison_environment.py: 2 warnings
+tests/test_issue183_launch_baseline_projection.py: 57 warnings
+tests/test_issue_217_lifecycle_boundaries.py: 4 warnings
+tests/test_issue_217_managed_async.py: 2 warnings
+tests/test_issue_218_managed_quality.py: 39 warnings
+tests/test_issue_22_launch_item_consistency.py: 2 warnings
+tests/test_issue_49_cross_issue_acceptance.py: 6 warnings
+tests/test_issue_7_cli.py: 6 warnings
+tests/test_issue_7_release_gates.py: 2 warnings
+tests/test_issue_82_typed_results.py: 1 warning
+tests/test_issue_84_eval_only_retry.py: 4 warnings
+tests/test_issue_85_snapshot_revision.py: 19 warnings
+tests/test_langfuse_run_scores_s3.py: 11 warnings
+tests/test_langfuse_usage_scores.py: 4 warnings
+tests/test_pr125_launch_detail_contract.py: 7 warnings
+tests/test_pr17_review_regressions.py: 5 warnings
+tests/test_real_llm_agent_integration.py: 5 warnings
+tests/test_result_outputs.py: 2 warnings
+tests/test_run_result_s3.py: 8 warnings
+  /Users/hosea/.codex/worktrees/3e2d/Argus/services/eval-runner/app/result_snapshots.py:270: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    created_at=datetime.utcnow(),
+
+tests/test_api_results_s3.py: 21 warnings
+tests/test_credential_resources.py: 2 warnings
+tests/test_issue183_baseline_environment.py: 10 warnings
+tests/test_issue183_comparison_environment.py: 2 warnings
+tests/test_issue183_launch_baseline_projection.py: 57 warnings
+tests/test_issue_217_lifecycle_boundaries.py: 4 warnings
+tests/test_issue_217_managed_async.py: 2 warnings
+tests/test_issue_218_managed_quality.py: 39 warnings
+tests/test_issue_22_launch_item_consistency.py: 2 warnings
+tests/test_issue_49_cross_issue_acceptance.py: 6 warnings
+tests/test_issue_7_cli.py: 6 warnings
+tests/test_issue_7_release_gates.py: 2 warnings
+tests/test_issue_82_typed_results.py: 1 warning
+tests/test_issue_84_eval_only_retry.py: 4 warnings
+tests/test_issue_85_snapshot_revision.py: 19 warnings
+tests/test_langfuse_run_scores_s3.py: 11 warnings
+tests/test_langfuse_usage_scores.py: 4 warnings
+tests/test_pr125_launch_detail_contract.py: 7 warnings
+tests/test_pr17_review_regressions.py: 5 warnings
+tests/test_real_llm_agent_integration.py: 5 warnings
+tests/test_result_outputs.py: 2 warnings
+tests/test_run_result_s3.py: 8 warnings
+  /Users/hosea/.codex/worktrees/3e2d/Argus/services/eval-runner/app/result_snapshots.py:298: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    next_retry_at=datetime.utcnow(),
+
+tests/test_api_results_s3.py: 1 warning
+tests/test_issue183_launch_baseline_projection.py: 2 warnings
+tests/test_issue_49_cross_issue_acceptance.py: 1 warning
+tests/test_issue_85_snapshot_revision.py: 4 warnings
+tests/test_run_result_s3.py: 2 warnings
+  /Users/hosea/.codex/worktrees/3e2d/Argus/services/eval-runner/app/baselines.py:117: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    updated_at=datetime.utcnow(),
+
+tests/test_issue183_baseline_environment.py::test_invalid_legacy_binding_retains_revision_and_can_be_repaired
+tests/test_issue183_launch_baseline_projection.py::test_binding_pointer_moves_but_frozen_candidate_reference_does_not
+tests/test_issue_85_snapshot_revision.py::test_switching_baseline_does_not_move_an_existing_candidate
+tests/test_run_result_s3.py::test_new_launch_freezes_the_current_environment_baseline
+  /Users/hosea/.codex/worktrees/3e2d/Argus/services/eval-runner/app/baselines.py:109: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    binding.updated_at = datetime.utcnow()
+
+tests/test_issue_7_cli.py::test_cli_wait_against_real_api_and_database[2-0]
+tests/test_issue_7_cli.py::test_cli_wait_against_real_api_and_database[1-1]
+tests/test_issue_7_cli.py::test_cli_freezes_completed_retry_before_gate_and_preserves_the_previous_pass
+  /Users/hosea/.codex/worktrees/3e2d/Argus/services/argus-cli/src/argus_cli/cli.py:173: StarletteDeprecationWarning: You should not use the 'timeout' argument with the TestClient. See https://github.com/Kludex/starlette/issues/1108 for more information.
+    response = client.request(method, args.api_url.rstrip("/") + path, timeout=min(10, remaining), **kwargs)
+
+tests/test_real_llm_agent.py::test_usage_extraction_never_fabricates[float-token-invalid]
+  /Users/hosea/.codex/worktrees/3e2d/Argus/.venv/lib/python3.12/site-packages/pydantic/main.py:520: UserWarning: Pydantic serializer warnings:
+    PydanticSerializationUnexpectedValue(Expected `int` - serialized value may not be as expected [field_name='prompt_tokens', input_value=3.5, input_type=float])
+    return self.__pydantic_serializer__.to_python(
+
+tests/test_real_llm_agent.py::test_usage_extraction_never_fabricates[string-token-invalid]
+  /Users/hosea/.codex/worktrees/3e2d/Argus/.venv/lib/python3.12/site-packages/pydantic/main.py:520: UserWarning: Pydantic serializer warnings:
+    PydanticSerializationUnexpectedValue(Expected `int` - serialized value may not be as expected [field_name='prompt_tokens', input_value='3', input_type=str])
+    return self.__pydantic_serializer__.to_python(
+
+tests/test_real_llm_agent.py::test_invalid_provider_response_maps_to_502_invalid_response[non-string-content]
+  /Users/hosea/.codex/worktrees/3e2d/Argus/.venv/lib/python3.12/site-packages/pydantic/main.py:520: UserWarning: Pydantic serializer warnings:
+    PydanticSerializationUnexpectedValue(Expected `str` - serialized value may not be as expected [field_name='content', input_value=[{'type': 'tool_use'}], input_type=list])
+    return self.__pydantic_serializer__.to_python(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_issue_217_lifecycle_boundaries.py:191: MVCC interleaving requires PostgreSQL
+SKIPPED [1] tests/test_issue_217_lifecycle_boundaries.py:354: row-lock interleaving requires PostgreSQL
+1669 passed, 2 skipped, 31 deselected, 8823 warnings in 69.52s (0:01:09)
+S4 real ingestion is a separate mandatory gate: make trajectory-test
+[8/8] Docker Compose validation
+docker compose config: OK
+Validation complete.

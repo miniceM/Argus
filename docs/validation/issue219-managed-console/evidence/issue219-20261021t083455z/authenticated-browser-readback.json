@@ -1,0 +1,23 @@
+{
+  "status": "PASS",
+  "verified_at": "2026-10-21T08:54:10.323430+00:00",
+  "method": "cua_repl existing authenticated Chrome profile; visible Scores tab readback",
+  "url": "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/f6d0b889aafcd4ba6d41a8813a5107c4?observation=c610c9745353b6e5&traceTab=scores",
+  "trace_id": "f6d0b889aafcd4ba6d41a8813a5107c4",
+  "observation_id": "c610c9745353b6e5",
+  "visible_output": "1266",
+  "visible_scores": [
+    {
+      "name": "issue214-20261019t084028z-judge",
+      "value": "True",
+      "comment": "The expression (135 + 287) * 3 equals 422 * 3 = 1266, so the agent's answer is correct."
+    },
+    {
+      "name": "issue214-20261019t084028z-code",
+      "value": "True",
+      "comment": "Native HTTP text checked by Langfuse managed Python runtime; expected constant 1266 is smoke rubric only"
+    }
+  ],
+  "credentials_in_browser": false,
+  "note": "Reused existing signed-in session without reading/exporting cookies. No account identity/PII screenshot archived; source=EVAL independently verified via ScoresV3 API."
+}

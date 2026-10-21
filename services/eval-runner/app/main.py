@@ -247,6 +247,9 @@ async def lifespan(app: FastAPI):
                 await task
             except (asyncio.CancelledError, Exception):
                 pass
+    close_managed_executor = getattr(worker, "close_managed_executor", None)
+    if worker_task is not None and close_managed_executor is not None:
+        close_managed_executor()
 
 
 app = FastAPI(

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from typing import Any
 
 from sqlalchemy import func, select, update
@@ -64,7 +67,14 @@ class ExecutionWorker:
         # #217 P2：托管评分远端读取耗时久，独立限流，不与 HTTP 执行共用
         # 本地槽，避免评分等待饿死业务 Agent 执行。
         self.managed_concurrency = asyncio.Semaphore(_managed_slot_count())
+        self._managed_executor: ThreadPoolExecutor | None = None
         self.heartbeat_interval = 5.0
+
+    def close_managed_executor(self) -> None:
+        """lifespan 在受管任务收尾后释放独立执行器；不影响 HTTP 默认执行器。"""
+        executor, self._managed_executor = self._managed_executor, None
+        if executor is not None:
+            executor.shutdown(wait=False, cancel_futures=True)
 
     def poll_queue(self, count: int = 10, block_ms: int = 1000) -> list[tuple[str, str, int, str]]:
         """Synchronously reads/claims items from the queue adapter, meant to be run in asyncio.to_thread."""
@@ -1196,12 +1206,18 @@ class ExecutionWorker:
         async with self.managed_concurrency:
             from .managed_score_recovery import recover_managed_scores
 
-            outcome = await asyncio.to_thread(
-                recover_managed_scores,
-                self.db_mgr,
-                item_id=item_id,
-                evaluation_generation=evaluation_generation,
-                worker_id=self.worker_id,
+            if self._managed_executor is None:
+                # 不能使用 asyncio 默认池：评分占满它时，poll_queue 和 HTTP
+                # 辅助任务即便有独立 Semaphore 也无法调度。外层任务和此池均有界。
+                self._managed_executor = ThreadPoolExecutor(
+                    max_workers=_managed_slot_count(), thread_name_prefix="argus-managed",
+                )
+            collect = partial(
+                recover_managed_scores, self.db_mgr, item_id=item_id,
+                evaluation_generation=evaluation_generation, worker_id=self.worker_id,
+            )
+            outcome = await asyncio.get_running_loop().run_in_executor(
+                self._managed_executor, copy_context().run, collect,
             )
             if not outcome.get("claimed"):
                 self.queue.ack(message_id)

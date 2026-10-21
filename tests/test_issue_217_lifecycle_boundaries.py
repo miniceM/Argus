@@ -753,3 +753,60 @@ def test_future_generation_cannot_skip_persisted_backoff(runtime):
     assert not early["claimed"]
     factory.assert_not_called()
     assert len(rows(db, ExecutionAttemptRecord, item_id)) == 1
+
+
+def test_live_dispatcher_isolates_managed_from_default_executor(setup_runtime, monkeypatch):
+    """真实 Worker 的阻塞收集不能耗尽 poll_queue / HTTP 共用的默认执行器。"""
+    import asyncio
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from types import SimpleNamespace
+
+    from app import main
+    from app import managed_score_recovery as recovery
+
+    worker = setup_runtime[4]
+    entered, release = threading.Event(), threading.Event()
+    sent = [False, False]
+
+    def collect(*args, **kwargs):
+        entered.set()
+        assert release.wait(5)
+        return {"claimed": True, "finalized": False}
+
+    def poll(**kwargs):
+        if not sent[0]:
+            sent[0] = True
+            return [("managed", "item-score", 1, "MANAGED_SCORE")]
+        if entered.is_set() and not sent[1]:
+            sent[1] = True
+            return [("http", "item-http", 1, "INVOCATION")]
+        return []
+
+    async def scenario():
+        asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=1))
+        http_started = asyncio.Event()
+
+        async def invoke(*unused):
+            http_started.set()
+
+        monkeypatch.setattr(recovery, "recover_managed_scores", collect)
+        monkeypatch.setattr(worker, "poll_queue", poll)
+        monkeypatch.setattr(worker, "execute_item_message", invoke)
+        monkeypatch.setattr(worker, "queue", Mock())
+        monkeypatch.setattr(main, "worker", worker)
+        monkeypatch.setattr(main, "settings", SimpleNamespace(
+            worker_concurrency=1, argus_worker_enabled=True, argus_reconciler_enabled=False,
+            argus_db_mode="standalone"))
+        monkeypatch.setattr(main.outbox_syncer, "process_batch", lambda **unused: 0)
+        monkeypatch.setattr(main.run_score_syncer, "process_batch", lambda **unused: 0)
+        monkeypatch.setattr(main, "build_link_loop_lease", lambda _: Mock(try_acquire=lambda: False))
+        async with main.lifespan(main.app):
+            try:
+                await asyncio.wait_for(http_started.wait(), timeout=1)
+                assert entered.is_set() and not release.is_set()
+            finally:
+                release.set()
+        assert worker._managed_executor is None
+
+    asyncio.run(scenario())

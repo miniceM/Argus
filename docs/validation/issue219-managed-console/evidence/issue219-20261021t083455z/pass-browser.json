@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "launch_id": "61b065da-48de-46da-9348-f888acad12e7",
+  "snapshot_id": "2b5907b7-b922-4634-84b6-6560f57fc7e2",
+  "gate_id": "b9733567-fa32-4d83-832e-bdc6cc6e6c2c",
+  "expected": "PASS",
+  "report_url": "http://127.0.0.1:56081/launches/61b065da-48de-46da-9348-f888acad12e7?tab=compare&snapshot_id=2b5907b7-b922-4634-84b6-6560f57fc7e2&gate_id=b9733567-fa32-4d83-832e-bdc6cc6e6c2c",
+  "panel_text": "Langfuse Managed Score\nAgent 执行：succeeded\n评分完成\n质量结论：PASS\n\n必要评分 2 / 2 已采纳\n\n历史冻结证据（只读）；远程后续重评不会改变本报告。缺少必要评分保持 UNKNOWN，不作为零分或质量 FAIL。\n\nissue214-20261019t084028z-judge\nboolean\n必要评分\n\nRule：cmvhuwpkz001iad0kh4jwab8b；Evaluator：cmvf082z1002uad0gkb42lwel\n\nissue214-20261019t084028z-judge\n布尔\n成功\n取值\ntrue\n证据 (Evidence)\n绑定 sha256:1171c7556e886184abe815c15d96fd9188d3c23e06c43867e03a50a0f1864125\n契约 MANAGED_SCORE_VERIFIED\n\nsource=EVAL；Score ID：08f901f7-83dc-58b5-a8a2-540d4e78ca60；dataType=BOOLEAN\n\n查看 Score 所在 Observation（Langfuse）\nissue214-20261019t084028z-code\nboolean\n必要评分\n\nRule：cmvhuwt82000rad0mzkoht7g6；Evaluator：cmvf083f50034ad0gbpddxpar\n\nissue214-20261019t084028z-code\n布尔\n成功\n取值\ntrue\n证据 (Evidence)\n绑定 sha256:1171c7556e886184abe815c15d96fd9188d3c23e06c43867e03a50a0f1864125\n契约 MANAGED_SCORE_VERIFIED\n\nsource=EVAL；Score ID：bae8d7ec-561f-55f4-8a37-57b75265c2dc；dataType=BOOLEAN\n\n查看 Score 所在 Observation（Langfuse）\n\nLangfuse Evaluator / Rule 遵循当前 latest；远程执行实现并未冻结。Argus 仅冻结本次实际采纳的 Score、采纳条件与质量判断规则。",
+  "gate_text": "PASS · 可发布\n\nGate ID：b9733567-fa32-4d83-832e-bdc6cc6e6c2c；Snapshot：2b5907b7-b922-4634-84b6-6560f57fc7e2 · revision 1\n\nReleasePolicy：issue219-20261021t083455z@1.0.0；digest：sha256:c25a3de3be16f3edb56e4e538798265afb72bf4255348e3902d401e3938270de\n\n结果 digest：d0954d253f45ca378dbf7c30880652de35d30c9a077c5045ed84d2b2bb352998\n\n原因：无阻断原因\n\nquality：PASS；实际 1；THRESHOLD_SATISFIED\ncoverage：PASS；实际 1；THRESHOLD_SATISFIED\n固定 Gate 报告",
+  "score_links": [
+    "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/f6d0b889aafcd4ba6d41a8813a5107c4?observation=c610c9745353b6e5",
+    "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/f6d0b889aafcd4ba6d41a8813a5107c4?observation=c610c9745353b6e5"
+  ],
+  "pending_observed": true,
+  "network_mocking": false,
+  "injection": null
+}

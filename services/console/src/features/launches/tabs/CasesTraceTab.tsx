@@ -16,6 +16,8 @@ import { useQuery } from "@tanstack/react-query";
 import { formatApiError } from "../../../api/errors";
 import { Button } from "../../../components/ui/Primitives";
 import { JsonViewer } from "../../../components/JsonViewer";
+import { ManagedEvaluationPanel } from "../ManagedEvaluationPanel";
+import { isSafeLangfuseUrl } from "../langfuseLink";
 import { AttemptDrawer } from "../AttemptDrawer";
 import { caseOutputQueryOptions } from "../launchComparisonQueries";
 import { EvaluationResultList } from "../EvaluationResultList";
@@ -31,6 +33,7 @@ interface CasesTraceTabProps {
   snapshotId: string | null;
   items: ItemExecution[];
   initialFilter?: string;
+  evaluationManifest?: Record<string, unknown>;
   manifestDataset?: any;
   snapshotCounts?: {
     pass?: number | null;
@@ -75,6 +78,7 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
   items,
   initialFilter = "ALL",
   manifestDataset,
+  evaluationManifest = {},
   snapshotCounts,
   currentFilter,
   onFilterChange,
@@ -231,7 +235,7 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
             >
               {/* 卡片头部行 */}
               <div
-                className="flex items-center justify-between gap-3 cursor-pointer"
+                className="flex flex-wrap items-center justify-between gap-3"
                 onClick={() => toggleExpand(item.dataset_item_id)}
                 data-testid={`case-row-expand-${item.dataset_item_id}`}
               >
@@ -340,7 +344,7 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
                   {/* Trace 链接 (N02: 优先读取冻结 trace_url) */}
                   {(() => {
                     const trace = (item as any).trace_url || item.langfuse_trace_url;
-                    return trace ? (
+                    return isSafeLangfuseUrl(trace) ? (
                       <a
                         href={trace}
                         target="_blank"
@@ -408,6 +412,7 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
                     type="button"
                     className="text-muted-foreground hover:text-foreground p-1 rounded-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-focus"
                     aria-label={isExpanded ? "收起" : "展开"}
+                    aria-expanded={isExpanded}
                   >
                     {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </button>
@@ -421,6 +426,7 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
                   snapshotId={snapshotId}
                   item={item}
                   manifestDataset={manifestDataset}
+                  evaluationManifest={evaluationManifest}
                   onOpenAttemptDrawer={() =>
                     setSelectedAttemptItem({
                       id: item.id,
@@ -464,9 +470,10 @@ const CaseDetailPanel: React.FC<{
   launchId: string;
   snapshotId: string | null;
   item: ItemExecution;
+  evaluationManifest?: Record<string, unknown>;
   manifestDataset?: any;
   onOpenAttemptDrawer: () => void;
-}> = ({ launchId, snapshotId, item, manifestDataset, onOpenAttemptDrawer }) => {
+}> = ({ launchId, snapshotId, item, manifestDataset, evaluationManifest = {}, onOpenAttemptDrawer }) => {
   // Shared validated entry with the ComparisonCaseDrawer: same key, same fetch,
   // same triple identity check (launch_id / snapshot_id / dataset_item_id), so a
   // foreign payload can never enter the shared success cache (issue 119 gap U1).
@@ -488,6 +495,7 @@ const CaseDetailPanel: React.FC<{
 
   return (
     <div className="mt-4 pt-4 border-t border-border space-y-4 text-muted-foreground">
+      <ManagedEvaluationPanel launchId={launchId} snapshotId={snapshotId} manifest={evaluationManifest} item={item} />
       {/* 冻结输入面板 */}
       <div className="p-3 bg-surface-subtle rounded-lg border border-border space-y-2">
         <div className="flex items-center justify-between">
@@ -691,10 +699,10 @@ const CaseDetailPanel: React.FC<{
       </div>
 
       {/* 底部操作与 Attempt 入口 */}
-      <div className="flex items-center justify-between pt-2 border-t border-border">
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border">
         {item.id ? (
           <>
-            <span className="text-micro font-mono">
+            <span className="text-micro font-mono break-all">
               Item Execution ID: {item.id}
             </span>
             <Button

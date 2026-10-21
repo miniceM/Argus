@@ -1,0 +1,20 @@
+{
+  "source_commit": "2a14d9d42d1e6188e9399c69be719797359233a1",
+  "environment": "issue219-20261021t083455z",
+  "flow_id": "8b8d2606-379c-42c4-9ac9-08dcbf9490e8",
+  "flow_sha256": "11905c4505607320922ca8a018a678a7ce919976f14a47ac3745b10ac66d38e2",
+  "models": [
+    {
+      "modelName": "deepseek-v4.1-flash",
+      "maxRetries": 0,
+      "temperature": 0
+    }
+  ],
+  "agent_version_max_retries": 0,
+  "network_mocking": false,
+  "source_sha256": {
+    "docs/validation/issue219-managed-console/real_console_acceptance.py": "6fd73570a99805b4f64ff603d1fb7cc11e61efa463a3f93f52ce2a8f66739df4",
+    "docs/validation/issue219-managed-console/real_console_flow.mjs": "d39c7cd66be1401d8324268bf10de3e065e6f3e5853c6ce3fe9453f3a51d0255",
+    "services/console/dist/index.html": "c41caa52ffc67e8cd73b41f8a17df63987704f5b6f1bfc627b488003ffb513a2"
+  }
+}

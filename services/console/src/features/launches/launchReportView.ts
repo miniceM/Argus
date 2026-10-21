@@ -8,6 +8,7 @@ export interface ReportCaseItem {
   dataset_item_id: string;
   execution_status: string;
   eval_status: string;
+  eval_error?: string | null;
   quality_conclusion: "pass" | "fail" | "unknown";
   scores: Record<string, number | undefined>;
   quality_evaluation: any | null;
@@ -168,6 +169,7 @@ export function projectFrozenCase(row: Record<string, any>): ReportCaseItem {
     dataset_item_id: datasetItemId,
     execution_status: row.execution_status ?? "succeeded",
     eval_status: row.eval_status ?? row.evaluation_status ?? "succeeded",
+    eval_error: row.eval_error ?? (Array.isArray(row.managed_evidence_reasons) ? row.managed_evidence_reasons.filter((reason: unknown) => typeof reason === "string").join("；") || null : null),
     quality_conclusion: qualityConclusion,
     scores: row.scores && typeof row.scores === "object" ? row.scores : {},
     quality_evaluation: row.quality_evaluation ?? null,

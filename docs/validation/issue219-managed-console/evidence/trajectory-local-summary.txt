@@ -1,0 +1,4 @@
+.venv/bin/python -m pytest -q tests/test_trajectory_backend_integration.py tests/test_trajectory_observation_integration.py -m trajectory_local
+...............................                                          [100%]
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+31 passed, 95 warnings in 190.72s (0:03:10)

@@ -138,7 +138,7 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
     <div className="space-y-6">
       {manifest.evaluation_source === "langfuse_managed" && <section className="space-y-3 rounded-xl border border-border bg-surface p-5" aria-label="Langfuse Managed 采纳契约">
         <h3 className="text-sm font-bold">Langfuse Managed Evaluation</h3>
-        <p className="text-sm text-timeout">待收集评分，暂不可用于正式发布。</p>
+        <p className="text-sm text-muted-foreground">{effectiveSnapshotId ? "当前报告只展示所选 Snapshot 已冻结的采纳结果；是否可发布以冻结证据状态及 Release Gate 为准。" : "评分尚未冻结；请查看用例中的采纳进度，再查看 Frozen Snapshot 与 Release Gate。"}</p>
         <p className="text-xs text-muted-foreground">已冻结 Score 采纳条件；Langfuse Rule 遵循当前 latest，远程执行实现并未冻结。以下为当前所选 Manifest 的原始配置，不从外部 Rule 回填。</p>
         <JsonViewer data={manifest.managed_evaluation ?? {}} />
         <h4 className="text-sm font-semibold">对应 QualityPolicy</h4>

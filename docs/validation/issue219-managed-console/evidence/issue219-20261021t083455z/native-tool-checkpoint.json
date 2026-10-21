@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "scope": "independent read-only internal audit; user workflow uses Console only",
+  "checkpoint": {
+    "launch_id": "61b065da-48de-46da-9348-f888acad12e7",
+    "item_execution_id": "7c9381fe-503f-4ea7-bd97-d09ab53cd320",
+    "trace_id": "f6d0b889aafcd4ba6d41a8813a5107c4",
+    "observation_id": "c610c9745353b6e5",
+    "output_digest": "sha256:07d2c9b24958ec626caad8992e667228c468946bb96967ebb9883994de62aa46"
+  },
+  "final_text": "1266",
+  "tools": [
+    {
+      "name": "calculator",
+      "content": "1266",
+      "tool_call_id": "call_575a3560ce91453784bfbdbd"
+    }
+  ],
+  "models": [
+    {
+      "modelName": "deepseek-v4.1-flash",
+      "maxRetries": 0,
+      "temperature": 0
+    }
+  ],
+  "source_sha256": "9350d411cd6a57be5070982be74f8be32ae13e297850378fd5b261fe9d740e9d"
+}

@@ -1,0 +1,3 @@
+pass: Console → native EVAL → frozen PASS PASS
+fail: Console → native EVAL → frozen FAIL PASS
+missing: Console → native EVAL → frozen UNKNOWN PASS

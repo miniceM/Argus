@@ -2,7 +2,8 @@
 
 ## 当前结论
 
-**本地功能、真实 Console E2E 与完整回归通过；独立 PR / 精确 head CI 待交付。**
+**本地功能、真实 Console E2E 与完整回归通过；已提交独立 [PR #227](https://github.com/miniceM/Argus/pull/227)。**
+远端精确 head 的 CI / Cloud Policy 结果在 PR 最终验收评论中单独记录，不以本地结果代替。
 实现基于 `0f721a7`，功能提交 `72b0861`，真实服务运行身份 `2a14d9d`（与功能提交的 UI 源码一致）。
 分支 `codex/issue219-managed-console`。验收后新增的内容是 harness、回归测试与脱敏证据，
 没有重写 #213～#218 的后端。真实、受控故障注入、网络替身和远端 CI 的边界如下。
@@ -32,7 +33,7 @@
 | PostgreSQL 全量专项 | **1669 passed** | 独立 argus219-postgres；2 项只在 SQLite 参数组跳过 MVCC/行锁探针，相应 PG 参数组已执行 |
 | S4 真实本地采集 | **31 passed，190.72s** | `make trajectory-prepare && make trajectory-test`，独立固定镜像，不使用 Cloud 凭据 |
 | 真实 Flowise→双 EVAL Score→Frozen Snapshot→Gate | **PASS** | 当前分支独立 Runner + Console；真实 Calculator/Judge/Code；三条 Console 链路见下 |
-| 独立 PR / 精确 head CI | NOT RUN | 未创建、未推送、未合并 |
+| 独立 PR / 精确 head CI | PR #227 已提交 | 精确 head / CI / Cloud Policy 见 PR 最终验收评论；未合并 |
 
 首轮新 Playwright 的 6 项失败来自 fixture 漏填必需 `system/info.build_id`，
 导致 AppShell 读取 undefined；补齐 API 真实必需字段后 6/6 通过。随后修正 mock
@@ -69,7 +70,7 @@ Snapshot 的 `EVIDENCE_COMPLETE` 为服务端实际 `COMPLETE`，避免把假诊
 | 6 | Rule 变更不改变既有 Snapshot/报告/Gate；后续 latest 如实披露 | #218 冻结后端回归 | PASS：暂停本次自有 Rule 后，三份 Snapshot/Gate API及浏览器文本/链接保持不变；不伪称冻结远程实现 |
 | 7 | Builtin/历史/Demo/S3.1 不变；429/超时/缺失/迟到/类型回归 | #213～#218 原有自动化及真实 Demo 基线 | PASS：无 Langfuse 配置的独立真实 HTTP Demo v1=2/6、v2=6/6；完整回归及PG参数组通过 |
 | 8 | Console 来源/等待/证据不足/有效链接；明确真实、mock、已知限制 | 本项负责 | PASS：6条新增 UI测试、真实 Score/Gate截图；匿名导航显示权限提示；已登录Chrome实际打开双Score页，未向浏览器传递密钥 |
-| 9 | make validate、API/DB/前端/Playwright 及运行证据 | 本项负责收口 | 本地 validate / 888 Vitest / 137 Playwright / 1669 Python / 31 S4 / 真实 Console E2E通过；PR/CI 待最终核验 |
+| 9 | make validate、API/DB/前端/Playwright 及运行证据 | 本项负责收口 | 本地 validate / 888 Vitest / 137 Playwright / 1669 Python / 31 S4 / 真实 Console E2E通过；PR #227 精确head CI/Cloud policy单独记录于PR |
 
 ## 本分支真实 E2E（2026-10-21）
 

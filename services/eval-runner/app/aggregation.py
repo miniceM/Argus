@@ -276,7 +276,13 @@ def aggregate_run(items: list[dict[str, Any]], evaluator_specs: list[dict[str, A
 
     managed_coverage = {}
     if managed:
-        required = [s["name"] for s in manifest["managed_evaluation"]["scores"] if s.get("required", True)]
+        managed_contract = manifest.get("managed_evaluation") or {}
+        managed_scores = managed_contract.get("scores") or []
+        required = [
+            s["name"]
+            for s in managed_scores
+            if isinstance(s, dict) and s.get("required", True) and isinstance(s.get("name"), str)
+        ]
         counts = {name: sum(
             any(r.get("evaluator_id") == name and r.get("status") == "succeeded"
                 and r.get("value") is not None for r in item.get("evaluation_results", []))

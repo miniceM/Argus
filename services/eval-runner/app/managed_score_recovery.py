@@ -53,10 +53,12 @@ from .evaluation_recovery import (
 
 WORK_TYPE_MANAGED = "MANAGED_SCORE"
 
-# Caller 超时不能终止阻塞 I/O 线程。直到线程真实退出才归还在途预算，
-# 使用非阻塞认领，既不累积等待协程，也不产生无界后台线程。
+# Caller 超时不能终止阻塞 I/O 线程。超时即归还槽位并标记抛弃，
+# 迟到线程退出时不再重复归还（单递减 guard）；迟到写入仍由租约
+# 围栏保证无效。_collection_abandoned_total 记录超时抛弃次数。
 _collection_slots_lock = threading.Lock()
 _collection_inflight = 0
+_collection_abandoned_total = 0
 
 MANAGED_PENDING_CODE = "LANGFUSE_MANAGED_SCORES_PENDING"
 MANAGED_PENDING_MESSAGE = "LANGFUSE_MANAGED_SCORES_PENDING: Agent 已成功，Langfuse 正在评分，暂不可用于正式发布。"
@@ -459,7 +461,7 @@ def _collect_with_timeout(db_mgr, client_factory, launch_id: str, item_id: str, 
     """
     from .worker import _managed_slot_count
 
-    global _collection_inflight
+    global _collection_abandoned_total, _collection_inflight
     if timeout_seconds <= 0:
         return {"decisions": [{"reason": "TIMEOUT"}], "retry_after": None}
     with _collection_slots_lock:
@@ -469,9 +471,16 @@ def _collect_with_timeout(db_mgr, client_factory, launch_id: str, item_id: str, 
 
     box: dict[str, Any] = {}
     worker_error: list[BaseException] = []
+    released = {"done": False}
+
+    def _release_slot() -> None:
+        global _collection_inflight
+        with _collection_slots_lock:
+            if not released["done"]:
+                released["done"] = True
+                _collection_inflight -= 1
 
     def _run() -> None:
-        global _collection_inflight
         from .langfuse_managed_scores import ManagedScoreCollector
         from .langfuse_scores_client import ScoresV3Client as _ScoresV3Client
 
@@ -497,18 +506,21 @@ def _collect_with_timeout(db_mgr, client_factory, launch_id: str, item_id: str, 
         except BaseException as exc:  # noqa: BLE001 - 与外层异常归一保持一致
             worker_error.append(exc)
         finally:
-            with _collection_slots_lock:
-                _collection_inflight -= 1
+            _release_slot()
 
     thread = threading.Thread(target=_run, name=f"managed-collect-{item_id[:8]}", daemon=True)
     try:
         thread.start()
     except BaseException:
-        with _collection_slots_lock:
-            _collection_inflight -= 1
+        _release_slot()
         raise
     thread.join(timeout=timeout_seconds)
     if thread.is_alive():
+        # 超时退场：立即归还槽位并计数抛弃；迟到线程退出时 _release_slot
+        # 不再重复递减，其写入仍由租约围栏判无效。
+        _release_slot()
+        with _collection_slots_lock:
+            _collection_abandoned_total += 1
         return {
             "launch_id": launch_id,
             "item_execution_id": item_id,
@@ -587,14 +599,21 @@ def _record_managed_attempt_started(
                 )
                 session.flush()
         except IntegrityError:
-            session.execute(
+            # 同代幂等复活：仅仍有效持有者可改写审计。迟到旧进程不得把
+            # 已结算审计改回 running，更不得重置 started_at 污染周期预算。
+            fenced_update = session.execute(
                 update(EvaluationAttemptRecord)
                 .where(
                     EvaluationAttemptRecord.item_execution_id == item_id,
                     EvaluationAttemptRecord.evaluation_generation == evaluation_generation,
+                    EvaluationAttemptRecord.status == "running",
+                    (
+                        EvaluationAttemptRecord.lease_token == lease_token
+                        if lease_token is not None
+                        else EvaluationAttemptRecord.lease_token.is_(None)
+                    ),
                 )
                 .values(
-                    status="running",
                     target_bindings=list(target_bindings),
                     reused_output_digest=reused_output_digest or "",
                     worker_id=worker_id,
@@ -605,6 +624,9 @@ def _record_managed_attempt_started(
                     completed_at=None,
                 )
             )
+            if fenced_update.rowcount != 1:
+                session.rollback()
+                return False
         session.commit()
         return True
 
@@ -652,7 +674,13 @@ def submit_managed_collection(
     ``new_cycle=True``（人工重提）开启新的收集周期：重置周期起点，
     给出新的重试窗口与 Deadline；代际仍单调递增做防旧隔离。
     自动/补偿提交保持 ``False``，不凭空放大预算。
+
+    代际递增经单条 CAS UPDATE 原子完成（PG/SQLite 均有效）：
+    并发两路提交仅一路 rowcount==1 胜出，败者按重读结果返回
+    already_running 或 None，绝不产生代际跳 2 与双重入队。
     """
+    from sqlalchemy.exc import OperationalError
+
     from .db_models import ExperimentItemExecutionRecord, ExperimentLaunchRecord
 
     now = _now()
@@ -676,12 +704,44 @@ def submit_managed_collection(
         if item.evaluation_status == EVALUATION_RUNNING:
             session.rollback()
             return {"already_running": True, "evaluation_generation": item.evaluation_generation}
-        new_gen = _open_collection_cycle(
-            item, now=now, pending_message=MANAGED_PENDING_MESSAGE,
-            reset_cycle_start=new_cycle,
-        )
-        item.updated_at = now
+        reset_start = new_cycle or item.evaluation_started_at is None
+        try:
+            res = session.execute(
+                update(ExperimentItemExecutionRecord)
+                .where(
+                    ExperimentItemExecutionRecord.id == item_id,
+                    ExperimentItemExecutionRecord.evaluation_status != EVALUATION_RUNNING,
+                    ExperimentItemExecutionRecord.execution_status == "succeeded",
+                )
+                .values(
+                    evaluation_generation=ExperimentItemExecutionRecord.evaluation_generation + 1,
+                    evaluation_status=EVALUATION_RUNNING,
+                    evaluation_error=MANAGED_PENDING_MESSAGE,
+                    evaluation_lease_owner=None,
+                    evaluation_lease_token=None,
+                    evaluation_lease_expires_at=None,
+                    evaluation_started_at=now if reset_start else ExperimentItemExecutionRecord.evaluation_started_at,
+                    evaluation_completed_at=None,
+                    eval_status="pending",
+                    quality_conclusion="unknown",
+                    eval_error=MANAGED_PENDING_MESSAGE,
+                    available_at=None,
+                    updated_at=now,
+                )
+            )
+        except OperationalError:
+            # SQLite 写锁竞争：败者不抛异常，按重读结果归一。
+            session.rollback()
+            res = None
+        if res is None or res.rowcount != 1:
+            session.rollback()
+            loser = session.get(ExperimentItemExecutionRecord, item_id)
+            if loser is not None and loser.evaluation_status == EVALUATION_RUNNING:
+                return {"already_running": True, "evaluation_generation": loser.evaluation_generation}
+            return None
         session.commit()
+        winner = session.get(ExperimentItemExecutionRecord, item_id)
+        new_gen = winner.evaluation_generation if winner is not None else item.evaluation_generation + 1
     queue.enqueue_items([(item_id, new_gen)], work_type=WORK_TYPE_MANAGED)
     return {"evaluation_generation": new_gen, "enqueued": True}
 
@@ -736,6 +796,9 @@ def _fail_managed(
             )
             session.commit()
             return RecoveryOutcome(claimed=True, finalized=False, reason="SUPERSEDED_OR_LEASE_LOST")
+        # 注意：此处不加显式取消检查。_fail_managed 本就是取消结算的共享出口
+        # （recover 取消分支与 Reconciler 取消分支经此落盘）；围栏已要求
+        # generation/token/RUNNING 全部有效，已结算行不会被迟到失败覆盖。
         item.eval_status = "failed"
         item.eval_error = f"{error_code}: {error_message}"
         item.quality_conclusion = "unknown"
@@ -968,9 +1031,31 @@ def _finalize_success(
                 db_mgr, claim, error_code=MANAGED_DEADLINE_CODE,
                 error_message="托管评分终结时已超时，质量保持 UNKNOWN。", launch_id=launch_id,
             )
-        if lease_exp <= now:
+        # 终结写前重读复验：锁内质量计算耗时窗口内，代际/租约/执行/
+        # 取消状态可能已变（SQLite 无 FOR UPDATE；PG 锁虽持有，重读可防
+        # 时钟偏斜与带外改写）。此处绝不凭陈旧快照发布成功结论。
+        session.expire(item)
+        now = _now()
+        lease_exp = _as_utc(item.evaluation_lease_expires_at)
+        if (
+            item.evaluation_generation != generation
+            or item.evaluation_lease_token != token
+            or item.evaluation_status != EVALUATION_RUNNING
+            or lease_exp is None
+            or lease_exp <= now
+            or (expected_dispatch is not None and item.dispatch_generation != expected_dispatch)
+            or item.execution_status != "succeeded"
+        ):
             session.rollback()
             return RecoveryOutcome(claimed=True, finalized=False, reason="SUPERSEDED_OR_LEASE_LOST")
+        if _launch_cancelled(session, launch_id):
+            _close_attempt(
+                session, item_id=item_id, evaluation_generation=generation, lease_token=token,
+                status="discarded", error_type="EVALUATION_CANCELLED",
+                error_message="评测任务已取消，迟到评分未写入。", now=now,
+            )
+            session.commit()
+            return RecoveryOutcome(claimed=True, finalized=False, reason="CANCELLED_SUPERSEDE")
         item.eval_status = "succeeded"
         item.eval_error = None
         item.quality_conclusion = decision.conclusion
@@ -1169,7 +1254,7 @@ def recover_managed_scores(
             error_message=f"托管评分重试已达上限（{int(cfg['max_attempts'])} 次），质量保持 UNKNOWN。",
             launch_id=launch_id,
         )
-    if started_at is not None and (now - started_at).total_seconds() >= float(cfg["deadline"]):
+    if started_at is not None and (_now() - started_at).total_seconds() >= float(cfg["deadline"]):
         return _fail_managed(
             db_mgr, claim, error_code=MANAGED_DEADLINE_CODE,
             error_message="托管评分等待已超时，质量保持 UNKNOWN，可在 Langfuse 出分后手动重评。",

@@ -1,0 +1,107 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.4, pytest-9.1.1, pluggy-1.7.0 -- /Users/hosea/.codex/worktrees/10d9/Argus/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/hosea/.codex/worktrees/10d9/Argus
+configfile: pyproject.toml
+plugins: cov-7.1.0, anyio-4.15.1
+collecting ... collected 74 items
+
+tests/test_issue_217_lifecycle_boundaries.py::test_expired_deadline_never_reads_remote[sqlite] PASSED [  1%]
+tests/test_issue_217_lifecycle_boundaries.py::test_expired_deadline_never_reads_remote[postgresql] PASSED [  2%]
+tests/test_issue_217_lifecycle_boundaries.py::test_deadline_during_fetch_rejects_late_score[sqlite] PASSED [  4%]
+tests/test_issue_217_lifecycle_boundaries.py::test_deadline_during_fetch_rejects_late_score[postgresql] PASSED [  5%]
+tests/test_issue_217_lifecycle_boundaries.py::test_retry_after_is_respected_and_duplicate_cannot_skip_backoff[sqlite] PASSED [  6%]
+tests/test_issue_217_lifecycle_boundaries.py::test_retry_after_is_respected_and_duplicate_cannot_skip_backoff[postgresql] PASSED [  8%]
+tests/test_issue_217_lifecycle_boundaries.py::test_cancel_during_backoff_settles_without_agent_rerun[sqlite] PASSED [  9%]
+tests/test_issue_217_lifecycle_boundaries.py::test_cancel_during_backoff_settles_without_agent_rerun[postgresql] PASSED [ 10%]
+tests/test_issue_217_lifecycle_boundaries.py::test_stale_worker_does_not_corrupt_winning_attempt_audit[sqlite] PASSED [ 12%]
+tests/test_issue_217_lifecycle_boundaries.py::test_stale_worker_does_not_corrupt_winning_attempt_audit[postgresql] PASSED [ 13%]
+tests/test_issue_217_lifecycle_boundaries.py::test_reconciler_scan_cannot_clear_newly_renewed_lease[sqlite] SKIPPED [ 14%]
+tests/test_issue_217_lifecycle_boundaries.py::test_reconciler_scan_cannot_clear_newly_renewed_lease[postgresql] PASSED [ 16%]
+tests/test_issue_217_lifecycle_boundaries.py::test_crashed_collections_consume_budget[sqlite] PASSED [ 17%]
+tests/test_issue_217_lifecycle_boundaries.py::test_crashed_collections_consume_budget[postgresql] PASSED [ 18%]
+tests/test_issue_217_lifecycle_boundaries.py::test_infinite_attempt_config_is_safe[inf] PASSED [ 20%]
+tests/test_issue_217_lifecycle_boundaries.py::test_infinite_attempt_config_is_safe[-inf] PASSED [ 21%]
+tests/test_issue_217_lifecycle_boundaries.py::test_infinite_attempt_config_is_safe[Infinity] PASSED [ 22%]
+tests/test_issue_217_lifecycle_boundaries.py::test_infinite_attempt_config_is_safe[1e309] PASSED [ 24%]
+tests/test_issue_217_lifecycle_boundaries.py::test_multiworker_single_adoption_on_both_databases[sqlite] PASSED [ 25%]
+tests/test_issue_217_lifecycle_boundaries.py::test_multiworker_single_adoption_on_both_databases[postgresql] PASSED [ 27%]
+tests/test_issue_217_lifecycle_boundaries.py::test_live_dispatcher_managed_wait_does_not_block_http PASSED [ 28%]
+tests/test_issue_217_lifecycle_boundaries.py::test_timed_out_thread_cannot_overwrite_new_generation[sqlite] PASSED [ 29%]
+tests/test_issue_217_lifecycle_boundaries.py::test_timed_out_thread_cannot_overwrite_new_generation[postgresql] PASSED [ 31%]
+tests/test_issue_217_lifecycle_boundaries.py::test_two_postgresql_reconcilers_advance_one_generation[sqlite] SKIPPED [ 32%]
+tests/test_issue_217_lifecycle_boundaries.py::test_two_postgresql_reconcilers_advance_one_generation[postgresql] PASSED [ 33%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_outbox_restores_scorable_observation_from_checkpoint[sqlite] PASSED [ 35%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_outbox_restores_scorable_observation_from_checkpoint[postgresql] PASSED [ 36%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_collection_waits_for_durable_observation_publication[sqlite-PENDING] PASSED [ 37%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_collection_waits_for_durable_observation_publication[sqlite-SYNCED] PASSED [ 39%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_collection_waits_for_durable_observation_publication[sqlite-FAILED] PASSED [ 40%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_collection_waits_for_durable_observation_publication[sqlite-SKIPPED] PASSED [ 41%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_collection_waits_for_durable_observation_publication[postgresql-PENDING] PASSED [ 43%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_collection_waits_for_durable_observation_publication[postgresql-SYNCED] PASSED [ 44%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_collection_waits_for_durable_observation_publication[postgresql-FAILED] PASSED [ 45%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_collection_waits_for_durable_observation_publication[postgresql-SKIPPED] PASSED [ 47%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_sdk_and_outbox_have_one_scorable_publisher[sqlite-otel] PASSED [ 48%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_sdk_and_outbox_have_one_scorable_publisher[sqlite-legacy] PASSED [ 50%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_sdk_and_outbox_have_one_scorable_publisher[postgresql-otel] PASSED [ 51%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_sdk_and_outbox_have_one_scorable_publisher[postgresql-legacy] PASSED [ 52%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_projection_refuses_corrupt_checkpoint[sqlite] PASSED [ 54%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_projection_refuses_corrupt_checkpoint[postgresql] PASSED [ 55%]
+tests/test_issue_217_lifecycle_boundaries.py::test_projection_failure_resubmit_has_one_new_budget_without_agent[sqlite] PASSED [ 56%]
+tests/test_issue_217_lifecycle_boundaries.py::test_projection_failure_resubmit_has_one_new_budget_without_agent[postgresql] PASSED [ 58%]
+tests/test_issue_217_lifecycle_boundaries.py::test_transient_score_failure_retries_then_converges_without_agent[sqlite-RATE_LIMITED] PASSED [ 59%]
+tests/test_issue_217_lifecycle_boundaries.py::test_transient_score_failure_retries_then_converges_without_agent[sqlite-UPSTREAM_UNAVAILABLE] PASSED [ 60%]
+tests/test_issue_217_lifecycle_boundaries.py::test_transient_score_failure_retries_then_converges_without_agent[sqlite-TIMEOUT] PASSED [ 62%]
+tests/test_issue_217_lifecycle_boundaries.py::test_transient_score_failure_retries_then_converges_without_agent[postgresql-RATE_LIMITED] PASSED [ 63%]
+tests/test_issue_217_lifecycle_boundaries.py::test_transient_score_failure_retries_then_converges_without_agent[postgresql-UPSTREAM_UNAVAILABLE] PASSED [ 64%]
+tests/test_issue_217_lifecycle_boundaries.py::test_transient_score_failure_retries_then_converges_without_agent[postgresql-TIMEOUT] PASSED [ 66%]
+tests/test_issue_217_lifecycle_boundaries.py::test_auth_failure_stops_unknown_without_agent[sqlite-AUTHENTICATION_FAILED] PASSED [ 67%]
+tests/test_issue_217_lifecycle_boundaries.py::test_auth_failure_stops_unknown_without_agent[sqlite-AUTHORIZATION_FAILED] PASSED [ 68%]
+tests/test_issue_217_lifecycle_boundaries.py::test_auth_failure_stops_unknown_without_agent[postgresql-AUTHENTICATION_FAILED] PASSED [ 70%]
+tests/test_issue_217_lifecycle_boundaries.py::test_auth_failure_stops_unknown_without_agent[postgresql-AUTHORIZATION_FAILED] PASSED [ 71%]
+tests/test_issue_217_lifecycle_boundaries.py::test_late_attempt_start_cannot_spend_new_manual_cycle_budget[sqlite] PASSED [ 72%]
+tests/test_issue_217_lifecycle_boundaries.py::test_late_attempt_start_cannot_spend_new_manual_cycle_budget[postgresql] PASSED [ 74%]
+tests/test_issue_217_lifecycle_boundaries.py::test_cancel_in_http_success_submission_gap_settles[sqlite] PASSED [ 75%]
+tests/test_issue_217_lifecycle_boundaries.py::test_cancel_in_http_success_submission_gap_settles[postgresql] PASSED [ 77%]
+tests/test_issue_217_lifecycle_boundaries.py::test_replayed_failure_cannot_rewrite_same_lease_success_audit[sqlite] PASSED [ 78%]
+tests/test_issue_217_lifecycle_boundaries.py::test_replayed_failure_cannot_rewrite_same_lease_success_audit[postgresql] PASSED [ 79%]
+tests/test_issue_217_lifecycle_boundaries.py::test_finalize_cannot_publish_success_after_deadline_inside_policy[sqlite] PASSED [ 81%]
+tests/test_issue_217_lifecycle_boundaries.py::test_finalize_cannot_publish_success_after_deadline_inside_policy[postgresql] PASSED [ 82%]
+tests/test_issue_217_lifecycle_boundaries.py::test_timed_out_collectors_release_slot_and_count_abandoned PASSED [ 83%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_concurrency_config_safely_falls_back[inf] PASSED [ 85%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_concurrency_config_safely_falls_back[-inf] PASSED [ 86%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_concurrency_config_safely_falls_back[Infinity] PASSED [ 87%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_concurrency_config_safely_falls_back[NaN] PASSED [ 89%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_concurrency_config_safely_falls_back[1e309] PASSED [ 90%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_concurrency_config_safely_falls_back[bad] PASSED [ 91%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_concurrency_config_safely_falls_back[-1] PASSED [ 93%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_concurrency_config_safely_falls_back[0] PASSED [ 94%]
+tests/test_issue_217_lifecycle_boundaries.py::test_managed_concurrency_config_has_finite_upper_bound PASSED [ 95%]
+tests/test_issue_217_lifecycle_boundaries.py::test_future_generation_cannot_skip_persisted_backoff[sqlite] PASSED [ 97%]
+tests/test_issue_217_lifecycle_boundaries.py::test_future_generation_cannot_skip_persisted_backoff[postgresql] PASSED [ 98%]
+tests/test_issue_217_lifecycle_boundaries.py::test_live_dispatcher_isolates_managed_from_default_executor PASSED [100%]
+
+=============================== warnings summary ===============================
+tests/test_issue_217_lifecycle_boundaries.py: 551 warnings
+  /Users/hosea/.codex/worktrees/10d9/Argus/.venv/lib/python3.12/site-packages/sqlalchemy/sql/schema.py:4296: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return util.wrap_callable(lambda ctx: fn(), fn)  # type: ignore[call-arg, no-any-return, no-untyped-call]  # noqa: E501
+
+tests/test_issue_217_lifecycle_boundaries.py::test_cancel_during_backoff_settles_without_agent_rerun[sqlite]
+tests/test_issue_217_lifecycle_boundaries.py::test_cancel_during_backoff_settles_without_agent_rerun[postgresql]
+tests/test_issue_217_lifecycle_boundaries.py::test_cancel_in_http_success_submission_gap_settles[sqlite]
+tests/test_issue_217_lifecycle_boundaries.py::test_cancel_in_http_success_submission_gap_settles[postgresql]
+  /Users/hosea/.codex/worktrees/10d9/Argus/services/eval-runner/app/result_snapshots.py:282: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    created_at=datetime.utcnow(),
+
+tests/test_issue_217_lifecycle_boundaries.py::test_cancel_during_backoff_settles_without_agent_rerun[sqlite]
+tests/test_issue_217_lifecycle_boundaries.py::test_cancel_during_backoff_settles_without_agent_rerun[postgresql]
+tests/test_issue_217_lifecycle_boundaries.py::test_cancel_in_http_success_submission_gap_settles[sqlite]
+tests/test_issue_217_lifecycle_boundaries.py::test_cancel_in_http_success_submission_gap_settles[postgresql]
+  /Users/hosea/.codex/worktrees/10d9/Argus/services/eval-runner/app/result_snapshots.py:310: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    next_retry_at=datetime.utcnow(),
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_issue_217_lifecycle_boundaries.py:191: MVCC interleaving requires PostgreSQL
+SKIPPED [1] tests/test_issue_217_lifecycle_boundaries.py:354: row-lock interleaving requires PostgreSQL
+================= 72 passed, 2 skipped, 559 warnings in 16.39s =================

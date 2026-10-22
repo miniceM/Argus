@@ -1,0 +1,75 @@
+{
+  "id": "cmvf083f50034ad0gbpddxpar",
+  "name": "issue214-20261019t084028z-code",
+  "description": null,
+  "createdBy": null,
+  "status": "active",
+  "pausedAt": null,
+  "pausedReason": null,
+  "pausedMessage": null,
+  "evaluationRuleAssignments": [
+    {
+      "evaluationRuleId": "cmvhuwt82000rad0mzkoht7g6"
+    },
+    {
+      "evaluationRuleId": "cmvhus3nv001uad0ejann2v6k"
+    },
+    {
+      "evaluationRuleId": "cmvhupk0x001ead0e5jyxyq9v"
+    },
+    {
+      "evaluationRuleId": "cmvhumz20001iad0emfjr1v9c"
+    },
+    {
+      "evaluationRuleId": "cmvhul0s3000fad0k4v3xu4ox"
+    },
+    {
+      "evaluationRuleId": "cmvhj1wpi005qad0efj1v0ecc"
+    },
+    {
+      "evaluationRuleId": "cmvhippi70050ad0ewqea29ok"
+    },
+    {
+      "evaluationRuleId": "cmvhg0ef6000vad0doiiorwxg"
+    },
+    {
+      "evaluationRuleId": "cmvhfcuhl001had0gzuizqhm0"
+    },
+    {
+      "evaluationRuleId": "cmvgmm9td0001ad0gv59kzna7"
+    },
+    {
+      "evaluationRuleId": "cmvglscqe0017ad0kv2plgsp6"
+    },
+    {
+      "evaluationRuleId": "cmvgkwgeo0018ad0jzx0zib6i"
+    },
+    {
+      "evaluationRuleId": "cmvgks495003vad0jbgak6f61"
+    },
+    {
+      "evaluationRuleId": "cmvgdofxo000gad0grdirxxbw"
+    },
+    {
+      "evaluationRuleId": "cmvg2evtf001gad0f864w8yji"
+    },
+    {
+      "evaluationRuleId": "cmvg27caa001kad0dkd7cxvyg"
+    },
+    {
+      "evaluationRuleId": "cmvf0oz4g0013ad0dzk88qwjk"
+    },
+    {
+      "evaluationRuleId": "cmvf083me001lad0i4v3cplr8"
+    }
+  ],
+  "createdAt": "2026-10-19T08:40:32.849Z",
+  "updatedAt": "2026-10-19T08:40:32.849Z",
+  "versionId": "cmvf083f50036ad0ggpilrl84",
+  "version": 1,
+  "versionCreatedAt": "2026-10-19T08:40:32.849Z",
+  "versionCreatedBy": null,
+  "type": "code",
+  "sourceCode": "def evaluate(ctx):\n    import json\n    import hashlib\n    def parsed(value):\n        if isinstance(value, str):\n            return json.loads(value)\n        return value\n    inp = parsed(ctx.observation.input)\n    out = parsed(ctx.observation.output)\n    if not isinstance(inp, dict) or not isinstance(inp.get(\"request\"), dict) or not isinstance(out, dict) or not isinstance(out.get(\"text\"), str):\n        raise ValueError(\"ISSUE214_INVALID_OBSERVATION_IO\")\n    def digest(value):\n        return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(\",\", \":\"), ensure_ascii=False).encode()).hexdigest()\n    passed = out[\"text\"].strip() == \"1266\"\n    return {\"scores\": [{\"name\": 'issue214-20261019t084028z-code', \"value\": passed, \"dataType\": \"BOOLEAN\", \"comment\": \"Native HTTP text checked by Langfuse managed Python runtime; expected constant 1266 is smoke rubric only\", \"metadata\": {\"input_sha256\": digest(inp), \"output_sha256\": digest(out), \"experiment_context_present\": ctx.experiment is not None}}]}\n",
+  "sourceCodeLanguage": "PYTHON"
+}

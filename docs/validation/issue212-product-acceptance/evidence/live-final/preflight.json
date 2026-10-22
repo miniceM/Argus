@@ -1,0 +1,22 @@
+{
+  "source_commit": "f2a67d6c24617f1c5847e84cb82b98773c755ee0",
+  "environment": "issue212-20261022t083959z",
+  "flow_id": "2a97aead-32e6-4dc9-812a-602184b99a92",
+  "flow_sha256": "df473b840a502613311dd89342dd4607112dc4ad75e81db2d27fdbbd9f7e0989",
+  "models": [
+    {
+      "modelName": "deepseek-v4.1-flash",
+      "maxRetries": 0,
+      "temperature": 0
+    }
+  ],
+  "agent_version_max_retries": 0,
+  "network_mocking": false,
+  "source_sha256": {
+    "docs/validation/issue219-managed-console/real_console_acceptance.py": "0462bbc9c503e56540935e7d16212b4d3f584424b24db3cf930ebc76e264b9f6",
+    "docs/validation/issue219-managed-console/real_console_flow.mjs": "fcedc83d5348816750e9ffa8fca2397ba4ea7819c29470e49b264c9727775d14",
+    "services/console/dist/index.html": "5b79d627a9abe80745a1c674f1264f4ad4a6676899d5114741f7ac0619aabbf8",
+    "services/eval-runner/app/result_snapshots.py": "72b770b2d32c2aba40913e4b8b2e8975d4089ee8fb1df569b4053c7023357b29",
+    "services/eval-runner/app/evaluation_recovery.py": "aaca1ef051fd87c0e9a16e5a8f3c26bc43778b57eedfd0c9300848047a309cba"
+  }
+}

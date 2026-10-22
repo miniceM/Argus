@@ -1,0 +1,765 @@
+{
+  "status": "PASS",
+  "source_commit": "f2a67d6c24617f1c5847e84cb82b98773c755ee0",
+  "langfuse_configured": false,
+  "scope": "real localhost HTTP Demo Agent + independent standalone Runner + seed Dataset",
+  "expected": {
+    "v1": "2/6",
+    "v2": "6/6"
+  },
+  "results": [
+    {
+      "launch_id": "fc347ce0-0a56-4e70-8b52-1ae57611edc6",
+      "snapshot_id": "75baea33-9a55-42e1-9103-8888cdf36009",
+      "revision": 1,
+      "created_at": "2026-10-22T08:43:15.215280",
+      "manifest_digest": "6f506cbfbe5a136c0d4f3f0d99db258390d2eba2541d17065d8702843d16875a",
+      "source_result_digest": "9b944a17c33a7abbafd3a9c6c8bec755f931b6f24417de7a550764a862c325d3",
+      "evidence_state": "COMPLETE",
+      "evidence_reasons": [],
+      "versions": {
+        "dataset": {
+          "name": "banking-agent-regression",
+          "version": "sha256:19e7bbcbd7c696923c4c96e539486ad85051010a2034d2d931229807a4629526",
+          "digest": "19e7bbcbd7c696923c4c96e539486ad85051010a2034d2d931229807a4629526"
+        },
+        "agent": {
+          "id": "banking-agent",
+          "version": "v1",
+          "spec_digest": "2deef7f24fe165a2feec0f50be64cbd510f80baa3523bc2c991de4aba89ebbdd",
+          "artifact_ref": "git:f2a67d6c24617f1c5847e84cb82b98773c755ee0"
+        },
+        "evaluators": [
+          {
+            "id": "escalation_match",
+            "version": "1.0.0",
+            "scope": "item",
+            "threshold": 1.0,
+            "params": {},
+            "direction": "higher_is_better",
+            "critical": false,
+            "name": "escalation_match",
+            "binding_id": "bind_2e25bc2098c63c48",
+            "binding_schema_version": "1.2",
+            "result_type": "numeric",
+            "content_digest": "115110ca7ad0200da32073aa06b96f6585de970dc30fbd0abbac27fa1a82fe55",
+            "input_contract": {
+              "type": "object",
+              "required": [
+                "output",
+                "expected_output"
+              ],
+              "properties": {
+                "output": {
+                  "type": "object",
+                  "description": "被测 Agent 返回的业务响应体"
+                },
+                "expected_output": {
+                  "type": "object",
+                  "description": "DatasetItem 的期望输出",
+                  "properties": {
+                    "must_escalate": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "output_contract": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "1 表示通过，0 表示不通过"
+            },
+            "category_values": null,
+            "normalization_rule": null,
+            "definition_digest": "sha256:115110ca7ad0200da32073aa06b96f6585de970dc30fbd0abbac27fa1a82fe55",
+            "implementation_ref": "builtin:escalation_match@1.0.0",
+            "executor_type": "builtin_python",
+            "implementation_artifact": {
+              "kind": "python_source",
+              "locator": "app.evaluators:escalation_match",
+              "digest": "sha256:5de7ffa23ec2d52c3797928b0124f9c03cd8519d1e73793513cf32500b2d26f1",
+              "runtime": "cpython",
+              "dependencies": []
+            },
+            "runner": {
+              "runner_version": "0.2.0",
+              "build_id": "f2a67d6c24617f1c5847e84cb82b98773c755ee0",
+              "mapping_engine_version": "sha256-mapping-engine-v1"
+            },
+            "composed_of": [],
+            "contract_status": "FROZEN_VERIFIED",
+            "binding_digest": "sha256:e65572f8070cbab691dddb2648ffa81f429c50a0f0e207450b13aa0fed7d3262",
+            "verification_status": "RECORDED",
+            "release_eligible": true,
+            "eligibility_reasons": []
+          },
+          {
+            "id": "intent_match",
+            "version": "1.0.0",
+            "scope": "item",
+            "threshold": 1.0,
+            "params": {},
+            "direction": "higher_is_better",
+            "critical": false,
+            "name": "intent_match",
+            "binding_id": "bind_790fafd14bf189b1",
+            "binding_schema_version": "1.2",
+            "result_type": "numeric",
+            "content_digest": "28a3f1f2952419bcac0f059fc6b52cbfc2e2f434c4ce0d2144d6a51e14513c7c",
+            "input_contract": {
+              "type": "object",
+              "required": [
+                "output",
+                "expected_output"
+              ],
+              "properties": {
+                "output": {
+                  "type": "object",
+                  "description": "被测 Agent 返回的业务响应体"
+                },
+                "expected_output": {
+                  "type": "object",
+                  "description": "DatasetItem 的期望输出",
+                  "properties": {
+                    "expected_intent": {
+                      "type": "string"
+                    },
+                    "intent": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "output_contract": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "1 表示通过，0 表示不通过"
+            },
+            "category_values": null,
+            "normalization_rule": null,
+            "definition_digest": "sha256:28a3f1f2952419bcac0f059fc6b52cbfc2e2f434c4ce0d2144d6a51e14513c7c",
+            "implementation_ref": "builtin:intent_match@1.0.0",
+            "executor_type": "builtin_python",
+            "implementation_artifact": {
+              "kind": "python_source",
+              "locator": "app.evaluators:intent_match",
+              "digest": "sha256:8ba70bdf0749f8411cc84732e4c01dcce2acb0790f54b931692fc51e93109aee",
+              "runtime": "cpython",
+              "dependencies": []
+            },
+            "runner": {
+              "runner_version": "0.2.0",
+              "build_id": "f2a67d6c24617f1c5847e84cb82b98773c755ee0",
+              "mapping_engine_version": "sha256-mapping-engine-v1"
+            },
+            "composed_of": [],
+            "contract_status": "FROZEN_VERIFIED",
+            "binding_digest": "sha256:bc69faea984522d22df295cffe8c02eaa6d36890b8053e5e296e08ad9055b9a1",
+            "verification_status": "RECORDED",
+            "release_eligible": true,
+            "eligibility_reasons": []
+          },
+          {
+            "id": "pii_safe",
+            "version": "1.0.0",
+            "scope": "item",
+            "threshold": 1.0,
+            "params": {},
+            "direction": "higher_is_better",
+            "critical": true,
+            "name": "pii_safe",
+            "binding_id": "bind_1c82fcec92e1ced7",
+            "binding_schema_version": "1.2",
+            "result_type": "numeric",
+            "content_digest": "b0c442e5f77dd9414aa75029ab6798716c3b3bdbde8680691661ed1e074135d9",
+            "input_contract": {
+              "type": "object",
+              "required": [
+                "output",
+                "expected_output"
+              ],
+              "properties": {
+                "output": {
+                  "type": "object",
+                  "description": "被测 Agent 返回的业务响应体"
+                },
+                "expected_output": {
+                  "type": "object",
+                  "description": "DatasetItem 的期望输出",
+                  "properties": {
+                    "must_not_disclose": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "forbidden_fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "output_contract": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "1 表示通过，0 表示不通过"
+            },
+            "category_values": null,
+            "normalization_rule": null,
+            "definition_digest": "sha256:b0c442e5f77dd9414aa75029ab6798716c3b3bdbde8680691661ed1e074135d9",
+            "implementation_ref": "builtin:pii_safe@1.0.0",
+            "executor_type": "builtin_python",
+            "implementation_artifact": {
+              "kind": "python_source",
+              "locator": "app.evaluators:pii_safe",
+              "digest": "sha256:7be5ee14f6f9a91263b13c0986a751d2a4a65b19b8e159ddbf8036ddba6d67b1",
+              "runtime": "cpython",
+              "dependencies": []
+            },
+            "runner": {
+              "runner_version": "0.2.0",
+              "build_id": "f2a67d6c24617f1c5847e84cb82b98773c755ee0",
+              "mapping_engine_version": "sha256-mapping-engine-v1"
+            },
+            "composed_of": [],
+            "contract_status": "FROZEN_VERIFIED",
+            "binding_digest": "sha256:fbda2ff40e370c6883c9b2efe847d810d9982f3a60fa4ba53d711843946ba172",
+            "verification_status": "RECORDED",
+            "release_eligible": true,
+            "eligibility_reasons": []
+          },
+          {
+            "id": "required_tool_match",
+            "version": "1.0.0",
+            "scope": "item",
+            "threshold": 1.0,
+            "params": {},
+            "direction": "higher_is_better",
+            "critical": false,
+            "name": "required_tool_match",
+            "binding_id": "bind_8296262c75579364",
+            "binding_schema_version": "1.2",
+            "result_type": "numeric",
+            "content_digest": "402b9c1b048205984e6b446b908b9d4e2b7126d8e5212ec915dbe63a8c988bfe",
+            "input_contract": {
+              "type": "object",
+              "required": [
+                "output",
+                "expected_output"
+              ],
+              "properties": {
+                "output": {
+                  "type": "object",
+                  "description": "被测 Agent 返回的业务响应体"
+                },
+                "expected_output": {
+                  "type": "object",
+                  "description": "DatasetItem 的期望输出",
+                  "properties": {
+                    "required_tool": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "output_contract": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "1 表示通过，0 表示不通过"
+            },
+            "category_values": null,
+            "normalization_rule": null,
+            "definition_digest": "sha256:402b9c1b048205984e6b446b908b9d4e2b7126d8e5212ec915dbe63a8c988bfe",
+            "implementation_ref": "builtin:required_tool_match@1.0.0",
+            "executor_type": "builtin_python",
+            "implementation_artifact": {
+              "kind": "python_source",
+              "locator": "app.evaluators:required_tool_match",
+              "digest": "sha256:37e29cc1e65819d88141ac97497bea8fef892dd784dffc40d4d4720f98bfb432",
+              "runtime": "cpython",
+              "dependencies": []
+            },
+            "runner": {
+              "runner_version": "0.2.0",
+              "build_id": "f2a67d6c24617f1c5847e84cb82b98773c755ee0",
+              "mapping_engine_version": "sha256-mapping-engine-v1"
+            },
+            "composed_of": [],
+            "contract_status": "FROZEN_VERIFIED",
+            "binding_digest": "sha256:9a47874b8cd3876f15558ac59f68777a1e81fb46eac8d60402048eb50ca6d5af",
+            "verification_status": "RECORDED",
+            "release_eligible": true,
+            "eligibility_reasons": []
+          }
+        ],
+        "runner": {
+          "runner_version": "0.2.0",
+          "build_id": "f2a67d6c24617f1c5847e84cb82b98773c755ee0",
+          "mapping_engine_version": "sha256-mapping-engine-v1"
+        },
+        "environment": "production"
+      },
+      "summary": {
+        "total_cost": null,
+        "cost_per_case": null,
+        "cost_currency": null,
+        "cost_case_count": 0,
+        "cost_coverage": 0.0,
+        "cost_source": null,
+        "cost_scope": null,
+        "cost_policy_version": null,
+        "cost_partial": true,
+        "cost_unavailable_reason": "INCOMPLETE_ATTEMPT_COST",
+        "usage_tokens_per_case": null,
+        "usage_input_tokens_per_case": null,
+        "usage_output_tokens_per_case": null,
+        "usage_case_count": 0,
+        "usage_coverage": 0.0,
+        "usage_partial": true,
+        "usage_unavailable_reason": "COST_NOT_RECORDED",
+        "total_cases": 6,
+        "evaluated_cases": 6,
+        "passed_cases": 2,
+        "failed_quality_cases": 4,
+        "pass_rate": 0.3333333333333333,
+        "evaluation_coverage": 1.0,
+        "quality_pass_count": 2,
+        "quality_fail_count": 4,
+        "quality_unknown_count": 0,
+        "decided_case_count": 6,
+        "decided_pass_rate": 0.3333333333333333,
+        "decision_coverage": 1.0,
+        "execution_error_count": 0,
+        "execution_error_rate": 0.0,
+        "evaluator_error_count": 0,
+        "critical_failure_count": 3,
+        "score_means": {
+          "escalation_match": 0.6666666666666666,
+          "intent_match": 1.0,
+          "pii_safe": 0.5,
+          "required_tool_match": 0.5
+        },
+        "score_counts": {
+          "escalation_match": 6,
+          "intent_match": 6,
+          "pii_safe": 6,
+          "required_tool_match": 6
+        },
+        "score_result_types": {
+          "escalation_match": "numeric",
+          "intent_match": "numeric",
+          "pii_safe": "numeric",
+          "required_tool_match": "numeric"
+        },
+        "p95_latency_ms": 241.0,
+        "usage_tokens_total": null
+      },
+      "langfuse_score_sync_status": "PENDING",
+      "langfuse_sync": {
+        "overall": "PENDING",
+        "item_trace": {
+          "status": "PENDING",
+          "reason": "正在同步到 Langfuse。",
+          "task_count": 6,
+          "failed_count": 0,
+          "pending_count": 2
+        },
+        "run_score": {
+          "status": "PENDING",
+          "reason": "正在同步到 Langfuse。",
+          "task_count": 1,
+          "failed_count": 0,
+          "pending_count": 1
+        }
+      }
+    },
+    {
+      "launch_id": "4699f83b-dae1-47db-9d6b-144105534df4",
+      "snapshot_id": "92d49bcf-4ac5-4280-a734-f3fa2eccba8a",
+      "revision": 1,
+      "created_at": "2026-10-22T08:43:19.252257",
+      "manifest_digest": "12ccbca3fae00a74140fff8823cb8bdba013bb80254966012dff2d069866782c",
+      "source_result_digest": "86957c694e2032667f216c95f945b67f2e5e4f66f79c29d516b90c6c50c7836c",
+      "evidence_state": "COMPLETE",
+      "evidence_reasons": [],
+      "versions": {
+        "dataset": {
+          "name": "banking-agent-regression",
+          "version": "sha256:19e7bbcbd7c696923c4c96e539486ad85051010a2034d2d931229807a4629526",
+          "digest": "19e7bbcbd7c696923c4c96e539486ad85051010a2034d2d931229807a4629526"
+        },
+        "agent": {
+          "id": "banking-agent",
+          "version": "v2",
+          "spec_digest": "56c0ca1aee5d0d1bf97c087dae7fdcddd26b6d6b2919df1b01faec533153ae78",
+          "artifact_ref": "git:f2a67d6c24617f1c5847e84cb82b98773c755ee0"
+        },
+        "evaluators": [
+          {
+            "id": "escalation_match",
+            "version": "1.0.0",
+            "scope": "item",
+            "threshold": 1.0,
+            "params": {},
+            "direction": "higher_is_better",
+            "critical": false,
+            "name": "escalation_match",
+            "binding_id": "bind_2e25bc2098c63c48",
+            "binding_schema_version": "1.2",
+            "result_type": "numeric",
+            "content_digest": "115110ca7ad0200da32073aa06b96f6585de970dc30fbd0abbac27fa1a82fe55",
+            "input_contract": {
+              "type": "object",
+              "required": [
+                "output",
+                "expected_output"
+              ],
+              "properties": {
+                "output": {
+                  "type": "object",
+                  "description": "被测 Agent 返回的业务响应体"
+                },
+                "expected_output": {
+                  "type": "object",
+                  "description": "DatasetItem 的期望输出",
+                  "properties": {
+                    "must_escalate": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "output_contract": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "1 表示通过，0 表示不通过"
+            },
+            "category_values": null,
+            "normalization_rule": null,
+            "definition_digest": "sha256:115110ca7ad0200da32073aa06b96f6585de970dc30fbd0abbac27fa1a82fe55",
+            "implementation_ref": "builtin:escalation_match@1.0.0",
+            "executor_type": "builtin_python",
+            "implementation_artifact": {
+              "kind": "python_source",
+              "locator": "app.evaluators:escalation_match",
+              "digest": "sha256:5de7ffa23ec2d52c3797928b0124f9c03cd8519d1e73793513cf32500b2d26f1",
+              "runtime": "cpython",
+              "dependencies": []
+            },
+            "runner": {
+              "runner_version": "0.2.0",
+              "build_id": "f2a67d6c24617f1c5847e84cb82b98773c755ee0",
+              "mapping_engine_version": "sha256-mapping-engine-v1"
+            },
+            "composed_of": [],
+            "contract_status": "FROZEN_VERIFIED",
+            "binding_digest": "sha256:e65572f8070cbab691dddb2648ffa81f429c50a0f0e207450b13aa0fed7d3262",
+            "verification_status": "RECORDED",
+            "release_eligible": true,
+            "eligibility_reasons": []
+          },
+          {
+            "id": "intent_match",
+            "version": "1.0.0",
+            "scope": "item",
+            "threshold": 1.0,
+            "params": {},
+            "direction": "higher_is_better",
+            "critical": false,
+            "name": "intent_match",
+            "binding_id": "bind_790fafd14bf189b1",
+            "binding_schema_version": "1.2",
+            "result_type": "numeric",
+            "content_digest": "28a3f1f2952419bcac0f059fc6b52cbfc2e2f434c4ce0d2144d6a51e14513c7c",
+            "input_contract": {
+              "type": "object",
+              "required": [
+                "output",
+                "expected_output"
+              ],
+              "properties": {
+                "output": {
+                  "type": "object",
+                  "description": "被测 Agent 返回的业务响应体"
+                },
+                "expected_output": {
+                  "type": "object",
+                  "description": "DatasetItem 的期望输出",
+                  "properties": {
+                    "expected_intent": {
+                      "type": "string"
+                    },
+                    "intent": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "output_contract": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "1 表示通过，0 表示不通过"
+            },
+            "category_values": null,
+            "normalization_rule": null,
+            "definition_digest": "sha256:28a3f1f2952419bcac0f059fc6b52cbfc2e2f434c4ce0d2144d6a51e14513c7c",
+            "implementation_ref": "builtin:intent_match@1.0.0",
+            "executor_type": "builtin_python",
+            "implementation_artifact": {
+              "kind": "python_source",
+              "locator": "app.evaluators:intent_match",
+              "digest": "sha256:8ba70bdf0749f8411cc84732e4c01dcce2acb0790f54b931692fc51e93109aee",
+              "runtime": "cpython",
+              "dependencies": []
+            },
+            "runner": {
+              "runner_version": "0.2.0",
+              "build_id": "f2a67d6c24617f1c5847e84cb82b98773c755ee0",
+              "mapping_engine_version": "sha256-mapping-engine-v1"
+            },
+            "composed_of": [],
+            "contract_status": "FROZEN_VERIFIED",
+            "binding_digest": "sha256:bc69faea984522d22df295cffe8c02eaa6d36890b8053e5e296e08ad9055b9a1",
+            "verification_status": "RECORDED",
+            "release_eligible": true,
+            "eligibility_reasons": []
+          },
+          {
+            "id": "pii_safe",
+            "version": "1.0.0",
+            "scope": "item",
+            "threshold": 1.0,
+            "params": {},
+            "direction": "higher_is_better",
+            "critical": true,
+            "name": "pii_safe",
+            "binding_id": "bind_1c82fcec92e1ced7",
+            "binding_schema_version": "1.2",
+            "result_type": "numeric",
+            "content_digest": "b0c442e5f77dd9414aa75029ab6798716c3b3bdbde8680691661ed1e074135d9",
+            "input_contract": {
+              "type": "object",
+              "required": [
+                "output",
+                "expected_output"
+              ],
+              "properties": {
+                "output": {
+                  "type": "object",
+                  "description": "被测 Agent 返回的业务响应体"
+                },
+                "expected_output": {
+                  "type": "object",
+                  "description": "DatasetItem 的期望输出",
+                  "properties": {
+                    "must_not_disclose": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "forbidden_fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "output_contract": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "1 表示通过，0 表示不通过"
+            },
+            "category_values": null,
+            "normalization_rule": null,
+            "definition_digest": "sha256:b0c442e5f77dd9414aa75029ab6798716c3b3bdbde8680691661ed1e074135d9",
+            "implementation_ref": "builtin:pii_safe@1.0.0",
+            "executor_type": "builtin_python",
+            "implementation_artifact": {
+              "kind": "python_source",
+              "locator": "app.evaluators:pii_safe",
+              "digest": "sha256:7be5ee14f6f9a91263b13c0986a751d2a4a65b19b8e159ddbf8036ddba6d67b1",
+              "runtime": "cpython",
+              "dependencies": []
+            },
+            "runner": {
+              "runner_version": "0.2.0",
+              "build_id": "f2a67d6c24617f1c5847e84cb82b98773c755ee0",
+              "mapping_engine_version": "sha256-mapping-engine-v1"
+            },
+            "composed_of": [],
+            "contract_status": "FROZEN_VERIFIED",
+            "binding_digest": "sha256:fbda2ff40e370c6883c9b2efe847d810d9982f3a60fa4ba53d711843946ba172",
+            "verification_status": "RECORDED",
+            "release_eligible": true,
+            "eligibility_reasons": []
+          },
+          {
+            "id": "required_tool_match",
+            "version": "1.0.0",
+            "scope": "item",
+            "threshold": 1.0,
+            "params": {},
+            "direction": "higher_is_better",
+            "critical": false,
+            "name": "required_tool_match",
+            "binding_id": "bind_8296262c75579364",
+            "binding_schema_version": "1.2",
+            "result_type": "numeric",
+            "content_digest": "402b9c1b048205984e6b446b908b9d4e2b7126d8e5212ec915dbe63a8c988bfe",
+            "input_contract": {
+              "type": "object",
+              "required": [
+                "output",
+                "expected_output"
+              ],
+              "properties": {
+                "output": {
+                  "type": "object",
+                  "description": "被测 Agent 返回的业务响应体"
+                },
+                "expected_output": {
+                  "type": "object",
+                  "description": "DatasetItem 的期望输出",
+                  "properties": {
+                    "required_tool": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "output_contract": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "1 表示通过，0 表示不通过"
+            },
+            "category_values": null,
+            "normalization_rule": null,
+            "definition_digest": "sha256:402b9c1b048205984e6b446b908b9d4e2b7126d8e5212ec915dbe63a8c988bfe",
+            "implementation_ref": "builtin:required_tool_match@1.0.0",
+            "executor_type": "builtin_python",
+            "implementation_artifact": {
+              "kind": "python_source",
+              "locator": "app.evaluators:required_tool_match",
+              "digest": "sha256:37e29cc1e65819d88141ac97497bea8fef892dd784dffc40d4d4720f98bfb432",
+              "runtime": "cpython",
+              "dependencies": []
+            },
+            "runner": {
+              "runner_version": "0.2.0",
+              "build_id": "f2a67d6c24617f1c5847e84cb82b98773c755ee0",
+              "mapping_engine_version": "sha256-mapping-engine-v1"
+            },
+            "composed_of": [],
+            "contract_status": "FROZEN_VERIFIED",
+            "binding_digest": "sha256:9a47874b8cd3876f15558ac59f68777a1e81fb46eac8d60402048eb50ca6d5af",
+            "verification_status": "RECORDED",
+            "release_eligible": true,
+            "eligibility_reasons": []
+          }
+        ],
+        "runner": {
+          "runner_version": "0.2.0",
+          "build_id": "f2a67d6c24617f1c5847e84cb82b98773c755ee0",
+          "mapping_engine_version": "sha256-mapping-engine-v1"
+        },
+        "environment": "production"
+      },
+      "summary": {
+        "total_cost": null,
+        "cost_per_case": null,
+        "cost_currency": null,
+        "cost_case_count": 0,
+        "cost_coverage": 0.0,
+        "cost_source": null,
+        "cost_scope": null,
+        "cost_policy_version": null,
+        "cost_partial": true,
+        "cost_unavailable_reason": "INCOMPLETE_ATTEMPT_COST",
+        "usage_tokens_per_case": null,
+        "usage_input_tokens_per_case": null,
+        "usage_output_tokens_per_case": null,
+        "usage_case_count": 0,
+        "usage_coverage": 0.0,
+        "usage_partial": true,
+        "usage_unavailable_reason": "COST_NOT_RECORDED",
+        "total_cases": 6,
+        "evaluated_cases": 6,
+        "passed_cases": 6,
+        "failed_quality_cases": 0,
+        "pass_rate": 1.0,
+        "evaluation_coverage": 1.0,
+        "quality_pass_count": 6,
+        "quality_fail_count": 0,
+        "quality_unknown_count": 0,
+        "decided_case_count": 6,
+        "decided_pass_rate": 1.0,
+        "decision_coverage": 1.0,
+        "execution_error_count": 0,
+        "execution_error_rate": 0.0,
+        "evaluator_error_count": 0,
+        "critical_failure_count": 0,
+        "score_means": {
+          "escalation_match": 1.0,
+          "intent_match": 1.0,
+          "pii_safe": 1.0,
+          "required_tool_match": 1.0
+        },
+        "score_counts": {
+          "escalation_match": 6,
+          "intent_match": 6,
+          "pii_safe": 6,
+          "required_tool_match": 6
+        },
+        "score_result_types": {
+          "escalation_match": "numeric",
+          "intent_match": "numeric",
+          "pii_safe": "numeric",
+          "required_tool_match": "numeric"
+        },
+        "p95_latency_ms": 94.0,
+        "usage_tokens_total": null
+      },
+      "langfuse_score_sync_status": "PENDING",
+      "langfuse_sync": {
+        "overall": "PENDING",
+        "item_trace": {
+          "status": "PENDING",
+          "reason": "正在同步到 Langfuse。",
+          "task_count": 6,
+          "failed_count": 0,
+          "pending_count": 2
+        },
+        "run_score": {
+          "status": "PENDING",
+          "reason": "正在同步到 Langfuse。",
+          "task_count": 1,
+          "failed_count": 0,
+          "pending_count": 1
+        }
+      }
+    }
+  ],
+  "source_sha256": "f996a80b67d780aaa3acc81843222d6d98684947a571540ac2fc2303a64d279d"
+}

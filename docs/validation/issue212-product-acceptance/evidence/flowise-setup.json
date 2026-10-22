@@ -1,0 +1,12 @@
+{
+  "flow_id": "2a97aead-32e6-4dc9-812a-602184b99a92",
+  "source_flow_id": "35f4c55f-4ba5-4138-aaf9-d6f5751222a7",
+  "model_max_retries": 0,
+  "agent_memory": false,
+  "tools": [
+    "calculator"
+  ],
+  "graph_sha256": "c5d9e223a0a08d55076f92915627024145b9e201f2f5e3b2820c17cad23a2c80",
+  "credentials_created": 0,
+  "existing_flow_modified": false
+}

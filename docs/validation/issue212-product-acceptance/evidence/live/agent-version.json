@@ -1,0 +1,21 @@
+{
+  "endpoint": "http://127.0.0.1:19091/api/v1/prediction/2a97aead-32e6-4dc9-812a-602184b99a92",
+  "protocol": "HTTP_JSON",
+  "method": "POST",
+  "request_mapping": {
+    "question": "input.question",
+    "streaming": "input.streaming"
+  },
+  "usage_cost_mapping": null,
+  "timeout_seconds": 150.0,
+  "max_retries": 0,
+  "rate_limit_per_minute": 600,
+  "max_concurrency": 1,
+  "trace_propagation": "W3C",
+  "is_idempotent": false,
+  "artifact_ref": "docker:flowiseai/flowise@sha256:cf880b17b1290fbaebebc76c33954bde67b3775aff95feec72a1d060cc81e43d",
+  "agent_id": "issue212-20261022t082316z",
+  "version": "v1",
+  "environment": "issue212-20261022t082316z",
+  "credential_ref": "env://FLOWISE_API_TOKEN"
+}

@@ -20,6 +20,7 @@ import time
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from uuid import UUID
 
 import httpx
 
@@ -46,11 +47,16 @@ def main(argv=None):
     parser.add_argument('--execute', action='store_true')
     parser.add_argument('--credential-container', default='argus-flowise-e2e-eval-runner-1')
     parser.add_argument('--evidence-dir', type=Path)
+    parser.add_argument('--flowise-credential-ref')
+    parser.add_argument('--flowise-origin', default='http://127.0.0.1:18091')
+    parser.add_argument('--flowise-postgres-container', default='argus-flowise-p0-postgres')
+    parser.add_argument('--flow-id', type=UUID, default=UUID('8b8d2606-379c-42c4-9ac9-08dcbf9490e8'))
+    parser.add_argument('--name-prefix', choices=['issue219', 'issue212'], default='issue219')
     args = parser.parse_args(argv)
     if not args.execute:
         print('DRY RUN：独立 Runner/Console；真实 Flowise 双评分及受控 FAIL/UNKNOWN；不会写 Score。')
         return
-    name = 'issue219-' + datetime.now(UTC).strftime('%Y%m%dt%H%M%Sz')
+    name = args.name_prefix + '-' + datetime.now(UTC).strftime('%Y%m%dt%H%M%Sz')
     out = (args.evidence_dir or HERE / 'evidence' / name).resolve()
     out.mkdir(parents=True, exist_ok=False)
     work = Path('/tmp') / name
@@ -59,7 +65,7 @@ def main(argv=None):
     provided = dict(x.split('=', 1) for x in raw['Config']['Env'] if '=' in x)
     env = os.environ.copy()
     for key, value in provided.items():
-        if key.startswith(('LANGFUSE_', 'FLOWISE_')) or key in ('ARGUS_SECRET_MODE', 'ARGUS_ALLOWED_CREDENTIAL_ENVS'):
+        if key.startswith(('LANGFUSE_', 'FLOWISE_')) or key in ('ARGUS_SECRET_MODE', 'ARGUS_ALLOWED_CREDENTIAL_ENVS', 'ARGUS_LANGFUSE_DASHBOARD_URL'):
             env[key] = value
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     port, ui_port = free_port(), free_port()
@@ -80,8 +86,8 @@ def main(argv=None):
         (out / (filename + '.json')).write_text(text)
 
     # 只读核对现有 Flowise 配置；不读取凭据、原始 flowData 不落盘。
-    flow_id = '8b8d2606-379c-42c4-9ac9-08dcbf9490e8'
-    flow_raw = subprocess.check_output(['docker', 'exec', 'argus-flowise-p0-postgres', 'psql', '-U', 'postgres',
+    flow_id = str(args.flow_id)
+    flow_raw = subprocess.check_output(['docker', 'exec', args.flowise_postgres_container, 'psql', '-U', 'postgres',
                                       '-d', 'flowise', '-At', '-c', f'SELECT "flowData" FROM chat_flow WHERE id=\'{flow_id}\''])
     models = [n['data']['inputs']['agentModelConfig'] for n in json.loads(flow_raw)['nodes']
               if 'agentModelConfig' in n.get('data', {}).get('inputs', {})]
@@ -92,7 +98,10 @@ def main(argv=None):
                           agent_version_max_retries=0, network_mocking=False,
                           source_sha256={str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
                                          for p in [Path(__file__), HERE / 'real_console_flow.mjs',
-                                                   ROOT / 'services/console/dist/index.html']}))
+                                                   ROOT / 'services/console/dist/index.html',
+                                                   ROOT / 'services/eval-runner/app/result_snapshots.py',
+                                                   ROOT / 'services/eval-runner/app/evaluation_recovery.py']}))
+    print(f'Live services: API http://127.0.0.1:{port}; Console http://127.0.0.1:{ui_port}; runtime {work}', flush=True)
     rules, audit, processes, logs = [], [], [], []
     lf = httpx.Client(base_url=env['LANGFUSE_BASE_URL'].rstrip('/'),
                       auth=(env['LANGFUSE_PUBLIC_KEY'], env['LANGFUSE_SECRET_KEY']), timeout=90)
@@ -162,10 +171,12 @@ def main(argv=None):
             expectations.append(dict(name=evaluator['score_name'], rule_id=rule['id'], evaluator_id=evaluator['id']))
         request(argus, 'POST', '/api/v1/agents', dict(id=name, name=name, description='Issue219 Console live acceptance'))
         version = json.loads((PRIOR / 'agent-version.json').read_text())['request']
-        version.update(agent_id=name, environment=name, endpoint=f'http://127.0.0.1:18091/api/v1/prediction/{flow_id}')
+        flowise_origin = args.flowise_origin.rstrip('/')
+        version.update(agent_id=name, environment=name, endpoint=f'{flowise_origin}/api/v1/prediction/{flow_id}',
+                       credential_ref=args.flowise_credential_ref)
         request(argus, 'POST', '/api/v1/agent-versions', version)
         save('agent-version', version)
-        version.update(version='v2', endpoint=f'http://127.0.0.1:{wrong.server_port}/invoke')
+        version.update(version='v2', endpoint=f'http://127.0.0.1:{wrong.server_port}/invoke', credential_ref=None)
         request(argus, 'POST', '/api/v1/agent-versions', version)
         request(argus, 'POST', '/api/v1/release-policies', dict(name=name, version='1.0.0', agent_id=name, environment=name,
                  rules=[dict(id='quality', metric='pass_rate', operator='>=', threshold=1.0),

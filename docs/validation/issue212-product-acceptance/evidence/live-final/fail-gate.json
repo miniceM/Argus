@@ -1,0 +1,63 @@
+{
+  "decision": "FAIL",
+  "releasable": false,
+  "engine_version": "release-gate-v4",
+  "candidate_snapshot_id": "9e4f3cda-550b-4d64-86f6-1a618efd41a0",
+  "baseline_snapshot_id": null,
+  "reason_codes": [
+    "THRESHOLD_VIOLATED"
+  ],
+  "rules": [
+    {
+      "id": "quality",
+      "metric": "pass_rate",
+      "operator": ">=",
+      "threshold": 1.0,
+      "actual": 0.0,
+      "conclusion": "FAIL",
+      "reason": "THRESHOLD_VIOLATED"
+    },
+    {
+      "id": "coverage",
+      "metric": "evaluation_coverage",
+      "operator": ">=",
+      "threshold": 1.0,
+      "actual": 1.0,
+      "conclusion": "PASS",
+      "reason": "THRESHOLD_SATISFIED"
+    }
+  ],
+  "id": "674eda44-613c-4fd5-90ab-0953fa521e7a",
+  "created_at": "2026-10-22T08:42:14.653591Z",
+  "policy": {
+    "name": "issue212-20261022t083959z",
+    "version": "1.0.0",
+    "agent_id": "issue212-20261022t083959z",
+    "environment": "issue212-20261022t083959z",
+    "block_critical_failures": true,
+    "rules": [
+      {
+        "id": "quality",
+        "metric": "pass_rate",
+        "operator": ">=",
+        "threshold": 1.0
+      },
+      {
+        "id": "coverage",
+        "metric": "evaluation_coverage",
+        "operator": ">=",
+        "threshold": 1.0
+      }
+    ]
+  },
+  "policy_digest": "sha256:d9000a51bb415333daeda89f94cb91ab0da73b38c8551a6bbf939a7d7079a4b2",
+  "candidate_launch_id": "e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+  "candidate_revision": 1,
+  "candidate_manifest_digest": "1522a70e6638738839f9114e4a923cdd2ed8b1ed488a3d72631b62daf1ee7c86",
+  "candidate_source_result_digest": "263fd2cfa0cc8eecffaf646101cfc8dab655e83c1548c375420c0f58b855ec5b",
+  "baseline_revision": null,
+  "baseline_manifest_digest": null,
+  "baseline_source_result_digest": null,
+  "report_url": "http://localhost:18083/launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e?snapshot_id=9e4f3cda-550b-4d64-86f6-1a618efd41a0",
+  "comparison_url": "http://localhost:18083/launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e?snapshot_id=9e4f3cda-550b-4d64-86f6-1a618efd41a0&tab=comparison"
+}

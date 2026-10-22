@@ -137,3 +137,13 @@ Langfuse 后续 Rule 改动或重评不会改变既有 Snapshot / Gate；新评�
 [本次 Console 交付记录及父 Issue 覆盖矩阵](validation/issue219-managed-console/README.md)
 分开标记真实 Flowise/Rule 联调、网络替身 UI 测试、完整回归与未满足项。
 Playwright 网络替身的 pending/down/recover 不等于真实 Langfuse 故障注入。
+
+
+## 8. 父 Issue #212 当前主线复验
+
+[2026-10-22 产品验收、覆盖矩阵与普通用户体验意见](validation/issue212-product-acceptance/README.md)
+记录了真实 Flowise 双评分、PASS / FAIL / UNKNOWN、远程迟到原生 Code Score 后的历史不可变性、
+已登录 Langfuse 外链验证，以及类型 / Vitest / Playwright / PostgreSQL / S4 完整回归。
+异步评分完成后，列表质量与冻结报告一致；等待评分时 UNKNOWN 仍不是质量 FAIL。
+历史 Snapshot 只展示当时已采纳 Score，即使 Langfuse 之后补齐缺分也不自动改变原 Gate；
+需要采纳新结果时，使用既有评测重试与新 Snapshot revision，而不是修改历史报告。

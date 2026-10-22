@@ -1,0 +1,63 @@
+{
+  "decision": "FAIL",
+  "releasable": false,
+  "engine_version": "release-gate-v4",
+  "candidate_snapshot_id": "bc5a0ceb-2c03-4c73-8edf-ad0dcb1f29a1",
+  "baseline_snapshot_id": null,
+  "reason_codes": [
+    "THRESHOLD_VIOLATED"
+  ],
+  "rules": [
+    {
+      "id": "quality",
+      "metric": "pass_rate",
+      "operator": ">=",
+      "threshold": 1.0,
+      "actual": 0.0,
+      "conclusion": "FAIL",
+      "reason": "THRESHOLD_VIOLATED"
+    },
+    {
+      "id": "coverage",
+      "metric": "evaluation_coverage",
+      "operator": ">=",
+      "threshold": 1.0,
+      "actual": 1.0,
+      "conclusion": "PASS",
+      "reason": "THRESHOLD_SATISFIED"
+    }
+  ],
+  "id": "01e7ea46-4066-4cb7-8ad7-0d52491bf7dc",
+  "created_at": "2026-10-22T08:25:15.044974Z",
+  "policy": {
+    "name": "issue212-20261022t082316z",
+    "version": "1.0.0",
+    "agent_id": "issue212-20261022t082316z",
+    "environment": "issue212-20261022t082316z",
+    "block_critical_failures": true,
+    "rules": [
+      {
+        "id": "quality",
+        "metric": "pass_rate",
+        "operator": ">=",
+        "threshold": 1.0
+      },
+      {
+        "id": "coverage",
+        "metric": "evaluation_coverage",
+        "operator": ">=",
+        "threshold": 1.0
+      }
+    ]
+  },
+  "policy_digest": "sha256:51957debbe9ab37adc939744c22515f7410b162e39691d03db5cf4a082010748",
+  "candidate_launch_id": "3dfb1d9c-a071-43b9-8196-ff1203a8ca3f",
+  "candidate_revision": 1,
+  "candidate_manifest_digest": "5c5af2cf9519e5ffca190ea03b042083d7ada3ae198a3826f820c3d79a35da84",
+  "candidate_source_result_digest": "074c529a0c67211783cf5c495b3e35ecebabc8d9e71159e487788749add33804",
+  "baseline_revision": null,
+  "baseline_manifest_digest": null,
+  "baseline_source_result_digest": null,
+  "report_url": "http://localhost:18083/launches/3dfb1d9c-a071-43b9-8196-ff1203a8ca3f?snapshot_id=bc5a0ceb-2c03-4c73-8edf-ad0dcb1f29a1",
+  "comparison_url": "http://localhost:18083/launches/3dfb1d9c-a071-43b9-8196-ff1203a8ca3f?snapshot_id=bc5a0ceb-2c03-4c73-8edf-ad0dcb1f29a1&tab=comparison"
+}

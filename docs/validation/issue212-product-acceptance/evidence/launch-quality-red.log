@@ -1,0 +1,71 @@
+FF.                                                                      [100%]
+=================================== FAILURES ===================================
+_ test_managed_recovery_updates_launch_quality_for_list_and_filter[values0-pass] _
+
+setup_runtime = (<app.db.DatabaseManager object at 0x1095aa2a0>, <app.queue.MemoryQueueAdapter object at 0x1095a9d30>, <app.limiter.Me...49790>, <app.worker.ExecutionWorker object at 0x109649a60>, <app.reconciler.ExecutionReconciler object at 0x109649e50>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x1096497f0>
+values = (True, True), expected = 'pass'
+
+    @pytest.mark.parametrize('values,expected', [((True, True), 'pass'), ((False, True), 'fail'), ((True, None), 'unknown')])
+    def test_managed_recovery_updates_launch_quality_for_list_and_filter(setup_runtime, monkeypatch, values, expected):
+        """真实 #212 复验：Item/冻结报告收敛后，Launch 列表与质量筛选不能滞留 UNKNOWN。"""
+        from app.manifest import LaunchService
+    
+        db, snapshot, _, _ = collect218(setup_runtime, monkeypatch, values=values)
+        with db.get_session() as session:
+            launch = session.get(ExperimentLaunchRecord, snapshot.launch_id)
+>           assert launch.quality_conclusion == expected
+E           AssertionError: assert 'unknown' == 'pass'
+E             
+E             - pass
+E             + unknown
+
+tests/test_issue_218_managed_quality.py:523: AssertionError
+_ test_managed_recovery_updates_launch_quality_for_list_and_filter[values1-fail] _
+
+setup_runtime = (<app.db.DatabaseManager object at 0x10a2db1d0>, <app.queue.MemoryQueueAdapter object at 0x10a2da2d0>, <app.limiter.Me...3a390>, <app.worker.ExecutionWorker object at 0x10a33a4b0>, <app.reconciler.ExecutionReconciler object at 0x10a33a6c0>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10a33aa50>
+values = (False, True), expected = 'fail'
+
+    @pytest.mark.parametrize('values,expected', [((True, True), 'pass'), ((False, True), 'fail'), ((True, None), 'unknown')])
+    def test_managed_recovery_updates_launch_quality_for_list_and_filter(setup_runtime, monkeypatch, values, expected):
+        """真实 #212 复验：Item/冻结报告收敛后，Launch 列表与质量筛选不能滞留 UNKNOWN。"""
+        from app.manifest import LaunchService
+    
+        db, snapshot, _, _ = collect218(setup_runtime, monkeypatch, values=values)
+        with db.get_session() as session:
+            launch = session.get(ExperimentLaunchRecord, snapshot.launch_id)
+>           assert launch.quality_conclusion == expected
+E           AssertionError: assert 'unknown' == 'fail'
+E             
+E             - fail
+E             + unknown
+
+tests/test_issue_218_managed_quality.py:523: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/sqlalchemy/sql/schema.py:4296: 4 warnings
+tests/test_issue_218_managed_quality.py: 44 warnings
+  /Users/hosea/.codex/worktrees/10d9/Argus/.venv/lib/python3.12/site-packages/sqlalchemy/sql/schema.py:4296: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return util.wrap_callable(lambda ctx: fn(), fn)  # type: ignore[call-arg, no-any-return, no-untyped-call]  # noqa: E501
+
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /Users/hosea/.codex/worktrees/10d9/Argus/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_issue_218_managed_quality.py::test_managed_recovery_updates_launch_quality_for_list_and_filter[values0-pass]
+tests/test_issue_218_managed_quality.py::test_managed_recovery_updates_launch_quality_for_list_and_filter[values1-fail]
+tests/test_issue_218_managed_quality.py::test_managed_recovery_updates_launch_quality_for_list_and_filter[values2-unknown]
+  /Users/hosea/.codex/worktrees/10d9/Argus/services/eval-runner/app/result_snapshots.py:270: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    created_at=datetime.utcnow(),
+
+tests/test_issue_218_managed_quality.py::test_managed_recovery_updates_launch_quality_for_list_and_filter[values0-pass]
+tests/test_issue_218_managed_quality.py::test_managed_recovery_updates_launch_quality_for_list_and_filter[values1-fail]
+tests/test_issue_218_managed_quality.py::test_managed_recovery_updates_launch_quality_for_list_and_filter[values2-unknown]
+  /Users/hosea/.codex/worktrees/10d9/Argus/services/eval-runner/app/result_snapshots.py:298: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    next_retry_at=datetime.utcnow(),
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_issue_218_managed_quality.py::test_managed_recovery_updates_launch_quality_for_list_and_filter[values0-pass]
+FAILED tests/test_issue_218_managed_quality.py::test_managed_recovery_updates_launch_quality_for_list_and_filter[values1-fail]
+2 failed, 1 passed, 36 deselected, 55 warnings in 1.52s

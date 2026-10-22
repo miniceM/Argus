@@ -133,6 +133,15 @@ try {
     await expect(result).toContainText(gateId);
     expect(await result.innerText()).toBe(gateText);
     await page.screenshot({ path: `${out}/real-ui/${config.label}-gate.png`, fullPage: true });
+    await page.goto(config.ui_url + '/launches');
+    const listRow = page.getByRole('row').filter({ has: page.getByRole('link', { name: launch.id, exact: true }) });
+    await expect(listRow).toContainText(config.expected);
+    await page.getByLabel('按质量结论过滤').selectOption(config.expected.toLowerCase());
+    await expect(listRow).toBeVisible();
+    await page.screenshot({ path: `${out}/real-ui/${config.label}-list-quality.png`, fullPage: true });
+    save('list-quality', { status: 'PASS', launch_id: launch.id, expected: config.expected,
+      actual_row: await listRow.innerText(), filter: config.expected.toLowerCase() });
+    await page.goto(reportUrl);
     save('browser', { status: 'PASS', launch_id: launch.id, snapshot_id: snapshotId, gate_id: gateId,
       expected: config.expected, report_url: reportUrl, panel_text: panelText, gate_text: gateText,
       score_links: links, pending_observed: pending, network_mocking: false,

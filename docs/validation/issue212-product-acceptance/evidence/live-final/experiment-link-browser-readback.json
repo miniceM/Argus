@@ -1,0 +1,8 @@
+{
+  "status": "PASS",
+  "input_path": "/project/cmu5a6fj500aoad0jvrckiypb/datasets/cmvf080gu001iad0i4ctjw5l4/runs/c9fcba05-7b58-53d2-9991-03eaf96f6265",
+  "redirected_to": "/project/cmu5a6fj500aoad0jvrckiypb/experiments/results?baseline=c9fcba05-7b58-53d2-9991-03eaf96f6265&c=53cdc29c-dc57-5e42-a827-3dc2999f5933",
+  "baseline_experiment_id": "c9fcba05-7b58-53d2-9991-03eaf96f6265",
+  "visible_dual_scores": "100% true",
+  "credentials_in_url": false
+}

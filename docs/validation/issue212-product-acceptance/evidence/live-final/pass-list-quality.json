@@ -1,0 +1,7 @@
+{
+  "status": "PASS",
+  "launch_id": "df1050ac-0f39-4a0c-852e-4193460aa00e",
+  "expected": "PASS",
+  "actual_row": "df1050ac-0f39-4a0c-852e-4193460aa00e\n\t\nissue212-20261022t083959z\nissue212-20261022t083959z\nv1\n\t\nissue214-20261019t084028z\n2026-10-22T08:40:16.077316+00:00\n\t\nCOMPLETED\n100% · 1/1\n\tPASS\tSYNCED\t2026/10/22 08:40:16\t\n详情\nLangfuse",
+  "filter": "pass"
+}

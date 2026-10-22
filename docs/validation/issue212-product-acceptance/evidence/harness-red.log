@@ -1,0 +1,49 @@
+..F..                                                                    [100%]
+=================================== FAILURES ===================================
+__ test_isolated_flowise_deployment_is_configurable_without_touching_services __
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10acc9d60>
+capsys = <_pytest.capture.CaptureFixture object at 0x10acc9e80>
+
+    def test_isolated_flowise_deployment_is_configurable_without_touching_services(monkeypatch, capsys):
+        """复验不得依赖已经销毁的 #219 容器、端口或 Flow ID。"""
+        module = harness()
+        monkeypatch.setattr(module.subprocess, 'check_output', lambda *a, **k: pytest.fail('unexpected subprocess'))
+>       module.main(['--flowise-origin', 'http://127.0.0.1:19091',
+                     '--flowise-postgres-container', 'argus-flowise-e2e-postgres-1',
+                     '--flow-id', '35f4c55f-4ba5-4138-aaf9-d6f5751222a7',
+                     '--name-prefix', 'issue212', '--flowise-credential-ref', 'env://FLOWISE_API_TOKEN'])
+
+tests/test_issue219_acceptance_harness.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+docs/validation/issue219-managed-console/real_console_acceptance.py:54: in main
+    args = parser.parse_args(argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.12/3.12.4/Frameworks/Python.framework/Versions/3.12/lib/python3.12/argparse.py:1899: in parse_args
+    self.error(msg % ' '.join(argv))
+/opt/homebrew/Cellar/python@3.12/3.12.4/Frameworks/Python.framework/Versions/3.12/lib/python3.12/argparse.py:2665: in error
+    self.exit(2, _('%(prog)s: error: %(message)s\n') % args)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ArgumentParser(prog='__main__.py', usage=None, description='#219 真实 Console 验收。默认 dry-run；--execute 才启动独立服务并产生模型费用。\n\...de（存在时）均由真实 Langfuse 执行。\n', formatter_class=<class 'argparse.HelpFormatter'>, conflict_handler='error', add_help=True)
+status = 2
+message = '__main__.py: error: unrecognized arguments: --flowise-credential-ref env://FLOWISE_API_TOKEN\n'
+
+    def exit(self, status=0, message=None):
+        if message:
+            self._print_message(message, _sys.stderr)
+>       _sys.exit(status)
+E       SystemExit: 2
+
+/opt/homebrew/Cellar/python@3.12/3.12.4/Frameworks/Python.framework/Versions/3.12/lib/python3.12/argparse.py:2652: SystemExit
+----------------------------- Captured stderr call -----------------------------
+usage: __main__.py [-h] [--execute]
+                   [--credential-container CREDENTIAL_CONTAINER]
+                   [--evidence-dir EVIDENCE_DIR]
+                   [--flowise-origin FLOWISE_ORIGIN]
+                   [--flowise-postgres-container FLOWISE_POSTGRES_CONTAINER]
+                   [--flow-id FLOW_ID] [--name-prefix {issue219,issue212}]
+__main__.py: error: unrecognized arguments: --flowise-credential-ref env://FLOWISE_API_TOKEN
+=========================== short test summary info ============================
+FAILED tests/test_issue219_acceptance_harness.py::test_isolated_flowise_deployment_is_configurable_without_touching_services
+1 failed, 4 passed in 0.14s

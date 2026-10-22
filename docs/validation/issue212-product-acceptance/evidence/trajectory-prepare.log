@@ -1,0 +1,93 @@
+.venv/bin/python -c 'import sys; assert sys.version_info[:2] == (3, 12), "S4 requires Python 3.12"'
+.venv/bin/python -m venv tests/fixtures/trajectory_agents/.venv
+tests/fixtures/trajectory_agents/.venv/bin/python -m pip install --require-hashes -r tests/fixtures/trajectory_agents/requirements.txt
+Collecting annotated-types==0.8.0 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 1))
+  Using cached annotated_types-0.8.0-py3-none-any.whl (13 kB)
+Collecting anyio==4.15.1 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 5))
+  Using cached anyio-4.15.1-py3-none-any.whl (132 kB)
+Collecting certifi==2026.7.22 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 12))
+  Using cached certifi-2026.7.22-py3-none-any.whl (136 kB)
+Collecting charset-normalizer==3.5.2 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 16))
+  Using cached charset_normalizer-3.5.2-cp312-cp312-macosx_10_13_universal2.whl (367 kB)
+Collecting genai-prices==0.1.11 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 190))
+  Using cached genai_prices-0.1.11-py3-none-any.whl (136 kB)
+Collecting googleapis-common-protos==1.75.5 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 194))
+  Using cached googleapis_common_protos-1.75.5-py3-none-any.whl (307 kB)
+Collecting griffelib==2.3.2 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 198))
+  Using cached griffelib-2.3.2-py3-none-any.whl (169 kB)
+Collecting h11==0.16.0 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 202))
+  Using cached h11-0.16.0-py3-none-any.whl (37 kB)
+Collecting httpcore2==2.13.1 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 206))
+  Using cached httpcore2-2.13.1-py3-none-any.whl (83 kB)
+Collecting httpx2==2.13.1 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 210))
+  Using cached httpx2-2.13.1-py3-none-any.whl (95 kB)
+Collecting idna==3.20 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 216))
+  Using cached idna-3.20-py3-none-any.whl (69 kB)
+Collecting logfire-api==5.1.1 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 223))
+  Using cached logfire_api-5.1.1-py3-none-any.whl (148 kB)
+Collecting opentelemetry-api==1.45.1 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 227))
+  Using cached opentelemetry_api-1.45.1-py3-none-any.whl (60 kB)
+Collecting opentelemetry-exporter-http-transport==0.66b1 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 236))
+  Using cached opentelemetry_exporter_http_transport-0.66b1-py3-none-any.whl (12 kB)
+Collecting opentelemetry-exporter-otlp-common==0.66b1 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 240))
+  Using cached opentelemetry_exporter_otlp_common-0.66b1-py3-none-any.whl (12 kB)
+Collecting opentelemetry-exporter-otlp-proto-common==1.45.1 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 244))
+  Using cached opentelemetry_exporter_otlp_proto_common-1.45.1-py3-none-any.whl (15 kB)
+Collecting opentelemetry-exporter-otlp-proto-http==1.45.1 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 248))
+  Using cached opentelemetry_exporter_otlp_proto_http-1.45.1-py3-none-any.whl (22 kB)
+Collecting opentelemetry-proto==1.45.1 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 252))
+  Using cached opentelemetry_proto-1.45.1-py3-none-any.whl (72 kB)
+Collecting opentelemetry-sdk==1.45.1 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 258))
+  Using cached opentelemetry_sdk-1.45.1-py3-none-any.whl (140 kB)
+Collecting opentelemetry-semantic-conventions==0.66b1 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 265))
+  Using cached opentelemetry_semantic_conventions-0.66b1-py3-none-any.whl (206 kB)
+Collecting protobuf==7.36.2 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 269))
+  Using cached protobuf-7.36.2-cp310-abi3-macosx_10_9_universal2.whl (456 kB)
+Collecting pydantic==2.14.1 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 281))
+  Using cached pydantic-2.14.1-py3-none-any.whl (488 kB)
+Collecting pydantic-ai-slim==2.55.0 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 288))
+  Using cached pydantic_ai_slim-2.55.0-py3-none-any.whl (2.2 MB)
+Collecting pydantic-core==2.50.1 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 292))
+  Using cached pydantic_core-2.50.1-cp312-cp312-macosx_11_0_arm64.whl (2.0 MB)
+Collecting pydantic-graph==2.55.0 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 431))
+  Using cached pydantic_graph-2.55.0-py3-none-any.whl (53 kB)
+Collecting requests==2.34.2 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 435))
+  Using cached requests-2.34.2-py3-none-any.whl (73 kB)
+Collecting truststore==0.10.5 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 441))
+  Using cached truststore-0.10.5-py3-none-any.whl (19 kB)
+Collecting typing-extensions==4.16.0 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 447))
+  Using cached typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+Collecting typing-inspection==0.4.4 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 460))
+  Using cached typing_inspection-0.4.4-py3-none-any.whl (14 kB)
+Collecting urllib3==2.8.0 (from -r tests/fixtures/trajectory_agents/requirements.txt (line 467))
+  Using cached urllib3-2.8.0-py3-none-any.whl (135 kB)
+Installing collected packages: urllib3, typing-extensions, truststore, protobuf, logfire-api, idna, h11, griffelib, charset-normalizer, certifi, annotated-types, typing-inspection, requests, pydantic-core, opentelemetry-proto, opentelemetry-api, httpcore2, googleapis-common-protos, anyio, pydantic, opentelemetry-semantic-conventions, opentelemetry-exporter-otlp-proto-common, opentelemetry-exporter-http-transport, httpx2, pydantic-graph, opentelemetry-sdk, genai-prices, pydantic-ai-slim, opentelemetry-exporter-otlp-common, opentelemetry-exporter-otlp-proto-http
+Successfully installed annotated-types-0.8.0 anyio-4.15.1 certifi-2026.7.22 charset-normalizer-3.5.2 genai-prices-0.1.11 googleapis-common-protos-1.75.5 griffelib-2.3.2 h11-0.16.0 httpcore2-2.13.1 httpx2-2.13.1 idna-3.20 logfire-api-5.1.1 opentelemetry-api-1.45.1 opentelemetry-exporter-http-transport-0.66b1 opentelemetry-exporter-otlp-common-0.66b1 opentelemetry-exporter-otlp-proto-common-1.45.1 opentelemetry-exporter-otlp-proto-http-1.45.1 opentelemetry-proto-1.45.1 opentelemetry-sdk-1.45.1 opentelemetry-semantic-conventions-0.66b1 protobuf-7.36.2 pydantic-2.14.1 pydantic-ai-slim-2.55.0 pydantic-core-2.50.1 pydantic-graph-2.55.0 requests-2.34.2 truststore-0.10.5 typing-extensions-4.16.0 typing-inspection-0.4.4 urllib3-2.8.0
+
+[notice] A new release of pip is available: 24.0 -> 26.2.2
+[notice] To update, run: /Users/hosea/.codex/worktrees/10d9/Argus/tests/fixtures/trajectory_agents/.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python tests/fixtures/trajectory_agents/prepare.py
+docker.langfuse.com/langfuse/langfuse@sha256:47ef2f121e2959c8458c209d118949ade25778017e3f5b75b1e45f72276811c3: Pulling from langfuse/langfuse
+Digest: sha256:47ef2f121e2959c8458c209d118949ade25778017e3f5b75b1e45f72276811c3
+Status: Image is up to date for docker.langfuse.com/langfuse/langfuse@sha256:47ef2f121e2959c8458c209d118949ade25778017e3f5b75b1e45f72276811c3
+docker.langfuse.com/langfuse/langfuse:4.38.0@sha256:47ef2f121e2959c8458c209d118949ade25778017e3f5b75b1e45f72276811c3
+docker.langfuse.com/langfuse/langfuse-worker@sha256:8631cf429efc4a2981d4e6ced4c005b9f6f620a4e34625baf60152301ec6d006: Pulling from langfuse/langfuse-worker
+Digest: sha256:8631cf429efc4a2981d4e6ced4c005b9f6f620a4e34625baf60152301ec6d006
+Status: Image is up to date for docker.langfuse.com/langfuse/langfuse-worker@sha256:8631cf429efc4a2981d4e6ced4c005b9f6f620a4e34625baf60152301ec6d006
+docker.langfuse.com/langfuse/langfuse-worker:4.38.0@sha256:8631cf429efc4a2981d4e6ced4c005b9f6f620a4e34625baf60152301ec6d006
+docker.io/library/postgres@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3: Pulling from library/postgres
+Digest: sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+Status: Image is up to date for postgres@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+docker.io/library/postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+docker.io/clickhouse/clickhouse-server@sha256:8a790dd3468db22b1d4e7b18a176f378ff5ff6053b9c48dd4ea1fa71a24c5ba6: Pulling from clickhouse/clickhouse-server
+Digest: sha256:8a790dd3468db22b1d4e7b18a176f378ff5ff6053b9c48dd4ea1fa71a24c5ba6
+Status: Image is up to date for clickhouse/clickhouse-server@sha256:8a790dd3468db22b1d4e7b18a176f378ff5ff6053b9c48dd4ea1fa71a24c5ba6
+docker.io/clickhouse/clickhouse-server:25.12@sha256:8a790dd3468db22b1d4e7b18a176f378ff5ff6053b9c48dd4ea1fa71a24c5ba6
+cgr.dev/chainguard/minio@sha256:dc455cdd4db6e390b1b26514f15ff37681a777bf8dab41aac445a0259f751e56: Pulling from chainguard/minio
+Digest: sha256:dc455cdd4db6e390b1b26514f15ff37681a777bf8dab41aac445a0259f751e56
+Status: Image is up to date for cgr.dev/chainguard/minio@sha256:dc455cdd4db6e390b1b26514f15ff37681a777bf8dab41aac445a0259f751e56
+cgr.dev/chainguard/minio@sha256:dc455cdd4db6e390b1b26514f15ff37681a777bf8dab41aac445a0259f751e56
+docker.io/library/redis@sha256:4fa24486b8bcca8eec45ee0eb166edc674795e53a2b53d1a9ef263eecebaac85: Pulling from library/redis
+Digest: sha256:4fa24486b8bcca8eec45ee0eb166edc674795e53a2b53d1a9ef263eecebaac85
+Status: Image is up to date for redis@sha256:4fa24486b8bcca8eec45ee0eb166edc674795e53a2b53d1a9ef263eecebaac85
+docker.io/library/redis:7@sha256:4fa24486b8bcca8eec45ee0eb166edc674795e53a2b53d1a9ef263eecebaac85

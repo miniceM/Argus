@@ -963,7 +963,8 @@ export const LaunchDetail: React.FC = () => {
           )}
         >
           <FileText className="w-4 h-4" />
-          <span>不可变快照与审计 (Manifest & Policy)</span>
+          <span>环境配置与快照审计 (Config & Manifest)</span>
+          <span className="sr-only">不可变快照与审计</span>
         </button>
       </div>
 

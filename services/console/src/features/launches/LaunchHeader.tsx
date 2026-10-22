@@ -269,10 +269,14 @@ export const LaunchHeader: React.FC<LaunchHeaderProps> = ({
         </Link>
         <div
           className="flex flex-wrap items-center gap-1.5 text-micro text-muted-foreground"
-          title="OTLP 同步（实时链路，非质量评分结论）"
+          title="云端链路与 OTLP 实时追踪同步（非质量评分门禁结论）"
         >
           <Activity className="w-3.5 h-3.5 text-muted-foreground/80 shrink-0" aria-hidden="true" />
-          <span>OTLP 同步（实时，非评分结论）</span>
+          <span>云端链路同步</span>
+          <span className="text-muted-foreground/60 hidden sm:inline" title="实时采集链路">
+            （OTLP 同步，非评分结论）
+          </span>
+          <span className="sr-only">OTLP 同步（实时，非评分结论）</span>
           <SyncStatusBadge
             status={launch.langfuse_sync_status}
             data-testid="langfuse-sync-badge"

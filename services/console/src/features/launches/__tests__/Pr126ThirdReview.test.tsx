@@ -316,7 +316,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     });
   });
 
-  const renderComponent = (initialUrl = "/launches/ff04d66b-3d00-4d67-8cf4-d36772fff708") => {
+  const renderComponent = (initialUrl = "/launches/ff04d66b-3d00-4d67-8cf4-d36772fff708?tab=compare") => {
     return render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[initialUrl]}>
@@ -330,7 +330,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   };
 
   it("AC1 & #120: Renders business Header with human-readable name, exact version badge, compact UUID copy, and 4 KPI cards", async () => {
-    renderComponent();
+    renderComponent("/launches/ff04d66b-3d00-4d67-8cf4-d36772fff708");
 
     // 1. Header contains agent name / id and exact version badge
     await waitFor(() => {
@@ -351,24 +351,24 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     expect(screen.getByText("P95 响应时延")).toBeInTheDocument();
     expect(screen.getByText("单用例平均 token 消耗")).toBeInTheDocument();
 
-    // 5. Default tab is Gate & Comparison, with audit/manifest panel not displayed in Tab 1
-    expect(screen.getByRole("tab", { name: /门禁与版本对比/ })).toHaveAttribute("aria-selected", "true");
+    // 5. Default tab is Cases & Trace, with audit/manifest panel not displayed in Tab 1
+    expect(screen.getByRole("tab", { name: /用例排查与 Trace/ })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByTestId("manifest-4d-grid")).not.toBeInTheDocument();
   });
 
-  it("AC2 & #121: Tab switching synchronizes URL query param (?tab=cases, ?tab=audit)", async () => {
-    renderComponent();
+  it("AC2 & #121: Tab switching synchronizes URL query param (?tab=compare, ?tab=audit)", async () => {
+    renderComponent("/launches/ff04d66b-3d00-4d67-8cf4-d36772fff708");
 
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: /用例排查与 Trace/ })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: /门禁与版本对比/ })).toBeInTheDocument();
     });
 
-    // Click Cases Tab
-    const casesTab = screen.getByRole("tab", { name: /用例排查与 Trace/ });
-    fireEvent.click(casesTab);
+    // Click Compare Tab
+    const compareTab = screen.getByRole("tab", { name: /门禁与版本对比/ });
+    fireEvent.click(compareTab);
 
     await waitFor(() => {
-      expect(screen.getByTestId("current-location")).toHaveTextContent("tab=cases");
+      expect(screen.getByTestId("current-location")).toHaveTextContent("tab=compare");
     });
 
     // Click Audit Tab
@@ -537,10 +537,10 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     expect(await screen.findByRole("button", { name: "未通过 (0)" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("REVIEW: invalid tab has a safe compare fallback", async () => {
+  it("REVIEW: invalid tab has a safe default fallback", async () => {
     renderComponent(`/launches/${mockLaunch.id}?tab=typo`);
     await screen.findByTestId("quality-pass-rate");
-    expect(screen.getByRole("tab", { name: /门禁与版本对比/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /用例排查与 Trace/ })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tabpanel")).toBeInTheDocument();
   });
 

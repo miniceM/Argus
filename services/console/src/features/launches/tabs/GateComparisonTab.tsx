@@ -561,6 +561,8 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
     ? (summary.summary.critical_failure_count as number)
     : 0;
 
+  const isBaselineEmpty = !activeBaseline && !comparison?.baseline_snapshot_id && !versions?.baseline;
+
   return (
     <div className="space-y-6">
       <ReleaseGatePanel key={`${launchId}-${snapshotId}`} launchId={launchId} snapshotId={snapshotId} />
@@ -732,6 +734,10 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
               <span className="text-xs bg-pass-subtle text-pass px-2.5 py-1 rounded-lg border border-pass-border font-medium">
                 对比口径有效 · 无环境漂移
               </span>
+            ) : isBaselineEmpty ? (
+              <span className="text-xs bg-surface text-muted-foreground px-2.5 py-1 rounded-lg border border-border">
+                尚未绑定基准
+              </span>
             ) : (
               <span className="text-xs bg-surface text-muted-foreground px-2.5 py-1 rounded-lg border border-border">
                 {comparability ? "契约存在差异" : "基线解析中"}
@@ -834,8 +840,44 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
         </p>
       )}
 
-      {/* 4. Comparability Banner */}
-      {comparability && !comparability.comparable && (
+      {/* 3.5 空基线正向向导卡片（友好引导，避免初次使用恐慌） */}
+      {isBaselineEmpty && (
+        <div
+          data-testid="baseline-guide-card"
+          className="rounded-xl border border-primary-border bg-primary-subtle p-5 space-y-3 text-foreground shadow-xs"
+        >
+          <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+            <ShieldCheck className="w-5 h-5" />
+            <span>当前版本尚未绑定基准 (Baseline)</span>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {summary?.evidence_state === "COMPLETE" ? (
+              <>
+                本次评测已具备完整证据，建议点击上方{" "}
+                <strong className="text-foreground font-semibold">【设为当前环境 Baseline】</strong>
+                ，即可作为后续版本回归比对的黄金基准。
+              </>
+            ) : (
+              <>当前版本尚未绑定基准。本次评测证据尚在生成或不完整，待证据完整后可将其固化为基准。</>
+            )}
+          </p>
+          {summary?.evidence_state === "COMPLETE" && onSetBaselineModal && (
+            <div>
+              <Button
+                variant="primary"
+                className="h-8 text-xs font-semibold"
+                onClick={onSetBaselineModal}
+              >
+                <ShieldCheck className="h-3.5 w-3.5" />
+                <span>立即设为当前环境 Baseline</span>
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 4. Comparability Banner - 仅在明确绑定了 Baseline 且存在契约冲突时展示 */}
+      {!isBaselineEmpty && comparability && !comparability.comparable && (
         <div
           data-testid="comparison-comparability-banner"
           role="status"

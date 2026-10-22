@@ -441,6 +441,43 @@ export const ComparisonReport: React.FC<{
           {activeBaseline.result_evidence_state === "COMPLETE" ? "完整" : "诊断"}
         </p>
       )}
+
+      {/* 空基线正向向导卡片（友好引导，避免初次使用恐慌） */}
+      {(!activeBaseline && !comparison?.baseline_snapshot_id && !versions?.baseline) && (
+        <div
+          data-testid="baseline-guide-card"
+          className="rounded-xl border border-primary-border bg-primary-subtle p-5 space-y-3 text-foreground shadow-xs"
+        >
+          <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+            <ShieldCheck className="w-5 h-5" />
+            <span>当前版本尚未绑定基准 (Baseline)</span>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {summaryQuery.data?.evidence_state === "COMPLETE" ? (
+              <>
+                本次评测已具备完整证据，建议点击上方{" "}
+                <strong className="text-foreground font-semibold">【设为当前环境 Baseline】</strong>
+                ，即可作为后续版本回归比对的黄金基准。
+              </>
+            ) : (
+              <>当前版本尚未绑定基准。本次评测证据尚在生成或不完整，待证据完整后可将其固化为基准。</>
+            )}
+          </p>
+          {summaryQuery.data?.evidence_state === "COMPLETE" && (
+            <div>
+              <Button
+                variant="primary"
+                className="h-8 text-xs font-semibold"
+                onClick={() => setBaselineMutation.mutate()}
+                disabled={setBaselineMutation.isPending}
+              >
+                <ShieldCheck className="h-3.5 w-3.5" />
+                <span>{setBaselineMutation.isPending ? "绑定中…" : "立即设为当前环境 Baseline"}</span>
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
       {setBaselineMutation.error && <p role="alert" className="text-xs text-fail">{formatApiError(setBaselineMutation.error)}</p>}
       {summaryQuery.error && <p role="alert" className="text-xs text-fail">{formatApiError(summaryQuery.error)}</p>}
       {comparisonQuery.error && <p role="alert" className="text-xs text-fail">{formatApiError(comparisonQuery.error)}</p>}
@@ -500,7 +537,8 @@ export const ComparisonReport: React.FC<{
           {summaryQuery.data?.langfuse_sync && (
           <LangfuseSyncPanel sync={summaryQuery.data.langfuse_sync} />
         )}
-        {comparability && !comparability.comparable && (
+        {/* 仅在明确绑定了 Baseline 且存在契约冲突时展示契约差异审计面板 */}
+        {(Boolean(activeBaseline || comparison?.baseline_snapshot_id || versions?.baseline)) && comparability && !comparability.comparable && (
           <div
             data-testid="comparison-comparability-banner"
             role="status"

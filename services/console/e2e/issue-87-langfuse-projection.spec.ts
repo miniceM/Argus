@@ -144,7 +144,7 @@ const itemSyncedRunScoreFailed = {
 test.describe("Issue #87 Langfuse projection and sync state", () => {
   test("a run-score failure is shown without hiding the synced item scope", async ({ page }) => {
     await mockApi(page, itemSyncedRunScoreFailed);
-    await page.goto(`/launches/${LAUNCH_ID}`);
+    await page.goto(`/launches/${LAUNCH_ID}?tab=compare`);
 
     const panel = page.getByTestId("langfuse-sync-panel");
     await expect(panel).toBeVisible();
@@ -162,7 +162,7 @@ test.describe("Issue #87 Langfuse projection and sync state", () => {
       item_trace: scope({ status: "RETRY_EXHAUSTED", reason: "Langfuse unreachable", failed_count: 2 }),
       run_score: scope({ status: "RETRY_EXHAUSTED", reason: "Langfuse unreachable", failed_count: 1 }),
     });
-    await page.goto(`/launches/${LAUNCH_ID}`);
+    await page.goto(`/launches/${LAUNCH_ID}?tab=compare`);
 
     // The sync scope is broken...
     await expect(page.getByTestId("langfuse-sync-overall")).toContainText("重试已耗尽");
@@ -174,7 +174,7 @@ test.describe("Issue #87 Langfuse projection and sync state", () => {
 
   test("after recovery the sync state is healthy and the conclusion has not moved", async ({ page }) => {
     await mockApi(page, recovered);
-    await page.goto(`/launches/${LAUNCH_ID}`);
+    await page.goto(`/launches/${LAUNCH_ID}?tab=compare`);
 
     const panel = page.getByTestId("langfuse-sync-panel");
     await expect(panel.getByTestId("langfuse-sync-overall")).toContainText("全部已同步");

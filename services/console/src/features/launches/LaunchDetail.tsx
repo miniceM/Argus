@@ -56,7 +56,7 @@ export const LaunchDetail: React.FC = () => {
   const { launchId } = useParams<{ launchId: string }>();
   const queryClient = useQueryClient();
 
-  const VALID_TABS = ["compare", "cases", "audit"] as const;
+  const VALID_TABS = ["cases", "compare", "audit"] as const;
   type TabKey = (typeof VALID_TABS)[number];
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -64,7 +64,7 @@ export const LaunchDetail: React.FC = () => {
   const rawTab = searchParams.get("tab");
   const currentTab: TabKey = rawTab && VALID_TABS.includes(rawTab as TabKey)
     ? (rawTab as TabKey)
-    : "compare";
+    : "cases";
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [showRetryModal, setShowRetryModal] = useState(false);
@@ -909,31 +909,11 @@ export const LaunchDetail: React.FC = () => {
         <button
           type="button"
           role="tab"
-          id="btn-tab-compare"
-          aria-controls="tab-compare"
-          aria-selected={currentTab === "compare"}
-          tabIndex={currentTab === "compare" ? 0 : -1}
-          onKeyDown={(e) => handleTabKeyDown(e, 0)}
-          onClick={() => setTab("compare")}
-          className={clsx(
-            "pb-3 flex items-center gap-1.5 transition cursor-pointer font-semibold",
-            currentTab === "compare"
-              ? "text-primary border-b-2 border-primary"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <Scale className="w-4 h-4" />
-          <span>门禁与版本对比 (Gate & Comparison)</span>
-        </button>
-
-        <button
-          type="button"
-          role="tab"
           id="btn-tab-cases"
           aria-controls="tab-cases"
           aria-selected={currentTab === "cases"}
           tabIndex={currentTab === "cases" ? 0 : -1}
-          onKeyDown={(e) => handleTabKeyDown(e, 1)}
+          onKeyDown={(e) => handleTabKeyDown(e, 0)}
           onClick={() => setTab("cases")}
           className={clsx(
             "pb-3 flex items-center gap-1.5 transition cursor-pointer font-semibold",
@@ -944,6 +924,26 @@ export const LaunchDetail: React.FC = () => {
         >
           <Layers className="w-4 h-4" />
           <span>用例排查与 Trace ({totalItems ?? "—"})</span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          id="btn-tab-compare"
+          aria-controls="tab-compare"
+          aria-selected={currentTab === "compare"}
+          tabIndex={currentTab === "compare" ? 0 : -1}
+          onKeyDown={(e) => handleTabKeyDown(e, 1)}
+          onClick={() => setTab("compare")}
+          className={clsx(
+            "pb-3 flex items-center gap-1.5 transition cursor-pointer font-semibold",
+            currentTab === "compare"
+              ? "text-primary border-b-2 border-primary"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <Scale className="w-4 h-4" />
+          <span>门禁与版本对比 (Gate & Comparison)</span>
         </button>
 
         <button

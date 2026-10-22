@@ -231,7 +231,11 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
           return (
             <div
               key={item.dataset_item_id || item.id}
-              className="p-4 hover:bg-surface-subtle transition-colors"
+              className={`p-4 transition-colors ${
+                isFail
+                  ? "bg-fail-subtle/25 border-l-4 border-l-fail hover:bg-fail-subtle/35"
+                  : "hover:bg-surface-subtle"
+              }`}
             >
               {/* 卡片头部行 */}
               <div
@@ -274,7 +278,7 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
                     </div>
                     {item.quality_evaluation && conclusion !== "pass" && (
                       <p
-                        className="text-micro text-muted-foreground truncate max-w-md mt-0.5"
+                        className={`text-micro truncate max-w-md mt-0.5 ${isFail ? "text-fail font-semibold" : "text-muted-foreground"}`}
                         data-testid={`quality-summary-${item.dataset_item_id}`}
                       >
                         {ruleSummary(item.quality_evaluation as QualityEvaluation)}

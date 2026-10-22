@@ -593,9 +593,9 @@ test.describe("Issue #119: launch detail first-screen hierarchy", () => {
           viewportSize.height + 1,
         );
 
-        const compareTab = page.getByRole("tab", { name: /门禁与版本对比/ });
-        await expect(compareTab).toHaveAttribute("aria-selected", "true");
-        await expect(compareTab).toBeInViewport();
+        const casesTab = page.getByRole("tab", { name: /用例排查与 Trace/ });
+        await expect(casesTab).toHaveAttribute("aria-selected", "true");
+        await expect(casesTab).toBeInViewport();
         const panel = page.getByRole("tabpanel");
         await expect(panel).toBeVisible();
         const panelBox = await panel.boundingBox();
@@ -642,19 +642,19 @@ test.describe("Issue #119: launch detail first-screen hierarchy", () => {
     await expect(page).toHaveURL(/tab=audit/);
 
     await page.keyboard.press("ArrowLeft");
-    await expect(casesTab).toBeFocused();
-    await expect(casesTab).toHaveAttribute("aria-selected", "true");
-    await expect(page).toHaveURL(/tab=cases/);
-
-    await page.keyboard.press("Home");
     await expect(compareTab).toBeFocused();
     await expect(compareTab).toHaveAttribute("aria-selected", "true");
     await expect(page).toHaveURL(/tab=compare/);
 
-    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Home");
     await expect(casesTab).toBeFocused();
     await expect(casesTab).toHaveAttribute("aria-selected", "true");
     await expect(page).toHaveURL(/tab=cases/);
+
+    await page.keyboard.press("ArrowRight");
+    await expect(compareTab).toBeFocused();
+    await expect(compareTab).toHaveAttribute("aria-selected", "true");
+    await expect(page).toHaveURL(/tab=compare/);
     await expect(page).toHaveURL(/snapshot_id=snap-v2/);
   });
 

@@ -324,7 +324,7 @@ test.describe("Issue #45: quality pass rate wording", () => {
       await route.fulfill({ json: launch });
     });
 
-    await page.goto(`/launches/${launchId}?snapshot_id=${snapshotId}`);
+    await page.goto(`/launches/${launchId}?snapshot_id=${snapshotId}&tab=compare`);
 
     const cohortTable = page.getByRole("table", { name: "Baseline 与 Candidate 聚合指标对比" });
     await expect(cohortTable).toBeVisible();

@@ -209,7 +209,7 @@ test.describe("Issue #85 fixed result revisions", () => {
         evidence_reasons: ["1/6 个用例评测失败或未产出结果"],
       },
     });
-    await page.goto(`/launches/${LAUNCH_ID}`);
+    await page.goto(`/launches/${LAUNCH_ID}?tab=compare`);
 
     await expect(page.getByTestId("snapshot-evidence-badge")).toHaveText("诊断快照");
     await expect(page.getByTestId("snapshot-evidence-reasons")).toContainText("评测失败");
@@ -223,7 +223,7 @@ test.describe("Issue #85 fixed result revisions", () => {
 
   test("the current Baseline shows both its result revision and its binding revision", async ({ page }) => {
     await mockApi(page);
-    await page.goto(`/launches/${LAUNCH_ID}`);
+    await page.goto(`/launches/${LAUNCH_ID}?tab=compare`);
 
     const line = page.getByTestId("baseline-revision-line");
     await expect(line).toContainText("结果修订 Revision 1");

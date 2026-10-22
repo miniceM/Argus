@@ -115,6 +115,17 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
     return true;
   });
 
+  // 当查看全部用例时，智能置顶未通过用例，让开发者首屏第一时间定位失败根因（两步定位排查）
+  const displayItems = filterQuality === "ALL"
+    ? [...filteredItems].sort((a, b) => {
+        const aFail = (a.quality_conclusion || "").toLowerCase() === "fail" || ["failed", "timed_out"].includes((a.execution_status || "").toLowerCase());
+        const bFail = (b.quality_conclusion || "").toLowerCase() === "fail" || ["failed", "timed_out"].includes((b.execution_status || "").toLowerCase());
+        if (aFail && !bFail) return -1;
+        if (!aFail && bFail) return 1;
+        return 0;
+      })
+    : filteredItems;
+
   const passCount = snapshotCounts?.pass != null
     ? snapshotCounts.pass
     : items.filter((i) => i.quality_conclusion?.toLowerCase() === "pass").length;
@@ -219,9 +230,30 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
         </span>
       </div>
 
+      {/* 失败用例首屏置顶提示与一键过滤引导 */}
+      {failCount > 0 && filterQuality === "ALL" && (
+        <div
+          data-testid="cases-failure-quick-focus"
+          className="flex flex-wrap items-center justify-between gap-3 bg-fail-subtle border border-fail-border text-fail px-4 py-2.5 rounded-xl text-xs"
+        >
+          <div className="flex items-center gap-2 font-medium">
+            <AlertCircle className="w-4 h-4 shrink-0 text-fail" />
+            <span>检测到 {failCount} 个未通过用例，已自动高亮并在下方置顶呈现</span>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-7 text-xs border-fail-border text-fail hover:bg-fail-subtle/80"
+            onClick={() => setFilterQuality("FAIL")}
+          >
+            仅看未通过 ({failCount})
+          </Button>
+        </div>
+      )}
+
       {/* 用例列表卡片容器 */}
       <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-xs divide-y divide-border text-xs">
-        {filteredItems.map((item) => {
+        {displayItems.map((item) => {
           const isExpanded = activeExpandedCaseId === item.dataset_item_id;
           const conclusion = (item.quality_conclusion || "unknown").toLowerCase();
           const isPass = conclusion === "pass";
@@ -231,7 +263,11 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
           return (
             <div
               key={item.dataset_item_id || item.id}
-              className="p-4 hover:bg-surface-subtle transition-colors"
+              className={`p-4 transition-colors ${
+                isFail
+                  ? "bg-fail-subtle/25 border-l-4 border-l-fail hover:bg-fail-subtle/35"
+                  : "hover:bg-surface-subtle"
+              }`}
             >
               {/* 卡片头部行 */}
               <div
@@ -274,7 +310,7 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
                     </div>
                     {item.quality_evaluation && conclusion !== "pass" && (
                       <p
-                        className="text-micro text-muted-foreground truncate max-w-md mt-0.5"
+                        className={`text-micro truncate max-w-md mt-0.5 ${isFail ? "text-fail font-semibold" : "text-muted-foreground"}`}
                         data-testid={`quality-summary-${item.dataset_item_id}`}
                       >
                         {ruleSummary(item.quality_evaluation as QualityEvaluation)}
@@ -442,7 +478,7 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
           );
         })}
 
-        {filteredItems.length === 0 && (
+        {displayItems.length === 0 && (
           <div className="p-8 text-center text-muted-foreground">
             当前筛选条件下没有用例记录。
           </div>

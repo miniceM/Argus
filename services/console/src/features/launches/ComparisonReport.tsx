@@ -6,6 +6,7 @@ import { api } from "../../api/client";
 import { queryKeys } from "../../api/query-keys";
 import { formatApiError } from "../../api/errors";
 import { Button, Panel } from "../../components/ui/Primitives";
+import { Modal } from "../../components/ui/Overlay";
 import { ComparisonCaseDrawer } from "./ComparisonCaseDrawer";
 import { LangfuseSyncPanel } from "./langfuseSyncStatus";
 
@@ -182,11 +183,13 @@ export const ComparisonReport: React.FC<{
   launchId: string;
   launchStatus: string;
   environment: string;
-}> = ({ launchId, launchStatus, environment }) => {
+  onSetBaselineModal?: () => void;
+}> = ({ launchId, launchStatus, environment, onSetBaselineModal }) => {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const snapshotId = searchParams.get("snapshot_id");
   const [latestRequest, setLatestRequest] = useState(0);
+  const [showBaselineConfirmModal, setShowBaselineConfirmModal] = useState(false);
   const [viewState, setViewState] = useState<ReportViewState>(() => ({
     launchId,
     snapshotId,
@@ -441,6 +444,49 @@ export const ComparisonReport: React.FC<{
           {activeBaseline.result_evidence_state === "COMPLETE" ? "完整" : "诊断"}
         </p>
       )}
+
+      {/* 空基线正向向导卡片（友好引导，避免初次使用恐慌） */}
+      {(!activeBaseline && !comparison?.baseline_snapshot_id && !versions?.baseline) && (
+        <div
+          data-testid="baseline-guide-card"
+          className="rounded-xl border border-primary-border bg-primary-subtle p-5 space-y-3 text-foreground shadow-xs"
+        >
+          <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+            <ShieldCheck className="w-5 h-5" />
+            <span>当前版本尚未绑定基准 (Baseline)</span>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {summaryQuery.data?.evidence_state === "COMPLETE" ? (
+              <>
+                本次评测已具备完整证据，建议点击上方{" "}
+                <strong className="text-foreground font-semibold">【设为当前环境 Baseline】</strong>
+                ，即可作为后续版本回归比对的黄金基准。
+              </>
+            ) : (
+              <>当前版本尚未绑定基准。本次评测证据尚在生成或不完整，待证据完整后可将其固化为基准。</>
+            )}
+          </p>
+          {summaryQuery.data?.evidence_state === "COMPLETE" && (
+            <div>
+              <Button
+                variant="primary"
+                className="h-8 text-xs font-semibold"
+                onClick={() => {
+                  if (onSetBaselineModal) {
+                    onSetBaselineModal();
+                  } else {
+                    setShowBaselineConfirmModal(true);
+                  }
+                }}
+                disabled={setBaselineMutation.isPending}
+              >
+                <ShieldCheck className="h-3.5 w-3.5" />
+                <span>{setBaselineMutation.isPending ? "绑定中…" : "立即设为当前环境 Baseline"}</span>
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
       {setBaselineMutation.error && <p role="alert" className="text-xs text-fail">{formatApiError(setBaselineMutation.error)}</p>}
       {summaryQuery.error && <p role="alert" className="text-xs text-fail">{formatApiError(summaryQuery.error)}</p>}
       {comparisonQuery.error && <p role="alert" className="text-xs text-fail">{formatApiError(comparisonQuery.error)}</p>}
@@ -467,15 +513,22 @@ export const ComparisonReport: React.FC<{
           {cohort ? (
             <div className="space-y-1">
             <h3 className="text-xs font-semibold text-foreground">共同可比样本质量（{comparisonSummary?.comparable_case_count ?? 0} 个 Case）</h3>
-            {/* This ratio uses a different denominator from the all-cases quality
-                ratio in the Launch detail header. Name the cohort and the
-                "evaluable" rule so the two are never read as one metric. */}
-            <p
-              data-testid="comparable-quality-pass-rate-help"
-              className="pb-1 text-micro text-muted-foreground"
+            {/* 百字说明默认折叠，降低用户认知负荷，同时保留口径追溯 */}
+            <details
+              data-testid="comparable-quality-pass-rate-details"
+              className="group text-micro text-muted-foreground py-0.5"
             >
-              质量通过率说明：仅统计双方共同可比样本。质量通过率为质量 PASS 数 / 有效已评测数；有效已评测要求执行成功、评测成功且质量结论为 PASS 或 FAIL。不可比或无有效质量结论的用例不参与该比例，请结合全量运行健康指标查看评测覆盖率与错误数。
-            </p>
+              <summary className="cursor-pointer font-medium hover:text-foreground inline-flex items-center gap-1 select-none">
+                <span>质量通过率口径说明</span>
+                <span className="text-2xs text-muted-foreground group-open:rotate-180 transition-transform">▾</span>
+              </summary>
+              <p
+                data-testid="comparable-quality-pass-rate-help"
+                className="mt-1 pl-2 border-l border-border text-muted-foreground leading-relaxed"
+              >
+                质量通过率说明：仅统计双方共同可比样本。质量通过率为质量 PASS 数 / 有效已评测数；有效已评测要求执行成功、评测成功且质量结论为 PASS 或 FAIL。不可比或无有效质量结论的用例不参与该比例，请结合全量运行健康指标查看评测覆盖率与错误数。
+              </p>
+            </details>
             <div className="overflow-x-auto rounded-lg border border-border">
               <table aria-label="Baseline 与 Candidate 聚合指标对比" className="min-w-full divide-y divide-border text-left text-xs">
                 <thead className="bg-canvas text-muted-foreground">
@@ -500,7 +553,8 @@ export const ComparisonReport: React.FC<{
           {summaryQuery.data?.langfuse_sync && (
           <LangfuseSyncPanel sync={summaryQuery.data.langfuse_sync} />
         )}
-        {comparability && !comparability.comparable && (
+        {/* 仅在明确绑定了 Baseline 且存在契约冲突时展示契约差异审计面板 */}
+        {(Boolean(activeBaseline || comparison?.baseline_snapshot_id || versions?.baseline)) && comparability && !comparability.comparable && (
           <div
             data-testid="comparison-comparability-banner"
             role="status"
@@ -686,6 +740,48 @@ export const ComparisonReport: React.FC<{
         datasetItemId={selectedCase}
         onClose={() => updateViewState({ selectedCase: null })}
       />}
+
+      {/* 设为 Baseline 二次确认弹窗（破坏性操作防误触） */}
+      <Modal
+        open={showBaselineConfirmModal}
+        onClose={() => setShowBaselineConfirmModal(false)}
+        title="设为当前环境 Baseline 确认"
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => setShowBaselineConfirmModal(false)}
+              disabled={setBaselineMutation.isPending}
+            >
+              取消
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setShowBaselineConfirmModal(false);
+                setBaselineMutation.mutate();
+              }}
+              disabled={setBaselineMutation.isPending}
+            >
+              {setBaselineMutation.isPending ? "绑定中…" : "确认设为 Baseline"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="p-4 space-y-3 text-xs text-foreground">
+          <p>
+            确定要将当前评测快照设为 <strong>{environment}</strong> 环境的对比基准 (Baseline) 吗？
+          </p>
+          <div className="bg-surface-subtle p-3 rounded-lg border border-border space-y-1 font-mono text-micro text-muted-foreground">
+            <div>Agent: {agentId}</div>
+            <div>Snapshot: {summaryQuery.data?.snapshot_id}</div>
+            <div>环境: {environment}</div>
+          </div>
+          <p className="text-muted-foreground">
+            设为基准后，后续评测任务将以此版本的指标与输出作为回归比对基线。
+          </p>
+        </div>
+      </Modal>
     </Panel>
   );
 };

@@ -344,6 +344,7 @@ test.describe("Issue #83: independent quality policy", () => {
     const created: Record<string, unknown>[] = [];
     await mockCreatePage(page, created);
     await page.goto("/launches/new");
+    await page.getByTestId("preset-custom").click();
 
     // One rule per selected metric, each seeded from its own frozen identity.
     await expect(page.getByTestId("quality-policy-editor")).toBeVisible();

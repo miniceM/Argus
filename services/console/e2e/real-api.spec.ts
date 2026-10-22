@@ -34,6 +34,7 @@ test.describe("Real API Acceptance E2E (Zero Mock)", () => {
     await expect(page.getByRole("radio", { name: /逐项诊断/ })).toHaveCount(0);
     await expect(page.getByRole("radio", { name: /复合结论/ })).toHaveCount(0);
     await expect(page.getByText("已选 4 项")).toBeVisible();
+    await page.getByTestId("preset-custom").click();
     await expect(page.getByTestId("quality-policy-editor")).toBeVisible();
     for (const id of ["escalation_match", "intent_match", "pii_safe", "required_tool_match"]) {
       await expect(page.getByTestId(`quality-rule-${id}`)).toBeVisible();

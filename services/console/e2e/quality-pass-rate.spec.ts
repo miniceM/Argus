@@ -324,13 +324,17 @@ test.describe("Issue #45: quality pass rate wording", () => {
       await route.fulfill({ json: launch });
     });
 
-    await page.goto(`/launches/${launchId}?snapshot_id=${snapshotId}`);
+    await page.goto(`/launches/${launchId}?snapshot_id=${snapshotId}&tab=compare`);
 
     const cohortTable = page.getByRole("table", { name: "Baseline 与 Candidate 聚合指标对比" });
     await expect(cohortTable).toBeVisible();
     await expect(cohortTable.getByText("质量通过率 (Quality Pass Rate)")).toBeVisible();
     // Candidate cohort ratio is 2/5 = 40%, distinct from the header's 2/6.
     await expect(cohortTable.getByText("40.0%")).toBeVisible();
+
+    const details = page.getByTestId("comparable-quality-pass-rate-details");
+    await expect(details).toBeVisible();
+    await details.locator("summary").click();
 
     const help = page.getByTestId("comparable-quality-pass-rate-help");
     await expect(help).toBeVisible();

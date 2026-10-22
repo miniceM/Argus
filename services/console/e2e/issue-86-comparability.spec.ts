@@ -246,7 +246,7 @@ async function mockApi(page: Page, body: Record<string, any>) {
 test.describe("Issue #86 comparison comparability", () => {
   test("identical contracts produce a formal Regression", async ({ page }) => {
     await mockApi(page, comparison());
-    await page.goto(`/launches/${LAUNCH_ID}`);
+    await page.goto(`/launches/${LAUNCH_ID}?tab=compare`);
 
     const verdict = page.getByTestId("comparison-formal-verdict");
     await expect(verdict).toContainText("正式比较");
@@ -287,7 +287,7 @@ test.describe("Issue #86 comparison comparability", () => {
         ],
       }),
     );
-    await page.goto(`/launches/${LAUNCH_ID}`);
+    await page.goto(`/launches/${LAUNCH_ID}?tab=compare`);
 
     const banner = page.getByTestId("comparison-comparability-banner");
     await expect(banner).toBeVisible();
@@ -333,7 +333,7 @@ test.describe("Issue #86 comparison comparability", () => {
         items: [],
       }),
     );
-    await page.goto(`/launches/${LAUNCH_ID}`);
+    await page.goto(`/launches/${LAUNCH_ID}?tab=compare`);
 
     await expect(page.getByTestId("comparability-reason-CONTRACT_PROVENANCE_UNKNOWN")).toBeVisible();
     await expect(page.getByTestId("comparability-dimension-AGGREGATION_COMPARISON")).toContainText("证据缺失");
@@ -365,7 +365,7 @@ test.describe("Issue #86 comparison comparability", () => {
         items: [],
       }),
     );
-    await page.goto(`/launches/${LAUNCH_ID}`);
+    await page.goto(`/launches/${LAUNCH_ID}?tab=compare`);
 
     const verdict = page.getByTestId("comparison-formal-verdict");
     await expect(verdict).toContainText("无法给出正式结论");

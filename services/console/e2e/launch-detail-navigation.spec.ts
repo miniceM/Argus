@@ -593,9 +593,9 @@ test.describe("Issue #119: launch detail first-screen hierarchy", () => {
           viewportSize.height + 1,
         );
 
-        const compareTab = page.getByRole("tab", { name: /门禁与版本对比/ });
-        await expect(compareTab).toHaveAttribute("aria-selected", "true");
-        await expect(compareTab).toBeInViewport();
+        const casesTab = page.getByRole("tab", { name: /用例排查与 Trace/ });
+        await expect(casesTab).toHaveAttribute("aria-selected", "true");
+        await expect(casesTab).toBeInViewport();
         const panel = page.getByRole("tabpanel");
         await expect(panel).toBeVisible();
         const panelBox = await panel.boundingBox();
@@ -642,19 +642,19 @@ test.describe("Issue #119: launch detail first-screen hierarchy", () => {
     await expect(page).toHaveURL(/tab=audit/);
 
     await page.keyboard.press("ArrowLeft");
-    await expect(casesTab).toBeFocused();
-    await expect(casesTab).toHaveAttribute("aria-selected", "true");
-    await expect(page).toHaveURL(/tab=cases/);
-
-    await page.keyboard.press("Home");
     await expect(compareTab).toBeFocused();
     await expect(compareTab).toHaveAttribute("aria-selected", "true");
     await expect(page).toHaveURL(/tab=compare/);
 
-    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Home");
     await expect(casesTab).toBeFocused();
     await expect(casesTab).toHaveAttribute("aria-selected", "true");
     await expect(page).toHaveURL(/tab=cases/);
+
+    await page.keyboard.press("ArrowRight");
+    await expect(compareTab).toBeFocused();
+    await expect(compareTab).toHaveAttribute("aria-selected", "true");
+    await expect(page).toHaveURL(/tab=compare/);
     await expect(page).toHaveURL(/snapshot_id=snap-v2/);
   });
 
@@ -787,5 +787,117 @@ test.describe("Issue #119: launch detail first-screen hierarchy", () => {
       body: JSON.stringify(downloadedJson, null, 2),
       contentType: "application/json",
     });
+  });
+
+  test("Issue #229 AC2: failed cases are visible above the fold on initial entry with 2-step root cause localization", async ({
+    page,
+  }) => {
+    // 1. Mock items API to return a failed item and a passing item
+    const mockCaseItems = [
+      {
+        id: "item-exec-pass",
+        launch_id: historicalLaunchId,
+        dataset_item_id: "case-pass-1",
+        execution_status: "SUCCEEDED",
+        quality_conclusion: "pass",
+        scores: { intent_match: 1 },
+      },
+      {
+        id: "item-exec-fail",
+        launch_id: historicalLaunchId,
+        dataset_item_id: "case-fail-2",
+        execution_status: "SUCCEEDED",
+        quality_conclusion: "fail",
+        scores: { intent_match: 0 },
+        quality_evaluation: {
+          conclusion: "fail",
+          rules: [{ evaluator_id: "intent_match", conclusion: "fail" }],
+        },
+      },
+    ];
+
+    await page.route(`**/api/v1/experiment-launches/${historicalLaunchId}/result-snapshots/*`, (route) => {
+      const url = new URL(route.request().url());
+      const segments = url.pathname.split("/");
+      const requestedSnapId = segments[segments.length - 1] || "snap-v2";
+      return route.fulfill({
+        json: {
+          launch_id: historicalLaunchId,
+          snapshot_id: requestedSnapId,
+          revision: requestedSnapId === "snap-v1" ? 1 : 2,
+          evidence_state: "COMPLETE",
+          releasable: false,
+          quality_pass_count: 1,
+          quality_fail_count: 1,
+          quality_unknown_count: 0,
+          manifest: {
+            schema_version: "1.0",
+            agent: { id: "banking-agent", version: "v1" },
+            dataset: { name: "regression-dataset", version: "v2" },
+            evaluators: [{ id: "intent_match", version: "1.0.0" }],
+          },
+          items: mockCaseItems,
+        },
+      });
+    });
+
+    await page.route(`**/api/v1/experiment-launches/${historicalLaunchId}/summary*`, (route) => {
+      const url = new URL(route.request().url());
+      const querySnapId = url.searchParams.get("snapshot_id") || "snap-v2";
+      return route.fulfill({
+        json: {
+          launch_id: historicalLaunchId,
+          snapshot_id: querySnapId,
+          versions: {
+            agent: { id: "banking-agent", version: "v1" },
+            dataset: { name: "regression-dataset", version: "v2" },
+            evaluators: [{ id: "intent_match", version: "1.0.0" }],
+            runner: { runner_version: "v0.2.0", mapping_engine_version: "engine-v1" },
+          },
+          summary: {
+            pass_rate: 0.5,
+            total_cases: 2,
+            quality_pass_count: 1,
+            quality_fail_count: 1,
+            quality_unknown_count: 0,
+          },
+          quality: { pass: 1, fail: 1, unknown: 0 },
+        },
+      });
+    });
+
+    await page.route(`**/api/v1/experiment-launches/${historicalLaunchId}/items`, (route) =>
+      route.fulfill({ json: mockCaseItems }),
+    );
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    // Visit launch detail root without ?tab= param (default tab behavior)
+    await page.goto(`/launches/${historicalLaunchId}?snapshot_id=snap-v2`);
+
+    // Verify initial scroll position is strictly at the top (no scroll needed)
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+    // Verify default active tab is Cases & Trace
+    const casesTab = page.getByRole("tab", { name: /用例排查与 Trace/ });
+    await expect(casesTab).toHaveAttribute("aria-selected", "true");
+
+    // Failure banner appears and is visible in viewport
+    const failureBanner = page.getByTestId("cases-failure-quick-focus");
+    await expect(failureBanner).toBeInViewport();
+
+    // Step 1: Failed case is pinned above passing cases and starts above the bottom of the viewport
+    const failedCaseRow = page.getByTestId("case-row-expand-case-fail-2");
+    const failBox = await failedCaseRow.boundingBox();
+    expect(failBox).not.toBeNull();
+    expect(failBox!.y).toBeGreaterThan(0);
+    expect(failBox!.y, "failed case card starts above the bottom of the viewport").toBeLessThan(900);
+
+    // Step 2: Click to expand failure row
+    await failedCaseRow.click();
+
+    // Root cause is directly accessible without scrolling
+    const qualitySummary = page.getByTestId("quality-summary-case-fail-2");
+    await expect(qualitySummary).toBeVisible();
+    await expect(qualitySummary).toContainText("违反规则：intent_match");
   });
 });

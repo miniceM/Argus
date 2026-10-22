@@ -111,7 +111,7 @@ export const LaunchesList: React.FC = () => {
     <div className="space-y-6">
       <PageHeader
         title="评测中心"
-        description="查看、检索与触发 Agent 自动化评测任务，所有历史记录均严格锁定不可变快照 (Frozen Manifest)。"
+        description="查看、检索与触发 Agent 自动化评测任务，所有历史记录均严格锁定版本快照与评测证据。"
         actions={(
           <>
             <Button variant="secondary" onClick={() => refetch()} disabled={isFetching} aria-label="刷新列表">

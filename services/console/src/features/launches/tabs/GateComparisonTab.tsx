@@ -561,6 +561,8 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
     ? (summary.summary.critical_failure_count as number)
     : 0;
 
+  const isBaselineEmpty = !activeBaseline && !comparison?.baseline_snapshot_id && !versions?.baseline;
+
   return (
     <div className="space-y-6">
       <ReleaseGatePanel key={`${launchId}-${snapshotId}`} launchId={launchId} snapshotId={snapshotId} />
@@ -732,6 +734,10 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
               <span className="text-xs bg-pass-subtle text-pass px-2.5 py-1 rounded-lg border border-pass-border font-medium">
                 对比口径有效 · 无环境漂移
               </span>
+            ) : isBaselineEmpty ? (
+              <span className="text-xs bg-surface text-muted-foreground px-2.5 py-1 rounded-lg border border-border">
+                尚未绑定基准
+              </span>
             ) : (
               <span className="text-xs bg-surface text-muted-foreground px-2.5 py-1 rounded-lg border border-border">
                 {comparability ? "契约存在差异" : "基线解析中"}
@@ -834,8 +840,44 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
         </p>
       )}
 
-      {/* 4. Comparability Banner */}
-      {comparability && !comparability.comparable && (
+      {/* 3.5 空基线正向向导卡片（友好引导，避免初次使用恐慌） */}
+      {isBaselineEmpty && (
+        <div
+          data-testid="baseline-guide-card"
+          className="rounded-xl border border-primary-border bg-primary-subtle p-5 space-y-3 text-foreground shadow-xs"
+        >
+          <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+            <ShieldCheck className="w-5 h-5" />
+            <span>当前版本尚未绑定基准 (Baseline)</span>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {summary?.evidence_state === "COMPLETE" ? (
+              <>
+                本次评测已具备完整证据，建议点击上方{" "}
+                <strong className="text-foreground font-semibold">【设为当前环境 Baseline】</strong>
+                ，即可作为后续版本回归比对的黄金基准。
+              </>
+            ) : (
+              <>当前版本尚未绑定基准。本次评测证据尚在生成或不完整，待证据完整后可将其固化为基准。</>
+            )}
+          </p>
+          {summary?.evidence_state === "COMPLETE" && onSetBaselineModal && (
+            <div>
+              <Button
+                variant="primary"
+                className="h-8 text-xs font-semibold"
+                onClick={onSetBaselineModal}
+              >
+                <ShieldCheck className="h-3.5 w-3.5" />
+                <span>立即设为当前环境 Baseline</span>
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 4. Comparability Banner - 仅在明确绑定了 Baseline 且存在契约冲突时展示 */}
+      {!isBaselineEmpty && comparability && !comparability.comparable && (
         <div
           data-testid="comparison-comparability-banner"
           role="status"
@@ -967,12 +1009,22 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
           <h3 className="text-xs font-semibold text-foreground">
             共同可比样本质量（{comparisonSummary?.comparable_case_count ?? 0} 个 Case）
           </h3>
-          <p
-            data-testid="comparable-quality-pass-rate-help"
-            className="pb-1 text-micro text-muted-foreground"
+          {/* 百字说明默认折叠，降低用户认知负荷，同时保留口径追溯 */}
+          <details
+            data-testid="comparable-quality-pass-rate-details"
+            className="group text-micro text-muted-foreground py-0.5"
           >
-            质量通过率说明：仅统计双方共同可比样本。质量通过率为质量 PASS 数 / 有效已评测数；有效已评测要求执行成功、评测成功且质量结论为 PASS 或 FAIL。不可比或无有效质量结论的用例不参与该比例，请结合全量运行健康指标查看评测覆盖率与错误数。
-          </p>
+            <summary className="cursor-pointer font-medium hover:text-foreground inline-flex items-center gap-1 select-none">
+              <span>质量通过率口径说明</span>
+              <span className="text-2xs text-muted-foreground group-open:rotate-180 transition-transform">▾</span>
+            </summary>
+            <p
+              data-testid="comparable-quality-pass-rate-help"
+              className="mt-1 pl-2 border-l border-border text-muted-foreground leading-relaxed"
+            >
+              质量通过率说明：仅统计双方共同可比样本。质量通过率为质量 PASS 数 / 有效已评测数；有效已评测要求执行成功、评测成功且质量结论为 PASS 或 FAIL。不可比或无有效质量结论的用例不参与该比例，请结合全量运行健康指标查看评测覆盖率与错误数。
+            </p>
+          </details>
           <div className="overflow-x-auto rounded-lg border border-border">
             <table aria-label="Baseline 与 Candidate 聚合指标对比" className="min-w-full divide-y divide-border text-left text-xs">
               <thead className="bg-surface-muted text-muted-foreground">

@@ -23,6 +23,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
   let snapshotManifestOverride: Record<string, unknown> | null = null;
   let snapshotListOverride: Record<string, unknown> | null = null;
   let snapshotDetailOverride: Record<string, unknown> | null = null;
+  let itemsOverride: any = null;
 
   const mockLaunch = {
     id: "ff04d66b-3d00-4d67-8cf4-d36772fff708",
@@ -250,18 +251,20 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     snapshotManifestOverride = null;
     snapshotListOverride = null;
     snapshotDetailOverride = null;
+    itemsOverride = null;
 
     (api.GET as any).mockImplementation((path: string, options?: any) => {
       if (path === "/api/v1/experiment-launches/{launch_id}") {
         return Promise.resolve({ data: mockLaunch });
       }
       if (path === "/api/v1/experiment-launches/{launch_id}/items") {
-        return Promise.resolve({ data: mockItems });
+        return Promise.resolve({ data: itemsOverride ?? mockItems });
       }
       if (path === "/api/v1/experiment-launches/{launch_id}/result-snapshots") {
         return Promise.resolve({ data: snapshotListOverride ?? mockSnapshotList });
       }
       if (path.includes("/result-snapshots/")) {
+        const currentItems = itemsOverride ?? mockItems;
         return Promise.resolve({
           data: snapshotDetailOverride ?? {
             ...mockSnapshotList.revisions[0],
@@ -269,7 +272,7 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
             releasable: true,
             manifest: snapshotManifestOverride ?? mockLaunch.manifest,
             summary: mockSummary.summary,
-            items: mockItems.map((item) => ({
+            items: currentItems.map((item: any) => ({
               ...item,
               trace_url: item.langfuse_trace_url,
               latency_ms: item.final_attempt_latency_ms,
@@ -374,24 +377,24 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
     expect(screen.getByText("P95 响应时延")).toBeInTheDocument();
     expect(screen.getByText("单用例平均 token 消耗")).toBeInTheDocument();
 
-    // 5. Default tab is Gate & Comparison, with audit/manifest panel not displayed in Tab 1
-    expect(screen.getByRole("tab", { name: /门禁与版本对比/ })).toHaveAttribute("aria-selected", "true");
+    // 5. Default tab is Cases & Trace (Issue #229 UX optimization), with audit/manifest panel not displayed in Tab 1
+    expect(screen.getByRole("tab", { name: /用例排查与 Trace/ })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByTestId("manifest-4d-grid")).not.toBeInTheDocument();
   });
 
-  it("AC2 & #121: Tab switching synchronizes URL query param (?tab=cases, ?tab=audit)", async () => {
+  it("AC2 & #121: Tab switching synchronizes URL query param (?tab=compare, ?tab=audit)", async () => {
     renderComponent();
 
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: /用例排查与 Trace/ })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: /门禁与版本对比/ })).toBeInTheDocument();
     });
 
-    // Click Cases Tab
-    const casesTab = screen.getByRole("tab", { name: /用例排查与 Trace/ });
-    fireEvent.click(casesTab);
+    // Click Compare Tab
+    const compareTab = screen.getByRole("tab", { name: /门禁与版本对比/ });
+    fireEvent.click(compareTab);
 
     await waitFor(() => {
-      expect(screen.getByTestId("current-location")).toHaveTextContent("tab=cases");
+      expect(screen.getByTestId("current-location")).toHaveTextContent("tab=compare");
     });
 
     // Click Audit Tab
@@ -438,6 +441,49 @@ describe("Launch Detail Refactoring (#119, #120-#124)", () => {
       const traceLinks = screen.getAllByRole("link", { name: /Trace/ });
       expect(traceLinks.length).toBeGreaterThanOrEqual(1);
       expect(traceLinks[0]).toHaveAttribute("href", "https://cloud.langfuse.com/trace/t1");
+    });
+  });
+
+  it("AC2 (Issue #229): highlights and pins failed cases at the top of Tab 1 for immediate two-step root cause localization", async () => {
+    const failedItems = [
+      {
+        ...mockItems[0],
+        dataset_item_id: "item-pass-001",
+        quality_conclusion: "pass",
+      },
+      {
+        ...mockItems[1],
+        dataset_item_id: "item-fail-002",
+        quality_conclusion: "fail",
+        scores: { pii_safe: 0, tool_match: 0 },
+        quality_evaluation: {
+          conclusion: "fail",
+          rules: [{ evaluator_id: "pii_safe", conclusion: "fail" }],
+        },
+      },
+    ];
+    itemsOverride = failedItems;
+
+    renderComponent("/launches/ff04d66b-3d00-4d67-8cf4-d36772fff708");
+
+    // 1. Tab 1 (Cases & Trace) is selected by default on initial entry
+    const casesTab = await screen.findByRole("tab", { name: /用例排查与 Trace/ });
+    expect(casesTab).toHaveAttribute("aria-selected", "true");
+
+    // 2. Banner alerts user to failure and offers 1-click filter
+    const failureBanner = await screen.findByTestId("cases-failure-quick-focus");
+    expect(failureBanner).toBeInTheDocument();
+    expect(failureBanner).toHaveTextContent("检测到 1 个未通过用例，已自动高亮并在下方置顶呈现");
+
+    // 3. Step 1: Failed case is sorted to the top (first case card above passing cases)
+    const caseCards = screen.getAllByTestId(/^case-row-expand-/);
+    expect(caseCards[0]).toHaveAttribute("data-testid", "case-row-expand-item-fail-002");
+    expect(screen.getByTestId("quality-summary-item-fail-002")).toHaveTextContent("违反规则：pii_safe");
+
+    // 4. Step 2: Click to expand and inspect failure root cause and outputs
+    fireEvent.click(caseCards[0]);
+    await waitFor(() => {
+      expect(screen.getByText("v2 output masked text")).toBeInTheDocument();
     });
   });
 

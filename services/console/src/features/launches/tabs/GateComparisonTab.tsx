@@ -1009,12 +1009,22 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
           <h3 className="text-xs font-semibold text-foreground">
             共同可比样本质量（{comparisonSummary?.comparable_case_count ?? 0} 个 Case）
           </h3>
-          <p
-            data-testid="comparable-quality-pass-rate-help"
-            className="pb-1 text-micro text-muted-foreground"
+          {/* 百字说明默认折叠，降低用户认知负荷，同时保留口径追溯 */}
+          <details
+            data-testid="comparable-quality-pass-rate-details"
+            className="group text-micro text-muted-foreground py-0.5"
           >
-            质量通过率说明：仅统计双方共同可比样本。质量通过率为质量 PASS 数 / 有效已评测数；有效已评测要求执行成功、评测成功且质量结论为 PASS 或 FAIL。不可比或无有效质量结论的用例不参与该比例，请结合全量运行健康指标查看评测覆盖率与错误数。
-          </p>
+            <summary className="cursor-pointer font-medium hover:text-foreground inline-flex items-center gap-1 select-none">
+              <span>质量通过率口径说明</span>
+              <span className="text-2xs text-muted-foreground group-open:rotate-180 transition-transform">▾</span>
+            </summary>
+            <p
+              data-testid="comparable-quality-pass-rate-help"
+              className="mt-1 pl-2 border-l border-border text-muted-foreground leading-relaxed"
+            >
+              质量通过率说明：仅统计双方共同可比样本。质量通过率为质量 PASS 数 / 有效已评测数；有效已评测要求执行成功、评测成功且质量结论为 PASS 或 FAIL。不可比或无有效质量结论的用例不参与该比例，请结合全量运行健康指标查看评测覆盖率与错误数。
+            </p>
+          </details>
           <div className="overflow-x-auto rounded-lg border border-border">
             <table aria-label="Baseline 与 Candidate 聚合指标对比" className="min-w-full divide-y divide-border text-left text-xs">
               <thead className="bg-surface-muted text-muted-foreground">

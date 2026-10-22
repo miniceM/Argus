@@ -109,10 +109,14 @@ describe("CreateLaunch Presets and Progressive Disclosure (Issue #229)", () => {
 
     // Now quick smoke is checked
     expect(quickSmokeRadio).toBeChecked();
-    // Smoke preset selects only essential metrics (fewer than 4)
+    // Smoke preset selects strictly declared essential metrics: intent_match and escalation_match
     await waitFor(() => {
-      expect(screen.getByTestId("selected-evaluators-count")).toHaveTextContent(/已选 [1-2] 项/);
+      expect(screen.getByTestId("selected-evaluators-count")).toHaveTextContent("已选 2 项");
     });
+    expect(screen.getByTestId("evaluator-toggle-intent_match")).toBeChecked();
+    expect(screen.getByTestId("evaluator-toggle-escalation_match")).toBeChecked();
+    expect(screen.getByTestId("evaluator-toggle-pii_safe")).not.toBeChecked();
+    expect(screen.getByTestId("evaluator-toggle-required_tool_match")).not.toBeChecked();
 
     // 4. Switch back to full regression
     fireEvent.click(fullRegressionRadio);
@@ -128,5 +132,63 @@ describe("CreateLaunch Presets and Progressive Disclosure (Issue #229)", () => {
     const advancedSection = await screen.findByTestId("advanced-evaluator-config");
     expect(advancedSection).toBeInTheDocument();
     expect(screen.getByText("高级配置与规则微调 (Advanced Configuration)")).toBeInTheDocument();
+  });
+
+  it("automatically switches to custom preset and expands advanced configuration when toggling an evaluator", async () => {
+    renderComponent();
+    await screen.findByTestId("launch-presets-container");
+
+    const advancedSection = screen.getByTestId("advanced-evaluator-config");
+    expect(advancedSection).not.toHaveAttribute("open");
+
+    // Toggle off pii_safe
+    const piiCheckbox = screen.getByTestId("evaluator-toggle-pii_safe");
+    expect(piiCheckbox).toBeChecked();
+    fireEvent.click(piiCheckbox);
+
+    // Preset should automatically switch to custom
+    expect(screen.getByTestId("preset-custom")).toBeChecked();
+    // Advanced section must be automatically opened to show rule editors
+    expect(advancedSection).toHaveAttribute("open");
+  });
+
+  it("submits correct evaluators and quality policy payload matching quick smoke preset", async () => {
+    (api.POST as any).mockResolvedValue({
+      data: { id: "launch-smoke-1", status: "RUNNING" },
+    });
+
+    renderComponent();
+    await screen.findByTestId("launch-presets-container");
+
+    // Switch to quick smoke
+    fireEvent.click(screen.getByTestId("preset-quick-smoke"));
+    await waitFor(() => {
+      expect(screen.getByTestId("selected-evaluators-count")).toHaveTextContent("已选 2 项");
+    });
+
+    // Submit form (default dataset is already filled)
+    const submitBtn = await screen.findByRole("button", { name: /创建评测任务/ });
+    await waitFor(() => expect(submitBtn).toBeEnabled());
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(api.POST).toHaveBeenCalledWith(
+        "/api/v1/experiment-launches",
+        expect.objectContaining({
+          body: expect.objectContaining({
+            evaluator_selections: expect.arrayContaining([
+              { id: "intent_match", version: "1.0.0" },
+              { id: "escalation_match", version: "1.0.0" },
+            ]),
+            quality_policy: expect.objectContaining({
+              rules: expect.arrayContaining([
+                expect.objectContaining({ evaluator_id: "intent_match" }),
+                expect.objectContaining({ evaluator_id: "escalation_match" }),
+              ]),
+            }),
+          }),
+        }),
+      );
+    });
   });
 });

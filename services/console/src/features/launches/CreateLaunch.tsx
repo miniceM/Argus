@@ -62,12 +62,50 @@ const diagnosticDefaults = (evaluators: EvaluatorResponse[]): SelectionMap =>
       return acc;
     }, {});
 
-const quickSmokeDefaults = (evaluators: EvaluatorResponse[]): SelectionMap => {
-  const itemEvals = evaluators.filter(
+/**
+ * 快速冒烟预设核心指标优先级白名单：
+ * 冒烟评测旨在最少用例与最短时间内验证核心对话链路正常，因此按以下语义优先级挑选前 2 项：
+ * 1. intent_match: 核心业务意图识别与答复匹配
+ * 2. escalation_match: 风险兜底升级转人工判断
+ * 3. required_tool_match / tool_call_match: 关键工具调用准确性
+ * 4. pii_safe: 基础安全过滤
+ * 若 Evaluator 目录中存在白名单项，严格按优先级顺序挑选；若都不存在，才安全降级回退至可用单用例指标。
+ */
+export const SMOKE_PRIORITY_IDS = [
+  "intent_match",
+  "escalation_match",
+  "required_tool_match",
+  "tool_call_match",
+  "pii_safe",
+] as const;
+
+export const quickSmokeDefaults = (evaluators: EvaluatorResponse[]): SelectionMap => {
+  const eligibleItemEvals = evaluators.filter(
     (e) => e.scope === "item" && composedOf(e).length === 0 && e.default_selected === true,
   );
-  const preferredSubset = itemEvals.slice(0, Math.min(2, itemEvals.length));
-  return preferredSubset.reduce<SelectionMap>((acc, e) => {
+  const byId = new Map(eligibleItemEvals.map((e) => [e.id, e]));
+
+  // 1. 优先按声明式白名单顺序选取
+  const selected: EvaluatorResponse[] = [];
+  for (const id of SMOKE_PRIORITY_IDS) {
+    const candidate = byId.get(id);
+    if (candidate) {
+      selected.push(candidate);
+      if (selected.length === 2) break;
+    }
+  }
+
+  // 2. 若白名单未凑齐 2 项，按可用列表安全兜底补充
+  if (selected.length < 2) {
+    for (const ev of eligibleItemEvals) {
+      if (!selected.some((s) => s.id === ev.id)) {
+        selected.push(ev);
+        if (selected.length === 2) break;
+      }
+    }
+  }
+
+  return selected.reduce<SelectionMap>((acc, e) => {
     const preferred = versionsOf(e).find((v) => v.release_eligible) ?? versionsOf(e)[0];
     if (preferred) acc[e.id] = preferred.version;
     return acc;
@@ -265,6 +303,7 @@ export const CreateLaunch: React.FC = () => {
 
   const toggleEvaluator = (evalId: string) => {
     setSelectedPreset("custom");
+    setIsAdvancedOpen(true);
     const target = evaluators?.find((e) => e.id === evalId);
     if (!target || target.scope !== "item" || composedOf(target).length > 0) return;
     setSelectedEvaluators((current) => {
@@ -284,6 +323,7 @@ export const CreateLaunch: React.FC = () => {
 
   const selectVersion = (evalId: string, version: string) => {
     setSelectedPreset("custom");
+    setIsAdvancedOpen(true);
     setSelectedEvaluators((current) => ({ ...(current ?? {}), [evalId]: version }));
   };
 
@@ -789,7 +829,7 @@ export const CreateLaunch: React.FC = () => {
                         <span className="block text-micro text-muted-foreground">{ev.description || "确定性规则评测器"}</span>
                         {!isItemScope && (
                           <span className="block text-micro text-timeout">
-                            派生运行指标，不能作为用例指标选择{reasonsOf(ev).length > 0 ? `（${reasonsOf(ev).join("、")}）` : ""}
+                            派生运行指标，不能作为用例指标选择（运行汇总指标，非单用例指标）{reasonsOf(ev).length > 0 ? `（${reasonsOf(ev).join("、")}）` : ""}
                           </span>
                         )}
                         {isItemScope && !selectable && (

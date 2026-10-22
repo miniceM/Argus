@@ -332,6 +332,10 @@ test.describe("Issue #45: quality pass rate wording", () => {
     // Candidate cohort ratio is 2/5 = 40%, distinct from the header's 2/6.
     await expect(cohortTable.getByText("40.0%")).toBeVisible();
 
+    const details = page.getByTestId("comparable-quality-pass-rate-details");
+    await expect(details).toBeVisible();
+    await details.locator("summary").click();
+
     const help = page.getByTestId("comparable-quality-pass-rate-help");
     await expect(help).toBeVisible();
     await expect(help).toContainText("仅统计双方共同可比样本");

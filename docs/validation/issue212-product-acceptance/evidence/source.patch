@@ -1,0 +1,238 @@
+diff --git a/docs/langfuse-managed-evaluation.md b/docs/langfuse-managed-evaluation.md
+index 8784bc2..9021f27 100644
+--- a/docs/langfuse-managed-evaluation.md
++++ b/docs/langfuse-managed-evaluation.md
+@@ -137,3 +137,13 @@ Langfuse 后续 Rule 改动或重评不会改变既有 Snapshot / Gate；新评
+ [本次 Console 交付记录及父 Issue 覆盖矩阵](validation/issue219-managed-console/README.md)
+ 分开标记真实 Flowise/Rule 联调、网络替身 UI 测试、完整回归与未满足项。
+ Playwright 网络替身的 pending/down/recover 不等于真实 Langfuse 故障注入。
++
++
++## 8. 父 Issue #212 当前主线复验
++
++[2026-10-22 产品验收、覆盖矩阵与普通用户体验意见](validation/issue212-product-acceptance/README.md)
++记录了真实 Flowise 双评分、PASS / FAIL / UNKNOWN、远程迟到原生 Code Score 后的历史不可变性、
++已登录 Langfuse 外链验证，以及类型 / Vitest / Playwright / PostgreSQL / S4 完整回归。
++异步评分完成后，列表质量与冻结报告一致；等待评分时 UNKNOWN 仍不是质量 FAIL。
++历史 Snapshot 只展示当时已采纳 Score，即使 Langfuse 之后补齐缺分也不自动改变原 Gate；
++需要采纳新结果时，使用既有评测重试与新 Snapshot revision，而不是修改历史报告。
+diff --git a/docs/validation/issue219-managed-console/real_console_acceptance.py b/docs/validation/issue219-managed-console/real_console_acceptance.py
+index 8a89e41..8b324c0 100644
+--- a/docs/validation/issue219-managed-console/real_console_acceptance.py
++++ b/docs/validation/issue219-managed-console/real_console_acceptance.py
+@@ -20,6 +20,7 @@ import time
+ from datetime import UTC, datetime
+ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+ from pathlib import Path
++from uuid import UUID
+ 
+ import httpx
+ 
+@@ -46,11 +47,16 @@ def main(argv=None):
+     parser.add_argument('--execute', action='store_true')
+     parser.add_argument('--credential-container', default='argus-flowise-e2e-eval-runner-1')
+     parser.add_argument('--evidence-dir', type=Path)
++    parser.add_argument('--flowise-credential-ref')
++    parser.add_argument('--flowise-origin', default='http://127.0.0.1:18091')
++    parser.add_argument('--flowise-postgres-container', default='argus-flowise-p0-postgres')
++    parser.add_argument('--flow-id', type=UUID, default=UUID('8b8d2606-379c-42c4-9ac9-08dcbf9490e8'))
++    parser.add_argument('--name-prefix', choices=['issue219', 'issue212'], default='issue219')
+     args = parser.parse_args(argv)
+     if not args.execute:
+         print('DRY RUN：独立 Runner/Console；真实 Flowise 双评分及受控 FAIL/UNKNOWN；不会写 Score。')
+         return
+-    name = 'issue219-' + datetime.now(UTC).strftime('%Y%m%dt%H%M%Sz')
++    name = args.name_prefix + '-' + datetime.now(UTC).strftime('%Y%m%dt%H%M%Sz')
+     out = (args.evidence_dir or HERE / 'evidence' / name).resolve()
+     out.mkdir(parents=True, exist_ok=False)
+     work = Path('/tmp') / name
+@@ -59,7 +65,7 @@ def main(argv=None):
+     provided = dict(x.split('=', 1) for x in raw['Config']['Env'] if '=' in x)
+     env = os.environ.copy()
+     for key, value in provided.items():
+-        if key.startswith(('LANGFUSE_', 'FLOWISE_')) or key in ('ARGUS_SECRET_MODE', 'ARGUS_ALLOWED_CREDENTIAL_ENVS'):
++        if key.startswith(('LANGFUSE_', 'FLOWISE_')) or key in ('ARGUS_SECRET_MODE', 'ARGUS_ALLOWED_CREDENTIAL_ENVS', 'ARGUS_LANGFUSE_DASHBOARD_URL'):
+             env[key] = value
+     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+     port, ui_port = free_port(), free_port()
+@@ -80,8 +86,8 @@ def main(argv=None):
+         (out / (filename + '.json')).write_text(text)
+ 
+     # 只读核对现有 Flowise 配置；不读取凭据、原始 flowData 不落盘。
+-    flow_id = '8b8d2606-379c-42c4-9ac9-08dcbf9490e8'
+-    flow_raw = subprocess.check_output(['docker', 'exec', 'argus-flowise-p0-postgres', 'psql', '-U', 'postgres',
++    flow_id = str(args.flow_id)
++    flow_raw = subprocess.check_output(['docker', 'exec', args.flowise_postgres_container, 'psql', '-U', 'postgres',
+                                       '-d', 'flowise', '-At', '-c', f'SELECT "flowData" FROM chat_flow WHERE id=\'{flow_id}\''])
+     models = [n['data']['inputs']['agentModelConfig'] for n in json.loads(flow_raw)['nodes']
+               if 'agentModelConfig' in n.get('data', {}).get('inputs', {})]
+@@ -92,7 +98,10 @@ def main(argv=None):
+                           agent_version_max_retries=0, network_mocking=False,
+                           source_sha256={str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
+                                          for p in [Path(__file__), HERE / 'real_console_flow.mjs',
+-                                                   ROOT / 'services/console/dist/index.html']}))
++                                                   ROOT / 'services/console/dist/index.html',
++                                                   ROOT / 'services/eval-runner/app/result_snapshots.py',
++                                                   ROOT / 'services/eval-runner/app/evaluation_recovery.py']}))
++    print(f'Live services: API http://127.0.0.1:{port}; Console http://127.0.0.1:{ui_port}; runtime {work}', flush=True)
+     rules, audit, processes, logs = [], [], [], []
+     lf = httpx.Client(base_url=env['LANGFUSE_BASE_URL'].rstrip('/'),
+                       auth=(env['LANGFUSE_PUBLIC_KEY'], env['LANGFUSE_SECRET_KEY']), timeout=90)
+@@ -162,10 +171,12 @@ def main(argv=None):
+             expectations.append(dict(name=evaluator['score_name'], rule_id=rule['id'], evaluator_id=evaluator['id']))
+         request(argus, 'POST', '/api/v1/agents', dict(id=name, name=name, description='Issue219 Console live acceptance'))
+         version = json.loads((PRIOR / 'agent-version.json').read_text())['request']
+-        version.update(agent_id=name, environment=name, endpoint=f'http://127.0.0.1:18091/api/v1/prediction/{flow_id}')
++        flowise_origin = args.flowise_origin.rstrip('/')
++        version.update(agent_id=name, environment=name, endpoint=f'{flowise_origin}/api/v1/prediction/{flow_id}',
++                       credential_ref=args.flowise_credential_ref)
+         request(argus, 'POST', '/api/v1/agent-versions', version)
+         save('agent-version', version)
+-        version.update(version='v2', endpoint=f'http://127.0.0.1:{wrong.server_port}/invoke')
++        version.update(version='v2', endpoint=f'http://127.0.0.1:{wrong.server_port}/invoke', credential_ref=None)
+         request(argus, 'POST', '/api/v1/agent-versions', version)
+         request(argus, 'POST', '/api/v1/release-policies', dict(name=name, version='1.0.0', agent_id=name, environment=name,
+                  rules=[dict(id='quality', metric='pass_rate', operator='>=', threshold=1.0),
+diff --git a/docs/validation/issue219-managed-console/real_console_flow.mjs b/docs/validation/issue219-managed-console/real_console_flow.mjs
+index c749699..8aa743f 100644
+--- a/docs/validation/issue219-managed-console/real_console_flow.mjs
++++ b/docs/validation/issue219-managed-console/real_console_flow.mjs
+@@ -133,6 +133,15 @@ try {
+     await expect(result).toContainText(gateId);
+     expect(await result.innerText()).toBe(gateText);
+     await page.screenshot({ path: `${out}/real-ui/${config.label}-gate.png`, fullPage: true });
++    await page.goto(config.ui_url + '/launches');
++    const listRow = page.getByRole('row').filter({ has: page.getByRole('link', { name: launch.id, exact: true }) });
++    await expect(listRow).toContainText(config.expected);
++    await page.getByLabel('按质量结论过滤').selectOption(config.expected.toLowerCase());
++    await expect(listRow).toBeVisible();
++    await page.screenshot({ path: `${out}/real-ui/${config.label}-list-quality.png`, fullPage: true });
++    save('list-quality', { status: 'PASS', launch_id: launch.id, expected: config.expected,
++      actual_row: await listRow.innerText(), filter: config.expected.toLowerCase() });
++    await page.goto(reportUrl);
+     save('browser', { status: 'PASS', launch_id: launch.id, snapshot_id: snapshotId, gate_id: gateId,
+       expected: config.expected, report_url: reportUrl, panel_text: panelText, gate_text: gateText,
+       score_links: links, pending_observed: pending, network_mocking: false,
+diff --git a/services/eval-runner/app/result_snapshots.py b/services/eval-runner/app/result_snapshots.py
+index 901e04e..147997a 100644
+--- a/services/eval-runner/app/result_snapshots.py
++++ b/services/eval-runner/app/result_snapshots.py
+@@ -22,6 +22,17 @@ from .db_models import (
+ )
+ 
+ 
++def _project_launch_quality(launch: ExperimentLaunchRecord, snapshot: RunResultSnapshotRecord) -> None:
++    """列表质量与当前已冻结证据一致；不修改执行状态或历史快照。"""
++    from .state_machine import aggregate_quality_conclusion
++
++    summary = snapshot.summary
++    launch.quality_conclusion = aggregate_quality_conclusion(
++        {"pass": summary.get("quality_pass_count", 0), "fail": summary.get("quality_fail_count", 0)},
++        summary.get("total_cases", 0),
++    )
++
++
+ def _canonical_digest(value: Any) -> str:
+     encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+@@ -250,6 +261,7 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) ->
+         RunResultSnapshotRecord.source_result_digest == source_digest,
+     )).first()
+     if existing:
++        _project_launch_quality(launch, existing)
+         return existing
+ 
+     evaluator_specs = launch.manifest.get("evaluators", [])
+@@ -297,6 +309,7 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) ->
+         status="PENDING",
+         next_retry_at=datetime.utcnow(),
+     ))
++    _project_launch_quality(launch, snapshot)
+     return snapshot
+ 
+ 
+diff --git a/tests/test_issue219_acceptance_harness.py b/tests/test_issue219_acceptance_harness.py
+index 9c7721c..41af1aa 100644
+--- a/tests/test_issue219_acceptance_harness.py
++++ b/tests/test_issue219_acceptance_harness.py
+@@ -28,3 +28,42 @@ def test_source_evidence_matches_frozen_score_and_rejects_duplicate_or_api_sourc
+     for rows in ([], [evidence, evidence], [{**evidence, 'source': 'API'}], [{**evidence, 'value': False}]):
+         with pytest.raises(AssertionError):
+             module.validate_score_readback(rows, evidence)
++
++
++def test_isolated_flowise_deployment_is_configurable_without_touching_services(monkeypatch, capsys):
++    """复验不得依赖已经销毁的 #219 容器、端口或 Flow ID。"""
++    module = harness()
++    monkeypatch.setattr(module.subprocess, 'check_output', lambda *a, **k: pytest.fail('unexpected subprocess'))
++    module.main(['--flowise-origin', 'http://127.0.0.1:19091',
++                 '--flowise-postgres-container', 'argus-flowise-e2e-postgres-1',
++                 '--flow-id', '35f4c55f-4ba5-4138-aaf9-d6f5751222a7',
++                 '--name-prefix', 'issue212', '--flowise-credential-ref', 'env://FLOWISE_API_TOKEN'])
++    assert 'DRY RUN' in capsys.readouterr().out
++
++
++def test_flow_identifier_rejects_sql_text_before_any_external_call(monkeypatch):
++    module = harness()
++    monkeypatch.setattr(module.subprocess, 'check_output', lambda *a, **k: pytest.fail('unexpected subprocess'))
++    with pytest.raises(SystemExit) as exc:
++        module.main(['--flow-id', "' OR 1=1 --"])
++    assert exc.value.code == 2
++
++
++def test_issue212_flow_clone_preserves_source_and_credentials_but_disables_retries():
++    import copy
++    path = PATH.parents[1] / 'issue212-product-acceptance/prepare_flowise.py'
++    spec = importlib.util.spec_from_file_location('issue212_prepare', path)
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    original = {'nodes': [{'data': {'name': 'agentAgentflow', 'inputs': {
++        'agentModelConfig': {'FLOWISE_CREDENTIAL_ID': 'existing', 'maxRetries': 2},
++        'agentEnableMemory': True, 'agentTools': [
++            {'agentSelectedTool': 'calculator'}, {'agentSelectedTool': 'requestsGet'}]}}}]}
++    before = copy.deepcopy(original)
++    result = module.isolated_graph(original)
++    assert original == before
++    agent = result['nodes'][0]['data']['inputs']
++    assert agent['agentModelConfig']['maxRetries'] == 0
++    assert agent['agentModelConfig']['FLOWISE_CREDENTIAL_ID'] == 'existing'
++    assert agent['agentEnableMemory'] is False
++    assert agent['agentTools'] == [{'agentSelectedTool': 'calculator'}]
+diff --git a/tests/test_issue_218_managed_quality.py b/tests/test_issue_218_managed_quality.py
+index 07f41f5..7750e6c 100644
+--- a/tests/test_issue_218_managed_quality.py
++++ b/tests/test_issue_218_managed_quality.py
+@@ -510,3 +510,33 @@ def test_late_required_score_requires_new_revision_and_never_rewrites_diagnostic
+         assert snapshots[1].revision == diagnostic.revision + 1
+         assert evaluate_gate(policy(), snapshots[1]).decision == "PASS"
+         assert len(list(session.scalars(select(ExecutionAttemptRecord)))) == 1
++
++
++@pytest.mark.parametrize('values,expected', [((True, True), 'pass'), ((False, True), 'fail'), ((True, None), 'unknown')])
++def test_managed_recovery_updates_launch_quality_for_list_and_filter(setup_runtime, monkeypatch, values, expected):
++    """真实 #212 复验：Item/冻结报告收敛后，Launch 列表与质量筛选不能滞留 UNKNOWN。"""
++    from app.manifest import LaunchService
++
++    db, snapshot, _, _ = collect218(setup_runtime, monkeypatch, values=values)
++    with db.get_session() as session:
++        launch = session.get(ExperimentLaunchRecord, snapshot.launch_id)
++        assert launch.quality_conclusion == expected
++        assert launch.status == 'COMPLETED'  # 质量 FAIL 不得改写 Agent 执行结论。
++    service = LaunchService(db, registry=None)
++    assert snapshot.launch_id in {v.id for v in service.list_launches(quality_conclusion=expected)}
++    if expected != 'unknown':
++        assert snapshot.launch_id not in {v.id for v in service.list_launches(quality_conclusion='unknown')}
++
++
++def test_existing_frozen_result_repairs_stale_launch_projection_without_new_revision(setup_runtime, monkeypatch):
++    """Reconciler 复用相同 Snapshot 时也须修复旧 Launch 的列表投影，而非改写历史。"""
++    db, snapshot, _, _ = collect218(setup_runtime, monkeypatch)
++    before = copy.deepcopy((snapshot.id, snapshot.revision, snapshot.source_result_digest, snapshot.items, snapshot.summary))
++    with db.get_session() as session:
++        launch = session.get(ExperimentLaunchRecord, snapshot.launch_id)
++        launch.quality_conclusion = 'unknown'
++    with db.get_session() as session:
++        launch = session.get(ExperimentLaunchRecord, snapshot.launch_id)
++        same = create_result_snapshot(session, launch)
++        assert launch.quality_conclusion == 'pass'
++        assert (same.id, same.revision, same.source_result_digest, same.items, same.summary) == before

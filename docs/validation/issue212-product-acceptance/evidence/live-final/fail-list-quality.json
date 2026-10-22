@@ -1,0 +1,7 @@
+{
+  "status": "PASS",
+  "launch_id": "e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+  "expected": "FAIL",
+  "actual_row": "e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e\n\t\nissue212-20261022t083959z\nissue212-20261022t083959z\nv2\n\t\nissue214-20261019t084028z\n2026-10-22T08:41:38.852113+00:00\n\t\nCOMPLETED\n100% · 1/1\n\tFAIL\tSYNCED\t2026/10/22 08:41:39\t\n详情\nLangfuse",
+  "filter": "fail"
+}

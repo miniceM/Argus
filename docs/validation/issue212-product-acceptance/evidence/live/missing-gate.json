@@ -1,0 +1,64 @@
+{
+  "decision": "UNKNOWN",
+  "releasable": false,
+  "engine_version": "release-gate-v4",
+  "candidate_snapshot_id": "79b2b45a-3347-4c8d-b28d-f1f2ee627e9e",
+  "baseline_snapshot_id": null,
+  "reason_codes": [
+    "CANDIDATE_EVIDENCE_INCOMPLETE",
+    "CANDIDATE_MANAGED_EVIDENCE_INCOMPLETE"
+  ],
+  "rules": [
+    {
+      "id": "quality",
+      "metric": "pass_rate",
+      "operator": ">=",
+      "threshold": 1.0,
+      "actual": null,
+      "conclusion": "UNKNOWN",
+      "reason": "CANDIDATE_EVIDENCE_INCOMPLETE"
+    },
+    {
+      "id": "coverage",
+      "metric": "evaluation_coverage",
+      "operator": ">=",
+      "threshold": 1.0,
+      "actual": null,
+      "conclusion": "UNKNOWN",
+      "reason": "CANDIDATE_EVIDENCE_INCOMPLETE"
+    }
+  ],
+  "id": "fa96f822-d1fe-48d8-8174-78e59f82f713",
+  "created_at": "2026-10-22T08:28:14.783755Z",
+  "policy": {
+    "name": "issue212-20261022t082316z",
+    "version": "1.0.0",
+    "agent_id": "issue212-20261022t082316z",
+    "environment": "issue212-20261022t082316z",
+    "block_critical_failures": true,
+    "rules": [
+      {
+        "id": "quality",
+        "metric": "pass_rate",
+        "operator": ">=",
+        "threshold": 1.0
+      },
+      {
+        "id": "coverage",
+        "metric": "evaluation_coverage",
+        "operator": ">=",
+        "threshold": 1.0
+      }
+    ]
+  },
+  "policy_digest": "sha256:51957debbe9ab37adc939744c22515f7410b162e39691d03db5cf4a082010748",
+  "candidate_launch_id": "598fc77e-b9d0-4edb-9f04-9b4f94667b7c",
+  "candidate_revision": 1,
+  "candidate_manifest_digest": "93669c3cab654342864d74cfe591b0924922bfbdfb5781bba24532bd7125a770",
+  "candidate_source_result_digest": "6c0b3ddeb7ae99b9b7132a755439910432b0d4a7e9c3930d1002abb9f67141bd",
+  "baseline_revision": null,
+  "baseline_manifest_digest": null,
+  "baseline_source_result_digest": null,
+  "report_url": "http://localhost:18083/launches/598fc77e-b9d0-4edb-9f04-9b4f94667b7c?snapshot_id=79b2b45a-3347-4c8d-b28d-f1f2ee627e9e",
+  "comparison_url": "http://localhost:18083/launches/598fc77e-b9d0-4edb-9f04-9b4f94667b7c?snapshot_id=79b2b45a-3347-4c8d-b28d-f1f2ee627e9e&tab=comparison"
+}

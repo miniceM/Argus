@@ -1,0 +1,6 @@
+{
+  "target": "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/cf23b2e8869b54e310ae1543c3beec3b?observation=7d9d312dedbf13ba",
+  "status": 200,
+  "final_url": "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/cf23b2e8869b54e310ae1543c3beec3b?observation=7d9d312dedbf13ba",
+  "note": "外部页面可能要求用户登录；未传递凭据，不冒充已登录查看 Score。"
+}

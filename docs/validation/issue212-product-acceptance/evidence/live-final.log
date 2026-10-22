@@ -1,0 +1,4 @@
+Live services: API http://127.0.0.1:53798; Console http://127.0.0.1:53799; runtime /tmp/issue212-20261022t083959z
+pass: Console → native EVAL → frozen PASS PASS
+fail: Console → native EVAL → frozen FAIL PASS
+missing: Console → native EVAL → frozen UNKNOWN PASS

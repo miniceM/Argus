@@ -1,0 +1,269 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "scenario": "pass",
+      "score_name": "issue214-20261019t084028z-judge",
+      "rows": [
+        {
+          "id": "1fd62eb2-65ed-541c-804c-054c3c4eb634",
+          "projectId": "cmu5a6fj500aoad0jvrckiypb",
+          "name": "issue214-20261019t084028z-judge",
+          "dataType": "BOOLEAN",
+          "value": true,
+          "source": "EVAL",
+          "subject": {
+            "kind": "observation",
+            "id": "7d9d312dedbf13ba",
+            "traceId": "cf23b2e8869b54e310ae1543c3beec3b"
+          },
+          "environment": "issue212-20261022t082316z",
+          "timestamp": "2026-10-22T08:23:57.713Z",
+          "createdAt": "2026-10-22T08:23:58.000Z",
+          "updatedAt": "2026-10-22T08:23:57.836Z",
+          "configId": null,
+          "metadata": {
+            "evaluation_rule_id": "cmvj9xkd2006yad0i3s0ec4hp",
+            "job_configuration_id": "cmvj9xkd2006yad0i3s0ec4hp",
+            "evaluation_rule_assignment_id": "cmvj9xkd20070ad0id74vgjwh",
+            "evaluator_id": "cmvf082z1002uad0gkb42lwel",
+            "evaluator_version_id": "cmvf082z1002wad0g6y71t1r8",
+            "job_execution_id": "23615ddc894f7e7c83a8e10c6813711e",
+            "target_trace_id": "cf23b2e8869b54e310ae1543c3beec3b",
+            "target_observation_id": "7d9d312dedbf13ba"
+          }
+        }
+      ],
+      "matches_frozen": true
+    },
+    {
+      "scenario": "pass",
+      "score_name": "issue214-20261019t084028z-code",
+      "rows": [
+        {
+          "id": "ca962588-e590-5752-93e2-2b3a7c79fb8e",
+          "projectId": "cmu5a6fj500aoad0jvrckiypb",
+          "name": "issue214-20261019t084028z-code",
+          "dataType": "BOOLEAN",
+          "value": true,
+          "source": "EVAL",
+          "subject": {
+            "kind": "observation",
+            "id": "7d9d312dedbf13ba",
+            "traceId": "cf23b2e8869b54e310ae1543c3beec3b"
+          },
+          "environment": "issue212-20261022t082316z",
+          "timestamp": "2026-10-22T08:23:50.851Z",
+          "createdAt": "2026-10-22T08:23:51.000Z",
+          "updatedAt": "2026-10-22T08:23:50.939Z",
+          "configId": null,
+          "metadata": {
+            "evaluation_rule_id": "cmvj9xnzf0073ad0inwygj1xe",
+            "job_configuration_id": "cmvj9xnzf0073ad0inwygj1xe",
+            "evaluation_rule_assignment_id": "cmvj9xnzf0075ad0i22ys9tkx",
+            "evaluator_id": "cmvf083f50034ad0gbpddxpar",
+            "evaluator_version_id": "cmvf083f50036ad0ggpilrl84",
+            "job_execution_id": "dfd2271449ac0ca043d1b89f296d8158",
+            "target_trace_id": "cf23b2e8869b54e310ae1543c3beec3b",
+            "target_observation_id": "7d9d312dedbf13ba",
+            "dispatcher_name": "aws-lambda",
+            "code_eval_runtime": "PYTHON",
+            "input_sha256": "9ae09609fb55ee4526c6b594e032e0e7e89e80828670bdac4c7df5cbb585c906",
+            "output_sha256": "a6b8717925946bb82d78e55bfbfceac99432e5f65521bbff6d15f9dab87d6d38"
+          }
+        }
+      ],
+      "matches_frozen": true
+    },
+    {
+      "scenario": "fail",
+      "score_name": "issue214-20261019t084028z-judge",
+      "rows": [
+        {
+          "id": "6c069cd4-b8b3-54db-82d0-36f0fbe22d93",
+          "projectId": "cmu5a6fj500aoad0jvrckiypb",
+          "name": "issue214-20261019t084028z-judge",
+          "dataType": "BOOLEAN",
+          "value": false,
+          "source": "EVAL",
+          "subject": {
+            "kind": "observation",
+            "id": "a9bef8eb6122d615",
+            "traceId": "122c7707a0e807bbf7cb22e325185b43"
+          },
+          "environment": "issue212-20261022t082316z",
+          "timestamp": "2026-10-22T08:24:47.703Z",
+          "createdAt": "2026-10-22T08:24:48.000Z",
+          "updatedAt": "2026-10-22T08:24:47.798Z",
+          "configId": null,
+          "metadata": {
+            "evaluation_rule_id": "cmvj9xkd2006yad0i3s0ec4hp",
+            "job_configuration_id": "cmvj9xkd2006yad0i3s0ec4hp",
+            "evaluation_rule_assignment_id": "cmvj9xkd20070ad0id74vgjwh",
+            "evaluator_id": "cmvf082z1002uad0gkb42lwel",
+            "evaluator_version_id": "cmvf082z1002wad0g6y71t1r8",
+            "job_execution_id": "799344e66ae3b15af83388b3b02df78c",
+            "target_trace_id": "122c7707a0e807bbf7cb22e325185b43",
+            "target_observation_id": "a9bef8eb6122d615"
+          }
+        }
+      ],
+      "matches_frozen": true
+    },
+    {
+      "scenario": "fail",
+      "score_name": "issue214-20261019t084028z-code",
+      "rows": [
+        {
+          "id": "360f61eb-6149-57af-9a76-52b42e6f8c9b",
+          "projectId": "cmu5a6fj500aoad0jvrckiypb",
+          "name": "issue214-20261019t084028z-code",
+          "dataType": "BOOLEAN",
+          "value": false,
+          "source": "EVAL",
+          "subject": {
+            "kind": "observation",
+            "id": "a9bef8eb6122d615",
+            "traceId": "122c7707a0e807bbf7cb22e325185b43"
+          },
+          "environment": "issue212-20261022t082316z",
+          "timestamp": "2026-10-22T08:24:40.252Z",
+          "createdAt": "2026-10-22T08:24:41.000Z",
+          "updatedAt": "2026-10-22T08:24:40.358Z",
+          "configId": null,
+          "metadata": {
+            "evaluation_rule_id": "cmvj9xnzf0073ad0inwygj1xe",
+            "job_configuration_id": "cmvj9xnzf0073ad0inwygj1xe",
+            "evaluation_rule_assignment_id": "cmvj9xnzf0075ad0i22ys9tkx",
+            "evaluator_id": "cmvf083f50034ad0gbpddxpar",
+            "evaluator_version_id": "cmvf083f50036ad0ggpilrl84",
+            "job_execution_id": "02637771206a5e6b1d561051c5fcf0c9",
+            "target_trace_id": "122c7707a0e807bbf7cb22e325185b43",
+            "target_observation_id": "a9bef8eb6122d615",
+            "dispatcher_name": "aws-lambda",
+            "code_eval_runtime": "PYTHON",
+            "input_sha256": "d8ca587973fec5c613673cd6ead78dc2628f98ea62c49d584ba05c49dedec825",
+            "output_sha256": "c9d6b860217600e5fd585ffecdac8aa4f1836a44674e68bc5dcce0e6764b8ce4"
+          }
+        }
+      ],
+      "matches_frozen": true
+    },
+    {
+      "scenario": "missing",
+      "score_name": "issue214-20261019t084028z-judge",
+      "rows": [
+        {
+          "id": "b35a1437-a8de-5b11-9f15-491aff09d752",
+          "projectId": "cmu5a6fj500aoad0jvrckiypb",
+          "name": "issue214-20261019t084028z-judge",
+          "dataType": "BOOLEAN",
+          "value": false,
+          "source": "EVAL",
+          "subject": {
+            "kind": "observation",
+            "id": "712461788ff32668",
+            "traceId": "6e30f32a21092971321c49da2efb38ea"
+          },
+          "environment": "issue212-20261022t082316z",
+          "timestamp": "2026-10-22T08:25:42.381Z",
+          "createdAt": "2026-10-22T08:25:43.000Z",
+          "updatedAt": "2026-10-22T08:25:42.488Z",
+          "configId": null,
+          "metadata": {
+            "evaluation_rule_id": "cmvj9xkd2006yad0i3s0ec4hp",
+            "job_configuration_id": "cmvj9xkd2006yad0i3s0ec4hp",
+            "evaluation_rule_assignment_id": "cmvj9xkd20070ad0id74vgjwh",
+            "evaluator_id": "cmvf082z1002uad0gkb42lwel",
+            "evaluator_version_id": "cmvf082z1002wad0g6y71t1r8",
+            "job_execution_id": "19ab5ff517a8a6f548de3d0583c88e64",
+            "target_trace_id": "6e30f32a21092971321c49da2efb38ea",
+            "target_observation_id": "712461788ff32668"
+          }
+        }
+      ],
+      "matches_frozen": true
+    },
+    {
+      "scenario": "missing",
+      "score_name": "issue214-20261019t084028z-code",
+      "rows": [],
+      "matches_frozen": true
+    }
+  ],
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/public/v3/scores",
+      "query": {
+        "traceId": "cf23b2e8869b54e310ae1543c3beec3b",
+        "observationId": "7d9d312dedbf13ba",
+        "name": "issue214-20261019t084028z-judge",
+        "fields": "details,subject",
+        "limit": 100
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v3/scores",
+      "query": {
+        "traceId": "cf23b2e8869b54e310ae1543c3beec3b",
+        "observationId": "7d9d312dedbf13ba",
+        "name": "issue214-20261019t084028z-code",
+        "fields": "details,subject",
+        "limit": 100
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v3/scores",
+      "query": {
+        "traceId": "122c7707a0e807bbf7cb22e325185b43",
+        "observationId": "a9bef8eb6122d615",
+        "name": "issue214-20261019t084028z-judge",
+        "fields": "details,subject",
+        "limit": 100
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v3/scores",
+      "query": {
+        "traceId": "122c7707a0e807bbf7cb22e325185b43",
+        "observationId": "a9bef8eb6122d615",
+        "name": "issue214-20261019t084028z-code",
+        "fields": "details,subject",
+        "limit": 100
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v3/scores",
+      "query": {
+        "traceId": "6e30f32a21092971321c49da2efb38ea",
+        "observationId": "712461788ff32668",
+        "name": "issue214-20261019t084028z-judge",
+        "fields": "details,subject",
+        "limit": 100
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/v3/scores",
+      "query": {
+        "traceId": "6e30f32a21092971321c49da2efb38ea",
+        "observationId": "712461788ff32668",
+        "name": "issue214-20261019t084028z-code",
+        "fields": "details,subject",
+        "limit": 100
+      },
+      "status": 200
+    }
+  ],
+  "score_writes": 0
+}

@@ -1,0 +1,219 @@
+[
+  {
+    "service": "langfuse",
+    "method": "GET",
+    "path": "/api/public/v2/evaluators/cmvf082z1002uad0gkb42lwel",
+    "status": 200,
+    "at": "2026-10-22T08:40:05.032453+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "POST",
+    "path": "/api/public/v2/evaluation-rules",
+    "status": 201,
+    "at": "2026-10-22T08:40:07.379410+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "GET",
+    "path": "/api/public/v2/evaluators/cmvf083f50034ad0gbpddxpar",
+    "status": 200,
+    "at": "2026-10-22T08:40:09.921323+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "POST",
+    "path": "/api/public/v2/evaluation-rules",
+    "status": 201,
+    "at": "2026-10-22T08:40:12.270426+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/agents",
+    "status": 201,
+    "at": "2026-10-22T08:40:12.300496+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/agent-versions",
+    "status": 201,
+    "at": "2026-10-22T08:40:12.308872+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/agent-versions",
+    "status": 201,
+    "at": "2026-10-22T08:40:12.313039+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "POST",
+    "path": "/api/v1/release-policies",
+    "status": 201,
+    "at": "2026-10-22T08:40:12.319000+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots/16310689-dc61-4c55-af3e-22245dc5d024",
+    "status": 200,
+    "at": "2026-10-22T08:41:31.939938+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/release-gates/36fcea91-6820-4cda-80bc-7f15d695f48a",
+    "status": 200,
+    "at": "2026-10-22T08:41:31.943254+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+    "status": 200,
+    "at": "2026-10-22T08:41:31.947350+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+    "status": 200,
+    "at": "2026-10-22T08:41:31.952977+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots/9e4f3cda-550b-4d64-86f6-1a618efd41a0",
+    "status": 200,
+    "at": "2026-10-22T08:42:15.388675+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/release-gates/674eda44-613c-4fd5-90ab-0953fa521e7a",
+    "status": 200,
+    "at": "2026-10-22T08:42:15.390861+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+    "status": 200,
+    "at": "2026-10-22T08:42:15.393933+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items/e15213b8-d751-4e22-a9e6-7d8d86daa59a/managed-scores",
+    "status": 200,
+    "at": "2026-10-22T08:42:15.397811+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvjaj7nq007fad0g4xqxgftu",
+    "status": 200,
+    "at": "2026-10-22T08:42:22.660663+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots/dba8cf16-f79c-43c0-83ab-6ffb48a173d0",
+    "status": 200,
+    "at": "2026-10-22T08:45:10.646291+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/release-gates/d9800058-d3c7-45b4-82db-97b7efac9cd9",
+    "status": 200,
+    "at": "2026-10-22T08:45:10.649059+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+    "status": 200,
+    "at": "2026-10-22T08:45:10.652742+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+    "status": 200,
+    "at": "2026-10-22T08:45:10.658243+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvjaj3w8004lad0jfqi59quv",
+    "status": 200,
+    "at": "2026-10-22T08:45:17.916995+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvjaj7nq007fad0g4xqxgftu",
+    "status": 200,
+    "at": "2026-10-22T08:45:20.251548+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots/16310689-dc61-4c55-af3e-22245dc5d024",
+    "status": 200,
+    "at": "2026-10-22T08:45:20.254808+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/release-gates/36fcea91-6820-4cda-80bc-7f15d695f48a",
+    "status": 200,
+    "at": "2026-10-22T08:45:20.256757+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots/9e4f3cda-550b-4d64-86f6-1a618efd41a0",
+    "status": 200,
+    "at": "2026-10-22T08:45:22.450347+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/release-gates/674eda44-613c-4fd5-90ab-0953fa521e7a",
+    "status": 200,
+    "at": "2026-10-22T08:45:22.453656+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots/dba8cf16-f79c-43c0-83ab-6ffb48a173d0",
+    "status": 200,
+    "at": "2026-10-22T08:45:24.462384+00:00"
+  },
+  {
+    "service": "argus",
+    "method": "GET",
+    "path": "/api/v1/release-gates/d9800058-d3c7-45b4-82db-97b7efac9cd9",
+    "status": 200,
+    "at": "2026-10-22T08:45:24.467233+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvjaj3w8004lad0jfqi59quv",
+    "status": 200,
+    "at": "2026-10-22T08:45:28.930111+00:00"
+  },
+  {
+    "service": "langfuse",
+    "method": "PATCH",
+    "path": "/api/public/v2/evaluation-rules/cmvjaj7nq007fad0g4xqxgftu",
+    "status": 200,
+    "at": "2026-10-22T08:45:31.265868+00:00"
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "method": "CUA existing authenticated browser; no credentials exported",
+  "trace_id": "2a222cfa1a81743f0d540f31bfd4f86e",
+  "observation_id": "14487a52bc92b5c0",
+  "visible_scores": [
+    {
+      "name": "issue214-20261019t084028z-judge",
+      "value": true
+    },
+    {
+      "name": "issue214-20261019t084028z-code",
+      "value": true
+    }
+  ],
+  "score_count": 2,
+  "credentials_in_url": false
+}

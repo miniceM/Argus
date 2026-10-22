@@ -1,0 +1,68 @@
+{
+  "status": "PASS",
+  "launch_id": "df1050ac-0f39-4a0c-852e-4193460aa00e",
+  "experiment_id": "c9fcba05-7b58-53d2-9991-03eaf96f6265",
+  "evidence": {
+    "observations": [
+      {
+        "id": "14487a52bc92b5c0",
+        "traceId": "2a222cfa1a81743f0d540f31bfd4f86e",
+        "type": "TOOL",
+        "name": "remote-agent-http",
+        "environment": "issue212-20261022t083959z"
+      }
+    ],
+    "experiments": [
+      {
+        "id": "c9fcba05-7b58-53d2-9991-03eaf96f6265",
+        "name": "argus-df1050ac-0f3",
+        "itemCount": 1,
+        "datasetId": "cmvf080gu001iad0i4ctjw5l4"
+      }
+    ],
+    "items": [
+      {
+        "id": "14487a52bc92b5c0",
+        "traceId": "2a222cfa1a81743f0d540f31bfd4f86e",
+        "experimentId": "c9fcba05-7b58-53d2-9991-03eaf96f6265",
+        "experimentName": "argus-df1050ac-0f3",
+        "experimentItemId": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+        "experimentDatasetId": "cmvf080gu001iad0i4ctjw5l4"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/public/v2/observations",
+      "query": {
+        "fromStartTime": "2026-10-22T08:40:16.077316+00:00",
+        "toStartTime": "2026-10-22T08:45:26.467851+00:00",
+        "limit": 100,
+        "traceId": "2a222cfa1a81743f0d540f31bfd4f86e"
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/experiments",
+      "query": {
+        "fromStartTime": "2026-10-22T08:40:16.077316+00:00",
+        "toStartTime": "2026-10-22T08:45:26.467851+00:00",
+        "limit": 100
+      },
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/experiment-items",
+      "query": {
+        "fromStartTime": "2026-10-22T08:40:16.077316+00:00",
+        "toStartTime": "2026-10-22T08:45:26.467851+00:00",
+        "limit": 100
+      },
+      "status": 200
+    }
+  ],
+  "source_sha256": "83fa3ea40481054476dba619b722334820e0256e07bb56b699288517bb778877"
+}

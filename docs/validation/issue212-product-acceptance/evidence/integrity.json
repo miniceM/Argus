@@ -1,0 +1,20 @@
+{
+  "status": "PASS",
+  "generated_at": "2026-10-22T17:27:16.391759+08:00",
+  "configured_secret_values_checked": 18,
+  "text_artifacts_scanned": 113,
+  "json_parse": "PASS",
+  "python_harness_syntax": "PASS",
+  "documentation_local_links": "PASS",
+  "git_diff_check": "PASS",
+  "openapi_and_generated_types_unchanged": true,
+  "runtime_source_hashes_match": "PASS",
+  "own_postgres_and_preview_services_cleaned": true,
+  "existing_stack_preserved": true,
+  "owned_rules_remote_read_confirmed_paused": true,
+  "scope_exclusions": [
+    "new remote PR/head CI not run",
+    "production Redis deployment not tested",
+    "no real outage or natural 429 induced"
+  ]
+}

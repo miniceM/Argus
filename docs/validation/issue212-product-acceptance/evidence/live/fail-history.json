@@ -1,0 +1,6 @@
+{
+  "status": "PASS",
+  "report_url": "http://127.0.0.1:57789/launches/3dfb1d9c-a071-43b9-8196-ff1203a8ca3f?tab=compare&snapshot_id=bc5a0ceb-2c03-4c73-8edf-ad0dcb1f29a1&gate_id=01e7ea46-4066-4cb7-8ad7-0d52491bf7dc",
+  "score_links_unchanged": true,
+  "gate_unchanged": true
+}

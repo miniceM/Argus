@@ -510,3 +510,33 @@ def test_late_required_score_requires_new_revision_and_never_rewrites_diagnostic
         assert snapshots[1].revision == diagnostic.revision + 1
         assert evaluate_gate(policy(), snapshots[1]).decision == "PASS"
         assert len(list(session.scalars(select(ExecutionAttemptRecord)))) == 1
+
+
+@pytest.mark.parametrize('values,expected', [((True, True), 'pass'), ((False, True), 'fail'), ((True, None), 'unknown')])
+def test_managed_recovery_updates_launch_quality_for_list_and_filter(setup_runtime, monkeypatch, values, expected):
+    """真实 #212 复验：Item/冻结报告收敛后，Launch 列表与质量筛选不能滞留 UNKNOWN。"""
+    from app.manifest import LaunchService
+
+    db, snapshot, _, _ = collect218(setup_runtime, monkeypatch, values=values)
+    with db.get_session() as session:
+        launch = session.get(ExperimentLaunchRecord, snapshot.launch_id)
+        assert launch.quality_conclusion == expected
+        assert launch.status == 'COMPLETED'  # 质量 FAIL 不得改写 Agent 执行结论。
+    service = LaunchService(db, registry=None)
+    assert snapshot.launch_id in {v.id for v in service.list_launches(quality_conclusion=expected)}
+    if expected != 'unknown':
+        assert snapshot.launch_id not in {v.id for v in service.list_launches(quality_conclusion='unknown')}
+
+
+def test_existing_frozen_result_repairs_stale_launch_projection_without_new_revision(setup_runtime, monkeypatch):
+    """Reconciler 复用相同 Snapshot 时也须修复旧 Launch 的列表投影，而非改写历史。"""
+    db, snapshot, _, _ = collect218(setup_runtime, monkeypatch)
+    before = copy.deepcopy((snapshot.id, snapshot.revision, snapshot.source_result_digest, snapshot.items, snapshot.summary))
+    with db.get_session() as session:
+        launch = session.get(ExperimentLaunchRecord, snapshot.launch_id)
+        launch.quality_conclusion = 'unknown'
+    with db.get_session() as session:
+        launch = session.get(ExperimentLaunchRecord, snapshot.launch_id)
+        same = create_result_snapshot(session, launch)
+        assert launch.quality_conclusion == 'pass'
+        assert (same.id, same.revision, same.source_result_digest, same.items, same.summary) == before

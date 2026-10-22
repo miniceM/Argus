@@ -1,0 +1,153 @@
+[
+  {
+    "id": "0163041a-b287-49f5-8486-acf59cdcd059",
+    "launch_id": "598fc77e-b9d0-4edb-9f04-9b4f94667b7c",
+    "dataset_item_id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+    "execution_status": "succeeded",
+    "eval_status": "failed",
+    "quality_conclusion": "unknown",
+    "execution_error": null,
+    "eval_error": "MANAGED_SCORES_EXHAUSTED: 托管评分重试已达上限（15 次），质量保持 UNKNOWN。",
+    "trace_id": "6e30f32a21092971321c49da2efb38ea",
+    "observation_id": "712461788ff32668",
+    "langfuse_trace_url": "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/6e30f32a21092971321c49da2efb38ea",
+    "final_attempt_id": "1e492ac8-f352-4fef-8ade-50f1229c999f",
+    "scores": {},
+    "evaluation_results": [
+      {
+        "evaluator_id": "issue214-20261019t084028z-judge",
+        "evaluator_version": null,
+        "result_type": "boolean",
+        "status": "succeeded",
+        "value": false,
+        "normalized_value": null,
+        "comment": null,
+        "evidence": {
+          "launch_id": "598fc77e-b9d0-4edb-9f04-9b4f94667b7c",
+          "item_execution_id": "0163041a-b287-49f5-8486-acf59cdcd059",
+          "dataset_item_id": "5e459f57-c5f5-4cd1-90da-db533d16591e",
+          "trace_id": "6e30f32a21092971321c49da2efb38ea",
+          "observation_id": "712461788ff32668",
+          "dispatch_generation": 1,
+          "evaluation_generation": 4,
+          "final_attempt_id": "1e492ac8-f352-4fef-8ade-50f1229c999f",
+          "manifest_digest": "sha256:93669c3cab654342864d74cfe591b0924922bfbdfb5781bba24532bd7125a770",
+          "manifest_schema_version": "1.2",
+          "acceptance_digest": "sha256:deac371da0403fc45ccf08e1f8f80de8cc84c470dd2ef1cca1f213c299556be0",
+          "checkpoint_id": "cp_9ea4181982144de9b294ffd6",
+          "output_digest": "sha256:c9d6b860217600e5fd585ffecdac8aa4f1836a44674e68bc5dcce0e6764b8ce4",
+          "input_digest": "sha256:d78b83dac632afdad275b01179ffc3a0919d1228e5b39004d28d02f253e9d714",
+          "score": {
+            "id": "b35a1437-a8de-5b11-9f15-491aff09d752",
+            "projectId": "cmu5a6fj500aoad0jvrckiypb",
+            "name": "issue214-20261019t084028z-judge",
+            "dataType": "BOOLEAN",
+            "value": false,
+            "source": "EVAL",
+            "subject": {
+              "kind": "observation",
+              "id": "712461788ff32668",
+              "traceId": "6e30f32a21092971321c49da2efb38ea"
+            },
+            "environment": "issue212-20261022t082316z",
+            "timestamp": "2026-10-22T08:25:42.381Z",
+            "createdAt": "2026-10-22T08:25:43.000Z",
+            "updatedAt": "2026-10-22T08:25:42.488Z",
+            "configId": null,
+            "metadata": {
+              "evaluation_rule_id": "cmvj9xkd2006yad0i3s0ec4hp",
+              "job_configuration_id": "cmvj9xkd2006yad0i3s0ec4hp",
+              "evaluation_rule_assignment_id": "cmvj9xkd20070ad0id74vgjwh",
+              "evaluator_id": "cmvf082z1002uad0gkb42lwel",
+              "evaluator_version_id": "cmvf082z1002wad0g6y71t1r8",
+              "job_execution_id": "19ab5ff517a8a6f548de3d0583c88e64",
+              "target_trace_id": "6e30f32a21092971321c49da2efb38ea",
+              "target_observation_id": "712461788ff32668"
+            }
+          },
+          "observed_at": "2026-10-22T08:25:51.814730+00:00",
+          "observation_io_digests": {
+            "input": "d8ca587973fec5c613673cd6ead78dc2628f98ea62c49d584ba05c49dedec825",
+            "output": "c9d6b860217600e5fd585ffecdac8aa4f1836a44674e68bc5dcce0e6764b8ce4"
+          },
+          "observation": {
+            "id": "712461788ff32668",
+            "traceId": "6e30f32a21092971321c49da2efb38ea",
+            "name": "remote-agent-http",
+            "type": "TOOL",
+            "projectId": "cmu5a6fj500aoad0jvrckiypb",
+            "environment": "issue212-20261022t082316z",
+            "startTime": "2026-10-22T08:25:28.491Z"
+          },
+          "score_url": "https://jp.cloud.langfuse.com/project/cmu5a6fj500aoad0jvrckiypb/traces/6e30f32a21092971321c49da2efb38ea?observation=712461788ff32668"
+        },
+        "duration_ms": null,
+        "error_code": null,
+        "error_message": null,
+        "provenance": {
+          "binding_id": "sha256:deac371da0403fc45ccf08e1f8f80de8cc84c470dd2ef1cca1f213c299556be0",
+          "evaluator_id": "issue214-20261019t084028z-judge",
+          "evaluator_version": null,
+          "definition_digest": "sha256:deac371da0403fc45ccf08e1f8f80de8cc84c470dd2ef1cca1f213c299556be0",
+          "executor_type": "langfuse_managed",
+          "manifest_schema_version": "1.2",
+          "contract_status": "MANAGED_SCORE_VERIFIED"
+        }
+      }
+    ],
+    "quality_evaluation": {
+      "conclusion": "unknown",
+      "policy_id": "langfuse-managed",
+      "policy_version": "1.0",
+      "policy_digest": "sha256:3a58a1493f0ec4e75d689901b81be8f399fd91ca02cd3d703980e96fb9241418",
+      "decided_by": "QUALITY_POLICY",
+      "releasable": false,
+      "unknown_reasons": [
+        "必要指标 'issue214-20261019t084028z-judge' 没有结果，证据不足，无法判定通过或不通过。",
+        "必要指标 'issue214-20261019t084028z-code' 没有结果，证据不足，无法判定通过或不通过。"
+      ],
+      "rules": [
+        {
+          "evaluator_id": "issue214-20261019t084028z-judge",
+          "result_type": "boolean",
+          "required": true,
+          "critical": false,
+          "operator": "==",
+          "expected": true,
+          "observed_value": null,
+          "observed_status": null,
+          "conclusion": "unknown",
+          "reason_code": "QUALITY_EVIDENCE_MISSING",
+          "explanation": "必要指标 'issue214-20261019t084028z-judge' 没有结果，证据不足，无法判定通过或不通过。"
+        },
+        {
+          "evaluator_id": "issue214-20261019t084028z-code",
+          "result_type": "boolean",
+          "required": true,
+          "critical": false,
+          "operator": "==",
+          "expected": true,
+          "observed_value": null,
+          "observed_status": null,
+          "conclusion": "unknown",
+          "reason_code": "QUALITY_EVIDENCE_MISSING",
+          "explanation": "必要指标 'issue214-20261019t084028z-code' 没有结果，证据不足，无法判定通过或不通过。"
+        }
+      ]
+    },
+    "evaluation_status": "failed",
+    "evaluation_generation": 15,
+    "evaluation_error": "MANAGED_SCORES_EXHAUSTED: 托管评分重试已达上限（15 次），质量保持 UNKNOWN。",
+    "evaluation_reused_output_digest": null,
+    "evaluation_recoverable": true,
+    "attempt_count": 1,
+    "final_attempt_http_status": 200,
+    "final_attempt_latency_ms": 58,
+    "queued_at": "2026-10-22T08:25:28.250143",
+    "available_at": null,
+    "lease_owner": null,
+    "dispatch_generation": 1,
+    "started_at": "2026-10-22T08:25:28.275196",
+    "completed_at": "2026-10-22T08:25:28.605338"
+  }
+]

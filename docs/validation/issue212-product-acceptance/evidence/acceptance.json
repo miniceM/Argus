@@ -1,0 +1,22 @@
+{
+  "status": "PASS",
+  "goal": "Issue #212 whole product E2E acceptance",
+  "baseline_head": "f2a67d6c24617f1c5847e84cb82b98773c755ee0",
+  "includes_local_patch": true,
+  "required_product_acceptance_remaining": [],
+  "tests": {
+    "vitest_passed": 898,
+    "playwright_passed": 138,
+    "python_passed": 1685,
+    "sqlite_only_skipped": 2,
+    "trajectory_passed": 31,
+    "pg_lifecycle_passed": 72
+  },
+  "real_e2e": "live-final/receipt.json",
+  "late_remote_native_score_immutability": "live-final/late-native-score-immutability.json",
+  "authenticated_score_browser": "live-final/authenticated-browser-readback.json",
+  "external_experiment_link": "live-final/experiment-link-browser-readback.json",
+  "source_identity": "source-identity.json",
+  "remote_delivery": "not pushed; no new PR/head CI; Issue #212 not closed",
+  "ux_advisories": "../README.md"
+}

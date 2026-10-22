@@ -1,0 +1,38 @@
+{
+  "repository": "miniceM/Argus",
+  "base_head": "f2a67d6c24617f1c5847e84cb82b98773c755ee0",
+  "worktree": "/Users/hosea/.codex/worktrees/10d9/Argus",
+  "patch_applied": true,
+  "git_diff_sha256": "8acdd062782fa671dbf810ba91690ca9cdcc1ae0f7c609179e8b15845111b257",
+  "sources": {
+    "services/eval-runner/app/result_snapshots.py": "72b770b2d32c2aba40913e4b8b2e8975d4089ee8fb1df569b4053c7023357b29",
+    "tests/test_issue_218_managed_quality.py": "920447ef9e20c72ff101bb7c5a1a68ce66a2b1bfe2aff40bb92ecd34baa9d38e",
+    "tests/test_issue219_acceptance_harness.py": "d1cc92c1942739b604ad6709245f228c9a586b8d2e7cfa3ee6c51d02f371e5db",
+    "docs/validation/issue219-managed-console/real_console_acceptance.py": "0462bbc9c503e56540935e7d16212b4d3f584424b24db3cf930ebc76e264b9f6",
+    "docs/validation/issue219-managed-console/real_console_flow.mjs": "fcedc83d5348816750e9ffa8fca2397ba4ea7819c29470e49b264c9727775d14",
+    "docs/validation/issue212-product-acceptance/prepare_flowise.py": "98cfadd96528ce6874cdf62bafb0c40a7b0e310aade973cb827a4f07043915a7"
+  },
+  "runtime_preflight_hashes_match_current": true,
+  "contract": {
+    "docs/openapi.json": {
+      "unchanged_from_head": true,
+      "sha256": "86713e6b222eec1c728b89667e221f44854604a9bbf594ce3e35cbe52db9a95b"
+    },
+    "services/console/src/api/schema.d.ts": {
+      "unchanged_from_head": true,
+      "sha256": "793ef87f8974b19aae8a27aa5075fe02631aedaa0049f4b763ee74bb0ecb9756"
+    }
+  },
+  "runtime": {
+    "python": "Python 3.12.4",
+    "node": "v22.23.4",
+    "pnpm": "10.5.2"
+  },
+  "generated_at": "2026-10-22T17:18:43.812770+08:00",
+  "remote_mutations": {
+    "push": false,
+    "pr_created": false,
+    "merge": false,
+    "issue_closed": false
+  }
+}

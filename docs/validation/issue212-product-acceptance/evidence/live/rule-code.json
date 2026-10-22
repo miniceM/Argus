@@ -1,0 +1,64 @@
+{
+  "request": {
+    "name": "issue212-20261022t082316z-code",
+    "enabled": true,
+    "sampling": 1,
+    "filter": [
+      {
+        "type": "stringOptions",
+        "column": "environment",
+        "operator": "any of",
+        "value": [
+          "issue212-20261022t082316z"
+        ]
+      },
+      {
+        "type": "stringOptions",
+        "column": "name",
+        "operator": "any of",
+        "value": [
+          "remote-agent-http"
+        ]
+      }
+    ],
+    "evaluatorAssignments": [
+      {
+        "evaluatorId": "cmvf083f50034ad0gbpddxpar",
+        "variableMapping": null
+      }
+    ]
+  },
+  "response": {
+    "id": "cmvj9xnzf0073ad0inwygj1xe",
+    "name": "issue212-20261022t082316z-code",
+    "createdBy": null,
+    "enabled": true,
+    "sampling": 1,
+    "filter": [
+      {
+        "type": "stringOptions",
+        "column": "environment",
+        "operator": "any of",
+        "value": [
+          "issue212-20261022t082316z"
+        ]
+      },
+      {
+        "type": "stringOptions",
+        "column": "name",
+        "operator": "any of",
+        "value": [
+          "remote-agent-http"
+        ]
+      }
+    ],
+    "evaluatorAssignments": [
+      {
+        "evaluatorId": "cmvf083f50034ad0gbpddxpar",
+        "variableMapping": null
+      }
+    ],
+    "createdAt": "2026-10-22T08:23:27.147Z",
+    "updatedAt": "2026-10-22T08:23:27.147Z"
+  }
+}

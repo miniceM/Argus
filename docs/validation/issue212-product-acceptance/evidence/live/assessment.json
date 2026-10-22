@@ -1,0 +1,6 @@
+{
+  "overall_product_acceptance": "FAIL",
+  "reason": "old harness passed narrower assertions but real browser discovered Launch list stayed UNKNOWN despite PASS/FAIL Snapshot/Gate",
+  "superseded_by": "../live-final/receipt.json",
+  "actual_final_source": "../source-identity.json"
+}

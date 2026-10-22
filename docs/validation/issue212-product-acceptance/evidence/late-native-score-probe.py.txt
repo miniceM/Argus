@@ -1,0 +1,40 @@
+import hashlib,json,os,subprocess,sys,time
+from pathlib import Path
+import httpx
+from sqlalchemy import select
+sys.path.insert(0,str(Path.cwd()/'services/eval-runner'))
+from app.db import DatabaseManager
+from app.db_models import LangfuseSyncTaskRecord
+from app.langfuse_run_items import read_managed_observation_projection,link_dataset_run_item
+from app.langfuse_scores_client import ScoresV3Client
+from app.langfuse_managed_scores import _score_evidence
+out=Path('docs/validation/issue212-product-acceptance/evidence/live-final')
+snapshot=json.loads((out/'missing-snapshot.json').read_text()); gate=json.loads((out/'missing-gate.json').read_text()); item=snapshot['items'][0]
+rule=json.loads((out/'rule-code.json').read_text())['response']['id'];name=json.loads((out/'evaluator-code.json').read_text())['name']
+x=json.loads(subprocess.check_output(['docker','inspect','argus-flowise-e2e-eval-runner-1']))[0]; e=dict(v.split('=',1) for v in x['Config']['Env'] if '=' in v)
+db=DatabaseManager('sqlite:////tmp/issue212-20261022t083959z/runtime.db')
+with db.get_session() as s:
+ t=s.scalar(select(LangfuseSyncTaskRecord).where(LangfuseSyncTaskRecord.launch_id==snapshot['launch_id']))
+ p={c.name:getattr(t,c.name) for c in t.__table__.columns}
+projection=read_managed_observation_projection(db,p);assert projection
+with httpx.Client(base_url=e['LANGFUSE_BASE_URL'],auth=(e['LANGFUSE_PUBLIC_KEY'],e['LANGFUSE_SECRET_KEY']),timeout=90) as lf, ScoresV3Client(e['LANGFUSE_BASE_URL'],e['LANGFUSE_PUBLIC_KEY'],e['LANGFUSE_SECRET_KEY']) as scores:
+ def rows():
+  return scores._pages('/api/public/v3/scores',dict(traceId=item['trace_id'],observationId=item['observation_id'],name=name,fields='details,subject'))
+ assert rows()==[], 'late probe already ran; do not replay twice'
+ try:
+  r=lf.patch('/api/public/v2/evaluation-rules/'+rule,json={'enabled':True});assert r.status_code==200
+  run_id=link_dataset_run_item(strategy='otel',lf=None,launch_id=p['launch_id'],run_name=p['dataset_run_name'],dataset_id=snapshot['manifest']['dataset']['dataset_id'],dataset_item_id=p['dataset_item_id'],dataset_version=p['dataset_version'],trace_id=p['trace_id'],observation_id=p['observation_id'],langfuse_base_url=e['LANGFUSE_BASE_URL'],langfuse_public_key=e['LANGFUSE_PUBLIC_KEY'],langfuse_secret_key=e['LANGFUSE_SECRET_KEY'],observation_projection=projection)
+  deadline=time.monotonic()+100; found=[]
+  while time.monotonic()<deadline:
+   time.sleep(5);found=rows()
+   if found:break
+  assert len(found)==1 and found[0]['source']=='EVAL', 'native Code score did not arrive after replay'
+  with httpx.Client(base_url='http://127.0.0.1:38080',timeout=30) as argus:
+   assert argus.get(f'/api/v1/experiment-launches/{snapshot["launch_id"]}/result-snapshots/{snapshot["snapshot_id"]}').json()==snapshot
+   assert argus.get('/api/v1/release-gates/'+gate['id']).json()==gate
+   current=argus.get(f'/api/v1/experiment-launches/{snapshot["launch_id"]}/items').json()[0]
+   assert current['attempt_count']==1 and current['eval_status']=='failed' and current['quality_conclusion']=='unknown'
+  receipt=dict(status='PASS',method='reenable owned Code Rule and replay identical stored OTLP TOOL via existing projector; no Agent call, no Scores write, no manual collect',rule_id=rule,experiment_id=run_id,remote_scores_before=[],remote_scores_after=[_score_evidence(v) for v in found],frozen_snapshot_unchanged=True,frozen_gate_unchanged=True,agent_attempts=1,quality='UNKNOWN',eval_status='failed',score_write_requests=0)
+  (out/'late-native-score-immutability.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n');print('PASS: native late Code EVAL appeared; frozen UNKNOWN Snapshot/Gate unchanged, Agent attempts=1')
+ finally:
+  r=lf.patch('/api/public/v2/evaluation-rules/'+rule,json={'enabled':False});assert r.status_code==200 and not r.json()['enabled']

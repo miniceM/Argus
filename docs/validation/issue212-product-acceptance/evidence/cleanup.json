@@ -1,0 +1,24 @@
+{
+  "status": "PASS",
+  "owned_rules": [
+    {
+      "id": "cmvj9xkd2006yad0i3s0ec4hp",
+      "enabled": false
+    },
+    {
+      "id": "cmvj9xnzf0073ad0inwygj1xe",
+      "enabled": false
+    },
+    {
+      "id": "cmvjaj3w8004lad0jfqi59quv",
+      "enabled": false
+    },
+    {
+      "id": "cmvjaj7nq007fad0g4xqxgftu",
+      "enabled": false
+    }
+  ],
+  "shared_evaluators_modified": false,
+  "flowise_test_flow_retained": true,
+  "existing_stack_removed": false
+}

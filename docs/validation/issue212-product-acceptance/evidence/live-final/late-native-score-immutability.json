@@ -1,0 +1,48 @@
+{
+  "status": "PASS",
+  "method": "reenable owned Code Rule and replay identical stored OTLP TOOL via existing projector; no Agent call, no Scores write, no manual collect",
+  "rule_id": "cmvjaj7nq007fad0g4xqxgftu",
+  "experiment_id": "5e428709-0815-5d05-8733-7edfbb9a4960",
+  "remote_scores_before": [],
+  "remote_scores_after": [
+    {
+      "id": "a5d671bf-1181-5951-a2ae-6e3f71d2e44a",
+      "projectId": "cmu5a6fj500aoad0jvrckiypb",
+      "name": "issue214-20261019t084028z-code",
+      "dataType": "BOOLEAN",
+      "value": false,
+      "source": "EVAL",
+      "subject": {
+        "kind": "observation",
+        "id": "279748256ed34388",
+        "traceId": "0d864fc9a1c9eb4940b5cdfffc36d3a8"
+      },
+      "environment": "issue212-20261022t083959z",
+      "timestamp": "2026-10-22T09:05:57.515Z",
+      "createdAt": "2026-10-22T09:05:58.000Z",
+      "updatedAt": "2026-10-22T09:05:57.596Z",
+      "configId": null,
+      "metadata": {
+        "evaluation_rule_id": "cmvjaj7nq007fad0g4xqxgftu",
+        "job_configuration_id": "cmvjaj7nq007fad0g4xqxgftu",
+        "evaluation_rule_assignment_id": "cmvjaj7nq007had0g3u77h4d1",
+        "evaluator_id": "cmvf083f50034ad0gbpddxpar",
+        "evaluator_version_id": "cmvf083f50036ad0ggpilrl84",
+        "job_execution_id": "2a316ff9318e64cbc5a021275f6c428f",
+        "target_trace_id": "0d864fc9a1c9eb4940b5cdfffc36d3a8",
+        "target_observation_id": "279748256ed34388",
+        "dispatcher_name": "aws-lambda",
+        "code_eval_runtime": "PYTHON",
+        "input_sha256": "c798ad7714641f3e8b821befe912ff12303f5e18917353653ccac68df1a723c7",
+        "output_sha256": "c9d6b860217600e5fd585ffecdac8aa4f1836a44674e68bc5dcce0e6764b8ce4"
+      }
+    }
+  ],
+  "frozen_snapshot_unchanged": true,
+  "frozen_gate_unchanged": true,
+  "agent_attempts": 1,
+  "quality": "UNKNOWN",
+  "eval_status": "failed",
+  "score_write_requests": 0,
+  "execution_script_sha256": "c5288e11fbc3e99d7118ed4707dc1db20fce25268c89736d7893c927c20e656e"
+}

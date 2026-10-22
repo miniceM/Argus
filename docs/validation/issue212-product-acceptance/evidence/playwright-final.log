@@ -1,0 +1,186 @@
+pnpm --dir services/console build
+
+> argus-console@0.2.0 build /Users/hosea/.codex/worktrees/10d9/Argus/services/console
+> tsc -b && vite build
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vite.config.ts:14:25). Use `import.meta.dirname` instead
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 2022 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.51 kB │ gzip:   0.34 kB
+dist/assets/index-BIst9KbJ.css   63.74 kB │ gzip:  11.37 kB
+dist/assets/index-BPE5RrcF.js   672.78 kB │ gzip: 193.79 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 290ms
+pnpm --dir services/console test:e2e
+
+> argus-console@0.2.0 test:e2e /Users/hosea/.codex/worktrees/10d9/Argus/services/console
+> playwright test
+
+[WebServer] INFO:     Started server process [25119]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:28080 (Press CTRL+C to quit)
+[WebServer] npm warn Unknown env config "dir". This will stop working in the next major version of npm.
+[WebServer] npm warn Unknown env config "verify-deps-before-run". This will stop working in the next major version of npm.
+[WebServer] (node:25184) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:25239) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+[WebServer]   - `__dirname` (vite.config.ts:14:25). Use `import.meta.dirname` instead
+[WebServer] Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+Running 138 tests using 1 worker
+
+(node:25269) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓    1 [chromium] › e2e/a11y.spec.ts:244:5 › WCAG 2.2 AA: rendered console routes › /launches has no violations (1.5s)
+  ✓    2 [chromium] › e2e/a11y.spec.ts:244:5 › WCAG 2.2 AA: rendered console routes › /launches/new has no violations (1.2s)
+  ✓    3 [chromium] › e2e/a11y.spec.ts:244:5 › WCAG 2.2 AA: rendered console routes › /launches/3fa85f64-5717-4562-b3fc-2c963f66afa6 has no violations (1.2s)
+  ✓    4 [chromium] › e2e/a11y.spec.ts:244:5 › WCAG 2.2 AA: rendered console routes › /agents has no violations (1.1s)
+  ✓    5 [chromium] › e2e/a11y.spec.ts:244:5 › WCAG 2.2 AA: rendered console routes › /agents/demo-banking-agent has no violations (1.2s)
+  ✓    6 [chromium] › e2e/a11y.spec.ts:244:5 › WCAG 2.2 AA: rendered console routes › /agents/demo-banking-agent/versions/1.0.0 has no violations (1.1s)
+  ✓    7 [chromium] › e2e/a11y.spec.ts:287:3 › WCAG 2.2 AA: overlay surfaces › register-agent dialog (1.5s)
+  ✓    8 [chromium] › e2e/a11y.spec.ts:293:3 › WCAG 2.2 AA: overlay surfaces › create-version dialog (1.6s)
+  ✓    9 [chromium] › e2e/a11y.spec.ts:299:3 › WCAG 2.2 AA: overlay surfaces › delete-agent dialog (1.5s)
+  ✓   10 [chromium] › e2e/a11y.spec.ts:305:3 › WCAG 2.2 AA: overlay surfaces › attempt drawer (1.6s)
+  ✓   11 [chromium] › e2e/a11y.spec.ts:315:3 › WCAG 2.2 AA: overlay surfaces › mobile navigation drawer (1.5s)
+  ✓   12 [chromium] › e2e/a11y.spec.ts:322:3 › WCAG 2.2 AA: overlay surfaces › mobile navigation traps keyboard focus and restores it on Escape (861ms)
+  ✓   13 [chromium] › e2e/a11y.spec.ts:371:3 › prefers-reduced-motion › the popover does not slide or scale itself in (974ms)
+  ✓   14 [chromium] › e2e/agents.spec.ts:4:3 › E2E-01: Agent Registry & Immutable Version UX Flow › registers new agent, creates immutable version, and inspects masked credentials (1.0s)
+  ✓   15 [chromium] › e2e/credentials.spec.ts:3:1 › 真实 API：创建凭据、Agent 选择、轮换、引用保护和停用 (1.4s)
+  ✓   16 [chromium] › e2e/historical-manifest.spec.ts:6:3 › E2E-02: Frozen Manifest Absolute Immutability Verification › historical launch displays frozen manifest even after agent updates in registry (547ms)
+  ✓   17 [chromium] › e2e/issue-215-managed-evaluation.spec.ts:8:1 › #215 显式配置 → 服务端拒绝无效规则 → 创建/刷新读回不可变契约 (1.1s)
+  ✓   18 [chromium] › e2e/issue-219-managed-experience.spec.ts:77:1 › Managed 自动 pending → 双 Score → Frozen Snapshot → 固定 Gate (2.1s)
+  ✓   19 [chromium] › e2e/issue-219-managed-experience.spec.ts:101:1 › Langfuse down / recover：诊断故障不伪造零分，恢复后显示拒绝来源 (575ms)
+  ✓   20 [chromium] › e2e/issue-219-managed-experience.spec.ts:113:44 › 冻结 fail：评分失败与质量失败分离、历史 Score / 链接不漂移 (712ms)
+  ✓   21 [chromium] › e2e/issue-219-managed-experience.spec.ts:113:44 › 冻结 unknown：评分失败与质量失败分离、历史 Score / 链接不漂移 (608ms)
+  ✓   22 [chromium] › e2e/issue-219-managed-experience.spec.ts:132:33 › Managed 360px 响应式、键盘和可访问性 (1.2s)
+  ✓   23 [chromium] › e2e/issue-219-managed-experience.spec.ts:132:33 › Managed 390px 响应式、键盘和可访问性 (1.3s)
+  ✓   24 [chromium] › e2e/issue-80-evaluator-versions.spec.ts:125:3 › Issue #80: exact Evaluator version and release eligibility › pins the user-confirmed version and survives a catalog default bump (484ms)
+  ✓   25 [chromium] › e2e/issue-80-evaluator-versions.spec.ts:163:3 › Issue #80: exact Evaluator version and release eligibility › shows the ineligible reason and blocks submission for a Langfuse-owned rule (435ms)
+  ✓   26 [chromium] › e2e/issue-80-evaluator-versions.spec.ts:185:3 › Issue #80: exact Evaluator version and release eligibility › keeps the four built-in diagnostics selectable (322ms)
+  ✓   27 [chromium] › e2e/issue-81-frozen-execution-identity.spec.ts:115:3 › Issue #81: frozen evaluation execution identity › shows the frozen version, implementation and verification status (512ms)
+  ✓   28 [chromium] › e2e/issue-81-frozen-execution-identity.spec.ts:131:3 › Issue #81: frozen evaluation execution identity › marks a pre-#81 Manifest as 历史契约未记录 without crashing (357ms)
+  ✓   29 [chromium] › e2e/issue-81-frozen-execution-identity.spec.ts:143:3 › Issue #81: frozen evaluation execution identity › turns a missing frozen artifact into an actionable failure (403ms)
+  ✓   30 [chromium] › e2e/issue-82-typed-results.spec.ts:184:3 › Issue #82: typed evaluation results › reads 0, false, category, text and a failure in one case without collapsing to zero (471ms)
+  ✓   31 [chromium] › e2e/issue-82-typed-results.spec.ts:226:3 › Issue #82: typed evaluation results › a legacy numeric-only item still renders without typed evidence (334ms)
+  ✓   32 [chromium] › e2e/issue-83-quality-policy.spec.ts:343:3 › Issue #83: independent quality policy › confirms a per-metric policy on the create page and submits it verbatim (535ms)
+  ✓   33 [chromium] › e2e/issue-83-quality-policy.spec.ts:392:3 › Issue #83: independent quality policy › shows the frozen policy and separates PASS / FAIL / UNKNOWN on the detail page (390ms)
+  ✓   34 [chromium] › e2e/issue-83-quality-policy.spec.ts:416:3 › Issue #83: independent quality policy › explains an UNKNOWN case as insufficient evidence rather than a rule violation (436ms)
+  ✓   35 [chromium] › e2e/issue-83-quality-policy.spec.ts:440:3 › Issue #83: independent quality policy › names the violated rule for a FAIL case (462ms)
+  ✓   36 [chromium] › e2e/issue-84-eval-retry.spec.ts:195:3 › Issue #84 evaluation-only retry › a failed evaluation is UNKNOWN with a reason and offers retry-evaluation, not retry-case (345ms)
+  ✓   37 [chromium] › e2e/issue-84-eval-retry.spec.ts:216:3 › Issue #84 evaluation-only retry › submitting the retry reports reuse of the Agent output and re-judgement progress (451ms)
+  ✓   38 [chromium] › e2e/issue-84-eval-retry.spec.ts:262:3 › Issue #84 evaluation-only retry › a recovered case shows 已恢复 and no longer advertises recoverability (371ms)
+  ✓   39 [chromium] › e2e/issue-84-eval-retry.spec.ts:280:3 › Issue #84 evaluation-only retry › a blocked case is explained instead of silently doing nothing (433ms)
+  ✓   40 [chromium] › e2e/issue-84-eval-retry.spec.ts:306:3 › Issue #84 evaluation-only retry › no retry-evaluation action is offered when the Launch does not allow it (305ms)
+  ✓   41 [chromium] › e2e/issue-85-snapshot-revision.spec.ts:165:3 › Issue #85 fixed result revisions › the report names its revision and offers a shareable pinned link (336ms)
+  ✓   42 [chromium] › e2e/issue-85-snapshot-revision.spec.ts:178:3 › Issue #85 fixed result revisions › a shared link stays on its revision after a newer one exists (322ms)
+  ✓   43 [chromium] › e2e/issue-85-snapshot-revision.spec.ts:187:3 › Issue #85 fixed result revisions › switching history writes the revision into the URL (494ms)
+  ✓   44 [chromium] › e2e/issue-85-snapshot-revision.spec.ts:198:3 › Issue #85 fixed result revisions › an incomplete revision is labelled diagnostic and refused as a Baseline (346ms)
+  ✓   45 [chromium] › e2e/issue-85-snapshot-revision.spec.ts:224:3 › Issue #85 fixed result revisions › the current Baseline shows both its result revision and its binding revision (386ms)
+  ✓   46 [chromium] › e2e/issue-86-comparability.spec.ts:247:3 › Issue #86 comparison comparability › identical contracts produce a formal Regression (435ms)
+  ✓   47 [chromium] › e2e/issue-86-comparability.spec.ts:257:3 › Issue #86 comparison comparability › a tightened policy is explained instead of reported as an Agent regression (341ms)
+  ✓   48 [chromium] › e2e/issue-86-comparability.spec.ts:307:3 › Issue #86 comparison comparability › a legacy Baseline reports an unknown contract rather than guessing it (309ms)
+  ✓   49 [chromium] › e2e/issue-86-comparability.spec.ts:344:3 › Issue #86 comparison comparability › incomplete required evidence is shown as insufficient, not as no regression (308ms)
+  ✓   50 [chromium] › e2e/issue-86-comparability.spec.ts:378:1 › 部分 token 证据即使有平均值也不显示完整 KPI (367ms)
+  ✓   51 [chromium] › e2e/issue-87-langfuse-projection.spec.ts:145:3 › Issue #87 Langfuse projection and sync state › a run-score failure is shown without hiding the synced item scope (349ms)
+  ✓   52 [chromium] › e2e/issue-87-langfuse-projection.spec.ts:159:3 › Issue #87 Langfuse projection and sync state › an outage never changes the frozen quality conclusion or the revision (373ms)
+  ✓   53 [chromium] › e2e/issue-87-langfuse-projection.spec.ts:175:3 › Issue #87 Langfuse projection and sync state › after recovery the sync state is healthy and the conclusion has not moved (391ms)
+  ✓   54 [chromium] › e2e/langfuse-links.spec.ts:105:3 › Langfuse link backfill (Issue #44) › list surfaces the link automatically once the API returns it (4.5s)
+  ✓   55 [chromium] › e2e/langfuse-links.spec.ts:124:3 › Langfuse link backfill (Issue #44) › detail surfaces the link without a manual reload (2.2s)
+  ✓   56 [chromium] › e2e/langfuse-links.spec.ts:138:3 › Langfuse link backfill (Issue #44) › item traffic does not grow while only the link is pending (8.2s)
+  ✓   57 [chromium] › e2e/langfuse-links.spec.ts:197:5 › Langfuse link degradation › renders a reason for dangerous URL (400ms)
+  ✓   58 [chromium] › e2e/langfuse-links.spec.ts:197:5 › Langfuse link degradation › renders a reason for sync failed (304ms)
+  ✓   59 [chromium] › e2e/langfuse-links.spec.ts:197:5 › Langfuse link degradation › renders a reason for not applicable (341ms)
+  ✓   60 [chromium] › e2e/langfuse-links.spec.ts:197:5 › Langfuse link degradation › renders a reason for seed dataset without a run (334ms)
+  ✓   61 [chromium] › e2e/launch-detail-navigation.spec.ts:101:3 › Issue #29: Launch detail navigation and identity › keeps a detail action on active and historical rows and opens the matching record (584ms)
+  ✓   62 [chromium] › e2e/launch-detail-navigation.spec.ts:126:3 › Issue #29: Launch detail navigation and identity › shows a not-found error for an unknown ID without rendering another Launch (1.6s)
+  ✓   63 [chromium] › e2e/launch-detail-navigation.spec.ts:286:5 › Issue #119: launch detail first-screen hierarchy › the tab bar and comparison entry are complete in the first screen at 1280x800 (535ms)
+  ✓   64 [chromium] › e2e/launch-detail-navigation.spec.ts:286:5 › Issue #119: launch detail first-screen hierarchy › the tab bar and comparison entry are complete in the first screen at 1440x900 (876ms)
+  ✓   65 [chromium] › e2e/launch-detail-navigation.spec.ts:479:7 › Issue #119: launch detail first-screen hierarchy › successful result retains a usable decision entry above the fold at 1280x800 (378ms)
+  ✓   66 [chromium] › e2e/launch-detail-navigation.spec.ts:479:7 › Issue #119: launch detail first-screen hierarchy › failed execution with its prior frozen report retains a usable decision entry above the fold at 1280x800 (382ms)
+  ✓   67 [chromium] › e2e/launch-detail-navigation.spec.ts:479:7 › Issue #119: launch detail first-screen hierarchy › cancelled execution with its prior frozen report retains a usable decision entry above the fold at 1280x800 (413ms)
+  ✓   68 [chromium] › e2e/launch-detail-navigation.spec.ts:479:7 › Issue #119: launch detail first-screen hierarchy › insufficient diagnostic evidence retains a usable decision entry above the fold at 1280x800 (378ms)
+  ✓   69 [chromium] › e2e/launch-detail-navigation.spec.ts:479:7 › Issue #119: launch detail first-screen hierarchy › running without a frozen result yet retains a usable decision entry above the fold at 1280x800 (363ms)
+  ✓   70 [chromium] › e2e/launch-detail-navigation.spec.ts:479:7 › Issue #119: launch detail first-screen hierarchy › successful result retains a usable decision entry above the fold at 1440x900 (394ms)
+  ✓   71 [chromium] › e2e/launch-detail-navigation.spec.ts:479:7 › Issue #119: launch detail first-screen hierarchy › failed execution with its prior frozen report retains a usable decision entry above the fold at 1440x900 (405ms)
+  ✓   72 [chromium] › e2e/launch-detail-navigation.spec.ts:479:7 › Issue #119: launch detail first-screen hierarchy › cancelled execution with its prior frozen report retains a usable decision entry above the fold at 1440x900 (391ms)
+  ✓   73 [chromium] › e2e/launch-detail-navigation.spec.ts:479:7 › Issue #119: launch detail first-screen hierarchy › insufficient diagnostic evidence retains a usable decision entry above the fold at 1440x900 (396ms)
+  ✓   74 [chromium] › e2e/launch-detail-navigation.spec.ts:479:7 › Issue #119: launch detail first-screen hierarchy › running without a frozen result yet retains a usable decision entry above the fold at 1440x900 (477ms)
+  ✓   75 [chromium] › e2e/launch-detail-navigation.spec.ts:632:3 › Issue #119: launch detail first-screen hierarchy › Launch detail Tabs support Arrow, Home and End keyboard navigation (412ms)
+  ✓   76 [chromium] › e2e/launch-detail-navigation.spec.ts:662:5 › Issue #119: launch detail first-screen hierarchy › the Regression KPI opens the filtered Comparison tab with Enter (322ms)
+  ✓   77 [chromium] › e2e/launch-detail-navigation.spec.ts:662:5 › Issue #119: launch detail first-screen hierarchy › the Regression KPI opens the filtered Comparison tab with Space (398ms)
+  ✓   78 [chromium] › e2e/launch-detail-navigation.spec.ts:685:3 › Issue #119: launch detail first-screen hierarchy › cancel confirmation traps focus, Escape sends no request, and keyboard confirmation sends one (436ms)
+  ✓   79 [chromium] › e2e/launch-detail-navigation.spec.ts:744:3 › Issue #119: launch detail first-screen hierarchy › downloads parseable JSON for the URL-pinned Launch and Snapshot (428ms)
+  ✓   80 [chromium] › e2e/launch-detail-navigation.spec.ts:792:3 › Issue #119: launch detail first-screen hierarchy › Issue #229 AC2: failed cases are visible above the fold on initial entry with 2-step root cause localization (445ms)
+  ✓   81 [chromium] › e2e/launches-filter.spec.ts:69:3 › Issue #46: Launch 筛选结果集 › Agent 条件只展示该 Agent 的 Launch (351ms)
+  ✓   82 [chromium] › e2e/launches-filter.spec.ts:84:5 › Issue #46: Launch 筛选结果集 › 质量 pass 只展示对应结果 (316ms)
+  ✓   83 [chromium] › e2e/launches-filter.spec.ts:84:5 › Issue #46: Launch 筛选结果集 › 质量 fail 只展示对应结果 (322ms)
+  ✓   84 [chromium] › e2e/launches-filter.spec.ts:84:5 › Issue #46: Launch 筛选结果集 › 质量 unknown 只展示对应结果 (325ms)
+  ✓   85 [chromium] › e2e/launches-filter.spec.ts:92:3 › Issue #46: Launch 筛选结果集 › Agent、执行状态、质量为交集；无匹配不残留，重置恢复全部结果 (425ms)
+  ✓   86 [chromium] › e2e/launches-filter.spec.ts:118:1 › Issue183: 环境四条件交集、重置与刷新不探测 Baseline (520ms)
+  ✓   87 [chromium] › e2e/launches-list.spec.ts:79:3 › UX-26: Launches List High-Density Table Layout and Row Height Verification › verifies table row height stability and no abnormal wrapping at 1440x720 (491ms)
+  ✓   88 [chromium] › e2e/launches-list.spec.ts:125:3 › UX-26: Launches List High-Density Table Layout and Row Height Verification › verifies horizontal scroll overflow on narrower screens (1024px) without collapsing layout (346ms)
+  ✓   89 [chromium] › e2e/launches-list.spec.ts:153:3 › UX-26: Launches List High-Density Table Layout and Row Height Verification › verifies graceful fallback when agents query fails (294ms)
+  ✓   90 [chromium] › e2e/launches.spec.ts:5:3 › E2E-03 ~ E2E-05: Launch Creation, Execution, Dual Badges and Attempt Drawer › creates launch, runs evaluation, verifies decoupled dual badges and lazy attempts (822ms)
+  ✓   91 [chromium] › e2e/pr126-r05-r13.spec.ts:251:3 › PR #126 R05/R13 acceptance evidence › R05: evaluation-only retry discovers S2 without moving the URL-pinned S1 (4.0s)
+  ✓   92 [chromium] › e2e/pr126-r05-r13.spec.ts:335:3 › PR #126 R05/R13 acceptance evidence › R13: RUNNING and terminal EVALUATING actions match allowed_actions and progress uses item state (2.2s)
+  ✓   93 [chromium] › e2e/pr126-r05-r13.spec.ts:431:3 › PR #126 R05/R13 acceptance evidence › R13: Attempt Drawer traps keyboard focus, closes on Escape, and restores its trigger (435ms)
+  ✓   94 [chromium] › e2e/quality-pass-rate.spec.ts:229:3 › Issue #45: quality pass rate wording › separates 6/6 execution success from 2/6 quality pass and explains the denominator (376ms)
+  ✓   95 [chromium] › e2e/quality-pass-rate.spec.ts:269:3 › Issue #45: quality pass rate wording › keeps the denominator help readable without sideways overflow on a narrow screen (332ms)
+  ✓   96 [chromium] › e2e/quality-pass-rate.spec.ts:284:3 › Issue #45: quality pass rate wording › labels the comparable-cohort ratio in the browser and states its denominator (452ms)
+  ✓   97 [chromium] › e2e/real-api.spec.ts:4:3 › Real API Acceptance E2E (Zero Mock) › walks through Agents -> Version Specs -> Create Launch -> Launch Frozen Manifest on real backend (788ms)
+  ✓   98 [chromium] › e2e/real-api.spec.ts:100:1 › Issue183: 真实 API 固化环境、四条件筛选与非法环境拒绝 (48ms)
+  ✓   99 [chromium] › e2e/responsive.spec.ts:407:7 › narrow viewports › /launches keeps every control reachable at 390px (271ms)
+  ✓  100 [chromium] › e2e/responsive.spec.ts:407:7 › narrow viewports › /launches/new keeps every control reachable at 390px (334ms)
+  ✓  101 [chromium] › e2e/responsive.spec.ts:407:7 › narrow viewports › /launches/3fa85f64-5717-4562-b3fc-2c963f66afa6 keeps every control reachable at 390px (328ms)
+  ✓  102 [chromium] › e2e/responsive.spec.ts:407:7 › narrow viewports › /agents keeps every control reachable at 390px (280ms)
+  ✓  103 [chromium] › e2e/responsive.spec.ts:407:7 › narrow viewports › /agents/financial-fraud-detection-assistant-enterprise-prod keeps every control reachable at 390px (273ms)
+  ✓  104 [chromium] › e2e/responsive.spec.ts:407:7 › narrow viewports › /agents/financial-fraud-detection-assistant-enterprise-prod/versions/1.0.0 keeps every control reachable at 390px (277ms)
+  ✓  105 [chromium] › e2e/responsive.spec.ts:407:7 › narrow viewports › /launches keeps every control reachable at 768px (353ms)
+  ✓  106 [chromium] › e2e/responsive.spec.ts:407:7 › narrow viewports › /launches/new keeps every control reachable at 768px (374ms)
+  ✓  107 [chromium] › e2e/responsive.spec.ts:407:7 › narrow viewports › /launches/3fa85f64-5717-4562-b3fc-2c963f66afa6 keeps every control reachable at 768px (335ms)
+  ✓  108 [chromium] › e2e/responsive.spec.ts:407:7 › narrow viewports › /agents keeps every control reachable at 768px (400ms)
+  ✓  109 [chromium] › e2e/responsive.spec.ts:407:7 › narrow viewports › /agents/financial-fraud-detection-assistant-enterprise-prod keeps every control reachable at 768px (324ms)
+  ✓  110 [chromium] › e2e/responsive.spec.ts:407:7 › narrow viewports › /agents/financial-fraud-detection-assistant-enterprise-prod/versions/1.0.0 keeps every control reachable at 768px (296ms)
+  ✓  111 [chromium] › e2e/responsive.spec.ts:423:5 › narrow viewports › /launches does not scroll the page sideways at 390px (355ms)
+  ✓  112 [chromium] › e2e/responsive.spec.ts:423:5 › narrow viewports › /launches/new does not scroll the page sideways at 390px (521ms)
+  ✓  113 [chromium] › e2e/responsive.spec.ts:423:5 › narrow viewports › /launches/3fa85f64-5717-4562-b3fc-2c963f66afa6 does not scroll the page sideways at 390px (332ms)
+  ✓  114 [chromium] › e2e/responsive.spec.ts:423:5 › narrow viewports › /agents does not scroll the page sideways at 390px (390ms)
+  ✓  115 [chromium] › e2e/responsive.spec.ts:423:5 › narrow viewports › /agents/financial-fraud-detection-assistant-enterprise-prod does not scroll the page sideways at 390px (287ms)
+  ✓  116 [chromium] › e2e/responsive.spec.ts:423:5 › narrow viewports › /agents/financial-fraud-detection-assistant-enterprise-prod/versions/1.0.0 does not scroll the page sideways at 390px (303ms)
+  ✓  117 [chromium] › e2e/responsive.spec.ts:506:5 › Issue #120: launch detail narrow-viewport action geometry › compact primary actions and the 更多操作 menu stay fully reachable at 360px (564ms)
+  ✓  118 [chromium] › e2e/responsive.spec.ts:506:5 › Issue #120: launch detail narrow-viewport action geometry › compact primary actions and the 更多操作 menu stay fully reachable at 390px (428ms)
+  ✓  119 [chromium] › e2e/responsive.spec.ts:506:5 › Issue #120: launch detail narrow-viewport action geometry › compact primary actions and the 更多操作 menu stay fully reachable at 768px (419ms)
+  ✓  120 [chromium] › e2e/responsive.spec.ts:593:7 › Issue #120: launch detail narrow-viewport action geometry › pending run and cancel actions stay fully reachable in the 更多操作 menu at 360px (421ms)
+  ✓  121 [chromium] › e2e/responsive.spec.ts:593:7 › Issue #120: launch detail narrow-viewport action geometry › partial-failure recovery actions stay fully reachable in the 更多操作 menu at 360px (382ms)
+  ✓  122 [chromium] › e2e/responsive.spec.ts:593:7 › Issue #120: launch detail narrow-viewport action geometry › pending run and cancel actions stay fully reachable in the 更多操作 menu at 390px (466ms)
+  ✓  123 [chromium] › e2e/responsive.spec.ts:593:7 › Issue #120: launch detail narrow-viewport action geometry › partial-failure recovery actions stay fully reachable in the 更多操作 menu at 390px (538ms)
+  ✓  124 [chromium] › e2e/responsive.spec.ts:593:7 › Issue #120: launch detail narrow-viewport action geometry › pending run and cancel actions stay fully reachable in the 更多操作 menu at 768px (492ms)
+  ✓  125 [chromium] › e2e/responsive.spec.ts:593:7 › Issue #120: launch detail narrow-viewport action geometry › partial-failure recovery actions stay fully reachable in the 更多操作 menu at 768px (446ms)
+  ✓  126 [chromium] › e2e/responsive.spec.ts:645:5 › Issue #120: launch detail narrow-viewport action geometry › menu confirmations keep payload gating, pending state and focus restoration at 360px (2.2s)
+  ✓  127 [chromium] › e2e/responsive.spec.ts:645:5 › Issue #120: launch detail narrow-viewport action geometry › menu confirmations keep payload gating, pending state and focus restoration at 390px (2.2s)
+  ✓  128 [chromium] › e2e/responsive.spec.ts:645:5 › Issue #120: launch detail narrow-viewport action geometry › menu confirmations keep payload gating, pending state and focus restoration at 768px (2.3s)
+  ✓  129 [chromium] › e2e/responsive.spec.ts:719:5 › Issue #120: launch detail narrow-viewport action geometry › desktop launch actions remain one-line 32px controls with long identity at 1024px (430ms)
+  ✓  130 [chromium] › e2e/responsive.spec.ts:719:5 › Issue #120: launch detail narrow-viewport action geometry › desktop launch actions remain one-line 32px controls with long identity at 1280px (403ms)
+  ✓  131 [chromium] › e2e/responsive.spec.ts:719:5 › Issue #120: launch detail narrow-viewport action geometry › desktop launch actions remain one-line 32px controls with long identity at 1440px (399ms)
+  ✓  132 [chromium] › e2e/responsive.spec.ts:850:5 › Issue #47: 核心页面布局与操作闭环 › Agents → Agent → Version 在 1440×720 可读且可操作 (1.3s)
+  ✓  133 [chromium] › e2e/responsive.spec.ts:908:5 › Issue #47: 核心页面布局与操作闭环 › 创建表单在 1440×720 经纵向滚动填写、提交并跳转 (1.1s)
+  ✓  134 [chromium] › e2e/responsive.spec.ts:850:5 › Issue #47: 核心页面布局与操作闭环 › Agents → Agent → Version 在 1024×720 可读且可操作 (1.4s)
+  ✓  135 [chromium] › e2e/responsive.spec.ts:908:5 › Issue #47: 核心页面布局与操作闭环 › 创建表单在 1024×720 经纵向滚动填写、提交并跳转 (1.2s)
+  ✓  136 [chromium] › e2e/responsive.spec.ts:976:3 › Issue183: 360px 环境筛选完整可见且支持键盘 (329ms)
+  ✓  137 [chromium] › e2e/responsive.spec.ts:976:3 › Issue183: 390px 环境筛选完整可见且支持键盘 (336ms)
+  ✓  138 [chromium] › e2e/responsive.spec.ts:976:3 › Issue183: 1280px 环境筛选完整可见且支持键盘 (457ms)
+
+  138 passed (1.8m)

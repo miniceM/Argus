@@ -1,0 +1,26 @@
+[WebServer] INFO:     Started server process [71432]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:28080 (Press CTRL+C to quit)
+[WebServer] npm warn Unknown env config "verify-deps-before-run". This will stop working in the next major version of npm.
+[WebServer] (node:71546) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:71572) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+[WebServer]   - `__dirname` (vite.config.ts:14:25). Use `import.meta.dirname` instead
+[WebServer] Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+Running 7 tests using 1 worker
+
+(node:71600) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › e2e/issue-215-managed-evaluation.spec.ts:8:1 › #215 显式配置 → 服务端拒绝无效规则 → 创建/刷新读回不可变契约 (2.5s)
+  ✓  2 [chromium] › e2e/issue-219-managed-experience.spec.ts:77:1 › Managed 自动 pending → 双 Score → Frozen Snapshot → 固定 Gate (2.4s)
+  ✓  3 [chromium] › e2e/issue-219-managed-experience.spec.ts:101:1 › Langfuse down / recover：诊断故障不伪造零分，恢复后显示拒绝来源 (599ms)
+  ✓  4 [chromium] › e2e/issue-219-managed-experience.spec.ts:113:44 › 冻结 fail：评分失败与质量失败分离、历史 Score / 链接不漂移 (825ms)
+  ✓  5 [chromium] › e2e/issue-219-managed-experience.spec.ts:113:44 › 冻结 unknown：评分失败与质量失败分离、历史 Score / 链接不漂移 (651ms)
+  ✓  6 [chromium] › e2e/issue-219-managed-experience.spec.ts:132:33 › Managed 360px 响应式、键盘和可访问性 (1.5s)
+  ✓  7 [chromium] › e2e/issue-219-managed-experience.spec.ts:132:33 › Managed 390px 响应式、键盘和可访问性 (2.1s)
+
+  7 passed (20.5s)

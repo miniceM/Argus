@@ -1,0 +1,4275 @@
+{
+  "status": "PASS",
+  "source": "actual original live Runner access log, methods/paths/status whitelist; query strings omitted",
+  "launch_creates": 3,
+  "run_submissions": 3,
+  "gate_calculations": 3,
+  "manual_collect_requests": 0,
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/openapi.json",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agents",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent-versions",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent-versions",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/release-policies",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/evaluators",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agent-versions",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/experiment-launches",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/issue212-20261022t083959z/baselines",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/run",
+      "status": 202
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots/16310689-dc61-4c55-af3e-22245dc5d024",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots/16310689-dc61-4c55-af3e-22245dc5d024",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/issue212-20261022t083959z/baselines",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/comparison/case",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/comparison",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/release-gates/evaluate",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots/16310689-dc61-4c55-af3e-22245dc5d024",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/issue212-20261022t083959z/baselines",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/release-gates/36fcea91-6820-4cda-80bc-7f15d695f48a",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots/16310689-dc61-4c55-af3e-22245dc5d024",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/release-gates/36fcea91-6820-4cda-80bc-7f15d695f48a",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items/242b2f7c-14c6-4cf0-a934-bc9249061ee7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/evaluators",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agent-versions",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/experiment-launches",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/issue212-20261022t083959z/baselines",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/run",
+      "status": 202
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items/e15213b8-d751-4e22-a9e6-7d8d86daa59a/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items/e15213b8-d751-4e22-a9e6-7d8d86daa59a/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items/e15213b8-d751-4e22-a9e6-7d8d86daa59a/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items/e15213b8-d751-4e22-a9e6-7d8d86daa59a/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items/e15213b8-d751-4e22-a9e6-7d8d86daa59a/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items/e15213b8-d751-4e22-a9e6-7d8d86daa59a/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items/e15213b8-d751-4e22-a9e6-7d8d86daa59a/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items/e15213b8-d751-4e22-a9e6-7d8d86daa59a/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items/e15213b8-d751-4e22-a9e6-7d8d86daa59a/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items/e15213b8-d751-4e22-a9e6-7d8d86daa59a/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items/e15213b8-d751-4e22-a9e6-7d8d86daa59a/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items/e15213b8-d751-4e22-a9e6-7d8d86daa59a/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items/e15213b8-d751-4e22-a9e6-7d8d86daa59a/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items/e15213b8-d751-4e22-a9e6-7d8d86daa59a/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items/e15213b8-d751-4e22-a9e6-7d8d86daa59a/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots/9e4f3cda-550b-4d64-86f6-1a618efd41a0",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots/9e4f3cda-550b-4d64-86f6-1a618efd41a0",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/issue212-20261022t083959z/baselines",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/comparison/case",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/comparison",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/release-gates/evaluate",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots/9e4f3cda-550b-4d64-86f6-1a618efd41a0",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/issue212-20261022t083959z/baselines",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/release-gates/674eda44-613c-4fd5-90ab-0953fa521e7a",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots/9e4f3cda-550b-4d64-86f6-1a618efd41a0",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/release-gates/674eda44-613c-4fd5-90ab-0953fa521e7a",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items/e15213b8-d751-4e22-a9e6-7d8d86daa59a/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/evaluators",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agent-versions",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/experiment-launches",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/issue212-20261022t083959z/baselines",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/run",
+      "status": 202
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots/dba8cf16-f79c-43c0-83ab-6ffb48a173d0",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots/dba8cf16-f79c-43c0-83ab-6ffb48a173d0",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/issue212-20261022t083959z/baselines",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/comparison/case",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/comparison",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/release-gates/evaluate",
+      "status": 201
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots/dba8cf16-f79c-43c0-83ab-6ffb48a173d0",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/issue212-20261022t083959z/baselines",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/release-gates/d9800058-d3c7-45b4-82db-97b7efac9cd9",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots/dba8cf16-f79c-43c0-83ab-6ffb48a173d0",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/release-gates/d9800058-d3c7-45b4-82db-97b7efac9cd9",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items/a31e5068-2326-4dcd-b829-63da99f99ff7/managed-scores",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots/16310689-dc61-4c55-af3e-22245dc5d024",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/release-gates/36fcea91-6820-4cda-80bc-7f15d695f48a",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/result-snapshots/16310689-dc61-4c55-af3e-22245dc5d024",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/release-gates/36fcea91-6820-4cda-80bc-7f15d695f48a",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/issue212-20261022t083959z/baselines",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/df1050ac-0f39-4a0c-852e-4193460aa00e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots/9e4f3cda-550b-4d64-86f6-1a618efd41a0",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/release-gates/674eda44-613c-4fd5-90ab-0953fa521e7a",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/result-snapshots/9e4f3cda-550b-4d64-86f6-1a618efd41a0",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/release-gates/674eda44-613c-4fd5-90ab-0953fa521e7a",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/issue212-20261022t083959z/baselines",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/e29fdad1-db61-4d19-b4c3-f9b75e0c1b9e/comparison/case",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots/dba8cf16-f79c-43c0-83ab-6ffb48a173d0",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/release-gates/d9800058-d3c7-45b4-82db-97b7efac9cd9",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/result-snapshots/dba8cf16-f79c-43c0-83ab-6ffb48a173d0",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/agents/issue212-20261022t083959z/baselines",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/release-gates/d9800058-d3c7-45b4-82db-97b7efac9cd9",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/comparison",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/items",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/experiment-launches/62daf415-4fa2-4486-bf6c-efccb80033ba/comparison/case",
+      "status": 200
+    }
+  ]
+}

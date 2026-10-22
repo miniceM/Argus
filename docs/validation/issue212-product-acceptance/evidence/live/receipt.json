@@ -1,0 +1,37 @@
+{
+  "status": "PASS",
+  "source_commit": "f2a67d6c24617f1c5847e84cb82b98773c755ee0",
+  "environment": "issue212-20261022t082316z",
+  "browser_network_mocking": false,
+  "manual_collect_requests": 0,
+  "score_write_requests": 0,
+  "rule_ids": [
+    "cmvj9xkd2006yad0i3s0ec4hp",
+    "cmvj9xnzf0073ad0inwygj1xe"
+  ],
+  "scenarios": [
+    {
+      "label": "pass",
+      "launch_id": "f38d6865-fb52-4c85-b857-e6f722c33385",
+      "snapshot_id": "19eaeae9-f9dd-4a65-ac8d-92c9e3c9d32b",
+      "gate_id": "ab04c0fa-3c00-42ba-855b-f6743d9f4fb0",
+      "decision": "PASS"
+    },
+    {
+      "label": "fail",
+      "launch_id": "3dfb1d9c-a071-43b9-8196-ff1203a8ca3f",
+      "snapshot_id": "bc5a0ceb-2c03-4c73-8edf-ad0dcb1f29a1",
+      "gate_id": "01e7ea46-4066-4cb7-8ad7-0d52491bf7dc",
+      "decision": "FAIL"
+    },
+    {
+      "label": "missing",
+      "launch_id": "598fc77e-b9d0-4edb-9f04-9b4f94667b7c",
+      "snapshot_id": "79b2b45a-3347-4c8d-b28d-f1f2ee627e9e",
+      "gate_id": "fa96f822-d1fe-48d8-8174-78e59f82f713",
+      "decision": "UNKNOWN"
+    }
+  ],
+  "historical_api_and_console_unchanged": true,
+  "timestamp": "2026-10-22T08:28:36.252455+00:00"
+}

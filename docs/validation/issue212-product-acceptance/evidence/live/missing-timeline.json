@@ -1,0 +1,26 @@
+[
+  {
+    "at": "2026-10-22T08:25:28.664Z",
+    "execution": "running",
+    "evaluation": "pending",
+    "quality": "unknown",
+    "status": "none",
+    "attempt_count": 1
+  },
+  {
+    "at": "2026-10-22T08:25:30.234Z",
+    "execution": "succeeded",
+    "evaluation": "pending",
+    "quality": "unknown",
+    "status": "evaluating",
+    "attempt_count": 1
+  },
+  {
+    "at": "2026-10-22T08:28:01.307Z",
+    "execution": "succeeded",
+    "evaluation": "failed",
+    "quality": "unknown",
+    "status": "failed",
+    "attempt_count": 1
+  }
+]

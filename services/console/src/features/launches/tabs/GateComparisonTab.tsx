@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { ExternalLink, ShieldCheck, Sparkles } from "lucide-react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { formatApiError } from "../../../api/errors";
@@ -838,6 +839,25 @@ export const GateComparisonTab: React.FC<GateComparisonTabProps> = ({
           Snapshot {activeBaseline.result_snapshot_id?.slice(0, 8)}… · 证据{" "}
           {activeBaseline.result_evidence_state === "COMPLETE" ? "完整" : "诊断"}
         </p>
+      )}
+
+      {/* 3.1 当前版本已作为黄金基线生效时的正向反馈与下一步 CTA */}
+      {activeBaseline && snapshotId && activeBaseline.result_snapshot_id === snapshotId && (
+        <div
+          data-testid="current-active-baseline-banner"
+          className="rounded-xl border border-primary-border bg-primary-subtle p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs"
+        >
+          <div className="flex items-center gap-2.5 font-medium text-primary">
+            <Sparkles className="w-4 h-4 shrink-0 text-primary" />
+            <span>当前评测版本已设为该环境的黄金基准 (Active Baseline)</span>
+          </div>
+          <Link
+            to="/launches/new"
+            className="inline-flex items-center gap-1 font-semibold text-primary hover:underline shrink-0"
+          >
+            <span>针对新版本发起对比评测 ↗</span>
+          </Link>
+        </div>
       )}
 
       {/* 3.5 空基线正向向导卡片（友好引导，避免初次使用恐慌） */}

@@ -602,6 +602,8 @@ describe("Issue #215 Managed 选择", () => {
   it("默认 Builtin，显式 Managed 提交外部契约而非本地 Evaluator", async () => {
     vi.mocked(api.POST).mockResolvedValue({ data: { id: "managed-215" } } as never);
     renderCreateLaunch();
+    const agentVersion = await screen.findByLabelText(/选择版本规格/);
+    await waitFor(() => expect(agentVersion).toHaveValue("v1"));
     const source = await screen.findByLabelText("评测来源 (Evaluation Source)");
     expect(source).toHaveValue("builtin");
     fireEvent.change(source, { target: { value: "langfuse_managed" } });
@@ -627,6 +629,8 @@ describe("Issue #215 Managed 选择", () => {
       code: "MANAGED_PROJECT_MISMATCH", message: "所选 project 与服务端不一致", recovery: "请重新选择项目",
     } } } as never);
     renderCreateLaunch();
+    const agentVersion = await screen.findByLabelText(/选择版本规格/);
+    await waitFor(() => expect(agentVersion).toHaveValue("v1"));
     fireEvent.change(await screen.findByLabelText("评测来源 (Evaluation Source)"), { target: { value: "langfuse_managed" } });
     const submit = screen.getByRole("button", { name: /创建评测任务/ });
     await waitFor(() => expect(submit).toBeEnabled());

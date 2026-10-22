@@ -72,6 +72,39 @@ const outputReasonText = (reason: string | null | undefined): string => {
   return map[reason] ? `${map[reason]} (${reason})` : reason;
 };
 
+/**
+ * 提取用例在数据集中的实际业务提问或意图，提升列表可读性，降低认知负担
+ */
+export const extractCaseTitle = (
+  datasetItemId: string,
+  manifestDataset?: any,
+): { title: string; isPrompt: boolean } => {
+  const datasetItems = manifestDataset?.items || [];
+  const found = datasetItems.find((d: any) => d.id === datasetItemId);
+  if (!found || !found.input) {
+    return { title: datasetItemId, isPrompt: false };
+  }
+  const input = found.input;
+  if (typeof input === "string" && input.trim()) {
+    return { title: input.trim(), isPrompt: true };
+  }
+  if (typeof input === "object" && input !== null) {
+    if (Array.isArray(input.messages) && input.messages.length > 0) {
+      const userMsg = input.messages.find((m: any) => m.role === "user") || input.messages[0];
+      if (userMsg && typeof userMsg.content === "string" && userMsg.content.trim()) {
+        return { title: userMsg.content.trim(), isPrompt: true };
+      }
+    }
+    if (typeof input.prompt === "string" && input.prompt.trim()) {
+      return { title: input.prompt.trim(), isPrompt: true };
+    }
+    if (typeof input.query === "string" && input.query.trim()) {
+      return { title: input.query.trim(), isPrompt: true };
+    }
+  }
+  return { title: datasetItemId, isPrompt: false };
+};
+
 export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
   launchId,
   snapshotId,
@@ -259,6 +292,7 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
           const isPass = conclusion === "pass";
           const isFail = conclusion === "fail";
           const errorText = item.execution_error || item.eval_error;
+          const { title: caseTitle, isPrompt } = extractCaseTitle(item.dataset_item_id, manifestDataset);
 
           return (
             <div
@@ -298,9 +332,30 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
                   {/* 用例标题与 ID */}
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-foreground font-mono">
-                        {item.dataset_item_id}
-                      </span>
+                      {isPrompt ? (
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="font-semibold text-foreground text-xs sm:text-sm leading-snug line-clamp-1"
+                            title={caseTitle}
+                            data-testid={`case-title-${item.dataset_item_id}`}
+                          >
+                            {caseTitle}
+                          </span>
+                          <span
+                            className="text-2xs text-muted-foreground font-mono bg-surface-muted px-1.5 py-0.5 rounded border border-border shrink-0"
+                            title={`完整用例 ID: ${item.dataset_item_id}`}
+                          >
+                            #{item.dataset_item_id.slice(-6)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span
+                          className="font-semibold text-foreground font-mono"
+                          data-testid={`case-title-${item.dataset_item_id}`}
+                        >
+                          {item.dataset_item_id}
+                        </span>
+                      )}
                       {item.dispatch_generation && item.dispatch_generation > 1 && (
                         <span className="px-1.5 py-0.2 rounded text-2xs font-semibold bg-primary-subtle text-primary border border-primary-border font-mono">
                           gen #{item.dispatch_generation}
@@ -418,7 +473,7 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
                           });
                         }}
                         className="min-h-7 px-2.5 py-1 text-xs font-mono disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={canOpenAttempts ? "查看 Attempt 调用历史" : "历史快照无实时 Attempt 执行记录"}
+                        title={canOpenAttempts ? "查看调用与重试记录" : "历史快照无实时 Attempt 执行记录"}
                       >
                         <span>{attempts != null ? `${attempts} 次尝试` : "—"}</span>
                         <Eye aria-hidden="true" className="h-3.5 w-3.5 ml-1" />
@@ -440,6 +495,7 @@ export const CasesTraceTab: React.FC<CasesTraceTabProps> = ({
                       });
                     }}
                     className="min-h-7 px-2.5 py-1 text-xs"
+                    title="查看评分与规则判定明细"
                   >
                     明细
                   </Button>

@@ -22,6 +22,17 @@ from .db_models import (
 )
 
 
+def _project_launch_quality(launch: ExperimentLaunchRecord, snapshot: RunResultSnapshotRecord) -> None:
+    """列表质量与当前已冻结证据一致；不修改执行状态或历史快照。"""
+    from .state_machine import aggregate_quality_conclusion
+
+    summary = snapshot.summary
+    launch.quality_conclusion = aggregate_quality_conclusion(
+        {"pass": summary.get("quality_pass_count", 0), "fail": summary.get("quality_fail_count", 0)},
+        summary.get("total_cases", 0),
+    )
+
+
 def _canonical_digest(value: Any) -> str:
     encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -250,6 +261,7 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
         RunResultSnapshotRecord.source_result_digest == source_digest,
     )).first()
     if existing:
+        _project_launch_quality(launch, existing)
         return existing
 
     evaluator_specs = launch.manifest.get("evaluators", [])
@@ -297,6 +309,7 @@ def create_result_snapshot(session: Session, launch: ExperimentLaunchRecord) -> 
         status="PENDING",
         next_retry_at=datetime.utcnow(),
     ))
+    _project_launch_quality(launch, snapshot)
     return snapshot
 
 

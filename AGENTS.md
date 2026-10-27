@@ -17,12 +17,15 @@ make demo                            # Demo 回归（v1 2/6、v2 6/6）
 make console-test / console-e2e      # Console 门禁
 ```
 
-四条硬边界（详见 §2）：
+产品范围先读 [产品边界与需求准入](docs/product-boundaries.md)；以下门禁是开发约束，不代表待建能力已交付。
+
+硬边界（详见 §2）：
 
 1. 业务 Agent 零 Evaluation SDK；
 2. Langfuse 与 Argus 职责分离；
-3. `traceparent` 必须传播，正式 Experiment 四个版本必须可复现；
-4. `docs/openapi.json` 与 `services/console/src/api/schema.d.ts` 必须同步。
+3. `traceparent` 必须传播；冻结身份/证据，不承诺随机系统完全确定性；
+4. 质量门禁不等于最终发布授权；禁止把版本 A 的结论给版本 B 使用；
+5. `docs/openapi.json` 与 `services/console/src/api/schema.d.ts` 必须同步。
 
 按任务类型读取（渐进式披露：只读你要改的那一节）：
 
@@ -36,6 +39,7 @@ make console-test / console-e2e      # Console 门禁
 | Langfuse 界面语言镜像 | §5.7 + `deploy/langfuse/README.md` |
 | Database Schema | §5.1；迁移按序号追加到 `migrations/`，不修改已发布迁移 |
 | 提 PR 或参与贡献 | `CONTRIBUTING.md` |
+| 新需求 / 扩范围 / Roadmap / Issue 设计 | §2.1、§2.2 + `docs/product-boundaries.md` |
 | 编写文档 | §11 |
 
 ---
@@ -55,29 +59,55 @@ make console-test / console-e2e      # Console 门禁
 
 ## 2. 系统定位与架构边界
 
-**Argus** 是企业级 AI Agent 低侵入评测与质量门禁平台：
+**Argus 是已有 Agent 服务的受治理评测桥接服务、持久化执行控制面与发布质量证据/门禁平台。**
 
 ```text
-Langfuse = Dataset / Trace / Observation / Experiment / Score 的 System of Record
-Argus    = Agent Registry / Versioned Launch / Remote Execution / Evaluation Orchestration / Release Gate
-Agent    = 普通业务应用，不感知 Evaluation Framework
+Langfuse = 日常 Dataset/Prompt、Trace/Observation、实验分析与在线评估
+Argus    = 适配接入 / 持久化 Launch 与 Attempt / 冻结证据 / 批准基准 / 质量 Gate
+Agent    = 业务 Runtime、会话与业务副作用
+CI/CD    = 构建/部署/灰度/回滚与最终发布授权
 ```
 
-以下边界 MUST 保持：
+### 2.1 范围准入门禁
 
-1. **业务 Agent 零 Evaluation SDK 依赖**
-   - `services/demo-agent/` 以及未来被测 Agent MUST NOT 引入 `langfuse`、Argus Eval SDK 或其他评测 SDK。
-   - Agent 仅暴露正常业务 API，例如 `POST /invoke`。
-   - 评测元数据通过 HTTP Header / W3C Trace Context 传递，不污染业务 DTO。
-2. **Langfuse 与 Argus 职责分离**
-   - MUST NOT 在 Argus 中重复实现 Langfuse 已成熟的数据模型和分析 UI。
-3. **W3C Trace Context 是跨系统链路标准**
-   - Eval Runner 调用 Agent 时 MUST 传播 `traceparent`；Agent 内部已有 OpenTelemetry 时继续向下游传播。
-   - OpenTelemetry 是可观测性增强，不构成运行基础评测的前置条件。
-4. **评测结果必须可复现**
-   - 正式 Experiment 必须能确定 Dataset / Agent / Evaluator / Runner 四个版本；禁止只记录 `latest`。
-5. **契约快照必须同步**
-   - `docs/openapi.json` 与 `services/console/src/api/schema.d.ts` 是同一份 API 合约的两份快照，改动任一侧都必须同步另一侧（见 §4）。
+每个新增需求、Issue 设计和 PR MUST 写清：消费者与实际场景；降低接入成本/提高执行可靠性/增强证据可信度/约束发布风险中的哪项；为何不能复用现有能力；权威状态归属、非目标、失败/权限/恢复验收及维护成本。详见 [产品边界 §5](docs/product-boundaries.md#5-开发需求准入人工评审门禁)。
+
+- MUST NOT 默认扩建第二套 Dataset/Prompt 编辑、通用 Trace/实验分析、在线评估告警、通用 DAG/审批流、生产部署/灰度/回滚或自建 IdP/Vault。
+- SHOULD 优先复用 Langfuse、企业身份/Secret/审批/CI 设施以及现有 Argus 模块；不能因 SDK 有并发就省略持久化执行，也不能再造第二套调度/结果体系。
+- Trajectory/Judge、新协议、多 CI Provider 等 MUST 按具体消费者重新准入；深度轨迹和自建 Judge 不再是普通发布闭环/v1.0 的默认前置。
+- 既有接口、冻结历史、安全与来源校验、真实夹具、质量回归和 i18n 补丁必须兼容维护；收敛范围不等于删除实现/验收证据或放宽门禁。
+- Langfuse Python/JS/TS SDK + 外置脚本同样可跨语言调用服务；MUST NOT 将零业务 SDK、并发/比较或基础 CI Gate 宣称为 Argus 独占能力。
+
+### 2.2 架构与可信证据门禁
+
+1. **业务 Agent 不必引入 Evaluation SDK**
+   - Argus Harness 放在外部 Runner；`services/demo-agent/` MUST NOT 引入评测 SDK、读取 Dataset 或自行评分。
+   - 对已支持调用契约承诺低侵入，不承诺任意接口/多轮/异步协议“只填 URL”。业务已有的可观测性 SDK 不要求删除。
+   - 元数据用 Header/W3C Trace Context，不强加业务 DTO 分支。
+2. **权威状态与外部采纳**
+   - Dataset/Prompt 日常编辑与 Trace 分析优先 Langfuse；Argus 拥有本次 Launch、冻结 Snapshot、批准基准和质量决策。
+   - 发布必需的冻结用例/最小证据允许持久化；MUST NOT 建双向可变主数据或用在线 latest 回填历史。
+   - 外部 Score 必须按冻结采纳契约验证精确来源和尝试，不按名称猜归属；复用 `TypedEvaluationResult`，不建平行结果模型。
+3. **W3C 与黑盒评测边界**
+   - Runner MUST 传播 `traceparent`；内部 OTel 是可选增强，不是最终输出评测前置。
+   - 无内部观测不伪造轨迹。冻结策略要求的证据缺失是 UNKNOWN；optional 诊断缺失不能污染无此要求的资格，不得临时改 optional 绕过失败。
+4. **冻结身份不等于核验远端制品，也不保证完全确定性**
+   - 正式结果必须固定 Dataset/Agent/Evaluator/Runner、环境、质量/比较策略与基准；禁止 latest 静默回退。
+   - AgentVersion 声明和远端实际制品核验 MUST 区分；URL/手填版本号不是可信执行回执。未实现的核验、失效/有效期能力必须标待实现，不能宣称已受保护。
+   - 模型、知识库、工具等不可控依赖必须披露；新证据/策略产生新 revision/decision，不改旧快照。
+5. **执行可靠性与副作用**
+   - 任务与 Attempt 持久化，评分重试不默认重调 Agent；lease/generation/取消/迟到结果隔离必须有反例测试。
+   - MUST NOT 承诺远端 exactly-once；超时不代表未执行。有副作用调用在没有业务幂等/状态查询/隔离契约时不得盲目自动重放。
+6. **质量门禁不是发布授权**
+   - 分开 Agent Execution / Evaluation / Quality Conclusion / Langfuse Sync；无效/缺失证据不得被均分洗成 PASS。
+   - Gate 只用于明确候选/环境/Snapshot/策略/基准；CI 的身份与适用范围核验属于正式集成验收，不以“最新绿灯”替代。
+   - Argus 不持有生产部署权；例外处置须授权和审计且与原始 Gate 分离，不能把 FAIL/UNKNOWN 改成 PASS。未交付例外能力必须明确不支持。
+7. **桥接访问与敏感数据**
+   - 新接入必须明确授权目标、SSRF/DNS/重定向/TLS、凭证用途与资源权限；不得携凭证访问任意 URL。
+   - 凭证只存引用；对日志/Trace/错误/快照/UI 的最小保留与脱敏均需验收，不能仅做前端遮罩。
+8. **API 契约快照**
+   - `docs/openapi.json` 与 `services/console/src/api/schema.d.ts` 必须同步；规划不等于新增了运行时接口。
+
 
 ---
 
@@ -182,14 +212,14 @@ Agent v2: overall_pass = 6 / 6
 
 - 生产模式下 `ARGUS_REDIS_URL` 缺失 MUST fail closed，不允许无协调地多实例执行。
 - Worker 在 Runner 进程内以 asyncio 任务运行（`ARGUS_WORKER_ENABLED` 控制），测试模式回退到内存队列。
-- 状态机、并发限流、Attempt 记录改动 MUST 有对应回归测试。
+- 状态机、并发限流、Attempt 记录改动 MUST 有对应回归测试；覆盖崩溃恢复、lease/generation、取消/迟到结果及副作用重试边界（§2.2）。
 
 ### 5.4 Evaluator / Baseline / Comparison
 
-- 确定性规则能解决时不引入 LLM Judge；引入时必须固定 Prompt 与 Model 版本。
+- 确定性规则或 Langfuse 托管评分能解决时不自建 Judge；新增自建 Judge 必须先过 §2.1，再固定实现/Prompt/Model 身份与采纳契约。
 - Evaluator 输出必须可解释：输入、输出、阈值显式定义。
 - 质量结论采用 fail-closed / unknown-safe：无 Evaluator 时不得判定通过。
-- Baseline 绑定、Run Summary 与 Candidate 对比必须基于冻结版本，不使用 `latest`。
+- Baseline 绑定、Run Summary 与 Candidate 对比必须基于冻结版本，不使用 `latest`；批准基准不得因首次或最新运行而自动获得资格。
 
 ### 5.5 Demo Agent
 
@@ -197,6 +227,9 @@ MUST NOT：引入 Langfuse SDK / Argus Eval SDK、读取 Dataset、自行计算 
 MAY：接收标准 `traceparent`、使用常规 OpenTelemetry instrumentation。
 
 ### 5.6 Console
+
+- 聚焦接入/版本、执行进展/恢复、冻结发布证据、基准/审计；详细 Trace 和自由实验探索优先链接 Langfuse，不扩建通用浏览器。
+- 历史报告读取选定 Snapshot；四类状态独立展示，未验证外部值只能作诊断。
 
 - 组件与数据获取遵循现有 `src/features/`、`src/components/` 结构，不新建平行体系。
 - API 类型来自 `services/console/src/api/schema.d.ts`（由 OpenAPI 生成），不得手写重复类型。
@@ -246,13 +279,15 @@ Dataset → Runner → Agent → Langfuse → Console → E2E
 
 ## 9. Definition of Done
 
-- [ ] 已阅读相关 Issue、设计评论和现有实现。
+- [ ] 已阅读相关 Issue、设计评论和现有实现；旧设计与当前范围冲突时已按 `docs/product-boundaries.md` 收敛并标注。
+- [ ] 已通过范围准入：消费者、四类价值、复用判断、权威状态、非目标、失败/权限/恢复验收与维护成本。
 - [ ] 验收标准已转换为测试或明确验证项。
 - [ ] 遵循 RED → GREEN → REFACTOR；例外已说明。
 - [ ] 新行为有自动化测试；Bug 有回归测试。
 - [ ] 目标测试通过。
 - [ ] `make validate` 通过（含 OpenAPI 与 Console 契约同步）；跳过项已说明原因。
-- [ ] 未破坏零 Evaluation SDK、W3C Trace、版本可复现与契约快照同步等边界。
+- [ ] 未破坏外置 Harness、W3C、冻结身份/来源、不可变证据、状态分离、发布授权与契约快照边界。
+- [ ] 涉及远端身份、副作用、迟到/取消、外部 Score、版本/环境错配时已有反例测试；未交付保证明确标注。
 - [ ] 未引入明文 Secret 或不必要的敏感数据。
 - [ ] Diff 无任务外修改。
 - [ ] 文档 / API / 配置在需要时同步更新。
@@ -286,6 +321,7 @@ Dataset → Runner → Agent → Langfuse → Console → E2E
 | `AGENTS.md`（本文） | 本仓库的开发者与 Agent | 仓库地图、质量门禁、架构边界、子系统约束、交付格式 | 用户导览、与开发无关的产品介绍 |
 | `CONTRIBUTING.md` | 外部贡献者 | 贡献路径、开发环境、流程、门禁与 PR 要求 | 架构约束的完整解释（指向本文） |
 | `SECURITY.md` | 报告者与部署方 | 报告渠道、支持范围、披露流程、部署方责任 | 通用安全科普 |
+| `docs/product-boundaries.md` | 产品、设计与开发 | 定位、权威状态、范围准入、保留/下沉/延期与近期验收 | 运行时能力或测试已通过的声明 |
 | `TECHNICAL_DESIGN.md` | 设计与开发 | 领域模型、状态机、API 设计的权威说明 | 快速上手 |
 | `deploy/langfuse/README.md` | 运维与开发 | i18n 镜像构建、发布与验收 | 全平台架构 |
 

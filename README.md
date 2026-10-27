@@ -1,19 +1,24 @@
 # Argus
 
-> **企业级 AI Agent 低侵入评测与质量门禁平台**
+> **Agent 评测桥接、持久化执行与发布质量证据/门禁平台**
 >
-> 把 Agent 评测从"每个应用仓库里的测试脚本"升级为统一、可复现、可治理的平台能力。
+> 连接已有业务服务与 Langfuse，把分散的接入、执行恢复和发布质量约定收敛为可审计流程；不接管业务 Runtime 或生产发布。
 
 [![CI](https://github.com/miniceM/Argus/actions/workflows/ci.yml/badge.svg)](https://github.com/miniceM/Argus/actions/workflows/ci.yml)
 [![Langfuse i18n](https://github.com/miniceM/Argus/actions/workflows/langfuse-i18n.yml/badge.svg)](https://github.com/miniceM/Argus/actions/workflows/langfuse-i18n.yml)
 
-Argus 在 [Langfuse](https://langfuse.com/) 已有的 Dataset / Trace / Observation / Experiment / Score 之上，补齐 **Agent Registry、版本化评测、远程执行与发布门禁** 这层执行控制面。业务 Agent 保持正常业务 API，不引入任何评测 SDK。
+Argus 在 [Langfuse](https://langfuse.com/) 之上提供统一的服务接入、持久化评测执行、冻结结果与质量门禁。对已支持 HTTP 契约的业务 Agent，不要求内嵌 Evaluation SDK；被测服务不受评测程序语言限制。
+
+Langfuse SDK + 外置脚本同样可以跨语言调用服务，并提供实验/比较与 CI 评测能力。Argus 的价值在于统一多团队的适配、恢复、证据与门禁约束，而不是独占“零业务 SDK”或“可以阻断回归”。
 
 ```text
-Langfuse = Dataset / Trace / Observation / Experiment / Score 的 System of Record
-Argus    = Agent Registry / Versioned Launch / Remote Execution / Evaluation Orchestration / Release Gate
-Agent    = 正常业务应用，不感知 Evaluation Framework
+Langfuse = 日常 Dataset/Prompt、Trace/Observation、实验探索与在线评估
+Argus    = 接入 / 持久化执行 / 冻结证据 / 批准基准 / 发布质量 Gate
+Agent    = 正常业务 API 与业务 Runtime；内部 OTel 可选
+CI/CD    = 构建、部署、审批、灰度、回滚与最终发布授权
 ```
+
+完整职责与非目标见 [产品边界与需求准入](docs/product-boundaries.md)。下文“已实现”与 Roadmap 目标分开，文档定位不代表所有企业级保护均已交付。
 
 > 本文面向**使用 Argus 的读者**：只想跑起来、评估它是否适合自己的团队，先看下面两节即可。
 > 需要读代码、改代码或参与开发，请直接看 [AGENTS.md](./AGENTS.md) 与 [TECHNICAL_DESIGN.md](./TECHNICAL_DESIGN.md)。
@@ -63,31 +68,24 @@ make clean     # 停止并删除本地 Volume
 
 ## 为什么需要 Argus
 
-把评测放进每个 Agent 仓库，随着团队和 Agent 数量增长会遇到：
+如果一个团队用少量 Langfuse 脚本已能满足需求，不必为了“平台化”再部署 Argus。以下需求同时存在时，再评估统一控制面的收益：
 
-- 评测 SDK 与业务代码强耦合；
-- timeout、retry、并发、rate limit 等执行逻辑重复建设；
-- Dataset、Evaluator、Baseline、Score 缺乏统一版本治理；
-- 测试调用路径可能偏离真实生产 API；
-- Java、Python、Node 及不同 Agent Framework 需要分别适配；
-- 很难形成统一、可审计的发布质量门禁。
-
-Argus 把这些能力上移到统一控制面：
+- 多个服务的协议、鉴权、输入输出映射反复维护；
+- 长任务需要持久化进展、故障恢复、取消和尝试隔离；
+- 外部评分需要来源验证，不能把缺失/错误当作通过；
+- 发布需要固定候选、环境、策略、批准基准和不可变证据；
+- 希望 CI 消费统一、可解释的质量门禁，而不是各团队各写一套约定。
 
 ```text
-Dataset
-   │
-   ▼
-Experiment Launch ── freeze Dataset / Agent / Evaluator / Runner Version
-   │
-   ▼
-Remote Agent Runner ── W3C Trace Context ──► 业务 Agent
-   │
-   ├─ Retry / Timeout / Rate Limit
-   ├─ Item Execution / Attempt
-   ├─ Evaluation
-   └─ Langfuse Trace / Score / Experiment
+Langfuse Dataset / 固定评分契约
+             ↓
+Argus Launch → Queue / Worker → HTTP 业务 Agent（任意语言）
+             ↓
+可信结果 → 不可变 Snapshot → 批准基准比较 → Quality Gate → CI/CD
+             └─ Trace / Score 投影与详细分析 → Langfuse
 ```
+
+基础最终输出评测不依赖内部埋点。深入工具/轨迹判断需要相应可信证据；没有证据时不会凭空补造。超时重试也不能替代远端业务幂等。
 
 ---
 
@@ -96,10 +94,10 @@ Remote Agent Runner ── W3C Trace Context ──► 业务 Agent
 | 对象 | 一句话 |
 |---|---|
 | `AgentDefinition` | 一个可被评测的 Agent 身份 |
-| `AgentVersion` | 该 Agent 的不可变可执行快照：Endpoint、协议、Request Mapping、执行策略、Credential 引用 |
+| `AgentVersion` | 该 Agent 的不可变调用配置：Endpoint、协议、Request Mapping、执行策略、Credential 引用；不自动证明远端制品身份 |
 | `ExperimentLaunch` | 一次可审计的评测请求，冻结 Dataset / Agent / Evaluator / Runner 四个版本 |
 | `ExperimentItemExecution` / `ExecutionAttempt` | 单个 Dataset Item 的逻辑执行与技术重试分离，重试不会被算成多个样本 |
-| `Baseline` | 一次完成结果，可绑定为后续 Candidate 的比较基准 |
+| `Baseline` | 符合资格的不可变结果快照，批准后精确绑定到 Candidate，非“最新一次运行” |
 
 字段、状态机与 API 语义见 [TECHNICAL_DESIGN.md](./TECHNICAL_DESIGN.md)。
 
@@ -111,12 +109,13 @@ Remote Agent Runner ── W3C Trace Context ──► 业务 Agent
 
 完整请求 / 响应结构以 [docs/openapi.json](./docs/openapi.json) 与运行时 `/docs` 为准；`services/demo-agent/` 是最小可运行参考实现。
 
-### 四条设计边界
+### 设计边界
 
-1. **业务 Agent 零 Evaluation SDK 侵入**：Agent 只需提供正常业务 API，不读取 Dataset、不自行计算 Score、不为"正在评测"加分支。
-2. **Langfuse 与 Argus 职责分离**：Argus 不重复实现 Langfuse 已成熟的数据模型与分析 UI。
-3. **评测必须可复现**：正式 Experiment 必须能确定 Dataset / Agent / Evaluator / Runner 四个版本，禁止只记录 `latest`。
-4. **评测上下文不污染业务 DTO**：通过标准 W3C `traceparent` 与 `X-Eval-*` Header 传递；Agent 已有 OpenTelemetry 时可继续向下游关联。
+1. **业务服务不必集成评测 SDK**：保证范围限于已支持接口；已有可观测性不要求移除。
+2. **一个对象一个权威方**：Argus 保存发布必需的冻结证据，不重建日常 Dataset/Prompt/Trace 分析平台。
+3. **冻结不夸大保证**：版本声明不等于远端制品已核验；随机模型和外部依赖不承诺完全确定性。
+4. **门禁不等于发布授权**：PASS 只说明满足指定质量策略，最终部署由 CI/CD 和审批系统负责。
+5. **历史与缺失证据诚实呈现**：重评新修订，来源不明/缺分保持 UNKNOWN，不能以均分洗绿。
 
 ---
 
@@ -135,52 +134,32 @@ Remote Agent Runner ── W3C Trace Context ──► 业务 Agent
 | 发布门禁 | 不可变策略、固定 Snapshot 的绝对/相对规则、critical veto、Gate API；见 [发布门禁](./docs/release-gates.md) 与 [CLI/CI 集成](./docs/release-cli.md) |
 | 界面语言 | 官方 Langfuse 的独立 `zh-CN` Patch Layer 镜像 |
 
-### Roadmap
+### Roadmap（2026-10-27 收敛）
 
-| 阶段 | 主题 | 状态 |
-|---|---|---|
-| S1 | Agent Registry 与版本化评测领域模型 | ✅ 已完成 |
-| S1.5 | 官方 Langfuse + 独立 i18n Patch Layer | ✅ 已完成 |
-| S2 | 异步 Orchestrator、Queue / Worker、可靠执行状态机 | ✅ 已完成 |
-| S3 | 版本化评测、Baseline Comparison、Run-level Score | ✅ 已完成 |
-| S4 | Standard Agent Trajectory、Trace Assembler、深度轨迹评测 | 🚧 规划中 |
-| S5 | Vault、RBAC、SSO、Audit、数据脱敏 | 🚧 规划中 |
-| S6 | ReleasePolicy、Release Gate、CLI、CI/CD 集成 | 🚧 规则/API、CLI 与 CI 示例已实现，授权治理继续推进 |
+| 主题 | 已有基础与后续边界 |
+|---|---|
+| 接入与持久化执行 | 复用 S1/S2；新协议按真实需求准入，不建设通用工作流引擎 |
+| 冻结评测与外部评分 | #49、#212–#219 已关闭；继续复用既有契约，不据此宣称新发布身份保护已验收 |
+| 最小安全/审计接入（#6、#31） | 补齐受控部署所需的身份/资源授权、Secret、目标访问和数据审计；不自建 IdP/Vault |
+| 发布质量证据与 CI（#7） | Gate/API/CLI 已有；收尾聚焦被测制品身份、CI 适用范围/失效与安全验收，不接管部署 |
+| 轨迹增强（#5、#127–#132） | 已有实现/历史证据继续维护；按需验证，不是普通发布闭环前置；#131 自建 Judge 默认延期 |
+| i18n 补丁 | 兼容维护已有成果，不作为平台核心差异或新增企业能力的前置 |
 
-当前版本仍不是完整的 v1.0 企业平台；尚未覆盖 LLM-as-a-Judge 版本治理、Agent Trajectory、Worker 独立扩缩容、SSO / RBAC、发布 Override 授权等能力。路线图见 [Roadmap Issue #1](https://github.com/miniceM/Argus/issues/1)。
+当前不是已经验收的完整企业发布平台。受信远端身份核验、判定有效期/CI 防错配和完整授权审计仍须按 [Roadmap #1](https://github.com/miniceM/Argus/issues/1) 取得证据。深度轨迹、自建 Judge、全部 SSO/Vault/CI Provider 组合不再作为 v1.0 必选清单。
 
 ---
 
 ## 架构一览
 
 ```text
-+----------------------------------------------------------------------------+
-| 业务 Agent Runtime   正常业务应用，不感知评测框架                          |
-+----------------------------------------------------------------------------+
-| 只暴露正常业务 API，例如 POST /invoke                                      |
-| 不引入 Langfuse / Argus SDK，不读 Dataset，不自行评分                      |
-+----------------------------------------------------------------------------+
-                            HTTP + W3C traceparent
-                                      ^
-                                      |
-+----------------------------------------------------------------------------+
-| Argus 控制面   services/eval-runner                                        |
-+----------------------------------------------------------------------------+
-| Agent Registry         Agent / 不可变 AgentVersion                         |
-| Experiment Launch      冻结 Dataset / Agent / Evaluator / Runner           |
-| Queue / Worker         状态机 / retry / cancel / resume                    |
-| Evaluator + Baseline   逐项评分 / 候选对比                                 |
-+----------------------------------------------------------------------------+
-                  写入 Dataset / Trace / Experiment / Score
-                                      |
-                                      v
-+----------------------------------------------------------------------------+
-| Langfuse   评测数据 System of Record                                       |
-+----------------------------------------------------------------------------+
-| Dataset / Trace / Observation / Experiment / Score                         |
-| 提供专业分析 UI；Argus 不重复实现这些模型                                  |
-+----------------------------------------------------------------------------+
+业务 Agent（任意语言 / 正常 API / 内部观测可选）
+                      ↑ HTTP + traceparent
+Argus：Registry → 持久化 Launch/Attempt → 评分采纳 → Snapshot/基准 → Gate
+                      ↕                         ↓
+Langfuse：Dataset / Trace / 托管评分 / 实验分析    CI/CD：核验质量证据后决定发布
 ```
+
+这是职责图，不表示远端身份核验、授权和 CI 防错配等目标已全部实现。模块复用既有部署，不要求拆成四套微服务。
 
 ---
 
@@ -190,6 +169,7 @@ Remote Agent Runner ── W3C Trace Context ──► 业务 Agent
 
 | 你想知道 | 去看 |
 |---|---|
+| 产品职责、非目标、需求准入与近期验收 | [产品边界与需求准入](docs/product-boundaries.md) |
 | 领域模型、状态机、API 设计细节 | [TECHNICAL_DESIGN.md](./TECHNICAL_DESIGN.md) |
 | 完整 API 合约 | [docs/openapi.json](./docs/openapi.json) 或运行时的 `/docs` |
 | Agent 凭据管理 | [凭据 Provider 与部署边界](./docs/secret-providers.md) |

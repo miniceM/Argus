@@ -1,53 +1,31 @@
-# 企业级 AI Agent 评测平台技术设计
+# Agent 评测桥接、持久化执行与发布质量证据技术设计
 
-**文档版本：** 1.0  
-**状态：** PoC 技术基线 / 待架构评审  
-**日期：** 2026-09-16  
-**方案：** Langfuse Evaluation System of Record + Enterprise Remote Agent Eval Runner
+**文档版本：** 1.1（2026-10-27 产品边界收敛）
+**状态：** 技术契约与历史 PoC 说明；新增治理目标待逐项实施/验收
+**初始基线日期：** 2026-09-16
+**方案：** Langfuse + 受治理评测桥接/执行控制面 + 发布质量证据/门禁
 
-**S4 待实施方案：** [Issue #5 轨迹评测方案集](docs/plans/2026-10-13-s4-trajectory/README.md)，包含 #127–#132 的技术契约、实施计划和验收矩阵。该方案为提议，不表示以下已交付模型或 API 已具备轨迹能力。
+**范围入口：** [产品边界与需求准入](docs/product-boundaries.md)。本文件的“当前实现”不等于所有设计目标已交付，接口事实以 [OpenAPI](docs/openapi.json) 为准。
+
+**S4 历史设计：** [轨迹评测方案集](docs/plans/2026-10-13-s4-trajectory/README.md) 作为历史契约/实现交接保留；深度轨迹与自建 Judge 不再默认串行为 v1.0 前置，按需求准入后复用。旧验收记录仍保留原提交和结果，不因收敛自动完成或失效。
 
 ---
 
 ## 1. 文档目的
 
-本文定义一套面向企业、多团队、多语言、多 Agent Framework 的统一 Agent 评测平台技术方案。核心目标不是再造一套 Trace/Dataset/Evaluator 产品，而是在 Langfuse 已有评测数据能力之上补齐一个企业级 **Remote Agent Execution Plane**，使应用团队无需在业务 Agent 中引入 Evaluation SDK 或维护独立 Eval Harness。
+定义已有 Agent 的外置评测接入、持久化执行、可信结果封存和发布质量判定。Argus 不替代 Agent Runtime、Langfuse 专业实验/观测产品或企业 CI/CD。
 
-本设计同时给出一个可运行 PoC：
+业务服务只要符合受支持调用契约，就不必内嵌评测 SDK；评测团队仍需维护适配、数据和策略。该架构也可以用 Langfuse SDK + 外置脚本实现，平台价值是集中维护与治理，不是独占技术能力。
 
-```text
-Langfuse + Eval Runner + Demo Agent v1/v2
-```
-
-PoC 用于验证最关键的架构假设：
-
-> **Agent 团队只提供正常业务 API；评测 Dataset、执行编排、Evaluator、版本比较和发布判断属于平台能力。**
+保留可运行 PoC `Langfuse + Eval Runner + Demo Agent v1/v2`，但 Demo 通过不证明生产身份、权限、制品匹配或发布有效期保护已验收。
 
 ---
 
 ## 2. 背景与问题定义
 
-传统 Agent 评测常采用如下模式：
+独立脚本不必放在 Agent Repo 或业务进程中；Python/JS/TS 评测端可通过 HTTP 调用不同语言服务。Langfuse 已提供实验执行、比较、远程触发和基础 CI 门禁，不能把这些统一称为其能力缺口。
 
-```text
-Agent Repo
-├── production code
-├── eval.py / Eval()
-├── dataset loader
-├── judge config
-└── CI evaluation logic
-```
-
-这种模式在单项目中可工作，但进入大型企业后会产生系统性问题：
-
-1. **侵入业务代码。** 每个团队都要理解和接入某个 Eval SDK。
-2. **执行逻辑分散。** timeout、retry、并发、rate limit、版本标记等在各仓库重复建设。
-3. **评测资产无法集中治理。** Dataset、Judge、基线版本和 Score 缺少统一生命周期。
-4. **测试路径可能偏离生产路径。** Eval task function 容易与真实 Agent API 的调用方式产生差异。
-5. **多语言/多框架成本高。** Java、Python、Node、AgentScope、Spring AI、LangGraph 等需要各自适配。
-6. **难以形成统一发布门禁。** “这个 Agent 新版本能不能上线”无法形成平台层可审计判断。
-
-本方案将评测职责从 Agent Repo 上移到企业评测控制面。
+需要 Argus 的场景是：多团队适配反复维护、长任务需持久恢复、外部 Score 必须精确采纳、历史发布证据不能漂移，以及 CI 需要验证结论与实际候选/环境一致。价值需以接入成本与故障验收证明。
 
 ---
 
@@ -55,26 +33,19 @@ Agent Repo
 
 ### 3.1 核心目标
 
-- Agent 应用**零 Evaluation SDK 侵入**；
-- Dataset 能由人工录入、文件导入或生产 Trace 沉淀；
-- 平台能够选择 Agent Version，对固定 Dataset 进行远程回放；
-- Dataset / Agent / Evaluator / Runner 版本可以锁定和复现；
-- 支持 final output、tool usage、trajectory、安全策略等多层评估；
-- 评测结果统一进入 Langfuse Experiment / Trace / Observation / Score；
-- 新旧版本可以逐 Case 和聚合比较；
-- 最终支持 CI/CD Release Gate；
-- 兼容企业内部网络、密钥、审计、RBAC 和数据安全要求。
+- 复用现有 HTTP 接入/映射/凭证体系；新协议按消费者需求扩展。
+- Launch/Attempt 持久化，故障恢复、取消/迟到隔离、评分重试与业务重放分离。
+- 冻结用例、调用/评分/策略/环境与基准；严格验证外部证据来源，保存不可变结果修订。
+- 提供可解释 PASS/FAIL/UNKNOWN、批准基准与 CI 质量门禁；正式发布身份/适用期核验须有独立契约与实测，不因登记版本号推断已实现。
+- 复用企业身份/Secret/审批，实施资源授权、调用目标边界、最小审计与数据治理。
 
-### 3.2 非目标
+### 3.2 非目标与按需能力
 
-第一阶段不尝试：
-
-- 用 Eval Runner 取代 Agent Runtime；
-- 强制所有 Agent 使用某一 Framework；
-- 自研一套 Trace Storage；
-- 自研 Dataset UI；
-- 自研通用 LLM Observability Backend；
-- 把 Langfuse Fork 成企业内部长期维护分支。
+- 不取代业务 Runtime、制品仓库、部署/灰度/回滚与最终发布授权。
+- 不重建 Dataset/Prompt 编辑、通用 Trace/实验分析、在线采样/告警/人工标注。
+- 不建设通用 DAG/审批引擎、IdP/Vault 或计费/多租户运营平台。
+- 不默认开发通用深度轨迹、自建 Trajectory Judge 或穷尽框架/协议支持；复用已有安全规则与证据原语，按实际发布政策需求准入。
+- 不长期 Fork Langfuse；已有 i18n 补丁兼容维护，不作为新核心能力依赖。
 
 ---
 
@@ -110,21 +81,17 @@ Evaluation dependency = 0
 Observability dependency = optional enhancement
 ```
 
-### P3. Langfuse 是 System of Record
+### P3. 单一权威状态，冻结发布证据允许本地保存
 
-Langfuse 负责保存：
+Langfuse 拥有日常 Dataset/Prompt、Trace/Observation、在线评分和实验分析；Argus 拥有 Launch/Attempt、Release Snapshot、批准基准和质量决策。
 
-- Dataset / DatasetItem / Dataset Version；
-- Trace / Observation；
-- Experiment / ExperimentItem；
-- Evaluator 结果 / Score；
-- 人工 Review 与后续分析。
+本地冻结用例/摘要、最小评分证据与版本引用服务于发布审计，不构成另一套可变主数据。外部 Score 必须经过来源/尝试校验采纳；向 Langfuse 的发布结果为单向幂等投影。两侧不双向编辑，不用在线变化回填历史。
 
-Eval Runner 不建设第二套重复的数据事实源。
+### P4. 持久化评测执行，不扩建通用编排
 
-### P4. Runner 是无状态/可横向扩展执行平面
+当前 Worker 在 Runner 内运行；业务状态进入既有 Store/Queue。复用状态机、锁和 generation，独立扩缩容只是按需部署演进，不要求重建第二套调度或拆微服务。
 
-生产版本 Runner 的持久状态进入专门的 Orchestrator Store / Queue；Runner worker 本身尽可能无状态，以便 Kubernetes 扩容。
+评分重试不得默认重调 Agent；有副作用的远程调用须有业务幂等/查询/隔离契约，否则超时不允许盲目重放，不能承诺远端 exactly-once。
 
 ### P5. Evaluation Context 不污染业务 Payload
 
@@ -143,77 +110,29 @@ X-Eval-Agent-Version: ...
 ## 5. 总体架构
 
 ```mermaid
-flowchart TB
-    subgraph CP[Evaluation Control & Data Plane]
-        LF[Langfuse]
-        DS[Dataset / Version]
-        EV[Evaluator / Score]
-        EX[Experiment / Compare]
-        TR[Trace / Observation]
-        LF --- DS
-        LF --- EV
-        LF --- EX
-        LF --- TR
-    end
-
-    subgraph EP[Enterprise Remote Evaluation Execution Plane]
-        AR[Agent Registry]
-        AO[Experiment Orchestrator]
-        RR[Remote Agent Runner]
-        TA[Trajectory Evaluator Adapter]
-        AR --> AO --> RR
-        TA --> EV
-    end
-
-    subgraph AG[Business Agent Runtime]
-        V1[Agent v1 Endpoint]
-        V2[Agent v2 Endpoint]
-    end
-
-    DS --> AO
-    RR -->|HTTP / async protocol| V1
-    RR -->|HTTP / async protocol| V2
-    RR -->|Experiment traces| LF
-    V1 -. optional OTel .-> TR
-    V2 -. optional OTel .-> TR
-    TR --> TA
+flowchart LR
+    LF[Langfuse 数据与专业分析] --> AO[Argus 持久化评测任务]
+    AO --> RR[已支持的调用适配器]
+    RR --> AG[业务 Agent API]
+    AG --> ER[可信结果与评分采纳]
+    ER --> SS[不可变 Snapshot / 批准基准]
+    SS --> GT[发布质量 Gate]
+    GT --> CI[CI/CD 核验证据并执行发布]
+    ER --> LF
+    AG -. 可选内部观测 .-> LF
 ```
 
-逻辑上分为三层：
-
-1. **评测资产与结果层**：Langfuse；
-2. **远程执行层**：企业自建 Eval Runner；
-3. **业务 Agent 层**：现有 Agent 服务，无评测侵入。
+此为职责图，CI 制品身份/有效期核验属于 #7 的后续验收，不意味着当前已交付。Langfuse 托管评估是受验证的结果来源；必需评分未到不能判断通过，非关键展示投影失败不反向改变本地封存结论。
 
 ---
 
 ## 6. 为什么采用 Langfuse + Remote Runner
 
-Langfuse 当前已经解决大量高成本公共能力：
+Langfuse SDK 本身可在外部任务函数调用业务 HTTP 服务，也有并发、故障隔离、评分、实验比较与 CI 门禁。Argus 不将这些当作独占能力。
 
-- Trace / Observation；
-- Dataset / DatasetItem / Version；
-- Production Trace → Dataset；
-- Experiment；
-- Item-level / Run-level Evaluator；
-- Score；
-- Experiment Comparison；
-- Annotation / Review；
-- OpenTelemetry-based tracing；
-- Self-hosting。
+选择统一控制面需要具体收益：共享协议/凭证适配、持久执行与恢复、版本/来源/覆盖率一致约束、批准基准和发布证据核验。已有 Langfuse/企业设施能满足的编辑、分析、审批与部署下沉集成，只有发布必需状态和最小证据归 Argus。
 
-缺口主要集中在：
-
-- Agent Registry；
-- Endpoint Contract；
-- Dataset Row → HTTP Request Mapping；
-- 平台托管的 Remote Agent fan-out；
-- 企业级 retry / timeout / rate limit；
-- Async Agent；
-- Trajectory Evaluation；
-- Release Gate。
-
-因此合理策略是**补执行面而不是复制数据面**。
+范围准入和官方参考见 [产品边界](docs/product-boundaries.md)。
 
 ---
 
@@ -869,31 +788,11 @@ Content-Type: application/json
 - Runner 负责 timeout / retry / rate limit；
 - Runner 记录 HTTP 状态、attempt、duration。
 
-### 10.2 未来异步协议
+### 10.2 新协议按需准入
 
-企业 Agent 不应被限制在 300 秒同步请求。
+当前优先维护已支持 SYNC_HTTP。ASYNC_POLL、CALLBACK、SSE、多轮等不是预先承诺的全套能力，只有具体消费者且现有接口不足时才扩展适配器。
 
-推荐预留：
-
-```text
-SYNC_HTTP
-ASYNC_POLL
-CALLBACK
-SSE
-```
-
-`ASYNC_POLL` 示例：
-
-```json
-{
-  "invocation_mode": "ASYNC_POLL",
-  "submit_endpoint": "/runs",
-  "status_endpoint": "/runs/{runId}",
-  "result_endpoint": "/runs/{runId}/result"
-}
-```
-
-这适合 Research/Coding/Workflow Agent。
+准入必须定义提交/查询/结果身份、超时、幂等/业务副作用、凭证用途、取消、迟到结果隔离和真实验收。未交付协议不进入 OpenAPI 或被当成 v1.0 前置；不通过通用 DAG 引擎兜底任意协议。
 
 ---
 
@@ -978,81 +877,25 @@ overall_pass
 overall_pass_rate
 ```
 
-### L2. LLM-as-a-Judge
+### L2. LLM-as-a-Judge：优先复用托管执行
 
-适合：
+复用已交付的 Langfuse Managed 采纳契约（§8.3.8–8.3.10），而非新建通用 Judge/校准平台。只有具体业务需求经准入后才扩展自建执行器；届时固定模型/Prompt/实现身份、覆盖范围、预算和校准证据。不能把一个可变规则名当作冻结 Judge。
 
-- 正确性；
-- 完整性；
-- 语义一致性；
-- 专业性；
-- 政策遵循。
+### L3. Human Review：外部流程集成
 
-生产要求：
+人工标注/复核优先使用 Langfuse 或企业已有流程。Argus 只采纳有来源与授权的证据，不建设 Annotation Queue 或通用审批设计器；人工例外不得篡改原始 Gate。
 
-- Judge Model 固定；
-- Judge Prompt 版本化；
-- 使用 human-labelled calibration set；
-- 记录方差和置信区间；
-- Critical Gate 不只依赖单一 Judge。
+### L4. Trajectory Evaluation：可选最小证据
 
-### L3. Human Review
-
-高风险金融场景需要业务专家复核：
-
-```text
-自动评测低置信度/冲突
-        ↓
-Annotation Queue
-        ↓
-Human Decision
-        ↓
-Dataset / Evaluator calibration
-```
-
-### L4. Trajectory Evaluation
-
-复杂 Agent 需要评价过程而不是只评价答案：
-
-- 工具选择是否正确；
-- Tool 参数是否正确；
-- 调用顺序是否合理；
-- 是否出现循环；
-- 是否有无效/多余 Tool；
-- 是否满足关键步骤；
-- 是否绕过合规流程。
+已有 StandardTrajectory、确定性规则和安全校验兼容维护；仅当明确发布政策需要时启用该证据，不强制所有服务提供内部观测。无内部轨迹仍可评最终答案；冻结 required 证据缺失 UNKNOWN，optional 不污染无此要求的必需资格。
 
 ---
 
-## 14. Trajectory Evaluator Adapter
+## 14. 最小轨迹证据适配边界
 
-Langfuse v4 是 Observation-first，因此建议自建一层 Trace Assembler，而不是创建第二套 Trace Backend。
+复用已有只读采集/关联/归一化、冻结制品、确定性规则和违规 Step 定位，不扩建通用 Trace Browser 或跨框架完整分析产品。详细 Trace 跳转 Langfuse；业务自报 tool_calls 不伪装成 observed 证据。
 
-```mermaid
-flowchart LR
-    LF[Langfuse Observations] --> AS[Trace Assembler]
-    AS --> AT[Canonical AgentTrajectory]
-    AT --> RE[Rule Evaluator]
-    AT --> LJ[LLM Judge]
-    RE --> SC[Langfuse Score API]
-    LJ --> SC
-```
-
-Canonical trajectory：
-
-```json
-{
-  "input": {},
-  "steps": [
-    {"type":"LLM","name":"router"},
-    {"type":"TOOL","name":"customer-query","arguments":{}},
-    {"type":"TOOL","name":"transaction-query","arguments":{}}
-  ],
-  "output": {}
-}
-```
-
-这样可以屏蔽 LangGraph / AgentScope / Spring AI / OpenAI Agents SDK 等底层 Framework 差异。
+#5/#127–#132 以及 [S4 历史设计](docs/plans/2026-10-13-s4-trajectory/README.md) 按 [范围准入](docs/product-boundaries.md#5-开发需求准入人工评审门禁) 选择子集；#131 自建 Judge 默认延期，#132 仅接入已验证且被策略要求的证据。旧全量阶段/校准矩阵不是普通发布或 v1.0 前置。
 
 ---
 
@@ -1221,40 +1064,15 @@ Issue #7 的首批实现提供不可变 `ReleasePolicy(name, version)` 和持久
 
 API 契约见 [OpenAPI](./docs/openapi.json)，使用方式和当前指标见 [发布门禁](./docs/release-gates.md)。本期不包含成本/Judge 不确定性规则、Console 策略编辑器、授权 Override 与身份审计，这些仍是后续范围。
 
-### 19.2 完整能力目标
+### 19.2 后续收尾：证据适用范围，而非接管发布
 
-最终目标不是“生成一张评测报表”，而是形成软件发布质量门禁。
+#7 的主线是：补齐远端声明/核验身份、待发布制品/环境与候选证据的绑定校验、明确的失效/有效期规则以及 CI fail-closed 验收。现有 Gate/API/CLI 不因本段规划而自动具备这些保证。
 
-示例规则：
+质量结论、门禁判定、最终发布授权分开；Argus 不部署生产。无效/缺失必需证据、UNKNOWN、不可比或范围错配不能被平均分稀释。候选/基准/策略变化产生新决策，不改原记录。
 
-```yaml
-release_gate:
-  aggregate:
-    overall_pass_rate: ">= 0.95"
-    pii_safe: "== 1.0"
-  critical_cases:
-    new_failures: "== 0"
-  regression:
-    vs_approved_baseline: ">= -0.01"
-  operational:
-    p95_latency_ms: "<= 12000"
-```
+优先复用外部审批。按需例外必须独立保存授权主体、理由、范围/期限与原始 Gate；不能把 FAIL/UNKNOWN 改成 PASS，当前未实现则继续明确不支持。
 
-Release Gate 必须同时考虑：
-
-- aggregate score；
-- critical slices；
-- newly failing cases；
-- incomplete/error cases；
-- latency / cost；
-- Judge uncertainty。
-
-不能仅比较平均分。
-
-门禁判定必须 **fail-closed**（§8.3.3）：`unknown_handling` 默认为 `unknown_not_releasable`，
-因此**证据不足的用例一律阻止发布**，不会被折算成"通过"或被平均分稀释。
-`已判定通过率` 的分母只含有明确结论的用例，必须与 `UNKNOWN` 数量一起呈现；
-只看通过率而不看 UNKNOWN 数量的门禁是无效的。
+不将深度轨迹、Judge 不确定性、计费、三种 CI 全部示例或 Console 通用策略/审批编辑器作为本期必选。
 
 ---
 
@@ -1302,39 +1120,9 @@ Runner → API Gateway → Agent → LLM → Tool
 
 ## 21. 扩展性设计
 
-PoC：
+复用既有 PostgreSQL/Redis、Queue/Worker、分布式限流、取消/checkpoint 和 failed-only rerun。当前 Worker 在 Runner 进程内，不把“生产可拆 Worker Pool”误写成现有部署事实。
 
-```text
-FastAPI Runner
-└─ in-process concurrency
-```
-
-生产：
-
-```text
-API / Control Service
-       │
-       ▼
-Persistent Queue
-       │
-       ├─ Runner Worker Pool
-       ├─ Runner Worker Pool
-       └─ Runner Worker Pool
-             │
-             ▼
-       Agent Endpoints
-```
-
-建议能力：
-
-- queue partition by agent/team；
-- tenant quotas；
-- per-endpoint concurrency semaphore；
-- distributed rate limiter；
-- backpressure；
-- cancellation；
-- checkpoint；
-- failed-only rerun。
+持久化执行、安全并发与恢复是核心；多进程独立扩缩容、队列分区或配额只有在真实负载/隔离需求下推进。不为定位升级重建调度器、不强拆微服务，不默认扩建多租户计费运营。
 
 ---
 
@@ -1442,82 +1230,34 @@ v2: 6/6 overall pass
 
 ---
 
-## 25. PoC 与生产实现差异
+## 25. 原始 PoC 与当前受控部署边界
 
-| 领域 | PoC | 生产建议 |
+§17、§22–§24 的 PoC 入口/清单保留历史用途，不代表当前 Registry 仍是 YAML 或运行仅同步；当前接口以 OpenAPI、能力概览以 README 为准。
+
+| 领域 | 已有基础/应复用 | 当前收尾或按需边界 |
 |---|---|---|
-| Langfuse | Docker Compose | Kubernetes/Managed infra |
-| Agent Registry | YAML | DB + UI + approval |
-| Secrets | `.env` | Vault/KMS/Secret Manager |
-| Orchestration | 同步 API | durable workflow / queue |
-| Rate limit | process memory | distributed limiter |
-| Retry | 简单 backoff | policy engine + DLQ |
-| Agent mode | SYNC_HTTP | sync + async + callback + SSE |
-| Evaluator | Python deterministic | centralized evaluator registry |
-| Trajectory | 未实现 | Trace Assembler + canonical model |
-| Release Gate | 规则/API、CLI 与 CI 示例已实现 | 授权治理继续推进 |
-| Auth | PoC credentials | SSO/RBAC/service identity |
-| Network | Docker bridge | VPC/K8s/mTLS/service mesh |
-| Audit | Langfuse + app logs | enterprise audit trail |
+| Registry / Runtime | DB 版本、持久化 Launch/Queue/Attempt | 核验远端实际身份，恢复/副作用隔离；不重建调度 |
+| Secret / 权限 / 审计 | 现有凭证与 Provider | #6/#31 补最小身份/资源权限、目标用途、审计和脱敏；不自建 Vault/IdP |
+| 协议 | SYNC_HTTP | 新协议经准入，不预先承诺 sync/async/callback/SSE 全支持 |
+| 评分 / 轨迹 | 确定性/托管评分、既有最小轨迹证据 | #5 按需，#131 自建 Judge 默认延期；不建评分/Trace 产品 |
+| Release Gate | 不可变规则/API、CLI 和 CI 示例 | #7 受信制品身份、范围与失效核验，不接管发布 |
+| 部署 / 网络 | 复用企业允许的网络与认证设施 | 明确安全基线，不要求 K8s/service mesh/mTLS 全部产品化 |
 
 ---
 
-## 26. 生产落地阶段
+## 26. 收敛后的交付路径
 
-### Phase 0 — PoC
+### 已有基础：维护，不重新开建
 
-验证：
+复用 Registry、持久化 Runtime、冻结评测/类型化结果、Snapshot/比较、托管 Score 采纳、Gate/CLI、Console 和既有 i18n。历史完成度按原 Issue/验收记录理解，不等于当前环境全量验证。
 
-```text
-Dataset → Remote Agent → Experiment → Score → Compare
-```
+### 近期主线：受控发布质量闭环
 
-### Phase 1 — MVP
+#6/#31 补最小身份/资源授权、Secret、目标网络访问、审计与脱敏；#7 补正式候选身份/范围/失效核验与 CI 防错配。按 [产品边界 B1–B8](docs/product-boundaries.md#6-收敛后的近期闭环与验收) 取得实际证据，不以关闭数量宣告企业就绪。
 
-增加：
+### 按需增强：非默认依赖
 
-- Agent Registry service；
-- ExperimentLaunch DB；
-- persistent worker queue；
-- Agent Endpoint auth；
-- Dataset version pinning；
-- evaluator version metadata；
-- Git/CI trigger；
-- baseline compare；
-- basic Release Gate。
-
-### Phase 2 — Enterprise
-
-增加：
-
-- Async Agent；
-- Trajectory Evaluation；
-- Human review；
-- Vault/mTLS；
-- RBAC/approval；
-- policy repository；
-- data masking；
-- SLO/chargeback；
-- multi-tenant quota。
-
-### Phase 3 — Continuous Evaluation
-
-形成：
-
-```text
-Production Observability
-        ↓
-Failure Mining
-        ↓
-Dataset Curation
-        ↓
-Offline Regression
-        ↓
-Release Gate
-        ↓
-Production Monitoring
-        ↺
-```
+#5/#127–#132 的最小轨迹证据在有实际消费者时维护/验收；自建 Judge、新协议、额外 CI Provider 经范围准入后另行实施。生产失败挖掘、在线监控/告警、数据集编辑、通用审批和部署仍由外部系统负责，不再规划为 Argus 的 Continuous Evaluation 全平台。
 
 ---
 
@@ -1566,10 +1306,10 @@ Production Monitoring
 **Decision:** 使用 `traceparent`/OpenTelemetry，不设计厂商私有 Trace Header。  
 **Reason:** Framework-neutral、语言无关、可接企业现有 APM。
 
-### ADR-004：Langfuse 是评测数据 System of Record
+### ADR-004：单一权威状态与发布证据分工（2026-10-27 修订）
 
-**Decision:** Runner 不复制 Trace/Dataset/Score 主数据。  
-**Reason:** 避免数据双写和一致性治理。
+**Decision:** Langfuse 拥有日常数据/观测/实验分析；Argus 拥有执行状态和冻结发布证据/决策。允许保存最小冻结用例与采纳证据，禁止双向可变主数据同步。
+**Reason:** 同时避免分析产品重复建设和远端变化导致历史发布结论漂移。
 
 ### ADR-005：平台 Header 承载 Evaluation Context
 
@@ -1610,13 +1350,6 @@ make demo
 
 ## 31. 最终结论
 
-该方案的核心并不是“给 Langfuse 加一个 HTTP 调用脚本”，而是建立新的企业能力边界：
+Argus 的核心是**评测桥接、持久化执行、可信发布证据与质量门禁**。它不独占跨语言/外置 SDK/实验/基础 CI 能力，不替代 Langfuse，也不接管 Agent Runtime 或生产发布授权。
 
-```text
-Agent 应用 = 负责业务执行
-Langfuse = 负责评测资产与结果
-Remote Eval Runner = 负责平台化执行
-Enterprise Policy = 负责能否发布
-```
-
-当这个边界建立后，企业可以让 Java、Python、Node 以及不同 Agent Framework 共享同一套 Dataset、Evaluator、Release Gate 和审计流程，从而把 Agent 质量保障从“各项目自觉执行”升级为“企业平台统一治理”。
+按真实接入维护成本、故障恢复与 CI 防错配证据证明价值。范围决策见 [产品边界](docs/product-boundaries.md)，当前交付接口见 [OpenAPI](docs/openapi.json)，剩余工作见 [Roadmap #1](https://github.com/miniceM/Argus/issues/1)。

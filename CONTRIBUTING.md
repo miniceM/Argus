@@ -103,6 +103,12 @@ lsof -nP -iTCP:28080 -iTCP:28083 -sTCP:LISTEN
 
 隔离真实 API 场景验证 Console/API 创建与 Frozen Manifest，不等于完整真实 Agent → Worker → Langfuse 执行验收。
 
+## 新需求与范围评审
+
+新增需求先阅读 [产品边界与需求准入](docs/product-boundaries.md) 和 [AGENTS.md §2](AGENTS.md#2-系统定位与架构边界)。Issue/PR 必须注明消费者、四类价值（接入成本/执行可靠性/证据可信度/发布风险）、复用判断、权威状态、非目标、失败/权限/恢复验收和维护成本。此为人工准入，不是本次新增自动 CI Check。
+
+不默认扩建通用实验/Trace/Dataset 产品、深度 Judge、审批工作流或部署平台。按需能力不能偷偷变成普通发布/v1.0 前置；收敛不得删除既有安全、来源校验、真实集成和兼容测试。历史计划与当前范围冲突时必须显式标注，不能把旧功能清单当当前授权。
+
 ## Commit 与 PR
 
 - 分支建议：`codex/<简短描述>`（其他前缀也可以，但请保持短且语义清晰）。

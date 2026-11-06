@@ -7070,18 +7070,36 @@
       "ResponseMapping": {
         "properties": {
           "answer_path": {
-            "type": "string",
-            "maxLength": 256,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$",
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 256,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Answer Path"
+          },
+          "fields": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fields"
           }
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "answer_path"
-        ],
         "title": "ResponseMapping"
       },
       "ResultSnapshotDetailResponse": {

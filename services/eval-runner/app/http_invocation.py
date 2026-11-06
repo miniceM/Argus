@@ -6,7 +6,7 @@ import re
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_serializer, model_validator
 
 from .secret_providers import CredentialUnavailable, _token
 
@@ -103,23 +103,66 @@ class HTTPHeader(BaseModel):
         return self
 
 
+DOT_PATH_RE = re.compile(r"^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$")
+TARGET_KEY_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _extract_dot_path(body: dict, path: str, label: str = "response path"):
+    value = body
+    for part in path.split("."):
+        if isinstance(value, dict) and part in value:
+            value = value[part]
+        elif isinstance(value, list) and part.isdigit() and int(part) < len(value):
+            value = value[int(part)]
+        else:
+            raise ValueError(f"Frozen {label} is missing")
+    return value
+
+
 class ResponseMapping(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    answer_path: str = Field(min_length=1, max_length=256, pattern=r"^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$")
+    answer_path: str | None = Field(default=None, min_length=1, max_length=256, pattern=r"^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$")
+    fields: dict[str, str] | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def validate_mapping_contract(self):
+        mapping = self.fields or {}
+        if not self.answer_path and not mapping:
+            raise ValueError("ResponseMapping requires answer_path or fields")
+        if len(mapping) > 32:
+            raise ValueError("ResponseMapping supports at most 32 fields")
+        for target, source in mapping.items():
+            if not TARGET_KEY_RE.fullmatch(target) or target.startswith("_") or target.lower().startswith("argus_"):
+                raise ValueError(f"Invalid or reserved response mapping target key: {target}")
+            if not source or len(source) > 256 or not DOT_PATH_RE.fullmatch(source):
+                raise ValueError(f"Invalid response mapping source dot-path: {source}")
+        if self.answer_path and "answer" in mapping and mapping["answer"] != self.answer_path:
+            raise ValueError("Conflicting answer_path and fields['answer']")
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler):
+        data = handler(self)
+        return {k: v for k, v in data.items() if v is not None and v != {}}
 
     def apply(self, body: dict) -> dict:
-        value = body
-        for part in self.answer_path.split("."):
-            if isinstance(value, dict) and part in value:
-                value = value[part]
-            elif isinstance(value, list) and part.isdigit() and int(part) < len(value):
-                value = value[int(part)]
-            else:
-                raise ValueError("Frozen answer path is missing")
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError("Frozen answer path must contain nonempty text")
-        # 原始字段仍保留，评分使用明确采纳的 answer。
-        return {**body, "answer": value}
+        extracted: dict = {}
+        mapping = self.fields or {}
+        effective_answer_path = self.answer_path or mapping.get("answer")
+        if effective_answer_path:
+            answer_val = _extract_dot_path(body, effective_answer_path, "answer path")
+            if not isinstance(answer_val, str) or not answer_val.strip():
+                raise ValueError("Frozen answer path must contain nonempty text")
+            extracted["answer"] = answer_val
+        for target, source in mapping.items():
+            if target == "answer":
+                continue
+            val = _extract_dot_path(body, source, f"response path '{source}'")
+            if val is None:
+                raise ValueError(f"Frozen response path '{source}' resolved to null")
+            extracted[target] = val
+        # 原始字段仍保留，评分使用明确采纳的提取字段。
+        return {**body, **extracted}
 
 
 class BasicSecret(BaseModel):

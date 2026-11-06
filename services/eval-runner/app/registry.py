@@ -91,6 +91,7 @@ def normalize_and_validate_spec(data: dict[str, Any]) -> dict[str, Any]:
     normalized = model.model_dump()
     normalized["http_auth"] = model.http_auth.model_dump(exclude_none=True, exclude_defaults=True) if model.http_auth else None
     normalized["http_headers"] = [header.model_dump(exclude_none=True, exclude_defaults=True) for header in model.http_headers]
+    normalized["response_mapping"] = model.response_mapping.model_dump(exclude_none=True, exclude_defaults=True) if model.response_mapping else None
 
     # 凭据绑定必须冻结环境，不能继承无凭据旧版本的跨环境兼容行为。
     if credential_bindings(normalized) and normalized["environment"] is None:

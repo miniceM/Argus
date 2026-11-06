@@ -12,6 +12,7 @@ import { AGENT_VERSION_FIELD_HELPS } from "./helpDocs";
 
 type AuthScheme = components["schemas"]["HTTPAuth"]["scheme"] | "legacy";
 type HeaderRow = { name: string; mode: "value" | "credential"; value: string; credentialId: string; prefix: string };
+type FieldMappingRow = { target: string; source: string };
 const FORM_ID = "create-version-form";
 
 interface CreateVersionDialogProps {
@@ -43,6 +44,7 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
   const [authPrefix, setAuthPrefix] = useState("");
   const [httpHeaders, setHttpHeaders] = useState<HeaderRow[]>([]);
   const [answerPath, setAnswerPath] = useState("");
+  const [responseFields, setResponseFields] = useState<FieldMappingRow[]>([]);
   const hasCredentialRefs = Boolean(credentialId || httpHeaders.some(header => header.mode === "credential" && header.credentialId));
   useEffect(() => {
     if (!isOpen || !hasCredentialRefs) setCredentialAuthorization("");
@@ -54,7 +56,20 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
   }});
   const [artifactRef, setArtifactRef] = useState("");
   const [environment, setEnvironment] = useState("staging");
+  const [requestMappingRows, setRequestMappingRows] = useState<FieldMappingRow[]>([
+    { target: "query", source: "input.user_message" },
+  ]);
   const [requestMappingStr, setRequestMappingStr] = useState('{"query": "input.user_message"}');
+  const applyRequestRows = (nextRows: FieldMappingRow[]) => {
+    setRequestMappingRows(nextRows);
+    const obj: Record<string, string> = {};
+    for (const row of nextRows) {
+      const k = row.target.trim();
+      const v = row.source.trim();
+      if (k) obj[k] = v;
+    }
+    setRequestMappingStr(JSON.stringify(obj));
+  };
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   // Per-field messages, because the form-level banner cannot say which
   // control is wrong. See `Field`'s `error` prop.
@@ -79,6 +94,21 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
       const frozenHeaders: components["schemas"]["HTTPHeader"][] = httpHeaders.map(header => header.mode === "value"
         ? { name: header.name.trim(), value: header.value, prefix: "" }
         : { name: header.name.trim(), credential_id: header.credentialId, prefix: header.prefix });
+      const extraResponseFields: Record<string, string> = {};
+      for (const row of responseFields) {
+        const target = row.target.trim();
+        const source = row.source.trim();
+        if (target && source) extraResponseFields[target] = source;
+      }
+      const trimmedAnswerPath = answerPath.trim();
+      const hasExtraResponseFields = Object.keys(extraResponseFields).length > 0;
+      const responseMappingPayload: components["schemas"]["ResponseMapping"] | null =
+        !trimmedAnswerPath && !hasExtraResponseFields
+          ? null
+          : {
+              ...(trimmedAnswerPath ? { answer_path: trimmedAnswerPath } : {}),
+              ...(hasExtraResponseFields ? { fields: extraResponseFields } : {}),
+            };
       const res = await api.POST("/api/v1/agent-versions", {
         ...(hasCredentialRefs ? { headers: { Authorization: `Bearer ${credentialAuthorization}` } } : {}),
         body: {
@@ -97,7 +127,7 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
           credential_id: credentialId || null,
           http_auth: authScheme === "legacy" ? null : authScheme === "api_key" ? { scheme: "api_key", header_name: authHeader.trim(), prefix: authPrefix } : { scheme: authScheme, prefix: "" },
           http_headers: frozenHeaders,
-          response_mapping: answerPath.trim() ? { answer_path: answerPath.trim() } : null,
+          response_mapping: responseMappingPayload,
           artifact_ref: artifactRef.trim() || null,
           environment: environment.trim().toLowerCase() || null,
           trace_propagation: "W3C",
@@ -401,24 +431,135 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
 
           {credentials.isError && <p role="alert" className="text-sm text-fail">凭据列表加载失败，请关闭并重试，或前往 Credentials 检查服务状态。</p>}
 
-          <Field
-            label="请求映射关系 (Request Mapping JSON)"
-            labelSuffix={
-              <FieldHelp {...AGENT_VERSION_FIELD_HELPS.requestMapping} placement="top-left" />
-            }
-            hint={`点路径映射关系，例如：${'{"query": "input.user_message"}'}`}
-          >
-            {({ id, ...aria }) => (
-              <TextArea
-                {...aria}
-                id={id}
-                rows={3}
-                value={requestMappingStr}
-                onChange={(e) => setRequestMappingStr(e.target.value)}
-                className="w-full text-xs font-mono"
-              />
-            )}
-          </Field>
+          <section aria-label="请求字段映射" className="space-y-3 rounded-lg border border-border bg-surface-muted p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <h3 className="text-sm font-semibold text-foreground">请求字段映射 (Request Mapping)</h3>
+                <FieldHelp {...AGENT_VERSION_FIELD_HELPS.requestMapping} placement="top-left" />
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => applyRequestRows([{ target: "query", source: "input.user_message" }])}
+                >
+                  默认模板
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => applyRequestRows([{ target: "message", source: "input.user_message" }])}
+                >
+                  DataAgent 模板
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() =>
+                    applyRequestRows([
+                      { target: "messages", source: "input.messages" },
+                      { target: "customer_id", source: "input.customer_id" },
+                    ])
+                  }
+                >
+                  多轮 Messages 模板
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              将数据集输入点路径（如 input.user_message）映射为发送给 Agent 的请求 JSON 字段。
+            </p>
+            {requestMappingRows.map((row, index) => {
+              const updateRow = (patch: Partial<FieldMappingRow>) => {
+                const next = requestMappingRows.map((r, i) => (i === index ? { ...r, ...patch } : r));
+                applyRequestRows(next);
+              };
+              return (
+                <div key={index} className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border border-border bg-surface p-3">
+                  <Field label={`请求字段 ${index + 1} 目标键名`}>
+                    {({ id }) => (
+                      <TextInput
+                        id={id}
+                        placeholder="e.g. message"
+                        value={row.target}
+                        onChange={(e) => updateRow({ target: e.target.value })}
+                        className="font-mono text-xs"
+                      />
+                    )}
+                  </Field>
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <Field label={`请求字段 ${index + 1} 数据源点路径`}>
+                        {({ id }) => (
+                          <TextInput
+                            id={id}
+                            placeholder="e.g. input.user_message"
+                            value={row.source}
+                            onChange={(e) => updateRow({ source: e.target.value })}
+                            className="font-mono text-xs"
+                          />
+                        )}
+                      </Field>
+                    </div>
+                    {requestMappingRows.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => applyRequestRows(requestMappingRows.filter((_, i) => i !== index))}
+                      >
+                        移除
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={requestMappingRows.length >= 32}
+              onClick={() => applyRequestRows([...requestMappingRows, { target: "", source: "" }])}
+            >
+              添加请求字段映射
+            </Button>
+
+            <details className="text-xs text-foreground-secondary pt-1">
+              <summary className="cursor-pointer">高级：直接编辑 Request Mapping JSON</summary>
+              <div className="pt-2">
+                <Field
+                  label="请求映射关系 (Request Mapping JSON)"
+                  hint={`点路径映射关系，例如：${'{"query": "input.user_message"}'}`}
+                >
+                  {({ id, ...aria }) => (
+                    <TextArea
+                      {...aria}
+                      id={id}
+                      rows={3}
+                      value={requestMappingStr}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setRequestMappingStr(raw);
+                        try {
+                          const parsed = JSON.parse(raw);
+                          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                            setRequestMappingRows(
+                              Object.entries(parsed).map(([target, source]) => ({
+                                target,
+                                source: String(source),
+                              }))
+                            );
+                          }
+                        } catch {
+                          // Ignore parse error while typing in raw JSON mode
+                        }
+                      }}
+                      className="w-full text-xs font-mono"
+                    />
+                  )}
+                </Field>
+              </div>
+            </details>
+          </section>
 
           <section className="space-y-3" aria-label="自定义 HTTP Headers">
             <h3 className="text-sm font-semibold">自定义 HTTP Headers</h3>
@@ -443,9 +584,72 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
             })}
             <Button type="button" variant="secondary" disabled={httpHeaders.length >= 32} onClick={() => setHttpHeaders(rows => [...rows, { name: "", mode: "value", value: "", credentialId: "", prefix: "" }])}>添加 HTTP Header</Button>
           </section>
-          <Field label="回答字段路径" hint="留空保留原响应；DataAgent 填 reply，Chat Completions 填 choices.0.message.content。必须是非空文本，配置随版本冻结。">
-            {({ id }) => <TextInput id={id} value={answerPath} onChange={e => setAnswerPath(e.target.value)} placeholder="reply" />}
-          </Field>
+
+          <section aria-label="应答字段提取映射" className="space-y-3 rounded-lg border border-border bg-surface-muted p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-foreground">应答字段提取映射 (Response Mapping)</h3>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Button type="button" variant="secondary" onClick={() => setAnswerPath("reply")}>
+                  DataAgent (reply)
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => setAnswerPath("choices.0.message.content")}>
+                  OpenAI (choices.0.message.content)
+                </Button>
+              </div>
+            </div>
+            <Field label="回答字段路径" hint="留空保留原响应；DataAgent 填 reply，Chat Completions 填 choices.0.message.content。必须是非空文本，配置随版本冻结。">
+              {({ id }) => <TextInput id={id} value={answerPath} onChange={e => setAnswerPath(e.target.value)} placeholder="reply" className="font-mono text-xs" />}
+            </Field>
+            {responseFields.map((row, index) => {
+              const updateRespRow = (patch: Partial<FieldMappingRow>) =>
+                setResponseFields((rows) => rows.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+              return (
+                <div key={index} className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border border-border bg-surface p-3">
+                  <Field label={`应答字段 ${index + 1} 目标键名`}>
+                    {({ id }) => (
+                      <TextInput
+                        id={id}
+                        placeholder="e.g. intent / tool_calls"
+                        value={row.target}
+                        onChange={(e) => updateRespRow({ target: e.target.value })}
+                        className="font-mono text-xs"
+                      />
+                    )}
+                  </Field>
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <Field label={`应答字段 ${index + 1} 响应点路径`}>
+                        {({ id }) => (
+                          <TextInput
+                            id={id}
+                            placeholder="e.g. meta.intent"
+                            value={row.source}
+                            onChange={(e) => updateRespRow({ source: e.target.value })}
+                            className="font-mono text-xs"
+                          />
+                        )}
+                      </Field>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setResponseFields((rows) => rows.filter((_, i) => i !== index))}
+                    >
+                      移除应答字段 {index + 1}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={responseFields.length >= 32}
+              onClick={() => setResponseFields((rows) => [...rows, { target: "", source: "" }])}
+            >
+              添加应答字段映射
+            </Button>
+          </section>
 
           <div className="flex items-center gap-2 pt-1">
             <input

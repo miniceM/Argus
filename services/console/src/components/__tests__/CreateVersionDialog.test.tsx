@@ -242,3 +242,53 @@ describe("CreateVersionDialog unified authentication card (Issue #250)", () => {
     expect(screen.getByText(/已选择该认证方式，请选择要绑定的凭据/)).toBeInTheDocument();
   });
 });
+
+describe("CreateVersionDialog structured request and response field mapping (Issue #251)", () => {
+  it("supports preset templates, visual request mapping rows, and multi-field response mapping", async () => {
+    vi.mocked(api.POST).mockClear().mockResolvedValue({ data: {}, response: new Response() } as any);
+    vi.mocked(api.GET).mockResolvedValue({ data: [], response: new Response() } as any);
+
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <CreateVersionDialog agentId="banking-agent" isOpen onClose={vi.fn()} />
+      </QueryClientProvider>
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: /版本号/ }), { target: { value: "structured-v1" } });
+
+    // Apply DataAgent request mapping preset and add an extra request field row
+    fireEvent.click(screen.getByRole("button", { name: "DataAgent 模板" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加请求字段映射" }));
+    fireEvent.change(screen.getByLabelText("请求字段 2 目标键名"), { target: { value: "customer_id" } });
+    fireEvent.change(screen.getByLabelText("请求字段 2 数据源点路径"), { target: { value: "input.customer_id" } });
+
+    // Configure response mapping: primary answer_path + structured extra response fields
+    fireEvent.change(screen.getByLabelText("回答字段路径"), { target: { value: "choices.0.message.content" } });
+    fireEvent.click(screen.getByRole("button", { name: "添加应答字段映射" }));
+    fireEvent.change(screen.getByLabelText("应答字段 1 目标键名"), { target: { value: "intent" } });
+    fireEvent.change(screen.getByLabelText("应答字段 1 响应点路径"), { target: { value: "meta.intent" } });
+
+    fireEvent.submit(document.getElementById("create-version-form")!);
+
+    await waitFor(() =>
+      expect(api.POST).toHaveBeenCalledWith(
+        "/api/v1/agent-versions",
+        expect.objectContaining({
+          body: expect.objectContaining({
+            version: "structured-v1",
+            request_mapping: {
+              message: "input.user_message",
+              customer_id: "input.customer_id",
+            },
+            response_mapping: {
+              answer_path: "choices.0.message.content",
+              fields: {
+                intent: "meta.intent",
+              },
+            },
+          }),
+        })
+      )
+    );
+  });
+});

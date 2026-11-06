@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +15,7 @@ from .config import find_path
 from .db import DatabaseManager
 from .db_models import (
     AgentRecord,
+    AgentVersionCredentialRecord,
     AgentVersionRecord,
     CredentialRecord,
     ExperimentItemExecutionRecord,
@@ -23,6 +24,7 @@ from .db_models import (
     ReleaseGateRecord,
     RunResultSnapshotRecord,
 )
+from .http_invocation import check_credential_target, credential_bindings
 from .models import (
     AgentConcurrencyError,
     AgentHasActiveLaunchesError,
@@ -58,11 +60,12 @@ def compute_spec_digest(spec_dict: dict[str, Any]) -> str:
         "timeout_seconds",
         "trace_propagation",
         "trajectory_source_profile_id",
+        "http_auth", "http_headers", "response_mapping",
     ]
     normalized: dict[str, Any] = {}
     for k in sorted(keys_to_include):
         val = spec_dict.get(k)
-        if val is not None:
+        if val is not None and not (k in ("http_auth", "http_headers", "response_mapping") and not val):
             normalized[k] = val
 
     canonical_json = json.dumps(normalized, sort_keys=True, separators=(",", ":"))
@@ -86,8 +89,11 @@ def normalize_and_validate_spec(data: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(msg) from exc
 
     normalized = model.model_dump()
+    normalized["http_auth"] = model.http_auth.model_dump(exclude_none=True, exclude_defaults=True) if model.http_auth else None
+    normalized["http_headers"] = [header.model_dump(exclude_none=True, exclude_defaults=True) for header in model.http_headers]
+
     # 凭据绑定必须冻结环境，不能继承无凭据旧版本的跨环境兼容行为。
-    if normalized["credential_id"] and normalized["environment"] is None:
+    if credential_bindings(normalized) and normalized["environment"] is None:
         normalized["environment"] = "production"
     digest = compute_spec_digest(normalized)
     normalized["spec_digest"] = digest
@@ -114,6 +120,10 @@ class AgentVersionSpec:
     usage_cost_mapping: dict[str, Any] | None = None
     credential_id: str | None = None
     trajectory_source_profile_id: str | None = None
+    http_auth: dict[str, Any] | None = None
+    http_headers: list[dict[str, Any]] = field(default_factory=list)
+    response_mapping: dict[str, Any] | None = None
+    environment: str | None = None
 
 
 class AgentRegistry:
@@ -409,6 +419,9 @@ class AgentRegistry:
         trace_propagation: str = "W3C",
         usage_cost_mapping: dict[str, Any] | None = None,
         trajectory_source_profile_id: str | None = None,
+        http_auth: dict[str, Any] | None = None,
+        http_headers: list[dict[str, Any]] | None = None,
+        response_mapping: dict[str, Any] | None = None,
     ) -> AgentVersionRecord:
         raw_spec = {
             "endpoint": endpoint,
@@ -420,6 +433,7 @@ class AgentRegistry:
             "response_schema": response_schema,
             "credential_ref": credential_ref,
             "credential_id": credential_id,
+            "http_auth": http_auth, "http_headers": http_headers or [], "response_mapping": response_mapping,
             "timeout_seconds": timeout_seconds,
             "max_retries": max_retries,
             "rate_limit_per_minute": rate_limit_per_minute,
@@ -438,10 +452,7 @@ class AgentRegistry:
             agent = session.get(AgentRecord, agent_id)
             if not agent:
                 raise ValueError(f"Agent '{agent_id}' does not exist. Please register the agent first.")
-            if credential_id:
-                credential = session.scalar(select(CredentialRecord).where(CredentialRecord.id == credential_id).with_for_update())
-                if credential is None or not credential.enabled or credential.environment != (normalized["environment"] or "production"):
-                    raise ValueError("Credential is missing, disabled or outside AgentVersion environment")
+            self._validate_credentials(session, normalized)
 
             # Check duplicate version
             stmt = select(AgentVersionRecord).where(
@@ -468,6 +479,7 @@ class AgentRegistry:
                 response_schema=normalized["response_schema"],
                 credential_ref=normalized["credential_ref"],
                 credential_id=normalized["credential_id"],
+                http_auth=normalized["http_auth"], http_headers=normalized["http_headers"], response_mapping=normalized["response_mapping"],
                 timeout_seconds=normalized["timeout_seconds"],
                 max_retries=normalized["max_retries"],
                 rate_limit_per_minute=normalized["rate_limit_per_minute"],
@@ -480,9 +492,24 @@ class AgentRegistry:
                 is_active=True,
             )
             session.add(version_rec)
+            session.flush()
+            self._retain_credentials(session, version_rec.id, normalized)
             session.commit()
             session.refresh(version_rec)
             return version_rec
+
+    @staticmethod
+    def _validate_credentials(session, normalized):
+        for cid, kind, _ in sorted(credential_bindings(normalized)):
+            credential = session.scalar(select(CredentialRecord).where(CredentialRecord.id == cid).with_for_update())
+            if credential is None:
+                raise ValueError("Credential is missing")
+            check_credential_target(credential, kind, normalized["endpoint"], normalized["environment"])
+
+    @staticmethod
+    def _retain_credentials(session, version_id, normalized):
+        for cid in sorted({cid for cid, _, _ in credential_bindings(normalized)}):
+            session.add(AgentVersionCredentialRecord(agent_version_id=version_id, credential_id=cid))
 
     def get_version(self, agent_id: str, version: str) -> AgentVersionRecord | None:
         with self.db_manager.get_session() as session:
@@ -532,6 +559,7 @@ class AgentRegistry:
             max_concurrency=ver.max_concurrency,
             credential_ref=ver.credential_ref,
             credential_id=ver.credential_id,
+            http_auth=ver.http_auth, http_headers=ver.http_headers or [], response_mapping=ver.response_mapping, environment=ver.environment,
             is_idempotent=ver.is_idempotent,
             spec_digest=ver.spec_digest,
             artifact_ref=ver.artifact_ref,
@@ -606,10 +634,7 @@ class AgentRegistry:
                                 f"AgentVersion '{agent_id}:{ver_name}' exists with different spec_digest ({existing.spec_digest} != {digest}). Cannot overwrite."
                             )
 
-                    if normalized["credential_id"]:
-                        credential = session.scalar(select(CredentialRecord).where(CredentialRecord.id == normalized["credential_id"]).with_for_update())
-                        if credential is None or not credential.enabled or credential.environment != (normalized["environment"] or "production"):
-                            raise ValueError("Credential must be enabled and match the AgentVersion environment")
+                    self._validate_credentials(session, normalized)
 
                     new_ver = AgentVersionRecord(
                         id=str(uuid.uuid4()),
@@ -626,6 +651,7 @@ class AgentRegistry:
                         response_schema=normalized["response_schema"],
                         credential_ref=normalized["credential_ref"],
                         credential_id=normalized["credential_id"],
+                        http_auth=normalized["http_auth"], http_headers=normalized["http_headers"], response_mapping=normalized["response_mapping"],
                         timeout_seconds=normalized["timeout_seconds"],
                         max_retries=normalized["max_retries"],
                         rate_limit_per_minute=normalized["rate_limit_per_minute"],
@@ -638,6 +664,8 @@ class AgentRegistry:
                         is_active=True,
                     )
                     session.add(new_ver)
+                    session.flush()
+                    self._retain_credentials(session, new_ver.id, normalized)
                     created.append(f"{agent_id}:{ver_name}")
 
             session.commit()

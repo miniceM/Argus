@@ -1,5 +1,7 @@
 # 版本化发布门禁
 
+> **2026-10-27 范围边界：** Argus 提供发布质量证据，不执行部署或替代最终审批。现有 Gate/API/CLI 不等于已完成远端实际制品核验、判定有效期和 CI 防错配；这些由 #7 收尾，最小权限/审计由 #6 承接。质量 PASS 不能自动证明待部署制品就是被测对象。详见 [产品边界](product-boundaries.md)。
+
 ReleasePolicy 将 Agent、environment 和发布阈值固定为不可变版本。Gate 只读取指定 RunResultSnapshot；活动 Launch、当前 Baseline 和 Langfuse 同步进度不会改变已保存的结论。
 
 ## 创建策略并取得结论
@@ -55,7 +57,7 @@ Gate 返回固定修订的报告链接、策略摘要、候选与基线 Snapshot
 
 数据库升级追加迁移 `013_release_gates.sql`。本期提供规则引擎与 API，不包含 Console 策略管理页。与既有控制面一致，生产部署必须在入口实施身份认证和权限控制。
 
-本期没有 Override 接口，不能把 `FAIL` 或 `UNKNOWN` 改成可发布。授权 Override、SSO/RBAC、操作者审计与保留期治理仍由 Issue #6/#7 承接；不可变 Gate 用于追溯原始判断，不代替完整审计系统。
+本期没有 Override 接口，不能把 `FAIL` 或 `UNKNOWN` 改成可发布。最小身份/资源授权、操作者审计与保留期治理由 Issue #6/#7 承接；例外优先接企业审批，按需独立保存授权处置，不建通用审批流，不改原始质量结论；不可变 Gate 用于追溯原始判断，不代替完整审计系统。
 
 创建策略时锁定 Agent 行并要求 active，防止 Purge 中途创建策略。引擎仅接受当前实现支持的冻结聚合/比较 digest；双方历史契约即使相同，若实现不支持仍返回 AGGREGATION_CONTRACT_UNSUPPORTED / UNKNOWN。
 

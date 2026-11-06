@@ -1,10 +1,12 @@
-# Issue #5：S4 轨迹评测完整实施方案
+# Issue #5：轨迹评测历史设计与按需维护入口
 
-**状态：提议 / 待方案评审，尚未实施。** 本文档集服务于 [#5](https://github.com/miniceM/Argus/issues/5) 及 [#127](https://github.com/miniceM/Argus/issues/127)、[#128](https://github.com/miniceM/Argus/issues/128)、[#129](https://github.com/miniceM/Argus/issues/129)、[#130](https://github.com/miniceM/Argus/issues/130)、[#131](https://github.com/miniceM/Argus/issues/131)、[#132](https://github.com/miniceM/Argus/issues/132)。文档 PR 只关联这些 issue；不使用关闭关键字，也不代表产品验收完成。
+> **范围修订（2026-10-27）：本篇保留为历史设计/实现交接，不是默认待实施承诺。** 当前准入与近期验收以 [产品边界](../../product-boundaries.md) 和 Roadmap #1、对应 Issue 当前正文为准。旧全量 S4 顺序、Judge/校准/完整规则/全部 M5 关闭矩阵不再是普通发布闭环或 v1.0 的必选前置。已有实现、安全/来源校验、测试和原始验收记录继续保留；重新启用子范围须先确认消费者、复用理由、非目标与反例验收。#131 自建 Judge 默认延期，#132 按 required 证据需求接入既有 Gate。
+
+**原始状态（2026-10-13）：提议 / 待评审；不作为当前完成度声明。** 本文档集服务于 [#5](https://github.com/miniceM/Argus/issues/5) 及 [#127](https://github.com/miniceM/Argus/issues/127)、[#128](https://github.com/miniceM/Argus/issues/128)、[#129](https://github.com/miniceM/Argus/issues/129)、[#130](https://github.com/miniceM/Argus/issues/130)、[#131](https://github.com/miniceM/Argus/issues/131)、[#132](https://github.com/miniceM/Argus/issues/132)。文档 PR 只关联这些 issue；不使用关闭关键字，也不代表产品验收完成。
 
 ## 1. 如何阅读和执行
 
-先读总体契约，再按完整计划选择当前任务，实施对应分期方案，最后提交验收矩阵要求的证据。本文档集作为一套评审；发生契约调整时同步所有受影响文档，不允许各分期自行解释同一枚举或 digest。
+先按当前产品边界和 Issue 正文选择真实需要维护/验收的最小子集，再参考历史技术细节。不得据此自动恢复全量计划、要求所有框架接入或把全部 Judge/M5 矩阵列为发布前置；任何重新准入的行为仍保留原有安全/来源/UNKNOWN/兼容保护。
 
 | 文档 | 内容 | 对应 issue |
 |---|---|---|

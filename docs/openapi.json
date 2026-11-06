@@ -2925,6 +2925,34 @@
             "title": "Credential Id",
             "description": "稳定 Credential ID，与 legacy credential_ref 互斥"
           },
+          "http_auth": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HTTPAuth"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "http_headers": {
+            "items": {
+              "$ref": "#/components/schemas/HTTPHeader"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Http Headers"
+          },
+          "response_mapping": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResponseMapping"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "timeout_seconds": {
             "type": "number",
             "maximum": 600.0,
@@ -3134,6 +3162,33 @@
               }
             ],
             "title": "Credential Id"
+          },
+          "http_auth": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HTTPAuth"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "http_headers": {
+            "items": {
+              "$ref": "#/components/schemas/HTTPHeader"
+            },
+            "type": "array",
+            "title": "Http Headers"
+          },
+          "response_mapping": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResponseMapping"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "timeout_seconds": {
             "type": "number",
@@ -3358,6 +3413,29 @@
           "summary"
         ],
         "title": "BaselineResponse"
+      },
+      "BasicSecret": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "format": "password",
+            "title": "Username",
+            "writeOnly": true
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "title": "Password",
+            "writeOnly": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "BasicSecret"
       },
       "BootstrapResult": {
         "properties": {
@@ -3969,7 +4047,12 @@
           },
           "type": {
             "type": "string",
-            "const": "bearer_token",
+            "enum": [
+              "bearer_token",
+              "api_key",
+              "basic_auth",
+              "header_value"
+            ],
             "title": "Type",
             "default": "bearer_token"
           },
@@ -3984,11 +4067,26 @@
             "title": "Provider",
             "default": "managed"
           },
+          "allowed_origins": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Allowed Origins"
+          },
           "secret": {
-            "type": "string",
-            "format": "password",
-            "title": "Secret",
-            "writeOnly": true
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "$ref": "#/components/schemas/BasicSecret"
+              }
+            ],
+            "title": "Secret"
           }
         },
         "additionalProperties": false,
@@ -4030,7 +4128,12 @@
           },
           "type": {
             "type": "string",
-            "const": "bearer_token",
+            "enum": [
+              "bearer_token",
+              "api_key",
+              "basic_auth",
+              "header_value"
+            ],
             "title": "Type",
             "default": "bearer_token"
           },
@@ -4042,6 +4145,13 @@
             "type": "string",
             "const": "managed",
             "title": "Provider"
+          },
+          "allowed_origins": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Origins"
           },
           "enabled": {
             "type": "boolean",
@@ -4066,10 +4176,17 @@
       "CredentialRotate": {
         "properties": {
           "secret": {
-            "type": "string",
-            "format": "password",
-            "title": "Secret",
-            "writeOnly": true
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "password",
+                "writeOnly": true
+              },
+              {
+                "$ref": "#/components/schemas/BasicSecret"
+              }
+            ],
+            "title": "Secret"
           }
         },
         "additionalProperties": false,
@@ -4122,6 +4239,35 @@
           "is_active"
         ],
         "title": "CredentialUsageVersion"
+      },
+      "CredentialUseEvidence": {
+        "properties": {
+          "credential_id": {
+            "type": "string",
+            "title": "Credential Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "header_name": {
+            "type": "string",
+            "title": "Header Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "credential_id",
+          "version",
+          "provider",
+          "header_name"
+        ],
+        "title": "CredentialUseEvidence",
+        "description": "仅记录实际发送的凭据身份，不含 Secret 或编码后的认证内容。"
       },
       "DomainErrorResponse": {
         "properties": {
@@ -4829,6 +4975,20 @@
               }
             ],
             "title": "Credential Provider"
+          },
+          "credential_usage": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CredentialUseEvidence"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Usage"
           },
           "started_at": {
             "type": "string",
@@ -5809,6 +5969,88 @@
           "reason"
         ],
         "title": "GateRuleResult"
+      },
+      "HTTPAuth": {
+        "properties": {
+          "scheme": {
+            "type": "string",
+            "enum": [
+              "none",
+              "bearer",
+              "api_key",
+              "basic"
+            ],
+            "title": "Scheme"
+          },
+          "header_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Header Name"
+          },
+          "prefix": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Prefix",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "scheme"
+        ],
+        "title": "HTTPAuth"
+      },
+      "HTTPHeader": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "credential_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Id"
+          },
+          "prefix": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Prefix",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "HTTPHeader"
       },
       "HTTPValidationError": {
         "properties": {
@@ -6824,6 +7066,23 @@
           "threshold"
         ],
         "title": "ReleaseRule"
+      },
+      "ResponseMapping": {
+        "properties": {
+          "answer_path": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$",
+            "title": "Answer Path"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "answer_path"
+        ],
+        "title": "ResponseMapping"
       },
       "ResultSnapshotDetailResponse": {
         "properties": {

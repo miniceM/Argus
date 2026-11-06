@@ -1,5 +1,7 @@
 # S4.3：轨迹参数规则、重复调用与脱敏
 
+> **范围修订（2026-10-27）：本篇保留为历史设计/实现交接，不是默认待实施承诺。** 当前准入与近期验收以 [产品边界](../../product-boundaries.md) 和 Roadmap #1、对应 Issue 当前正文为准。旧全量 S4 顺序、Judge/校准/完整规则/全部 M5 关闭矩阵不再是普通发布闭环或 v1.0 的必选前置。已有实现、安全/来源校验、测试和原始验收记录继续保留；重新启用子范围须先确认消费者、复用理由、非目标与反例验收。#131 自建 Judge 默认延期，#132 按 required 证据需求接入既有 Gate。
+
 状态：**提议，待方案 PR 评审；本文是待实施方案，不表示功能已交付。**
 
 关联：[父 Issue #5](https://github.com/miniceM/Argus/issues/5)、[Issue #130](https://github.com/miniceM/Argus/issues/130)。共同契约见 [01-technical-design.md](01-technical-design.md) §3、§5–§8。

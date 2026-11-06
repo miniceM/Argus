@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
+from .api_credentials import SecretSafeRoute
 from .api_credentials import authorize as authorize_credential
 from .models import (
     AgentConcurrencyError,
@@ -24,7 +25,7 @@ from .models import (
 )
 from .registry import AgentRegistry
 
-router = APIRouter(prefix="/api/v1", tags=["Agent Registry"])
+router = APIRouter(prefix="/api/v1", tags=["Agent Registry"], route_class=SecretSafeRoute)
 
 
 def get_registry() -> AgentRegistry:
@@ -199,7 +200,7 @@ def create_agent_version(
     authorization: str | None = Header(default=None),
 ) -> AgentVersionResponse:
     # 绑定即授权 Runner 向该不可变端点发送 Secret，复用现有管理授权。
-    if payload.credential_id:
+    if payload.credential_id or any(header.credential_id for header in payload.http_headers):
         authorize_credential(authorization)
     try:
         version = reg.create_version(
@@ -214,6 +215,9 @@ def create_agent_version(
             response_schema=payload.response_schema,
             credential_ref=payload.credential_ref,
             credential_id=payload.credential_id,
+            http_auth=payload.http_auth.model_dump(exclude_none=True, exclude_defaults=True) if payload.http_auth else None,
+            http_headers=[header.model_dump(exclude_none=True, exclude_defaults=True) for header in payload.http_headers],
+            response_mapping=payload.response_mapping.model_dump() if payload.response_mapping else None,
             timeout_seconds=payload.timeout_seconds,
             max_retries=payload.max_retries,
             rate_limit_per_minute=payload.rate_limit_per_minute,

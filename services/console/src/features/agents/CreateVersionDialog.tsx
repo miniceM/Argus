@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Layers } from "lucide-react";
+import type { components } from "../../api/schema";
 import { api } from "../../api/client";
 import { queryKeys } from "../../api/query-keys";
 import { formatApiError } from "../../api/errors";
@@ -9,6 +10,8 @@ import { Button, Field, SelectInput, TextArea, TextInput } from "../../component
 import { Modal } from "../../components/ui/Overlay";
 import { AGENT_VERSION_FIELD_HELPS } from "./helpDocs";
 
+type AuthScheme = components["schemas"]["HTTPAuth"]["scheme"] | "legacy";
+type HeaderRow = { name: string; mode: "value" | "credential"; value: string; credentialId: string; prefix: string };
 const FORM_ID = "create-version-form";
 
 interface CreateVersionDialogProps {
@@ -35,9 +38,15 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
   const [credentialRef, setCredentialRef] = useState("");
   const [credentialId, setCredentialId] = useState("");
   const [credentialAuthorization, setCredentialAuthorization] = useState("");
+  const [authScheme, setAuthScheme] = useState<AuthScheme>("legacy");
+  const [authHeader, setAuthHeader] = useState("X-API-Key");
+  const [authPrefix, setAuthPrefix] = useState("");
+  const [httpHeaders, setHttpHeaders] = useState<HeaderRow[]>([]);
+  const [answerPath, setAnswerPath] = useState("");
+  const hasCredentialRefs = Boolean(credentialId || httpHeaders.some(header => header.mode === "credential" && header.credentialId));
   useEffect(() => {
-    if (!isOpen || !credentialId) setCredentialAuthorization("");
-  }, [isOpen, credentialId]);
+    if (!isOpen || !hasCredentialRefs) setCredentialAuthorization("");
+  }, [isOpen, hasCredentialRefs]);
   const credentials = useQuery({ queryKey: ["credentials"], enabled: isOpen, queryFn: async () => {
     const result = await api.GET("/api/v1/credentials");
     if (result.error || !result.data) throw new Error("无法加载凭据");
@@ -67,8 +76,11 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
         throw new Error("Request Mapping 必须是合法的 JSON 格式");
       }
 
+      const frozenHeaders: components["schemas"]["HTTPHeader"][] = httpHeaders.map(header => header.mode === "value"
+        ? { name: header.name.trim(), value: header.value, prefix: "" }
+        : { name: header.name.trim(), credential_id: header.credentialId, prefix: header.prefix });
       const res = await api.POST("/api/v1/agent-versions", {
-        ...(credentialId ? { headers: { Authorization: `Bearer ${credentialAuthorization}` } } : {}),
+        ...(hasCredentialRefs ? { headers: { Authorization: `Bearer ${credentialAuthorization}` } } : {}),
         body: {
           agent_id: agentId,
           version: version.trim(),
@@ -83,6 +95,9 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
           is_idempotent: isIdempotent,
           credential_ref: credentialId ? null : credentialRef.trim() || null,
           credential_id: credentialId || null,
+          http_auth: authScheme === "legacy" ? null : authScheme === "api_key" ? { scheme: "api_key", header_name: authHeader.trim(), prefix: authPrefix } : { scheme: authScheme, prefix: "" },
+          http_headers: frozenHeaders,
+          response_mapping: answerPath.trim() ? { answer_path: answerPath.trim() } : null,
           artifact_ref: artifactRef.trim() || null,
           environment: environment.trim().toLowerCase() || null,
           trace_propagation: "W3C",
@@ -117,7 +132,15 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
       setErrorMsg("请填写版本号与远程 HTTP 端点");
       return;
     }
-    if (credentialId && !credentialAuthorization.trim()) {
+    const requiresCredential =
+      authScheme === "api_key" ||
+      authScheme === "basic" ||
+      (authScheme === "bearer" && !credentialRef.trim());
+    if (requiresCredential && !credentialId) {
+      setErrorMsg("已选择该认证方式，请选择要绑定的凭据（若无需鉴权请切换为 No Auth）。");
+      return;
+    }
+    if (hasCredentialRefs && !credentialAuthorization.trim()) {
       setErrorMsg("绑定凭据需要管理授权 Token，请由管理员确认端点可信。");
       return;
     }
@@ -206,7 +229,7 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
                   type="text"
                   placeholder="e.g. production / staging"
                   value={environment}
-                  onChange={(e) => { setEnvironment(e.target.value); setCredentialId(""); }}
+                  onChange={(e) => { setEnvironment(e.target.value); setCredentialId(""); setHttpHeaders([]); }}
                   className="w-full text-sm"
                 />
               )}
@@ -296,56 +319,87 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
             </Field>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field
-              label="选择凭据 (Credential)"
-              labelSuffix={<FieldHelp {...AGENT_VERSION_FIELD_HELPS.credentialRef} />}
-              hint="先在 Credentials 创建凭据；仅列出当前环境中启用的凭据"
-            >
-              {({ id, ...aria }) => (
-                <SelectInput
-                  {...aria}
-                  id={id}
-                  value={credentialId}
-                  onChange={(e) => { setCredentialId(e.target.value); setCredentialRef(""); setCredentialAuthorization(""); }}
-                  className="w-full font-mono"
+          <Field
+            label="产物标识 (ArtifactRef)"
+            labelSuffix={
+              <FieldHelp {...AGENT_VERSION_FIELD_HELPS.artifactRef} placement="bottom-right" />
+            }
+          >
+            {({ id }) => (
+              <TextInput
+                id={id}
+                type="text"
+                placeholder="git commit SHA 或 docker image digest"
+                value={artifactRef}
+                onChange={(e) => setArtifactRef(e.target.value)}
+                className="w-full font-mono"
+              />
+            )}
+          </Field>
+
+          <section aria-label="身份认证与凭据" className="space-y-3 rounded-lg border border-border bg-surface-muted p-4">
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-sm font-semibold text-foreground">身份认证与凭据</h3>
+              <FieldHelp {...AGENT_VERSION_FIELD_HELPS.credentialRef} />
+            </div>
+
+            <Field label="HTTP 认证方式" hint="默认兼容旧 Bearer/无认证配置；认证方式随新版本冻结。">
+              {({ id }) => <SelectInput id={id} value={authScheme} onChange={e => { setAuthScheme(e.target.value as AuthScheme); setCredentialId(""); setCredentialRef(""); setCredentialAuthorization(""); }}>
+                <option value="legacy">自动（历史 Bearer / 无认证）</option>
+                <option value="none">No Auth</option>
+                <option value="bearer">Bearer Token</option>
+                <option value="api_key">API Key（Header）</option>
+                <option value="basic">Basic Auth</option>
+              </SelectInput>}
+            </Field>
+
+            {authScheme === "none" ? (
+              <p className="text-xs text-foreground-secondary">此端点无需身份鉴权，调用时不附带认证请求头。</p>
+            ) : (
+              <div className="space-y-3 pt-1">
+                <Field
+                  label="选择凭据 (Credential)"
+                  hint="先在 Credentials 创建凭据；仅列出当前环境中启用的匹配凭据"
                 >
-                  <option value="">无需鉴权 / 使用历史引用</option>
-                  {credentials.data?.filter(credential => credential.enabled && credential.environment === (environment.trim().toLowerCase() || "production")).map(credential => <option key={credential.id} value={credential.id}>{credential.name} · {credential.provider} · {credential.id.slice(-8)}</option>)}
-                </SelectInput>
-              )}
-            </Field>
+                  {({ id, ...aria }) => (
+                    <SelectInput
+                      {...aria}
+                      id={id}
+                      value={credentialId}
+                      onChange={(e) => { setCredentialId(e.target.value); setCredentialRef(""); setCredentialAuthorization(""); }}
+                      className="w-full font-mono"
+                    >
+                      <option value="">
+                        {authScheme === "legacy" ? "不绑定凭据 / 使用下方历史引用" : "请选择要绑定的凭据..."}
+                      </option>
+                      {credentials.data?.filter(credential => credential.enabled && credential.environment === (environment.trim().toLowerCase() || "production") &&
+                        (credential.type || "bearer_token") === (authScheme === "api_key" ? "api_key" : authScheme === "basic" ? "basic_auth" : "bearer_token")).map(credential => <option key={credential.id} value={credential.id}>{credential.name} · {credential.provider} · {credential.id.slice(-8)}</option>)}
+                    </SelectInput>
+                  )}
+                </Field>
 
-            <Field
-              label="产物标识 (ArtifactRef)"
-              labelSuffix={
-                <FieldHelp {...AGENT_VERSION_FIELD_HELPS.artifactRef} placement="bottom-right" />
-              }
-            >
-              {({ id }) => (
-                <TextInput
-                  id={id}
-                  type="text"
-                  placeholder="git commit SHA 或 docker image digest"
-                  value={artifactRef}
-                  onChange={(e) => setArtifactRef(e.target.value)}
-                  className="w-full font-mono"
-                />
-              )}
-            </Field>
-          </div>
+                {authScheme === "api_key" && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="API Key Header 名称">{({ id }) => <TextInput id={id} required value={authHeader} onChange={e => setAuthHeader(e.target.value)} />}</Field>
+                  <Field label="API Key 固定前缀" hint="原始 Authorization 可留空；Token 前缀需包含尾部空格。">{({ id }) => <TextInput id={id} value={authPrefix} onChange={e => setAuthPrefix(e.target.value)} />}</Field>
+                </div>}
 
-          {credentialId && <Field label="凭据绑定管理授权 Token" hint="绑定会允许 Runner 向此端点发送凭据，需管理员确认端点可信。授权仅用于本次操作。">
+                {["legacy", "bearer"].includes(authScheme) && (
+                  <details className="text-sm text-foreground-secondary">
+                    <summary>开发 / 历史引用迁移</summary>
+                    <Field label="历史凭据引用 (SecretRef)" hint="生产建议创建 Credential 后选择其名称。env:// 仅用于明确开启的开发模式。">
+                      {({ id }) => <TextInput id={id} disabled={Boolean(credentialId)} placeholder="env://DEMO_AUTH_TOKEN" value={credentialRef} onChange={e => setCredentialRef(e.target.value)} />}
+                    </Field>
+                  </details>
+                )}
+              </div>
+            )}
+          </section>
+
+          {hasCredentialRefs && <Field label="凭据绑定管理授权 Token" hint="绑定会允许 Runner 向此端点发送凭据，需管理员确认端点可信。授权仅用于本次操作。">
             {({ id }) => <TextInput id={id} type="password" autoComplete="off" required value={credentialAuthorization} onChange={e => setCredentialAuthorization(e.target.value)} />}
           </Field>}
 
           {credentials.isError && <p role="alert" className="text-sm text-fail">凭据列表加载失败，请关闭并重试，或前往 Credentials 检查服务状态。</p>}
-          <details className="text-sm text-foreground-secondary">
-            <summary>开发 / 历史引用迁移</summary>
-            <Field label="历史凭据引用 (SecretRef)" hint="生产建议创建 Credential 后选择其名称。env:// 仅用于明确开启的开发模式。">
-              {({ id }) => <TextInput id={id} disabled={Boolean(credentialId)} placeholder="env://DEMO_AUTH_TOKEN" value={credentialRef} onChange={e => setCredentialRef(e.target.value)} />}
-            </Field>
-          </details>
 
           <Field
             label="请求映射关系 (Request Mapping JSON)"
@@ -364,6 +418,33 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
                 className="w-full text-xs font-mono"
               />
             )}
+          </Field>
+
+          <section className="space-y-3" aria-label="自定义 HTTP Headers">
+            <h3 className="text-sm font-semibold">自定义 HTTP Headers</h3>
+            <p className="text-xs text-muted-foreground">普通值不允许存放秘密；敏感值选择凭据引用。平台追踪、幂等和传输头不可覆盖。</p>
+            {httpHeaders.map((header, index) => {
+              const update = (patch: Partial<HeaderRow>) => setHttpHeaders(rows => rows.map((row, i) => i === index ? { ...row, ...patch } : row));
+              return <div key={index} className="space-y-2 rounded-lg border border-border p-3">
+                <Field label={`Header ${index + 1} 名称`}>{({ id }) => <TextInput id={id} required value={header.name} onChange={e => update({ name: e.target.value })} />}</Field>
+                <Field label={`Header ${index + 1} 值来源`}>{({ id }) => <SelectInput id={id} value={header.mode} onChange={e => update({ mode: e.target.value as HeaderRow["mode"], value: "", credentialId: "" })}>
+                  <option value="value">普通值（非敏感）</option><option value="credential">敏感值凭据引用</option>
+                </SelectInput>}</Field>
+                {header.mode === "value" ? <Field label={`Header ${index + 1} 普通值`}>{({ id }) => <TextInput id={id} required value={header.value} onChange={e => update({ value: e.target.value })} />}</Field>
+                : <>
+                  <Field label={`Header ${index + 1} 凭据`}>{({ id }) => <SelectInput id={id} required value={header.credentialId} onChange={e => { update({ credentialId: e.target.value }); setCredentialAuthorization(""); }}>
+                    <option value="">选择敏感 Header 值凭据</option>
+                    {credentials.data?.filter(c => c.enabled && c.type === "header_value" && c.environment === environment.trim().toLowerCase()).map(c => <option key={c.id} value={c.id}>{c.name} · {c.id.slice(-8)}</option>)}
+                  </SelectInput>}</Field>
+                  <Field label={`Header ${index + 1} 固定前缀`}>{({ id }) => <TextInput id={id} value={header.prefix} onChange={e => update({ prefix: e.target.value })} />}</Field>
+                </>}
+                <Button type="button" variant="secondary" onClick={() => setHttpHeaders(rows => rows.filter((_, i) => i !== index))}>移除 Header {index + 1}</Button>
+              </div>;
+            })}
+            <Button type="button" variant="secondary" disabled={httpHeaders.length >= 32} onClick={() => setHttpHeaders(rows => [...rows, { name: "", mode: "value", value: "", credentialId: "", prefix: "" }])}>添加 HTTP Header</Button>
+          </section>
+          <Field label="回答字段路径" hint="留空保留原响应；DataAgent 填 reply，Chat Completions 填 choices.0.message.content。必须是非空文本，配置随版本冻结。">
+            {({ id }) => <TextInput id={id} value={answerPath} onChange={e => setAnswerPath(e.target.value)} placeholder="reply" />}
           </Field>
 
           <div className="flex items-center gap-2 pt-1">

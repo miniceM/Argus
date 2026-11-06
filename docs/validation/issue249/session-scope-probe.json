@@ -1,0 +1,12 @@
+{
+  "default_scope" : "MAIN",
+  "default_collides" : true,
+  "official_sha" : "0b6743b263ba8e39eb417e35048026f1e0196548",
+  "default_case_a" : "chatui|x:agentId=data-agent",
+  "default_case_b" : "chatui|x:agentId=data-agent",
+  "configured_case_a" : "chatui|g:case-a|r:bob|x:agentId=data-agent",
+  "configured_case_b" : "chatui|g:case-b|r:bob|x:agentId=data-agent",
+  "configured_separates" : true,
+  "different_user_separates" : true,
+  "configured_scope" : "PER_ACCOUNT_CHANNEL_PEER"
+}

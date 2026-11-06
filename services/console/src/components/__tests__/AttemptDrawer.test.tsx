@@ -44,3 +44,13 @@ describe("AttemptDrawer empty state", () => {
     expect(empty).toHaveTextContent("暂无记录的调用 Attempt");
   });
 });
+
+it("shows only credential identity and revision for each actual Header", async () => {
+  vi.mocked(api.GET).mockResolvedValue({ data: [{ id: "attempt-1", attempt_no: 1, status: "SUCCEEDED", started_at: "2026-11-06T00:00:00Z", credential_usage: [
+    { credential_id: "credential-a", version: 2, provider: "managed", header_name: "authorization" },
+    { credential_id: "credential-b", version: 3, provider: "managed", header_name: "x-extra" },
+  ] }] } as any);
+  renderDrawer();
+  expect(await screen.findByText("authorization · credential-a · 修订 2")).toBeVisible();
+  expect(screen.getByText("x-extra · credential-b · 修订 3")).toBeVisible();
+});

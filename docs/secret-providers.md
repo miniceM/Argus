@@ -2,7 +2,9 @@
 
 ## 默认：Argus Managed Secret
 
-Credentials 是一等资源：稳定 ID、名称、类型（目前支持 `bearer_token`）、环境、Provider、启用状态与当前修订。
+Credentials 是一等资源：稳定 ID、名称、类型（`bearer_token` / `api_key` / `basic_auth` / `header_value`）、环境、Provider、启用状态与当前修订。
+同步 HTTP 认证、Headers 与 DataAgent 接入步骤见 [HTTP Agent 接入](http-agent-integration.md)。
+
 Console 的 Credentials 页面支持创建、查看使用关系、轮换、停用与删除；AgentVersion
 按名称选择凭据，仅保存 `credential_id`。Token 写入一次，所有 API 响应只返回元数据。
 默认 Managed Provider 无需 Vault 或 Kubernetes，可用于 Compose 部署。
@@ -37,7 +39,7 @@ UID 时，应设置文件所有者让 Runner 能读取，不能放宽为组或�
 在 Console 创建名称、环境与 Token，管理授权 Token 由部署管理员安全交付。
 创建 AgentVersion 时选同一环境的 Credential，并提交现有管理授权 Token 批准其目标端点，即可发起正式评测；无鉴权 Agent 可不选。Console 将环境名称去除首尾空白并转为小写；有声明环境的 AgentVersion 只能用于同环境的 Launch。绑定 Credential 时未填写环境会冻结为 production；旧凭据版本的空环境也按 production 校验，不能跨环境发起评测。同名凭据的选项显示 ID 后缀，绑定仍提交完整 ID。
 
-绑定 `credential_id` 的 `POST /api/v1/agent-versions` 同样需管理授权，防止普通 API 用户把凭据发送到自己控制的端点。已有批准的不可变版本仍可正常执行；无凭据版本保持原有行为。YAML 导入只用于管理员控制的启动配置，不提供公开导入 API。
+绑定主凭据或敏感 Header 引用的 `POST /api/v1/agent-versions` 同样需管理授权，防止普通 API 用户把凭据发送到自己控制的端点。已有批准的不可变版本仍可正常执行；无凭据版本保持原有行为。YAML 导入只用于管理员控制的启动配置，不提供公开导入 API。
 
 写操作 `POST /api/v1/credentials`、`/{id}/rotate`、`/{id}/disable`、`/rewrap` 与
 `DELETE /{id}` 需独立 Bearer 管理授权。未配置授权/主密钥则拒绝写入；错误响应不回显输入。
@@ -52,7 +54,7 @@ UID 时，应设置文件所有者让 Runner 能读取，不能放宽为组或�
 - Secret 轮换：`POST /api/v1/credentials/{id}/rotate`，只提交新 `secret`。
   ID 不变，修订递增；不可变 AgentVersion/Frozen Manifest 不改写。
   每个新 Worker Attempt 发送前读取当前修订，将非秘密 `credential_id`、
-  `credential_version`、`credential_provider` 写入 Attempt。已经准备好的调用使用其解析的修订。
+  `credential_version`、`credential_provider` 写入 Attempt；多 Header 的 `credential_usage` 记录每个 Header 的 ID/修订/Provider，API 和 Console 调用历史可读，不包含值。已经准备好的调用使用其解析的修订。
 - 停用：先查看 `GET /{id}/usage`。请求需 `confirm_name`；有版本引用时还需 `force: true`。
   停用后，未来解析明确失败；不能撤销已发送的请求。删除须名称确认，任何历史版本引用
   都会返回 409，数据库外键也阻止并发删除。

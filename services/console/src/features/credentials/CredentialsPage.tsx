@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { components } from "../../api/schema";
-import { Button, Field, TextInput } from "../../components/ui/Primitives";
+import { Button, Field, SelectInput, TextArea, TextInput } from "../../components/ui/Primitives";
 import { Modal } from "../../components/ui/Overlay";
 
 type Credential = components["schemas"]["CredentialResponse"];
 type Operation = "create" | "rotate" | "disable" | "delete";
 const credentialLabel = (credential: Credential) => `${credential.name} (${credential.id.slice(-8)})`;
+const typeLabels = { bearer_token: "Bearer Token", api_key: "API Key", basic_auth: "Basic Auth", header_value: "敏感 Header 值" };
 const titles = { create: "创建凭据", rotate: "轮换凭据", disable: "停用凭据", delete: "删除凭据" };
 
 export function CredentialsPage() {
@@ -22,6 +23,10 @@ export function CredentialsPage() {
   const [name, setName] = useState("");
   const [environment, setEnvironment] = useState("production");
   const [secret, setSecret] = useState("");
+  const [type, setType] = useState<Credential["type"]>("bearer_token");
+  const [origins, setOrigins] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [authorization, setAuthorization] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [force, setForce] = useState(false);
@@ -30,10 +35,11 @@ export function CredentialsPage() {
   const [usageTarget, setUsageTarget] = useState<Credential | null>(null);
   const [usage, setUsage] = useState<components["schemas"]["CredentialUsage"] | null>(null);
   const close = () => {
-    setSecret(""); setAuthorization(""); setOperation(null); setError(null);
+    setUsername(""); setPassword(""); setSecret(""); setAuthorization(""); setOperation(null); setError(null);
   };
   const open = (action: Operation, credential: Credential | null = null) => {
     setSelected(credential); setOperation(action); setName(""); setConfirmation("");
+    setType(credential?.type || "bearer_token"); setOrigins(""); setUsername(""); setPassword("");
     setSecret(""); setAuthorization(""); setForce(false); setError(null);
   };
   const showUsage = async (credential: Credential) => {
@@ -45,16 +51,18 @@ export function CredentialsPage() {
     event.preventDefault();
     if (!operation) return;
     setPending(true); setError(null);
+    const protectedSecret = type === "basic_auth" ? { username, password } : secret;
     const headers = { Authorization: `Bearer ${authorization}` };
     try {
       let response;
       if (operation === "create") {
         response = await api.POST("/api/v1/credentials", { headers, body: {
-          name, environment, provider: "managed", type: "bearer_token", secret,
+          name, environment, provider: "managed", type, secret: protectedSecret,
+          allowed_origins: origins.split(/\r?\n/).map(value => value.trim()).filter(Boolean),
         }});
       } else if (selected) {
         const params = { path: { credential_id: selected.id } };
-        if (operation === "rotate") response = await api.POST("/api/v1/credentials/{credential_id}/rotate", { headers, params, body: { secret } });
+        if (operation === "rotate") response = await api.POST("/api/v1/credentials/{credential_id}/rotate", { headers, params, body: { secret: protectedSecret } });
         if (operation === "disable") response = await api.POST("/api/v1/credentials/{credential_id}/disable", { headers, params, body: { confirm_name: confirmation, force } });
         if (operation === "delete") response = await api.DELETE("/api/v1/credentials/{credential_id}", { headers, params: { ...params, query: { confirm_name: confirmation } } });
       }
@@ -96,7 +104,7 @@ export function CredentialsPage() {
     {list.isError && <p role="alert" className="text-fail">无法加载凭据。<Button variant="secondary" onClick={() => list.refetch()}>重试</Button></p>}
     {list.data?.length === 0 && <p className="rounded-lg border border-border bg-surface p-6 text-foreground-secondary">尚无凭据。凭据使用 Argus 加密存储。</p>}
     {list.data?.map(credential => <article key={credential.id} className="rounded-lg border border-border bg-surface p-4 space-y-3">
-      <div><h2 className="font-semibold">{credential.name}</h2><p className="text-sm text-foreground-secondary">Bearer Token · {credential.environment} · {credential.provider} · {credential.enabled ? "已启用" : "已停用"} · 修订 {credential.version}</p><p className="text-xs font-mono text-muted-foreground">{credential.id}</p></div>
+      <div><h2 className="font-semibold">{credential.name}</h2><p className="text-sm text-foreground-secondary">{typeLabels[credential.type || "bearer_token"]} · {credential.environment} · {credential.provider} · {credential.enabled ? "已启用" : "已停用"} · 修订 {credential.version}</p><p className="text-xs font-mono text-muted-foreground">{credential.id}</p><p className="text-xs text-muted-foreground">目标：{credential.allowed_origins?.join(", ") || "历史 Bearer 未约束 Origin，建议新建受限凭据"}</p></div>
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" aria-label={`查看使用关系 ${credentialLabel(credential)}`} onClick={() => showUsage(credential)}>查看使用关系</Button>
         {credential.provider === "managed" && credential.enabled && <Button variant="secondary" aria-label={`轮换 ${credentialLabel(credential)}`} onClick={() => open("rotate", credential)}>轮换</Button>}
@@ -118,9 +126,17 @@ export function CredentialsPage() {
         {error && <p role="alert" className="text-sm text-fail">{error}</p>}
         {operation === "create" && <>
           <Field label="凭据名称">{({ id }) => <TextInput id={id} required maxLength={128} value={name} onChange={e => setName(e.target.value)} />}</Field>
+          <Field label="凭据类型">{({ id }) => <SelectInput id={id} value={type} onChange={e => { setType(e.target.value as Credential["type"]); setSecret(""); setUsername(""); setPassword(""); }}>
+            {Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </SelectInput>}</Field>
+          <Field label="允许的目标 Origin（每行一个）" hint="例如 https://agent.example:8443，不含路径。新类型必须填写；不是 DNS/SSRF 防护的替代。">{({ id }) => <TextArea id={id} required={type !== "bearer_token"} value={origins} onChange={e => setOrigins(e.target.value)} />}</Field>
           <Field label="环境">{({ id }) => <TextInput id={id} required value={environment} onChange={e => setEnvironment(e.target.value)} />}</Field>
         </>}
-        {(operation === "rotate" || operation === "create") && <Field label="Agent Token（仅输入一次）" hint="保存后无法查看。旧修订保留为密文。">{({ id }) => <TextInput id={id} type="password" autoComplete="off" required value={secret} onChange={e => setSecret(e.target.value)} />}</Field>}
+        {(operation === "rotate" || operation === "create") && type === "basic_auth" && <>
+          <Field label="Basic 用户名">{({ id }) => <TextInput id={id} type="password" autoComplete="off" required value={username} onChange={e => setUsername(e.target.value)} />}</Field>
+          <Field label="Basic 密码">{({ id }) => <TextInput id={id} type="password" autoComplete="new-password" required value={password} onChange={e => setPassword(e.target.value)} />}</Field>
+        </>}
+        {(operation === "rotate" || operation === "create") && type !== "basic_auth" && <Field label="Agent Token（仅输入一次）" hint="保存后无法查看。旧修订保留为密文。">{({ id }) => <TextInput id={id} type="password" autoComplete="off" required value={secret} onChange={e => setSecret(e.target.value)} />}</Field>}
         {(operation === "delete" || operation === "disable") && <>
           <p className="text-sm">{operation === "delete" ? "删除仅允许未被任何版本引用的凭据。" : "停用后，引用此凭据的后续调用将在发送请求前失败。"}</p>
           <Field label={`输入凭据名称确认：${selected?.name}`}>{({ id }) => <TextInput id={id} required value={confirmation} onChange={e => setConfirmation(e.target.value)} />}</Field>

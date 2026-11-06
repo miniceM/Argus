@@ -62,3 +62,21 @@ it("creates a Managed Credential without asking users to configure a Provider", 
   expect(screen.queryByText("Vault（需管理员启用）")).not.toBeInTheDocument();
   expect(screen.getByLabelText("Agent Token（仅输入一次）")).toBeVisible();
 });
+
+it("creates Basic credentials as protected fields with explicit target origins", async () => {
+  vi.mocked(api.GET).mockResolvedValue({ data: [], response: new Response() } as any);
+  vi.mocked(api.POST).mockClear().mockResolvedValue({ data: {}, response: new Response() } as any);
+  render(<QueryClientProvider client={new QueryClient()}><CredentialsPage /></QueryClientProvider>);
+  fireEvent.click(screen.getByRole("button", { name: "创建凭据" }));
+  fireEvent.change(screen.getByLabelText("凭据类型"), { target: { value: "basic_auth" } });
+  fireEvent.change(screen.getByLabelText("凭据名称"), { target: { value: "Java Basic" } });
+  fireEvent.change(screen.getByLabelText("允许的目标 Origin（每行一个）"), { target: { value: "https://agent.example" } });
+  fireEvent.change(screen.getByLabelText("Basic 用户名"), { target: { value: "test-user" } });
+  fireEvent.change(screen.getByLabelText("Basic 密码"), { target: { value: "test-password" } });
+  fireEvent.change(screen.getByLabelText("管理授权 Token"), { target: { value: "admin" } });
+  fireEvent.submit(screen.getByLabelText("创建凭据表单"));
+  await waitFor(() => expect(api.POST).toHaveBeenCalledWith("/api/v1/credentials", expect.objectContaining({ body: expect.objectContaining({
+    type: "basic_auth", allowed_origins: ["https://agent.example"], secret: { username: "test-user", password: "test-password" },
+  }) })));
+  await waitFor(() => expect(screen.queryByDisplayValue("test-password")).not.toBeInTheDocument());
+});

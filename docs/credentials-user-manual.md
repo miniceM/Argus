@@ -103,7 +103,9 @@ docker compose --env-file .env.poc -f docker-compose.yml -f deploy/credentials.c
 
 - **名称**：起个一眼认得出的名字，比如 `客服Agent-生产`。以后到处都用这个名字认凭据；
 - **环境**：一个分组标签，最常用 `production`（生产）和 `staging`（预发）。**先记住一条规则：凭据的环境必须和它服务的 Agent 环境一致**，系统不允许混用（防止测试 Token 被发到生产）；
-- **Agent Token**：你们 Agent 的通行证原文。**只让填一次，保存后再也看不到**，所以先在密码管理器里备好再粘贴。注意别带换行或空格——从别处复制时最容易带进来，带了会保存失败；
+- **凭据类型**：Bearer Token、API Key、Basic Auth 或敏感 Header 值。按目标接口的真实 Header/前缀选择，详细步骤见 [HTTP Agent 接入](http-agent-integration.md)。
+- **允许的目标 Origin**：例如 `https://agent.example:8443`，不包含路径；API Key、Basic、敏感 Header 凭据必须填写。旧 Bearer 可兼容未约束 Origin，但建议新建受限凭据。
+- **Agent Token**（非 Basic 类型）：你们 Agent 的通行证原文。**只让填一次，保存后再也看不到**，所以先在密码管理器里备好再粘贴。注意别带换行或空格——从别处复制时最容易带进来，带了会保存失败；
 - **管理授权 Token**：管理员密码。
 
 填完点确认。成功后页面上只剩名称、环境、版本号这些信息——Token 原文已经加密收起来了，谁也查不回来。这是正常现象。
@@ -112,7 +114,7 @@ docker compose --env-file .env.poc -f docker-compose.yml -f deploy/credentials.c
 
 光存进凭据还不够，还得告诉 Argus："调用某个 Agent 的时候，用这个凭据"。
 
-在哪绑？去 **Agents** 页面创建 **Agent 版本**（就是登记"要测的 Agent 住在哪个地址、怎么调用"）时，有一个凭据下拉框，选你刚创建的凭据即可。**不想设防的 Agent 可以不选**，那就不用管凭据这整件事。
+在哪绑？去 **Agents** 页面创建 **Agent 版本**（就是登记"要测的 Agent 住在哪个地址、怎么调用"）时，先选 HTTP 认证方式，再在凭据下拉框选择同类型、同环境的凭据。Basic 的用户名/密码在 Credentials 输入；自定义 Headers 的敏感值同样只能选凭据引用。**不想设防的 Agent 可以不选**，那就不用管凭据这整件事。
 
 这里有个别嫌麻烦的环节：**选了凭据，就必须再填一次管理员密码**。原因很实在——绑定等于批准"Argus 以后会把你的 Token 发到这个地址"。如果没有这道批准，任何人都可以把你的 Token 引到他自己搭的假 Agent 上偷走。所以每次绑定都当作一次"端点可信"的签字。
 
@@ -132,7 +134,7 @@ docker compose --env-file .env.poc -f docker-compose.yml -f deploy/credentials.c
 
 **怎么做**：凭据列表里点 **停用**。有两个确认：一是**输入凭据的名称**（防手滑）；二是如果这个凭据还在被某个 Agent 用着，要**再勾一个"强制停用"**（也是防手滑）。
 
-**效果**：从这一刻起，所有依赖它的调用会**在发出请求之前直接失败**并报 `CREDENTIAL_UNAVAILABLE`——也就是"宁可不测，也不把可疑的 Token 发出去"。注意：**已经发出去的请求追不回来**，所以拉闸要趁早。
+**效果**：从这一刻起，所有后续尚未解析凭据的调用会**在发出请求之前直接失败**并报 `CREDENTIAL_UNAVAILABLE`——也就是"宁可不测，也不把可疑的 Token 发出去"。注意：**已经发出去的请求追不回来**，所以拉闸要趁早。
 
 之后想恢复？停用是单行道，不能取消。等换好新 Token 后，重新创建一份凭据再绑定到新的 Agent 版本即可。
 
@@ -202,6 +204,6 @@ DEMO_AUTH_TOKEN=<本地演示 Token>
 | `POST /api/v1/credentials/{id}/disable` | 需要 | 停用（要传 `confirm_name`；有引用时加 `force: true`） |
 | `POST /api/v1/credentials/rewrap` | 需要 | 换保险箱钥匙时重包裹密文 |
 | `DELETE /api/v1/credentials/{id}?confirm_name=...` | 需要 | 删除 |
-| `POST /api/v1/agent-versions`（带 `credential_id`） | 需要 | 绑定凭据（= 批准端点） |
+| `POST /api/v1/agent-versions`（带主凭据或敏感 Header 凭据引用） | 需要 | 绑定凭据（= 批准端点） |
 
 管理员密码通过请求头提交：`Authorization: Bearer <admin-token 内容>`。

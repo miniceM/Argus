@@ -111,6 +111,10 @@ Argus Launch → Queue / Worker → HTTP 业务 Agent（任意语言）
 
 ### 设计边界
 
+受认证保护的同步 HTTP 服务，参见 [HTTP Agent 认证、Headers 与回答提取](docs/http-agent-integration.md)，包含 Console 配置流程与 AgentScope Java DataAgent 的部署前置和验收限制。
+
+### 设计边界
+
 1. **业务服务不必集成评测 SDK**：保证范围限于已支持接口；已有可观测性不要求移除。
 2. **一个对象一个权威方**：Argus 保存发布必需的冻结证据，不重建日常 Dataset/Prompt/Trace 分析平台。
 3. **冻结不夸大保证**：版本声明不等于远端制品已核验；随机模型和外部依赖不承诺完全确定性。

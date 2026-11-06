@@ -922,6 +922,10 @@ export interface components {
              * @description 稳定 Credential ID，与 legacy credential_ref 互斥
              */
             credential_id?: string | null;
+            http_auth?: components["schemas"]["HTTPAuth"] | null;
+            /** Http Headers */
+            http_headers?: components["schemas"]["HTTPHeader"][];
+            response_mapping?: components["schemas"]["ResponseMapping"] | null;
             /**
              * Timeout Seconds
              * @default 30
@@ -1016,6 +1020,10 @@ export interface components {
             credential_ref?: string | null;
             /** Credential Id */
             credential_id?: string | null;
+            http_auth?: components["schemas"]["HTTPAuth"] | null;
+            /** Http Headers */
+            http_headers?: components["schemas"]["HTTPHeader"][];
+            response_mapping?: components["schemas"]["ResponseMapping"] | null;
             /** Timeout Seconds */
             timeout_seconds: number;
             /** Max Retries */
@@ -1100,6 +1108,19 @@ export interface components {
             summary: {
                 [key: string]: unknown;
             };
+        };
+        /** BasicSecret */
+        BasicSecret: {
+            /**
+             * Username
+             * Format: password
+             */
+            username: string;
+            /**
+             * Password
+             * Format: password
+             */
+            password: string;
         };
         /** BootstrapResult */
         BootstrapResult: {
@@ -1306,9 +1327,9 @@ export interface components {
             /**
              * Type
              * @default bearer_token
-             * @constant
+             * @enum {string}
              */
-            type: "bearer_token";
+            type: "bearer_token" | "api_key" | "basic_auth" | "header_value";
             /**
              * Environment
              * @default production
@@ -1320,11 +1341,10 @@ export interface components {
              * @constant
              */
             provider: "managed";
-            /**
-             * Secret
-             * Format: password
-             */
-            secret: string;
+            /** Allowed Origins */
+            allowed_origins?: string[];
+            /** Secret */
+            secret: string | components["schemas"]["BasicSecret"];
         };
         /** CredentialDisable */
         CredentialDisable: {
@@ -1345,9 +1365,9 @@ export interface components {
             /**
              * Type
              * @default bearer_token
-             * @constant
+             * @enum {string}
              */
-            type: "bearer_token";
+            type: "bearer_token" | "api_key" | "basic_auth" | "header_value";
             /** Environment */
             environment: string;
             /**
@@ -1355,6 +1375,8 @@ export interface components {
              * @constant
              */
             provider: "managed";
+            /** Allowed Origins */
+            allowed_origins?: string[];
             /** Enabled */
             enabled: boolean;
             /** Version */
@@ -1362,11 +1384,8 @@ export interface components {
         };
         /** CredentialRotate */
         CredentialRotate: {
-            /**
-             * Secret
-             * Format: password
-             */
-            secret: string;
+            /** Secret */
+            secret: string | components["schemas"]["BasicSecret"];
         };
         /** CredentialUsage */
         CredentialUsage: {
@@ -1383,6 +1402,20 @@ export interface components {
             version: string;
             /** Is Active */
             is_active: boolean;
+        };
+        /**
+         * CredentialUseEvidence
+         * @description 仅记录实际发送的凭据身份，不含 Secret 或编码后的认证内容。
+         */
+        CredentialUseEvidence: {
+            /** Credential Id */
+            credential_id: string;
+            /** Version */
+            version: number;
+            /** Provider */
+            provider: string;
+            /** Header Name */
+            header_name: string;
         };
         /** DomainErrorResponse */
         DomainErrorResponse: {
@@ -1659,6 +1692,8 @@ export interface components {
             credential_version?: number | null;
             /** Credential Provider */
             credential_provider?: string | null;
+            /** Credential Usage */
+            credential_usage?: components["schemas"]["CredentialUseEvidence"][] | null;
             /**
              * Started At
              * Format: date-time
@@ -2026,6 +2061,35 @@ export interface components {
             conclusion: "PASS" | "FAIL" | "UNKNOWN";
             /** Reason */
             reason: string;
+        };
+        /** HTTPAuth */
+        HTTPAuth: {
+            /**
+             * Scheme
+             * @enum {string}
+             */
+            scheme: "none" | "bearer" | "api_key" | "basic";
+            /** Header Name */
+            header_name?: string | null;
+            /**
+             * Prefix
+             * @default
+             */
+            prefix: string;
+        };
+        /** HTTPHeader */
+        HTTPHeader: {
+            /** Name */
+            name: string;
+            /** Value */
+            value?: string | null;
+            /** Credential Id */
+            credential_id?: string | null;
+            /**
+             * Prefix
+             * @default
+             */
+            prefix: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -2446,6 +2510,11 @@ export interface components {
             operator: ">=" | "<=";
             /** Threshold */
             threshold: number;
+        };
+        /** ResponseMapping */
+        ResponseMapping: {
+            /** Answer Path */
+            answer_path: string;
         };
         /**
          * ResultSnapshotDetailResponse

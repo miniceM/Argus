@@ -128,6 +128,7 @@ async def _execute_single_item(
                 started_at=datetime.utcnow(),
             )
             # invoke() 已在授权 Attempt 前解析凭据；记录本次实际使用的修订。
+            att_rec.credential_usage = executor.credential_usage
             credential = executor.resolved_credential
             if credential is not None:
                 att_rec.credential_id = credential.credential_id
@@ -453,6 +454,8 @@ class LaunchExecutionService:
                 max_concurrency=exec_policy["max_concurrency"],
                 credential_ref=agent_spec_dict.get("credential_ref"),
                 credential_id=agent_spec_dict.get("credential_id"),
+                http_auth=agent_spec_dict.get("http_auth"), http_headers=agent_spec_dict.get("http_headers", []),
+                response_mapping=agent_spec_dict.get("response_mapping"), environment=agent_spec_dict.get("environment"),
                 id=agent_spec_dict.get("agent_version_id", ""),
                 is_idempotent=bool(agent_spec_dict.get("is_idempotent", False)),
             )

@@ -244,6 +244,20 @@ export const AgentVersionDetail: React.FC = () => {
             </div>
 
             <div>
+              <span className="text-muted-foreground block mb-1 font-medium">HTTP 认证方式</span>
+              <p className="font-mono">{versionData.http_auth?.scheme || (versionData.credential_id || versionData.credential_ref ? "bearer（历史兼容）" : "none")}
+                {versionData.http_auth?.scheme === "api_key" ? ` · ${versionData.http_auth.header_name} · 前缀 ${JSON.stringify(versionData.http_auth.prefix || "")}` : ""}
+              </p>
+            </div>
+            <div>
+              <span className="text-muted-foreground block mb-1 font-medium">自定义 HTTP Headers（冻结配置）</span>
+              {versionData.http_headers?.length ? versionData.http_headers.map(header => <p key={header.name.toLowerCase()} className="font-mono break-all">
+                {header.name}: {header.credential_id ? <Link to="/credentials" className="text-primary">凭据引用 {header.credential_id}</Link> : header.value}
+              </p>) : <p>未配置</p>}
+            </div>
+            <p className="font-mono">回答字段：{versionData.response_mapping?.answer_path || "原样响应（默认 answer）"}</p>
+
+            <div>
               <span className="text-muted-foreground block mb-1 font-medium">产物制品引用 (Artifact Ref)</span>
               <div className="p-2.5 bg-canvas rounded-lg border border-border font-mono text-foreground-secondary truncate">
                 {versionData.artifact_ref || "未配置 (无特定 Artifact 镜像或哈希)"}

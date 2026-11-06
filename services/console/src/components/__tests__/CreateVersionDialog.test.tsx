@@ -174,3 +174,24 @@ it("requires binding authorization and clears it after a successful version crea
   await waitFor(() => expect(api.POST).toHaveBeenCalledWith("/api/v1/agent-versions", expect.objectContaining({ headers: { Authorization: "Bearer example-binding-authorization" } })));
   await waitFor(() => expect(screen.queryByDisplayValue("example-binding-authorization")).not.toBeInTheDocument());
 });
+
+it("freezes API Key settings, ordinary Headers and reply extraction", async () => {
+  vi.mocked(api.GET).mockResolvedValue({ data: [{ id: "key-id", name: "Java Key", type: "api_key", environment: "staging", provider: "managed", enabled: true, version: 1 }], response: new Response() } as any);
+  vi.mocked(api.POST).mockClear().mockResolvedValue({ data: {}, response: new Response() } as any);
+  render(<QueryClientProvider client={new QueryClient()}><CreateVersionDialog agentId="java-agent" isOpen onClose={vi.fn()} /></QueryClientProvider>);
+  fireEvent.change(screen.getByRole("textbox", { name: /版本号/ }), { target: { value: "key-v1" } });
+  fireEvent.change(screen.getByLabelText("HTTP 认证方式"), { target: { value: "api_key" } });
+  await screen.findByRole("option", { name: /Java Key/ });
+  fireEvent.change(screen.getByRole("combobox", { name: /选择凭据/ }), { target: { value: "key-id" } });
+  fireEvent.change(screen.getByLabelText("API Key Header 名称"), { target: { value: "X-API-Key" } });
+  fireEvent.click(screen.getByRole("button", { name: "添加 HTTP Header" }));
+  fireEvent.change(screen.getByLabelText("Header 1 名称"), { target: { value: "X-Tenant" } });
+  fireEvent.change(screen.getByLabelText("Header 1 普通值"), { target: { value: "evaluation" } });
+  fireEvent.change(screen.getByLabelText("回答字段路径"), { target: { value: "reply" } });
+  fireEvent.change(screen.getByLabelText("凭据绑定管理授权 Token"), { target: { value: "admin" } });
+  fireEvent.submit(document.getElementById("create-version-form")!);
+  await waitFor(() => expect(api.POST).toHaveBeenCalledWith("/api/v1/agent-versions", expect.objectContaining({ body: expect.objectContaining({
+    http_auth: { scheme: "api_key", header_name: "X-API-Key", prefix: "" },
+    http_headers: [{ name: "X-Tenant", value: "evaluation", prefix: "" }], response_mapping: { answer_path: "reply" },
+  }) })));
+});

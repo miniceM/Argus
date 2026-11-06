@@ -109,6 +109,8 @@ Argus Launch → Queue / Worker → HTTP 业务 Agent（任意语言）
 
 完整请求 / 响应结构以 [docs/openapi.json](./docs/openapi.json) 与运行时 `/docs` 为准；`services/demo-agent/` 是最小可运行参考实现。
 
+受认证保护的同步 HTTP 服务，参见 [HTTP Agent 认证、Headers 与回答提取](docs/http-agent-integration.md)，包含 Console 配置流程与 AgentScope Java DataAgent 的部署前置和验收限制。
+
 ### 设计边界
 
 1. **业务服务不必集成评测 SDK**：保证范围限于已支持接口；已有可观测性不要求移除。

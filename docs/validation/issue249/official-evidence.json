@@ -1,0 +1,152 @@
+{
+  "accepted_at": "2026-11-06",
+  "base_commit": "2c614759738e8cf865ea4a8d4bbfff205a068b3c",
+  "branch": "codex/issue249-http-auth-headers",
+  "delivery_state": "uncommitted worktree; no remote CI or deployment acceptance",
+  "official_sha": "0b6743b263ba8e39eb417e35048026f1e0196548",
+  "deployment_extension": "Official DataAgent + external OpenAI Model bean + capped provider proxy + permission fixture seed via official Store; auth/ACL/Sandbox source unchanged",
+  "runner_build": "issue249-worktree-22edb553babe7def",
+  "runner_mode": "local SQLite/memory queue; not production HA",
+  "native_checks": {
+    "login": 200,
+    "clone_visible": 200,
+    "clone_tier": "CLONE",
+    "visible_but_no_run": 403,
+    "private_invisible": 404,
+    "missing_jwt": 401,
+    "invalid_jwt": 401
+  },
+  "launch_id": "7ab40775-163e-4721-9282-924e52047168",
+  "snapshot_id": "1114e1d5-e597-4093-ab6a-1671c9993a2e",
+  "execution_status": "PARTIAL_FAILED",
+  "quality_conclusion": "unknown",
+  "evidence_state": "DIAGNOSTIC",
+  "progress": {
+    "total": 2,
+    "succeeded": 1,
+    "failed": 1,
+    "attempts": 2,
+    "retries": 0
+  },
+  "quality_counts": {
+    "quality_pass_count": 1,
+    "quality_fail_count": 0,
+    "quality_unknown_count": 1,
+    "decision_coverage": 0.5
+  },
+  "langfuse_sync_outbox": {
+    "overall": "SYNCED",
+    "item_trace": {
+      "status": "SYNCED",
+      "reason": null,
+      "task_count": 2,
+      "failed_count": 0,
+      "pending_count": 0
+    },
+    "run_score": {
+      "status": "SYNCED",
+      "reason": null,
+      "task_count": 1,
+      "failed_count": 0,
+      "pending_count": 0
+    }
+  },
+  "items": [
+    {
+      "item_id": "98d6adf9-7709-4fc8-b7cb-35dbeff4fba3",
+      "dataset_item_id": "3ed8e647-200d-4169-977f-c6ca1762f30f",
+      "execution_status": "succeeded",
+      "eval_status": "succeeded",
+      "quality_conclusion": "pass",
+      "http_status": 200,
+      "trace_id": "b7de27a0ad2d5da61d260983359225a2",
+      "observation_id": "4f93404a1c38e9d5",
+      "cloud_read_status": 200,
+      "cloud_observation_match": true,
+      "cloud_output": {
+        "reply": "SELECT 1 AS argus_http_ok;",
+        "sessionKey": "ca6a3d02-1346-4b4c-9346-204c5df5bffc",
+        "answer": "SELECT 1 AS argus_http_ok;"
+      },
+      "evaluation_results": [
+        {
+          "evaluator_id": "answer_present",
+          "result_type": "boolean",
+          "status": "succeeded",
+          "value": true
+        }
+      ],
+      "attempts": [
+        {
+          "id": "8f9fad05-126d-40f8-b69c-440efc848ca5",
+          "attempt_no": 1,
+          "status": "COMPLETED",
+          "http_status": 200,
+          "request_phase": "RESPONSE_RECEIVED",
+          "trace_context_received": false,
+          "credential_usage": [
+            {
+              "credential_id": "ae78f0c2-040d-439d-904a-287538533c7f",
+              "version": 1,
+              "provider": "managed",
+              "header_name": "authorization"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "item_id": "5e67d3b5-0707-411d-ad74-381e8f67d539",
+      "dataset_item_id": "d1e1fb4f-1655-43cc-81f1-6b436f8592ff",
+      "execution_status": "failed",
+      "eval_status": "skipped",
+      "quality_conclusion": "unknown",
+      "http_status": 500,
+      "trace_id": "5885402f98db9a938a8a28e1444567b8",
+      "observation_id": "c8525f649bc1f674",
+      "cloud_read_status": 200,
+      "cloud_observation_match": true,
+      "cloud_output": null,
+      "evaluation_results": [],
+      "attempts": [
+        {
+          "id": "71bccf82-3a2d-4b13-9761-c2fdf6b7c703",
+          "attempt_no": 1,
+          "status": "FAILED",
+          "http_status": 500,
+          "request_phase": "RESPONSE_RECEIVED",
+          "trace_context_received": false,
+          "credential_usage": [
+            {
+              "credential_id": "ae78f0c2-040d-439d-904a-287538533c7f",
+              "version": 1,
+              "provider": "managed",
+              "header_name": "authorization"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "model_budget": {
+    "authorized_limit": 4,
+    "actual_upstream_requests": 4,
+    "statuses": [
+      400,
+      400,
+      200,
+      200
+    ],
+    "successful_responses_input_tokens": 8777,
+    "successful_responses_output_tokens": 70,
+    "note": "fourth upstream response is not proof of second item success; extra internal use not attributed"
+  },
+  "session_isolation": {
+    "status": "FAIL on actual default-scope deployment",
+    "offline_configured_routing": "PASS; no paid inference rerun",
+    "details": "sessionKey UUID is ignored by MAIN dmScope; configure PER_ACCOUNT_CHANNEL_PEER"
+  },
+  "remote_intranet_acceptance": "NOT RUN",
+  "official_expired_jwt_acceptance": "NOT RUN",
+  "official_trace_acknowledgement": false
+}

@@ -167,6 +167,13 @@ export const AttemptDrawer: React.FC<AttemptDrawerProps> = ({
                         </span>
                       </div>
 
+                      {attempt.credential_usage?.length ? <div className="space-y-1" aria-label="本次凭据使用证据">
+                        <p className="text-muted-foreground">实际使用的凭据（仅身份 / 修订）</p>
+                        {attempt.credential_usage.map(entry => <p key={entry.header_name} className="font-mono break-all">
+                          {entry.header_name} · {entry.credential_id} · 修订 {entry.version}
+                        </p>)}
+                      </div> : null}
+
                       {/* Ambiguous Outcome Alert */}
                       {attempt.error_type === "AMBIGUOUS_OUTCOME" && (
                         <div className="p-3 bg-timeout-subtle border border-timeout-border rounded-lg text-timeout-strong space-y-1">

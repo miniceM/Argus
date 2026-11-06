@@ -12,7 +12,14 @@ from pathlib import Path
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import select
 
-from .db_models import AgentVersionRecord, CredentialAuditRecord, CredentialRecord, CredentialSecretRecord
+from .db_models import (
+    AgentVersionCredentialRecord,
+    AgentVersionRecord,
+    CredentialAuditRecord,
+    CredentialRecord,
+    CredentialSecretRecord,
+)
+from .http_invocation import allowed_origin, check_credential_target, encode_secret
 from .secret_providers import CredentialUnavailable, _token
 
 
@@ -22,6 +29,7 @@ class ResolvedCredential:
     credential_id: str | None = None
     version: int | None = None
     provider: str | None = None
+    type: str = "bearer_token"
 
 
 def protected_file(variable: str) -> str:
@@ -73,7 +81,7 @@ class CredentialService:
     @staticmethod
     def metadata(record):
         return {"id": record.id, "name": record.name, "environment": record.environment,
-                "type": "bearer_token", "provider": record.provider, "enabled": record.enabled, "version": record.active_version}
+                "type": record.type, "allowed_origins": record.allowed_origins, "provider": record.provider, "enabled": record.enabled, "version": record.active_version}
 
     @staticmethod
     def audit(session, record, action, actor, *, version=None):
@@ -82,16 +90,24 @@ class CredentialService:
 
     def usage(self, credential_id):
         with self.manager.get_session() as session:
-            versions = session.scalars(select(AgentVersionRecord).where(AgentVersionRecord.credential_id == credential_id)).all()
+            refs = select(AgentVersionCredentialRecord.agent_version_id).where(AgentVersionCredentialRecord.credential_id == credential_id)
+            versions = session.scalars(select(AgentVersionRecord).where(
+                (AgentVersionRecord.credential_id == credential_id) | AgentVersionRecord.id.in_(refs))).all()
             return {"credential_id": credential_id, "versions": [
                 {"agent_id": version.agent_id, "version": version.version, "is_active": version.is_active}
                 for version in versions]}
 
-    def create(self, name, environment, secret, actor):
+    def create(self, name, environment, secret, actor, *, type="bearer_token", allowed_origins=None):
+        if type not in ("bearer_token", "api_key", "basic_auth", "header_value"):
+            raise ValueError("Invalid credential type")
+        origins = sorted(set(allowed_origin(origin) for origin in (allowed_origins or [])))
+        if type != "bearer_token" and not origins:
+            raise ValueError("Explicit credential target origins required")
+        secret = encode_secret(secret, type)
         credential_id = str(uuid.uuid4())
         envelope = ManagedSecretProvider().encrypt(credential_id, 1, secret)
         with self.manager.get_session() as session:
-            record = CredentialRecord(id=credential_id, name=name, environment=environment, provider="managed", active_version=1)
+            record = CredentialRecord(id=credential_id, name=name, environment=environment, provider="managed", active_version=1, type=type, allowed_origins=origins)
             session.add(record)
             session.flush()
             session.add(CredentialSecretRecord(credential_id=credential_id, version=1, envelope=envelope))
@@ -105,6 +121,7 @@ class CredentialService:
             record = session.scalar(select(CredentialRecord).where(CredentialRecord.id == credential_id).with_for_update())
             if record is None or record.provider != "managed" or not record.enabled:
                 raise ValueError("CREDENTIAL_NOT_ROTATABLE")
+            secret = encode_secret(secret, record.type)
             record.active_version += 1
             session.add(CredentialSecretRecord(credential_id=record.id, version=record.active_version,
                                               envelope=provider.encrypt(record.id, record.active_version, secret)))
@@ -128,12 +145,15 @@ class CredentialService:
             session.commit()
         return {"rewrapped": count}
 
-    def resolve(self, credential_id) -> ResolvedCredential:
+    def resolve(self, credential_id, kind=None, endpoint=None, environment=None) -> ResolvedCredential:
         try:
             with self.manager.get_session() as session:
                 record = session.get(CredentialRecord, credential_id)
                 if record is None or not record.enabled:
                     raise CredentialUnavailable()
+                if kind is not None:
+                    check_credential_target(record, kind, endpoint, environment)
+                credential_type = record.type
                 revision = session.get(CredentialSecretRecord, (record.id, record.active_version))
                 if revision is None:
                     raise CredentialUnavailable()
@@ -141,6 +161,6 @@ class CredentialService:
             if provider != "managed":
                 raise CredentialUnavailable()
             token = ManagedSecretProvider().decrypt(credential_id, version, envelope)
-            return ResolvedCredential(token, credential_id, version, provider)
+            return ResolvedCredential(token, credential_id, version, provider, credential_type)
         except Exception:
             raise CredentialUnavailable() from None

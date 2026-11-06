@@ -253,7 +253,7 @@ class ExecutionWorker:
 
     def mark_attempt_dispatched(
         self, item_id: str, launch_id: str, lease_token: str, generation: int,
-        attempt_id: str, credential: Any = None,
+        attempt_id: str, credential: Any = None, credential_usage: list | None = None,
     ) -> bool:
         """凭据预取后按 Launch -> Item -> Attempt 加锁，再确认发送权和租约。"""
         is_pg = self.db_mgr.engine.dialect.name == "postgresql"
@@ -289,6 +289,7 @@ class ExecutionWorker:
                 attempt.credential_id = credential.credential_id
                 attempt.credential_version = credential.version
                 attempt.credential_provider = credential.provider
+            attempt.credential_usage = credential_usage
             attempt.request_phase = "MAY_HAVE_BEEN_SENT"
             session.commit()
             return True
@@ -602,6 +603,8 @@ class ExecutionWorker:
                 is_idempotent=bool(agent_dict.get("is_idempotent", False)),
                 credential_ref=agent_dict.get("credential_ref"),
                 credential_id=agent_dict.get("credential_id"),
+                http_auth=agent_dict.get("http_auth"), http_headers=agent_dict.get("http_headers", []),
+                response_mapping=agent_dict.get("response_mapping"), environment=agent_dict.get("environment"),
                 id=agent_dict.get("agent_version_id", f"{agent_dict['agent_id']}-{agent_dict['version']}"),
             )
 
@@ -784,7 +787,7 @@ class ExecutionWorker:
 
             # 解析期间可能已失去租约或被取消，禁止旧 Worker 标记发送或调用 Agent。
             if not current_attempt_id or not self.mark_attempt_dispatched(
-                item_id, launch_id, token, generation, current_attempt_id, executor.resolved_credential,
+                item_id, launch_id, token, generation, current_attempt_id, executor.resolved_credential, executor.credential_usage,
             ):
                 self.limiter.release_concurrency_permit(spec.id, permit_id)
                 await executor._client.aclose()

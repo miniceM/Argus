@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import email.utils
+import json
 import time
 from collections import deque
 from collections.abc import Callable
@@ -11,11 +13,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
 from .costs import extract_usage_cost
 from .credentials import CredentialService
+from .http_invocation import HTTPAuth, HTTPHeader, ResponseMapping, credential_bindings
 from .registry import AgentVersionSpec
 from .secret_providers import CredentialUnavailable
 from .security import resolve_execution_credential
@@ -59,6 +63,7 @@ class ErrorClassification(StrEnum):
     HTTP_5XX = "HTTP_5XX"
     HTTP_429 = "HTTP_429"
     INVALID_RESPONSE = "INVALID_RESPONSE"
+    SENSITIVE_RESPONSE = "SENSITIVE_RESPONSE"
     SSL_ERROR = "SSL_ERROR"
     UNKNOWN_ERROR = "UNKNOWN_ERROR"
 
@@ -129,6 +134,9 @@ class RemoteAgentExecutor:
         self.credential_db_manager = credential_db_manager
         self.resolved_credential = None
         self._credential_prepared = False
+        self._resolved_headers = {}
+        self.credential_usage = []
+        self._secret_values = set()
         self._limiter = SlidingWindowRateLimiter(spec.rate_limit_per_minute)
         self._client = client or httpx.AsyncClient(
             timeout=httpx.Timeout(
@@ -143,17 +151,86 @@ class RemoteAgentExecutor:
         if self._credential_prepared and not force_refresh:
             return
         try:
-            if self.spec.credential_id:
+            resolved = {}
+            configuration = {"credential_id": self.spec.credential_id, "credential_ref": self.spec.credential_ref,
+                             "http_auth": self.spec.http_auth, "http_headers": self.spec.http_headers}
+            for cid, kind, name in credential_bindings(configuration):
                 manager = self.credential_db_manager
                 if manager is None:
                     from .main import db_manager
                     manager = db_manager
-                self.resolved_credential = await _resolve_execution_secret(CredentialService(manager).resolve, self.spec.credential_id)
+                credential = await _resolve_execution_secret(CredentialService(manager).resolve, cid, kind,
+                                                               self.spec.endpoint, self.spec.environment)
+                resolved[name.lower()] = credential
+            primary = None
+            if self.spec.credential_id:
+                auth = HTTPAuth.model_validate(self.spec.http_auth or {"scheme": "bearer"})
+                primary = resolved[auth.target_header().lower()]
             elif self.spec.credential_ref:
-                self.resolved_credential = await _resolve_execution_secret(resolve_execution_credential, self.spec.credential_ref)
+                primary = await _resolve_execution_secret(resolve_execution_credential, self.spec.credential_ref)
+            secrets = set()
+            usage = []
+            for name, credential in resolved.items():
+                usage.append({"credential_id": credential.credential_id, "version": credential.version,
+                              "provider": credential.provider, "header_name": name})
+            for credential in [*resolved.values(), *([primary] if primary else [])]:
+                secrets.add(credential.token)
+                if credential.type == "basic_auth":
+                    decoded = base64.b64decode(credential.token).decode()
+                    secrets.update([decoded, *decoded.split(":", 1)])
+            # 全部解析完毕才发布本次身份；后续 Header 构造与同步授权回调之间不 await。
+            self.resolved_credential = primary
+            self._resolved_headers = resolved
+            self.credential_usage = usage
+            self._secret_values = {form for value in secrets if value for form in
+                (value, quote(value, safe=""), json.dumps(value, ensure_ascii=True)[1:-1], base64.b64encode(value.encode()).decode())}
             self._credential_prepared = True
-        except (ValueError, TimeoutError):
+        except (ValueError, TimeoutError, KeyError):
+            self._credential_prepared = False
             raise CredentialUnavailable() from None
+
+    def build_headers(self, headers):
+        result = dict(headers)
+        names = {name.lower() for name in headers}
+        auth = HTTPAuth.model_validate(self.spec.http_auth or
+            {"scheme": "bearer" if self.resolved_credential else "none"})
+        additions = []
+        if auth.scheme != "none":
+            if self.resolved_credential is None:
+                raise CredentialUnavailable()
+            prefix = {"bearer": "Bearer ", "basic": "Basic ", "api_key": auth.prefix}[auth.scheme]
+            additions.append((auth.target_header(), prefix + self.resolved_credential.token))
+        for raw in self.spec.http_headers:
+            header = HTTPHeader.model_validate(raw)
+            value = header.value if header.value is not None else header.prefix + self._resolved_headers[header.name.lower()].token
+            additions.append((header.name, value))
+        for name, value in additions:
+            if name.lower() in names:
+                raise ValueError("HTTP Header conflicts with runtime-managed Header")
+            names.add(name.lower())
+            result[name] = value
+        return result
+
+    def _safe_error(self, message, secret_values):
+        if any(secret in message for secret in secret_values):
+            return "Remote HTTP error (sensitive details removed)"
+        return message
+
+    def _response_problem(self, response, secret_values):
+        content = response.text + json.dumps(dict(response.headers), ensure_ascii=True)
+        if any(secret in content for secret in secret_values):
+            return ErrorClassification.SENSITIVE_RESPONSE, "Remote response contained credential material; content discarded"
+        if 300 <= response.status_code < 400 or response.status_code in (202, 204):
+            return ErrorClassification.INVALID_RESPONSE, "Expected final synchronous JSON response; redirect/async/empty response refused"
+        return None
+
+    def _response_body(self, response):
+        body = response.json()
+        if not isinstance(body, dict):
+            raise ValueError("Remote agent response must be a JSON object")
+        if self.spec.response_mapping:
+            body = ResponseMapping.model_validate(self.spec.response_mapping).apply(body)
+        return body
 
     async def invoke_once(
         self,
@@ -166,19 +243,24 @@ class RemoteAgentExecutor:
         if self.spec.method != "POST":
             raise ValueError(f"Executor currently supports POST only, got: {self.spec.method}")
 
-        call_headers = dict(headers)
         await self.prepare_credential()
-        if self.resolved_credential:
-            call_headers["Authorization"] = f"Bearer {self.resolved_credential.token}"
+        call_headers = self.build_headers(headers)
+        secret_values = frozenset(self._secret_values)
 
         active_client = client or self._client
         start_time = time.monotonic()
 
         try:
-            resp = await active_client.post(self.spec.endpoint, json=payload, headers=call_headers)
+            resp = await active_client.post(self.spec.endpoint, json=payload, headers=call_headers, follow_redirects=False, auth=None)
             duration_ms = int((time.monotonic() - start_time) * 1000)
             trace_received = resp.headers.get("x-demo-traceparent-received", "").lower() == "true"
-            resp_headers = dict(resp.headers)
+            problem = self._response_problem(resp, secret_values)
+            if problem:
+                return SingleInvocationResult(resp.status_code, None, None, {}, duration_ms, trace_received,
+                                              problem[0], problem[1], False, True)
+            # 只采纳传输诊断，不把任意远端 Header/Set-Cookie 持久化。
+            resp_headers = {key: value for key, value in resp.headers.items()
+                            if key.lower() in {"content-type", "retry-after", "x-demo-traceparent-received"}}
             usage_cost = None
             if self.spec.usage_cost_mapping:
                 try:
@@ -235,9 +317,7 @@ class RemoteAgentExecutor:
                 )
 
             try:
-                body = resp.json()
-                if not isinstance(body, dict):
-                    raise ValueError("Remote agent response must be a JSON object")
+                body = self._response_body(resp)
             except Exception as exc:
                 return SingleInvocationResult(
                     status_code=resp.status_code,
@@ -247,7 +327,7 @@ class RemoteAgentExecutor:
                     duration_ms=duration_ms,
                     trace_context_received=trace_received,
                     error_category=ErrorClassification.INVALID_RESPONSE,
-                    error_message=f"Invalid JSON response: {exc}",
+                    error_message=f"Invalid JSON response: {self._safe_error(str(exc), secret_values)}",
                     is_retryable=False,
                     may_have_side_effects=True,
                     usage_cost=usage_cost,
@@ -277,7 +357,7 @@ class RemoteAgentExecutor:
                 duration_ms=duration_ms,
                 trace_context_received=False,
                 error_category=ErrorClassification.CONNECT_ERROR,
-                error_message=str(exc),
+                error_message=self._safe_error(str(exc), secret_values),
                 is_retryable=True,
                 may_have_side_effects=False,
             )
@@ -293,7 +373,7 @@ class RemoteAgentExecutor:
                 duration_ms=duration_ms,
                 trace_context_received=False,
                 error_category=ErrorClassification.READ_TIMEOUT,
-                error_message=str(exc),
+                error_message=self._safe_error(str(exc), secret_values),
                 is_retryable=is_retryable,
                 may_have_side_effects=True,
             )
@@ -308,7 +388,7 @@ class RemoteAgentExecutor:
                 duration_ms=duration_ms,
                 trace_context_received=False,
                 error_category=ErrorClassification.UNKNOWN_ERROR,
-                error_message=str(exc),
+                error_message=self._safe_error(str(exc), secret_values),
                 is_retryable=False,
                 may_have_side_effects=True,
             )
@@ -340,9 +420,9 @@ class RemoteAgentExecutor:
                 # 同步 executor 可被多个 Item 共用；每个实际 HTTP Attempt 读取当前凭据。
                 await self._limiter.acquire()
                 await self.prepare_credential(force_refresh=True)
-                call_headers = dict(headers)
-                if self.resolved_credential:
-                    call_headers["Authorization"] = f"Bearer {self.resolved_credential.token}"
+                call_headers = self.build_headers(headers)
+                # 过滤器也按 Attempt 冻结，不能被并发 Item 的凭据轮换覆盖。
+                secret_values = frozenset(self._secret_values)
                 # 拷贝 Header 与同步授权回调之间不让出控制权，修订与发送的 Token 一致。
                 attempt_id: str | None = None
                 if on_attempt_start:
@@ -355,9 +435,15 @@ class RemoteAgentExecutor:
                 attempt_started = time.monotonic()
 
                 try:
-                    response = await client.post(self.spec.endpoint, json=payload, headers=call_headers)
+                    response = await client.post(self.spec.endpoint, json=payload, headers=call_headers, follow_redirects=False, auth=None)
                     duration_ms = int((time.monotonic() - attempt_started) * 1000)
                     trace_received = response.headers.get("x-demo-traceparent-received", "").lower() == "true"
+
+                    problem = self._response_problem(response, secret_values)
+                    if problem:
+                        if on_attempt_end:
+                            on_attempt_end(attempt_id, response.status_code, problem[0], problem[1], duration_ms, trace_received)
+                        raise RuntimeError(f"Remote agent failed with {problem[0]}: {problem[1]}")
 
                     # 1. Check HTTP 429
                     if response.status_code == 429:
@@ -436,21 +522,19 @@ class RemoteAgentExecutor:
 
                     # 4. Check JSON format
                     try:
-                        body = response.json()
-                        if not isinstance(body, dict):
-                            raise ValueError("Remote agent response must be a JSON object")
+                        body = self._response_body(response)
                     except Exception as exc:
                         if on_attempt_end:
                             on_attempt_end(
                                 attempt_id,
                                 response.status_code,
                                 ErrorClassification.INVALID_RESPONSE,
-                                str(exc),
+                                self._safe_error(str(exc), secret_values),
                                 duration_ms,
                                 trace_received,
                             )
                         raise RuntimeError(
-                            f"Remote agent failed with INVALID_RESPONSE: {exc}"
+                            f"Remote agent failed with INVALID_RESPONSE: {self._safe_error(str(exc), secret_values)}"
                         ) from exc
 
                     # Success!
@@ -473,7 +557,7 @@ class RemoteAgentExecutor:
                                 attempt_id,
                                 None,
                                 ErrorClassification.CONNECT_ERROR,
-                                str(exc),
+                                self._safe_error(str(exc), secret_values),
                                 duration_ms,
                                 False,
                             )
@@ -485,12 +569,12 @@ class RemoteAgentExecutor:
                                 attempt_id,
                                 None,
                                 ErrorClassification.CONNECT_ERROR,
-                                str(exc),
+                                self._safe_error(str(exc), secret_values),
                                 duration_ms,
                                 False,
                             )
                         raise RuntimeError(
-                            f"Remote agent failed with CONNECT_ERROR after {total_attempts} attempts: {exc}"
+                            f"Remote agent failed with CONNECT_ERROR after {total_attempts} attempts: {self._safe_error(str(exc), secret_values)}"
                         ) from exc
 
                 except httpx.ReadTimeout as exc:
@@ -502,7 +586,7 @@ class RemoteAgentExecutor:
                                 attempt_id,
                                 None,
                                 ErrorClassification.READ_TIMEOUT,
-                                str(exc),
+                                self._safe_error(str(exc), secret_values),
                                 duration_ms,
                                 False,
                             )
@@ -514,12 +598,12 @@ class RemoteAgentExecutor:
                                 attempt_id,
                                 None,
                                 ErrorClassification.READ_TIMEOUT,
-                                str(exc),
+                                self._safe_error(str(exc), secret_values),
                                 duration_ms,
                                 False,
                             )
                         raise RuntimeError(
-                            f"Remote agent failed with READ_TIMEOUT: {exc}"
+                            f"Remote agent failed with READ_TIMEOUT: {self._safe_error(str(exc), secret_values)}"
                         ) from exc
 
                 except (RuntimeError, ValueError):
@@ -533,11 +617,11 @@ class RemoteAgentExecutor:
                             attempt_id,
                             None,
                             ErrorClassification.UNKNOWN_ERROR,
-                            str(exc),
+                            self._safe_error(str(exc), secret_values),
                             duration_ms,
                             False,
                         )
-                    raise RuntimeError(f"Remote agent call failed: {exc}") from exc
+                    raise RuntimeError(f"Remote agent call failed: {self._safe_error(str(exc), secret_values)}") from exc
 
 
         raise RuntimeError(f"Remote agent failed after {total_attempts} attempt(s)")

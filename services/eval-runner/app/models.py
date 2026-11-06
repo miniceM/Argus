@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .http_invocation import HTTPAuth, HTTPHeader, ResponseMapping
 from .managed_evaluation import ManagedEvaluationContract
 from .security import validate_credential_ref, validate_endpoint_url
 from .trajectory.schema import Identity
@@ -213,6 +214,9 @@ class AgentVersionSpecValidator(BaseModel):
     response_schema: dict[str, Any] | None = None
     credential_ref: str | None = Field(default=None, description="Legacy Provider reference; prefer credential_id. env://NAME requires development mode")
     credential_id: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9_-]+$", description="稳定 Credential ID，与 legacy credential_ref 互斥")
+    http_auth: HTTPAuth | None = None
+    http_headers: list[HTTPHeader] = Field(default_factory=list, max_length=32)
+    response_mapping: ResponseMapping | None = None
     timeout_seconds: float = Field(default=30.0, ge=1.0, le=600.0)
     max_retries: int = Field(default=2, ge=0, le=10)
     rate_limit_per_minute: int = Field(default=600, ge=1, le=10000)
@@ -272,6 +276,16 @@ class AgentVersionSpecValidator(BaseModel):
     def credential_source(self):
         if self.credential_id and self.credential_ref:
             raise ValueError("Use credential_id or legacy credential_ref, not both")
+        auth = self.http_auth or HTTPAuth(scheme="bearer" if self.credential_id or self.credential_ref else "none")
+        if auth.scheme != "none" and not (self.credential_id or self.credential_ref):
+            raise ValueError("Authentication requires a credential")
+        if auth.scheme == "none" and (self.credential_id or self.credential_ref):
+            raise ValueError("No Auth cannot bind a credential")
+        if self.credential_ref and auth.scheme != "bearer":
+            raise ValueError("Legacy provider supports Bearer only")
+        names = [entry.name.lower() for entry in self.http_headers]
+        if len(names) != len(set(names)) or (auth.scheme != "none" and auth.target_header().lower() in names):
+            raise ValueError("Duplicate or conflicting HTTP Header names")
         return self
 
 
@@ -298,6 +312,9 @@ class AgentVersionResponse(BaseModel):
     response_schema: dict[str, Any] | None = None
     credential_ref: str | None = None
     credential_id: str | None = None
+    http_auth: HTTPAuth | None = None
+    http_headers: list[HTTPHeader] = Field(default_factory=list)
+    response_mapping: ResponseMapping | None = None
     timeout_seconds: float
     max_retries: int
     rate_limit_per_minute: int
@@ -860,6 +877,14 @@ class RetryEvaluationResponse(BaseModel):
     message: str = ""
 
 
+class CredentialUseEvidence(BaseModel):
+    """仅记录实际发送的凭据身份，不含 Secret 或编码后的认证内容。"""
+    credential_id: str
+    version: int
+    provider: str
+    header_name: str
+
+
 class ExecutionAttemptResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -877,6 +902,7 @@ class ExecutionAttemptResponse(BaseModel):
     credential_id: str | None = None
     credential_version: int | None = None
     credential_provider: str | None = None
+    credential_usage: list[CredentialUseEvidence] | None = None
     started_at: datetime
     completed_at: datetime | None = None
 

@@ -89,6 +89,9 @@ class AgentVersionRecord(Base):
     response_schema: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     credential_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     credential_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("credentials.id", ondelete="RESTRICT"), nullable=True)
+    http_auth: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    http_headers: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    response_mapping: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     timeout_seconds: Mapped[float] = mapped_column(Float, default=30.0, nullable=False)
     max_retries: Mapped[int] = mapped_column(Integer, default=2, nullable=False)
     rate_limit_per_minute: Mapped[int] = mapped_column(Integer, default=600, nullable=False)
@@ -236,8 +239,17 @@ class CredentialRecord(Base):
     environment: Mapped[str] = mapped_column(String(64), nullable=False)
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    type: Mapped[str] = mapped_column(String(32), default="bearer_token", nullable=False)
+    allowed_origins: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     active_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class AgentVersionCredentialRecord(Base):
+    """Header 引用具有真实 FK，删除/并发绑定不能绕过不可变版本。"""
+    __tablename__ = "agent_version_credentials"
+    agent_version_id: Mapped[str] = mapped_column(String(64), ForeignKey("agent_versions.id", ondelete="CASCADE"), primary_key=True)
+    credential_id: Mapped[str] = mapped_column(String(64), ForeignKey("credentials.id", ondelete="RESTRICT"), primary_key=True)
 
 
 class CredentialSecretRecord(Base):
@@ -418,6 +430,7 @@ class ExecutionAttemptRecord(Base):
     worker_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     request_phase: Mapped[str] = mapped_column(String(64), default="PREPARED", nullable=False)
     credential_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    credential_usage: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
     credential_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     credential_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     dispatch_generation: Mapped[int] = mapped_column(Integer, default=1, nullable=False)

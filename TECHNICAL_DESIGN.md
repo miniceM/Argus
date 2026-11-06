@@ -1353,3 +1353,14 @@ make demo
 Argus 的核心是**评测桥接、持久化执行、可信发布证据与质量门禁**。它不独占跨语言/外置 SDK/实验/基础 CI 能力，不替代 Langfuse，也不接管 Agent Runtime 或生产发布授权。
 
 按真实接入维护成本、故障恢复与 CI 防错配证据证明价值。范围决策见 [产品边界](docs/product-boundaries.md)，当前交付接口见 [OpenAPI](docs/openapi.json)，剩余工作见 [Roadmap #1](https://github.com/miniceM/Argus/issues/1)。
+
+
+### HTTP Agent 受控调用契约（Issue #249）
+
+- 不可变 AgentVersion 增加 `http_auth`、`http_headers`、`response_mapping`；非空配置进入 spec_digest 与 Launch 的冻结 agent 投影。新增字段的空默认值不重算旧版本指纹，也不改写旧 Manifest。
+- 主认证沿用顶层 credential_id；http_auth 只描述 none/bearer/api_key/basic 与 API Key Header 名/公开固定前缀。未配置 http_auth 时兼容原 Bearer / 匿名行为，legacy credential_ref 仅支持 Bearer。
+- Headers 区分普通值与 Credential 引用。主认证与 Header 不能重名；名称大小写不敏感，平台传输、W3C、X-Eval/X-Argus 和幂等头不可覆盖。绑定均需现有管理授权；agent_version_credentials 外键表保留多秘密引用，不新建 Secret 存储。
+- Credential 增加 type 与 allowed_origins；新 API Key/Basic/header_value 必须显式约束目标 Origin，绑定和每次解析均检查类型/环境/目标。历史无 Origin 的 Bearer 不被宣称已获得追溯保护。Basic 的受保护用户名/密码组合经编码后进入既有 AES-GCM 信封，编码不等于加密，禁止回显编码或解码材料。
+- 同步路径与 Worker 使用同一 Header 构造、响应保护和输出提取逻辑。Attempt 的 credential_usage 只记录 Header 名、Credential ID、实际修订和 Provider；同步授权回调前固定发送材料，Worker 延续 lease/generation/取消检查，不能解析后再换秘密却沿用旧审计。
+- 回答提取只支持固定 JSON 点路径（含数组下标），采纳为 answer，并保留 reply 等源字段。缺失/非文本失败；不把 202/SSE/重定向当最终回答。请求不跟随重定向，HTTPS 使用默认证书校验；已知凭据在响应体/响应头中回显会被非重试地拒绝并丢弃内容。
+- Origin 检查不是 DNS 固定、SSRF 防护或远端制品核验。正式部署必须另行限制 Runner 出站网络、云元数据地址和不受信 DNS/代理；本期不交付完整网络隔离、SSO、OAuth 刷新或 Service Session/Turn 适配。详见 [HTTP Agent 接入](docs/http-agent-integration.md)。

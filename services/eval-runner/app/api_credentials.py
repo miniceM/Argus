@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from .baselines import normalize_environment
 from .credentials import CredentialService, protected_file
 from .db_models import CredentialRecord
+from .http_invocation import BasicSecret, CredentialType, allowed_origin, encode_secret
 from .secret_providers import CredentialUnavailable, _token
 
 
@@ -52,10 +53,16 @@ def authorize(authorization: str | None = Header(default=None)) -> str:
 class CredentialCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=128)
-    type: Literal["bearer_token"] = "bearer_token"
+    type: CredentialType = "bearer_token"
     environment: str = "production"
     provider: Literal["managed"] = "managed"
-    secret: SecretStr
+    allowed_origins: list[str] = Field(default_factory=list, max_length=32)
+
+    @field_validator("allowed_origins")
+    @classmethod
+    def origins(cls, values):
+        return sorted(set(allowed_origin(value) for value in values))
+    secret: SecretStr | BasicSecret
 
     @field_validator("environment")
     @classmethod
@@ -65,7 +72,7 @@ class CredentialCreate(BaseModel):
 
 class CredentialRotate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    secret: SecretStr
+    secret: SecretStr | BasicSecret
 
 
 class CredentialDisable(BaseModel):
@@ -77,9 +84,10 @@ class CredentialDisable(BaseModel):
 class CredentialResponse(BaseModel):
     id: str
     name: str
-    type: Literal["bearer_token"] = "bearer_token"
+    type: CredentialType = "bearer_token"
     environment: str
     provider: Literal["managed"]
+    allowed_origins: list[str] = Field(default_factory=list)
     enabled: bool
     version: int
 
@@ -103,13 +111,13 @@ def list_credentials(svc=Depends(service)):
 
 @router.post("", response_model=CredentialResponse, status_code=201)
 def create_credential(payload: CredentialCreate, actor=Depends(authorize), svc=Depends(service)):
-    secret = payload.secret.get_secret_value()
+    secret = payload.secret.get_secret_value() if isinstance(payload.secret, SecretStr) else payload.secret.model_dump()
     try:
-        _token(secret)
+        encode_secret(secret, payload.type)
     except CredentialUnavailable:
         raise HTTPException(422, "Invalid credential secret") from None
     try:
-        return svc.create(payload.name, payload.environment, secret, actor)
+        return svc.create(payload.name, payload.environment, secret, actor, type=payload.type, allowed_origins=payload.allowed_origins)
     except CredentialUnavailable:
         raise HTTPException(503, "Credential provider is unavailable or not configured") from None
     except ValueError:
@@ -131,12 +139,18 @@ def credential_usage(credential_id: str, svc=Depends(service)):
 
 @router.post("/{credential_id}/rotate", response_model=CredentialResponse)
 def rotate_credential(credential_id: str, payload: CredentialRotate, actor=Depends(authorize), svc=Depends(service)):
+    secret = payload.secret.get_secret_value() if isinstance(payload.secret, SecretStr) else payload.secret.model_dump()
+    with svc.manager.get_session() as session:
+        record = session.get(CredentialRecord, credential_id)
+        if record is None:
+            raise HTTPException(404, "Credential not found")
+        kind = record.type
     try:
-        _token(payload.secret.get_secret_value())
+        encode_secret(secret, kind)
     except CredentialUnavailable:
         raise HTTPException(422, "Invalid credential secret") from None
     try:
-        return svc.rotate(credential_id, payload.secret.get_secret_value(), actor)
+        return svc.rotate(credential_id, secret, actor)
     except CredentialUnavailable:
         raise HTTPException(503, "Credential keyring is unavailable") from None
     except (ValueError, IntegrityError):

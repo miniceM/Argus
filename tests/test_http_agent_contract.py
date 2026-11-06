@@ -300,3 +300,56 @@ def test_concurrent_rotation_preserves_each_inflight_secret_filter(credentials, 
                     await first
         await executor._client.aclose()
     asyncio.run(run())
+
+
+def test_structured_response_mapping_extracts_multiple_fields_and_preserves_legacy_digest():
+    """Issue #251：支持多字段响应提取，同时保持仅含 answer_path 时的序列化与 digest 兼容。"""
+    legacy = normalize_and_validate_spec({
+        "endpoint": "https://agent.example/send",
+        "response_mapping": {"answer_path": "reply"},
+    })
+    assert legacy["response_mapping"] == {"answer_path": "reply"}
+
+    structured = normalize_and_validate_spec({
+        "endpoint": "https://agent.example/send",
+        "response_mapping": {
+            "answer_path": "choices.0.message.content",
+            "fields": {"intent": "meta.intent", "tool_calls": "meta.tools"},
+        },
+    })
+    assert structured["response_mapping"] == {
+        "answer_path": "choices.0.message.content",
+        "fields": {"intent": "meta.intent", "tool_calls": "meta.tools"},
+    }
+    assert structured["spec_digest"] != legacy["spec_digest"]
+
+    payload = {
+        "choices": [{"message": {"content": "extracted final answer"}}],
+        "meta": {"intent": "card_security", "tools": [{"name": "freeze-card"}]},
+    }
+
+    async def run():
+        executor = RemoteAgentExecutor(spec(response_mapping=structured["response_mapping"]))
+        transport = httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+        async with httpx.AsyncClient(transport=transport) as http:
+            result = await executor.invoke_once({}, {}, client=http)
+            assert result.body is not None
+            assert result.body["answer"] == "extracted final answer"
+            assert result.body["intent"] == "card_security"
+            assert result.body["tool_calls"] == [{"name": "freeze-card"}]
+        await executor._client.aclose()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("bad_mapping", [
+    {},
+    {"answer_path": "reply", "fields": {"answer": "other.path"}},
+    {"fields": {"_internal": "data.val"}},
+    {"fields": {"argus_score": "data.val"}},
+    {"fields": {"nested.target": "data.val"}},
+    {"fields": {"intent": "..invalid_path"}},
+])
+def test_response_mapping_rejects_empty_invalid_or_conflicting_rules(bad_mapping):
+    with pytest.raises(ValidationError):
+        AgentVersionSpecValidator(endpoint="https://agent.example/send", response_mapping=bad_mapping)

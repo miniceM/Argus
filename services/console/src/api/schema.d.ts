@@ -2514,7 +2514,11 @@ export interface components {
         /** ResponseMapping */
         ResponseMapping: {
             /** Answer Path */
-            answer_path: string;
+            answer_path?: string | null;
+            /** Fields */
+            fields?: {
+                [key: string]: string;
+            } | null;
         };
         /**
          * ResultSnapshotDetailResponse

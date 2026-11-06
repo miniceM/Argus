@@ -256,6 +256,16 @@ export const AgentVersionDetail: React.FC = () => {
               </p>) : <p>未配置</p>}
             </div>
             <p className="font-mono">回答字段：{versionData.response_mapping?.answer_path || "原样响应（默认 answer）"}</p>
+            {versionData.response_mapping?.fields && Object.keys(versionData.response_mapping.fields).length > 0 && (
+              <div>
+                <span className="text-muted-foreground block mb-1 font-medium">应答扩展字段映射</span>
+                {Object.entries(versionData.response_mapping.fields).map(([target, source]) => (
+                  <p key={target} className="font-mono break-all">
+                    {target} ← {source}
+                  </p>
+                ))}
+              </div>
+            )}
 
             <div>
               <span className="text-muted-foreground block mb-1 font-medium">产物制品引用 (Artifact Ref)</span>

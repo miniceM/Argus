@@ -132,6 +132,14 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
       setErrorMsg("请填写版本号与远程 HTTP 端点");
       return;
     }
+    const requiresCredential =
+      authScheme === "api_key" ||
+      authScheme === "basic" ||
+      (authScheme === "bearer" && !credentialRef.trim());
+    if (requiresCredential && !credentialId) {
+      setErrorMsg("已选择该认证方式，请选择要绑定的凭据（若无需鉴权请切换为 No Auth）。");
+      return;
+    }
     if (hasCredentialRefs && !credentialAuthorization.trim()) {
       setErrorMsg("绑定凭据需要管理授权 Token，请由管理员确认端点可信。");
       return;
@@ -311,68 +319,87 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
             </Field>
           </div>
 
-          <Field label="HTTP 认证方式" hint="默认兼容旧 Bearer/无认证配置；认证方式随新版本冻结。">
-            {({ id }) => <SelectInput id={id} value={authScheme} onChange={e => { setAuthScheme(e.target.value as AuthScheme); setCredentialId(""); setCredentialRef(""); setCredentialAuthorization(""); }}>
-              <option value="legacy">自动（历史 Bearer / 无认证）</option><option value="none">No Auth</option>
-              <option value="bearer">Bearer Token</option><option value="api_key">API Key（Header）</option><option value="basic">Basic Auth</option>
-            </SelectInput>}
+          <Field
+            label="产物标识 (ArtifactRef)"
+            labelSuffix={
+              <FieldHelp {...AGENT_VERSION_FIELD_HELPS.artifactRef} placement="bottom-right" />
+            }
+          >
+            {({ id }) => (
+              <TextInput
+                id={id}
+                type="text"
+                placeholder="git commit SHA 或 docker image digest"
+                value={artifactRef}
+                onChange={(e) => setArtifactRef(e.target.value)}
+                className="w-full font-mono"
+              />
+            )}
           </Field>
-          {authScheme === "api_key" && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="API Key Header 名称">{({ id }) => <TextInput id={id} required value={authHeader} onChange={e => setAuthHeader(e.target.value)} />}</Field>
-            <Field label="API Key 固定前缀" hint="原始 Authorization 可留空；Token 前缀需包含尾部空格。">{({ id }) => <TextInput id={id} value={authPrefix} onChange={e => setAuthPrefix(e.target.value)} />}</Field>
-          </div>}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field
-              label="选择凭据 (Credential)"
-              labelSuffix={<FieldHelp {...AGENT_VERSION_FIELD_HELPS.credentialRef} />}
-              hint="先在 Credentials 创建凭据；仅列出当前环境中启用的凭据"
-            >
-              {({ id, ...aria }) => (
-                <SelectInput
-                  {...aria}
-                  id={id}
-                  value={credentialId}
-                  disabled={authScheme === "none"}
-                  onChange={(e) => { setCredentialId(e.target.value); setCredentialRef(""); setCredentialAuthorization(""); }}
-                  className="w-full font-mono"
-                >
-                  <option value="">无需鉴权 / 使用历史引用</option>
-                  {credentials.data?.filter(credential => credential.enabled && credential.environment === (environment.trim().toLowerCase() || "production") &&
-                    (credential.type || "bearer_token") === (authScheme === "api_key" ? "api_key" : authScheme === "basic" ? "basic_auth" : "bearer_token")).map(credential => <option key={credential.id} value={credential.id}>{credential.name} · {credential.provider} · {credential.id.slice(-8)}</option>)}
-                </SelectInput>
-              )}
+
+          <section aria-label="身份认证与凭据" className="space-y-3 rounded-lg border border-border bg-surface-muted p-4">
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-sm font-semibold text-foreground">身份认证与凭据</h3>
+              <FieldHelp {...AGENT_VERSION_FIELD_HELPS.credentialRef} />
+            </div>
+
+            <Field label="HTTP 认证方式" hint="默认兼容旧 Bearer/无认证配置；认证方式随新版本冻结。">
+              {({ id }) => <SelectInput id={id} value={authScheme} onChange={e => { setAuthScheme(e.target.value as AuthScheme); setCredentialId(""); setCredentialRef(""); setCredentialAuthorization(""); }}>
+                <option value="legacy">自动（历史 Bearer / 无认证）</option>
+                <option value="none">No Auth</option>
+                <option value="bearer">Bearer Token</option>
+                <option value="api_key">API Key（Header）</option>
+                <option value="basic">Basic Auth</option>
+              </SelectInput>}
             </Field>
 
-            <Field
-              label="产物标识 (ArtifactRef)"
-              labelSuffix={
-                <FieldHelp {...AGENT_VERSION_FIELD_HELPS.artifactRef} placement="bottom-right" />
-              }
-            >
-              {({ id }) => (
-                <TextInput
-                  id={id}
-                  type="text"
-                  placeholder="git commit SHA 或 docker image digest"
-                  value={artifactRef}
-                  onChange={(e) => setArtifactRef(e.target.value)}
-                  className="w-full font-mono"
-                />
-              )}
-            </Field>
-          </div>
+            {authScheme === "none" ? (
+              <p className="text-xs text-foreground-secondary">此端点无需身份鉴权，调用时不附带认证请求头。</p>
+            ) : (
+              <div className="space-y-3 pt-1">
+                <Field
+                  label="选择凭据 (Credential)"
+                  hint="先在 Credentials 创建凭据；仅列出当前环境中启用的匹配凭据"
+                >
+                  {({ id, ...aria }) => (
+                    <SelectInput
+                      {...aria}
+                      id={id}
+                      value={credentialId}
+                      onChange={(e) => { setCredentialId(e.target.value); setCredentialRef(""); setCredentialAuthorization(""); }}
+                      className="w-full font-mono"
+                    >
+                      <option value="">
+                        {authScheme === "legacy" ? "不绑定凭据 / 使用下方历史引用" : "请选择要绑定的凭据..."}
+                      </option>
+                      {credentials.data?.filter(credential => credential.enabled && credential.environment === (environment.trim().toLowerCase() || "production") &&
+                        (credential.type || "bearer_token") === (authScheme === "api_key" ? "api_key" : authScheme === "basic" ? "basic_auth" : "bearer_token")).map(credential => <option key={credential.id} value={credential.id}>{credential.name} · {credential.provider} · {credential.id.slice(-8)}</option>)}
+                    </SelectInput>
+                  )}
+                </Field>
+
+                {authScheme === "api_key" && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="API Key Header 名称">{({ id }) => <TextInput id={id} required value={authHeader} onChange={e => setAuthHeader(e.target.value)} />}</Field>
+                  <Field label="API Key 固定前缀" hint="原始 Authorization 可留空；Token 前缀需包含尾部空格。">{({ id }) => <TextInput id={id} value={authPrefix} onChange={e => setAuthPrefix(e.target.value)} />}</Field>
+                </div>}
+
+                {["legacy", "bearer"].includes(authScheme) && (
+                  <details className="text-sm text-foreground-secondary">
+                    <summary>开发 / 历史引用迁移</summary>
+                    <Field label="历史凭据引用 (SecretRef)" hint="生产建议创建 Credential 后选择其名称。env:// 仅用于明确开启的开发模式。">
+                      {({ id }) => <TextInput id={id} disabled={Boolean(credentialId)} placeholder="env://DEMO_AUTH_TOKEN" value={credentialRef} onChange={e => setCredentialRef(e.target.value)} />}
+                    </Field>
+                  </details>
+                )}
+              </div>
+            )}
+          </section>
 
           {hasCredentialRefs && <Field label="凭据绑定管理授权 Token" hint="绑定会允许 Runner 向此端点发送凭据，需管理员确认端点可信。授权仅用于本次操作。">
             {({ id }) => <TextInput id={id} type="password" autoComplete="off" required value={credentialAuthorization} onChange={e => setCredentialAuthorization(e.target.value)} />}
           </Field>}
 
           {credentials.isError && <p role="alert" className="text-sm text-fail">凭据列表加载失败，请关闭并重试，或前往 Credentials 检查服务状态。</p>}
-          <details className="text-sm text-foreground-secondary">
-            <summary>开发 / 历史引用迁移</summary>
-            <Field label="历史凭据引用 (SecretRef)" hint="生产建议创建 Credential 后选择其名称。env:// 仅用于明确开启的开发模式。">
-              {({ id }) => <TextInput id={id} disabled={Boolean(credentialId) || !["legacy", "bearer"].includes(authScheme)} placeholder="env://DEMO_AUTH_TOKEN" value={credentialRef} onChange={e => setCredentialRef(e.target.value)} />}
-            </Field>
-          </details>
 
           <Field
             label="请求映射关系 (Request Mapping JSON)"

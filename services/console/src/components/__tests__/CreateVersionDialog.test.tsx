@@ -195,3 +195,50 @@ it("freezes API Key settings, ordinary Headers and reply extraction", async () =
     http_headers: [{ name: "X-Tenant", value: "evaluation", prefix: "" }], response_mapping: { answer_path: "reply" },
   }) })));
 });
+
+describe("CreateVersionDialog unified authentication card (Issue #250)", () => {
+  it("hides credential selector when No Auth is selected and avoids redundant 'no auth' copy when a scheme is chosen", async () => {
+    vi.mocked(api.GET).mockResolvedValue({
+      data: [{ id: "cred-bearer", name: "Bearer 凭据", type: "bearer_token", environment: "staging", provider: "managed", enabled: true, version: 1 }],
+      response: new Response(),
+    } as any);
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <CreateVersionDialog agentId="banking-agent" isOpen onClose={vi.fn()} />
+      </QueryClientProvider>
+    );
+
+    const authRegion = screen.getByRole("region", { name: "身份认证与凭据" });
+    expect(authRegion).toBeInTheDocument();
+
+    // Switch to No Auth -> credential combobox should be hidden
+    fireEvent.change(screen.getByLabelText("HTTP 认证方式"), { target: { value: "none" } });
+    expect(screen.queryByRole("combobox", { name: /选择凭据/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/无需身份鉴权/)).toBeInTheDocument();
+
+    // Switch to Bearer Token -> credential combobox appears inside the auth card without misleading "无需鉴权" option
+    fireEvent.change(screen.getByLabelText("HTTP 认证方式"), { target: { value: "bearer" } });
+    const credSelect = screen.getByRole("combobox", { name: /选择凭据/ });
+    expect(authRegion).toContainElement(credSelect);
+    expect(screen.queryByRole("option", { name: /无需鉴权/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /请选择.*凭据/ })).toBeInTheDocument();
+  });
+
+  it("blocks submission when an explicit auth scheme is selected without choosing a credential", async () => {
+    vi.mocked(api.POST).mockClear();
+    vi.mocked(api.GET).mockResolvedValue({ data: [], response: new Response() } as any);
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <CreateVersionDialog agentId="banking-agent" isOpen onClose={vi.fn()} />
+      </QueryClientProvider>
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: /版本号/ }), { target: { value: "v-unselected" } });
+    fireEvent.change(screen.getByLabelText("HTTP 认证方式"), { target: { value: "api_key" } });
+    await waitFor(() => expect(api.GET).toHaveBeenCalled());
+    fireEvent.submit(document.getElementById("create-version-form")!);
+
+    expect(api.POST).not.toHaveBeenCalled();
+    expect(screen.getByText(/已选择该认证方式，请选择要绑定的凭据/)).toBeInTheDocument();
+  });
+});

@@ -54,6 +54,13 @@ class AgentCreateRequest(BaseModel):
     name: str = Field(..., description="Human-readable name")
     description: str | None = Field(default=None, description="Detailed description")
     owner: str | None = Field(default=None, description="Team or owner identifier")
+    langfuse_connection: LangfuseConnection | None = None
+
+
+class AgentLangfuseConnectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    langfuse_connection: LangfuseConnection | None = Field(..., description="Agent 全部版本共用的项目连接；null 清除当前绑定，不改历史 Launch")
 
 
 class AgentSummaryResponse(BaseModel):
@@ -63,6 +70,7 @@ class AgentSummaryResponse(BaseModel):
     name: str
     description: str | None = None
     owner: str | None = None
+    langfuse_connection: LangfuseConnection | None = None
     status: str
     version_count: int = 0
     latest_version: str | None = None
@@ -206,6 +214,13 @@ class UsageCostMapping(BaseModel):
 
 
 class AgentVersionSpecValidator(BaseModel):
+    @model_validator(mode="before")
+    @classmethod
+    def reject_version_project_binding(cls, value):
+        if isinstance(value, dict) and value.get("langfuse_connection") is not None:
+            raise ValueError("Langfuse connection belongs to the Agent; configure it once for all versions")
+        return value
+
     endpoint: str = Field(..., description="HTTP POST URL of the agent")
     protocol: str = Field(default="HTTP_JSON", description="Invocation protocol, currently HTTP_JSON only")
     method: str = Field(default="POST", description="HTTP method, currently POST only")
@@ -215,7 +230,6 @@ class AgentVersionSpecValidator(BaseModel):
     response_schema: dict[str, Any] | None = None
     credential_ref: str | None = Field(default=None, description="Legacy Provider reference; prefer credential_id. env://NAME requires development mode")
     credential_id: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9_-]+$", description="稳定 Credential ID，与 legacy credential_ref 互斥")
-    langfuse_connection: LangfuseConnection | None = None
     http_auth: HTTPAuth | None = None
     http_headers: list[HTTPHeader] = Field(default_factory=list, max_length=32)
     response_mapping: ResponseMapping | None = None
@@ -314,7 +328,6 @@ class AgentVersionResponse(BaseModel):
     response_schema: dict[str, Any] | None = None
     credential_ref: str | None = None
     credential_id: str | None = None
-    langfuse_connection: LangfuseConnection | None = None
     http_auth: HTTPAuth | None = None
     http_headers: list[HTTPHeader] = Field(default_factory=list)
     response_mapping: ResponseMapping | None = None

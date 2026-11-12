@@ -13,6 +13,24 @@
         ],
         "summary": "Register a new Agent Definition",
         "operationId": "create_agent_api_v1_agents_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -192,6 +210,76 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DomainErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agents/langfuse-connection": {
+      "put": {
+        "tags": [
+          "Agent Registry"
+        ],
+        "summary": "配置 Agent 全部版本共用的 Langfuse 项目",
+        "operationId": "set_agent_langfuse_connection_api_v1_agents_langfuse_connection_put",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Agent ID",
+              "title": "Id"
+            },
+            "description": "Agent ID"
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentLangfuseConnectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
                 }
               }
             }
@@ -2594,6 +2682,16 @@
             ],
             "title": "Owner",
             "description": "Team or owner identifier"
+          },
+          "langfuse_connection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LangfuseConnection"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -2633,6 +2731,27 @@
           "id"
         ],
         "title": "AgentDeleteResponse"
+      },
+      "AgentLangfuseConnectionRequest": {
+        "properties": {
+          "langfuse_connection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LangfuseConnection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Agent 全部版本共用的项目连接；null 清除当前绑定，不改历史 Launch"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "langfuse_connection"
+        ],
+        "title": "AgentLangfuseConnectionRequest"
       },
       "AgentPurgeRequest": {
         "properties": {
@@ -2685,6 +2804,16 @@
               }
             ],
             "title": "Owner"
+          },
+          "langfuse_connection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LangfuseConnection"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "status": {
             "type": "string",
@@ -2768,6 +2897,16 @@
               }
             ],
             "title": "Owner"
+          },
+          "langfuse_connection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LangfuseConnection"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "status": {
             "type": "string",
@@ -2924,16 +3063,6 @@
             ],
             "title": "Credential Id",
             "description": "稳定 Credential ID，与 legacy credential_ref 互斥"
-          },
-          "langfuse_connection": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LangfuseConnection"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "http_auth": {
             "anyOf": [
@@ -3172,16 +3301,6 @@
               }
             ],
             "title": "Credential Id"
-          },
-          "langfuse_connection": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LangfuseConnection"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "http_auth": {
             "anyOf": [
@@ -4228,6 +4347,13 @@
             },
             "type": "array",
             "title": "Versions"
+          },
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/CredentialUsageAgent"
+            },
+            "type": "array",
+            "title": "Agents"
           }
         },
         "type": "object",
@@ -4236,6 +4362,24 @@
           "versions"
         ],
         "title": "CredentialUsage"
+      },
+      "CredentialUsageAgent": {
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "title": "Agent Id"
+          },
+          "is_current": {
+            "type": "boolean",
+            "title": "Is Current"
+          }
+        },
+        "type": "object",
+        "required": [
+          "agent_id",
+          "is_current"
+        ],
+        "title": "CredentialUsageAgent"
       },
       "CredentialUsageVersion": {
         "properties": {

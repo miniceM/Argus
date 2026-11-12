@@ -545,8 +545,8 @@ export const CreateLaunch: React.FC = () => {
                 )}
               </Field>
               {selectedAgentVersion && <p className="mt-2 text-xs text-muted-foreground" role="note">
-                Langfuse 连接来源：{versions?.find(v => v.version === selectedAgentVersion)?.langfuse_connection
-                  ? `BOUND · ${versions.find(v => v.version === selectedAgentVersion)?.langfuse_connection?.project_id}`
+                Agent 共用的 Langfuse 连接：{agents?.find(a => a.id === selectedAgentId)?.langfuse_connection
+                  ? `BOUND · ${agents?.find(a => a.id === selectedAgentId)?.langfuse_connection?.project_id}`
                   : "GLOBAL_ENV（部署全局配置）"}。Project ID 采纳条件不会更改此路由。
               </p>}
               {versions && versions.length === 0 && (

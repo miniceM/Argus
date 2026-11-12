@@ -11,22 +11,10 @@ vi.mock("../../api/client", () => ({
   },
 }));
 
-it("按版本绑定 Langfuse 项目时只提交凭据引用并要求管理授权", async () => {
-  vi.mocked(api.GET).mockResolvedValue({ data: [{ id: "lf-credential", name: "团队 B", type: "basic_auth", enabled: true, environment: "staging" }] } as any);
-  vi.mocked(api.POST).mockResolvedValue({ data: {} } as any);
+it("创建版本不再单独绑定 Langfuse 项目", () => {
   render(<QueryClientProvider client={new QueryClient()}><CreateVersionDialog agentId="team-b" isOpen onClose={vi.fn()} /></QueryClientProvider>);
-  fireEvent.change(screen.getByRole("textbox", { name: /版本号/ }), { target: { value: "bound" } });
-  fireEvent.click(screen.getByRole("checkbox", { name: "绑定独立 Langfuse 项目" }));
-  fireEvent.change(screen.getByLabelText(/Langfuse Base URL/), { target: { value: "https://lf.example" } });
-  fireEvent.change(screen.getByLabelText(/Langfuse Project ID/), { target: { value: "project-b" } });
-  await screen.findByRole("option", { name: /团队 B/ });
-  fireEvent.change(screen.getByLabelText(/Langfuse 凭据/), { target: { value: "lf-credential" } });
-  fireEvent.change(screen.getByLabelText(/凭据绑定管理授权/), { target: { value: "example-admin" } });
-  fireEvent.submit(document.getElementById("create-version-form")!);
-  await waitFor(() => expect(api.POST).toHaveBeenCalledWith("/api/v1/agent-versions", expect.objectContaining({
-    headers: { Authorization: "Bearer example-admin" },
-    body: expect.objectContaining({ langfuse_connection: { base_url: "https://lf.example", project_id: "project-b", credential_id: "lf-credential" } }),
-  })));
+  expect(screen.queryByRole("checkbox", { name: "绑定独立 Langfuse 项目" })).not.toBeInTheDocument();
+  expect(screen.getByText(/Langfuse 项目在 Agent 详情页统一配置/)).toBeInTheDocument();
 });
 
 describe("CreateVersionDialog Help Indicators (Issue #18)", () => {

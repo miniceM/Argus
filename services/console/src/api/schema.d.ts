@@ -23,6 +23,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agents/langfuse-connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 配置 Agent 全部版本共用的 Langfuse 项目 */
+        put: operations["set_agent_langfuse_connection_api_v1_agents_langfuse_connection_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents/purge": {
         parameters: {
             query?: never;
@@ -751,6 +768,7 @@ export interface components {
              * @description Team or owner identifier
              */
             owner?: string | null;
+            langfuse_connection?: components["schemas"]["LangfuseConnection"] | null;
         };
         /** AgentDeleteResponse */
         AgentDeleteResponse: {
@@ -777,6 +795,11 @@ export interface components {
              */
             message: string;
         };
+        /** AgentLangfuseConnectionRequest */
+        AgentLangfuseConnectionRequest: {
+            /** @description Agent 全部版本共用的项目连接；null 清除当前绑定，不改历史 Launch */
+            langfuse_connection: components["schemas"]["LangfuseConnection"] | null;
+        };
         /** AgentPurgeRequest */
         AgentPurgeRequest: {
             /**
@@ -800,6 +823,7 @@ export interface components {
             description?: string | null;
             /** Owner */
             owner?: string | null;
+            langfuse_connection?: components["schemas"]["LangfuseConnection"] | null;
             /** Status */
             status: string;
             /**
@@ -840,6 +864,7 @@ export interface components {
             description?: string | null;
             /** Owner */
             owner?: string | null;
+            langfuse_connection?: components["schemas"]["LangfuseConnection"] | null;
             /** Status */
             status: string;
             /**
@@ -922,7 +947,6 @@ export interface components {
              * @description 稳定 Credential ID，与 legacy credential_ref 互斥
              */
             credential_id?: string | null;
-            langfuse_connection?: components["schemas"]["LangfuseConnection"] | null;
             http_auth?: components["schemas"]["HTTPAuth"] | null;
             /** Http Headers */
             http_headers?: components["schemas"]["HTTPHeader"][];
@@ -1021,7 +1045,6 @@ export interface components {
             credential_ref?: string | null;
             /** Credential Id */
             credential_id?: string | null;
-            langfuse_connection?: components["schemas"]["LangfuseConnection"] | null;
             http_auth?: components["schemas"]["HTTPAuth"] | null;
             /** Http Headers */
             http_headers?: components["schemas"]["HTTPHeader"][];
@@ -1395,6 +1418,15 @@ export interface components {
             credential_id: string;
             /** Versions */
             versions: components["schemas"]["CredentialUsageVersion"][];
+            /** Agents */
+            agents?: components["schemas"]["CredentialUsageAgent"][];
+        };
+        /** CredentialUsageAgent */
+        CredentialUsageAgent: {
+            /** Agent Id */
+            agent_id: string;
+            /** Is Current */
+            is_current: boolean;
         };
         /** CredentialUsageVersion */
         CredentialUsageVersion: {
@@ -2831,7 +2863,9 @@ export interface operations {
     create_agent_api_v1_agents_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2912,6 +2946,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DomainErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_agent_langfuse_connection_api_v1_agents_langfuse_connection_put: {
+        parameters: {
+            query: {
+                /** @description Agent ID */
+                id: string;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentLangfuseConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentResponse"];
                 };
             };
             /** @description Validation Error */

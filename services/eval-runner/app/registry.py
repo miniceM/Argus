@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from .config import find_path
 from .db import DatabaseManager
 from .db_models import (
+    AgentLangfuseCredentialRecord,
     AgentRecord,
     AgentVersionCredentialRecord,
     AgentVersionRecord,
@@ -93,7 +94,7 @@ def normalize_and_validate_spec(data: dict[str, Any]) -> dict[str, Any]:
     normalized["http_headers"] = [header.model_dump(exclude_none=True, exclude_defaults=True) for header in model.http_headers]
 
     # 凭据绑定必须冻结环境，不能继承无凭据旧版本的跨环境兼容行为。
-    if (credential_bindings(normalized) or normalized.get("langfuse_connection")) and normalized["environment"] is None:
+    if credential_bindings(normalized) and normalized["environment"] is None:
         normalized["environment"] = "production"
     digest = compute_spec_digest(normalized)
     normalized["spec_digest"] = digest
@@ -148,6 +149,8 @@ class AgentRegistry:
         name: str,
         description: str | None = None,
         owner: str | None = None,
+        langfuse_connection: dict[str, Any] | None = None,
+        actor: str = "system",
     ) -> AgentRecord:
         with self.db_manager.get_session() as session:
             existing = session.get(AgentRecord, agent_id)
@@ -162,6 +165,43 @@ class AgentRegistry:
                 status="active",
             )
             session.add(agent)
+            session.flush()
+            if langfuse_connection is not None:
+                self._set_langfuse_connection(session, agent, langfuse_connection, actor)
+            session.commit()
+            session.refresh(agent)
+            return agent
+
+    @staticmethod
+    def _set_langfuse_connection(session, agent, binding, actor):
+        from .credentials import CredentialService
+        from .langfuse_connection import LangfuseConnection
+
+        if binding is not None:
+            binding = LangfuseConnection.model_validate(binding).model_dump()
+            credential = session.scalar(select(CredentialRecord).where(
+                CredentialRecord.id == binding["credential_id"]).with_for_update())
+            if credential is None:
+                raise ValueError("Credential is missing")
+            # 项目在 Agent 层配置一次；具体 Launch 仍须匹配凭据的环境。
+            check_credential_target(credential, "basic_auth", binding["base_url"], credential.environment)
+            key = (agent.id, credential.id)
+            if session.get(AgentLangfuseCredentialRecord, key) is None:
+                session.add(AgentLangfuseCredentialRecord(agent_id=agent.id, credential_id=credential.id))
+            CredentialService.audit(session, credential, "BIND_LANGFUSE_AGENT", actor)
+        elif agent.langfuse_connection:
+            credential = session.get(CredentialRecord, agent.langfuse_connection["credential_id"])
+            CredentialService.audit(session, credential, "UNBIND_LANGFUSE_AGENT", actor)
+        agent.langfuse_connection = binding
+
+    def set_langfuse_connection(self, agent_id, binding, *, actor="system"):
+        with self.db_manager.get_session() as session:
+            agent = session.scalar(select(AgentRecord).where(AgentRecord.id == agent_id).with_for_update())
+            if agent is None:
+                raise AgentNotFoundError(agent_id)
+            if agent.status != "active":
+                raise ValueError("Agent is not active")
+            self._set_langfuse_connection(session, agent, binding, actor)
             session.commit()
             session.refresh(agent)
             return agent
@@ -207,6 +247,7 @@ class AgentRegistry:
                 "name": agent.name,
                 "description": agent.description,
                 "owner": agent.owner,
+                "langfuse_connection": agent.langfuse_connection,
                 "status": agent.status,
                 "version_count": v_count,
                 "latest_version": latest_active,
@@ -276,6 +317,7 @@ class AgentRegistry:
                         "name": agent.name,
                         "description": agent.description,
                         "owner": agent.owner,
+                        "langfuse_connection": agent.langfuse_connection,
                         "status": agent.status,
                         "version_count": v_counts.get(agent.id, 0),
                         "latest_version": latest_active.get(agent.id),
@@ -422,10 +464,8 @@ class AgentRegistry:
         http_auth: dict[str, Any] | None = None,
         http_headers: list[dict[str, Any]] | None = None,
         response_mapping: dict[str, Any] | None = None,
-        langfuse_connection: dict[str, Any] | None = None,
     ) -> AgentVersionRecord:
         raw_spec = {
-            "langfuse_connection": langfuse_connection,
             "endpoint": endpoint,
             "protocol": protocol,
             "method": method,
@@ -481,7 +521,6 @@ class AgentRegistry:
                 response_schema=normalized["response_schema"],
                 credential_ref=normalized["credential_ref"],
                 credential_id=normalized["credential_id"],
-                langfuse_connection=normalized["langfuse_connection"],
                 http_auth=normalized["http_auth"], http_headers=normalized["http_headers"], response_mapping=normalized["response_mapping"],
                 timeout_seconds=normalized["timeout_seconds"],
                 max_retries=normalized["max_retries"],
@@ -503,13 +542,6 @@ class AgentRegistry:
 
     @staticmethod
     def _validate_credentials(session, normalized):
-        connection = normalized.get("langfuse_connection")
-        if connection:
-            credential = session.scalar(select(CredentialRecord).where(
-                CredentialRecord.id == connection["credential_id"]).with_for_update())
-            if credential is None:
-                raise ValueError("Credential is missing")
-            check_credential_target(credential, "basic_auth", connection["base_url"], normalized["environment"])
         for cid, kind, _ in sorted(credential_bindings(normalized)):
             credential = session.scalar(select(CredentialRecord).where(CredentialRecord.id == cid).with_for_update())
             if credential is None:
@@ -519,8 +551,6 @@ class AgentRegistry:
     @staticmethod
     def _retain_credentials(session, version_id, normalized):
         ids = {cid for cid, _, _ in credential_bindings(normalized)}
-        if normalized.get("langfuse_connection"):
-            ids.add(normalized["langfuse_connection"]["credential_id"])
         for cid in sorted(ids):
             session.add(AgentVersionCredentialRecord(agent_version_id=version_id, credential_id=cid))
 
@@ -629,6 +659,9 @@ class AgentRegistry:
                     session.add(agent)
                     session.flush()
 
+                if "langfuse_connection" in agent_info:
+                    self._set_langfuse_connection(session, agent, agent_info["langfuse_connection"], "yaml-import")
+
                 versions_data = agent_info.get("versions", {})
                 for ver_name, ver_info in versions_data.items():
                     normalized = normalize_and_validate_spec(ver_info)
@@ -664,7 +697,6 @@ class AgentRegistry:
                         response_schema=normalized["response_schema"],
                         credential_ref=normalized["credential_ref"],
                         credential_id=normalized["credential_id"],
-                        langfuse_connection=normalized["langfuse_connection"],
                         http_auth=normalized["http_auth"], http_headers=normalized["http_headers"], response_mapping=normalized["response_mapping"],
                         timeout_seconds=normalized["timeout_seconds"],
                         max_retries=normalized["max_retries"],

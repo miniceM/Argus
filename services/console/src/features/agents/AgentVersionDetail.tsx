@@ -269,13 +269,8 @@ export const AgentVersionDetail: React.FC = () => {
 
       <Panel className="space-y-2 p-5 text-sm" aria-label="Langfuse 项目连接">
         <h3 className="font-semibold">Langfuse 项目连接</h3>
-        <Badge tone="neutral">{versionData.langfuse_connection ? "BOUND" : "GLOBAL_ENV"}</Badge>
-        {versionData.langfuse_connection ? <>
-          <p className="font-mono break-all">{versionData.langfuse_connection.base_url}</p>
-          <p>Project：{versionData.langfuse_connection.project_id}</p>
-          <p>凭据引用：<Link to="/credentials" className="text-primary font-mono">{versionData.langfuse_connection.credential_id}</Link></p>
-          <p className="text-xs text-muted-foreground">更改项目绑定需创建新版本；轮换和停用在下一次调用解析时生效。</p>
-        </> : <p className="text-muted-foreground">使用部署的全局 Langfuse 配置。</p>}
+        <p className="text-muted-foreground">此版本与该 Agent 的其他版本共用项目连接。每次 Launch 单独冻结实际使用的连接。</p>
+        <Link to={`/agents/${agentId}`} className="inline-flex min-h-7 items-center text-primary">前往 Agent 管理项目连接</Link>
       </Panel>
 
       {/* Contract & Schemas */}

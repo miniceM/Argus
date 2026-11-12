@@ -60,6 +60,7 @@ class AgentRecord(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     owner: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    langfuse_connection: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="active", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -69,6 +70,13 @@ class AgentRecord(Base):
     versions: Mapped[list[AgentVersionRecord]] = relationship(
         "AgentVersionRecord", back_populates="agent", cascade="all, delete-orphan"
     )
+
+
+class AgentLangfuseCredentialRecord(Base):
+    __tablename__ = "agent_langfuse_credentials"
+
+    agent_id: Mapped[str] = mapped_column(String(128), ForeignKey("agents.id", ondelete="CASCADE"), primary_key=True)
+    credential_id: Mapped[str] = mapped_column(String(64), ForeignKey("credentials.id", ondelete="RESTRICT"), primary_key=True)
 
 
 class AgentVersionRecord(Base):

@@ -113,8 +113,9 @@ export function CredentialsPage() {
       </div>
     </article>)}
     <Modal open={usage !== null} onClose={() => setUsage(null)} title={usageTarget ? `凭据使用关系 · ${credentialLabel(usageTarget)}` : "凭据使用关系"}>
-      <div className="p-6 space-y-2"><p className="text-sm text-foreground-secondary">不可变历史版本也会保护凭据不被删除。</p>
-        {usage?.versions.length === 0 && <p>暂无版本引用。</p>}
+      <div className="p-6 space-y-2"><p className="text-sm text-foreground-secondary">Agent 项目绑定与不可变历史记录也会保护凭据不被删除。</p>
+        {usage?.agents?.map(agent => <p key={agent.agent_id}>{agent.agent_id} · {agent.is_current ? "当前项目连接" : "历史项目连接"}</p>)}
+        {usage?.versions.length === 0 && !usage?.agents?.length && <p>暂无引用。</p>}
         {usage?.versions.map(version => <p key={`${version.agent_id}:${version.version}`}>{version.agent_id} / {version.version} · {version.is_active ? "当前版本" : "历史版本"}</p>)}
       </div>
     </Modal>

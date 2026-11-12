@@ -251,10 +251,10 @@ def test_020_upgrade_keeps_old_identity_and_adds_header_fk(tmp_path):
         connection.execute(text("INSERT INTO agents (id,name) VALUES ('old-agent','Old')"))
         connection.execute(text("INSERT INTO agent_versions (id,agent_id,version,spec_digest,endpoint) VALUES ('old-version','old-agent','v1','unchanged-digest','https://agent.example/send')"))
         connection.execute(text("INSERT INTO credentials (id,name,environment,provider) VALUES ('header-secret','Header','production','managed')"))
-    assert MigrationRunner(engine, migrations).apply_all() == ["020_http_agent_invocation.sql"]
+    assert MigrationRunner(engine, migrations).apply_all() == ["020_http_agent_invocation.sql", "021_langfuse_connection.sql"]
     with engine.begin() as connection:
-        row = connection.execute(text("SELECT spec_digest,http_auth,http_headers,response_mapping FROM agent_versions")).one()
-        assert tuple(row) == ("unchanged-digest", None, "[]", None)
+        row = connection.execute(text("SELECT spec_digest,http_auth,http_headers,response_mapping,langfuse_connection FROM agent_versions")).one()
+        assert tuple(row) == ("unchanged-digest", None, "[]", None, None)
         connection.execute(text("INSERT INTO agent_version_credentials (agent_version_id,credential_id) VALUES ('old-version','header-secret')"))
     with pytest.raises(IntegrityError), engine.begin() as connection:
         connection.execute(text("DELETE FROM credentials WHERE id='header-secret'"))

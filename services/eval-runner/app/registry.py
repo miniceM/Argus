@@ -60,7 +60,7 @@ def compute_spec_digest(spec_dict: dict[str, Any]) -> str:
         "timeout_seconds",
         "trace_propagation",
         "trajectory_source_profile_id",
-        "http_auth", "http_headers", "response_mapping",
+        "http_auth", "http_headers", "response_mapping", "langfuse_connection",
     ]
     normalized: dict[str, Any] = {}
     for k in sorted(keys_to_include):
@@ -93,7 +93,7 @@ def normalize_and_validate_spec(data: dict[str, Any]) -> dict[str, Any]:
     normalized["http_headers"] = [header.model_dump(exclude_none=True, exclude_defaults=True) for header in model.http_headers]
 
     # 凭据绑定必须冻结环境，不能继承无凭据旧版本的跨环境兼容行为。
-    if credential_bindings(normalized) and normalized["environment"] is None:
+    if (credential_bindings(normalized) or normalized.get("langfuse_connection")) and normalized["environment"] is None:
         normalized["environment"] = "production"
     digest = compute_spec_digest(normalized)
     normalized["spec_digest"] = digest
@@ -422,8 +422,10 @@ class AgentRegistry:
         http_auth: dict[str, Any] | None = None,
         http_headers: list[dict[str, Any]] | None = None,
         response_mapping: dict[str, Any] | None = None,
+        langfuse_connection: dict[str, Any] | None = None,
     ) -> AgentVersionRecord:
         raw_spec = {
+            "langfuse_connection": langfuse_connection,
             "endpoint": endpoint,
             "protocol": protocol,
             "method": method,
@@ -479,6 +481,7 @@ class AgentRegistry:
                 response_schema=normalized["response_schema"],
                 credential_ref=normalized["credential_ref"],
                 credential_id=normalized["credential_id"],
+                langfuse_connection=normalized["langfuse_connection"],
                 http_auth=normalized["http_auth"], http_headers=normalized["http_headers"], response_mapping=normalized["response_mapping"],
                 timeout_seconds=normalized["timeout_seconds"],
                 max_retries=normalized["max_retries"],
@@ -500,6 +503,13 @@ class AgentRegistry:
 
     @staticmethod
     def _validate_credentials(session, normalized):
+        connection = normalized.get("langfuse_connection")
+        if connection:
+            credential = session.scalar(select(CredentialRecord).where(
+                CredentialRecord.id == connection["credential_id"]).with_for_update())
+            if credential is None:
+                raise ValueError("Credential is missing")
+            check_credential_target(credential, "basic_auth", connection["base_url"], normalized["environment"])
         for cid, kind, _ in sorted(credential_bindings(normalized)):
             credential = session.scalar(select(CredentialRecord).where(CredentialRecord.id == cid).with_for_update())
             if credential is None:
@@ -508,7 +518,10 @@ class AgentRegistry:
 
     @staticmethod
     def _retain_credentials(session, version_id, normalized):
-        for cid in sorted({cid for cid, _, _ in credential_bindings(normalized)}):
+        ids = {cid for cid, _, _ in credential_bindings(normalized)}
+        if normalized.get("langfuse_connection"):
+            ids.add(normalized["langfuse_connection"]["credential_id"])
+        for cid in sorted(ids):
             session.add(AgentVersionCredentialRecord(agent_version_id=version_id, credential_id=cid))
 
     def get_version(self, agent_id: str, version: str) -> AgentVersionRecord | None:
@@ -651,6 +664,7 @@ class AgentRegistry:
                         response_schema=normalized["response_schema"],
                         credential_ref=normalized["credential_ref"],
                         credential_id=normalized["credential_id"],
+                        langfuse_connection=normalized["langfuse_connection"],
                         http_auth=normalized["http_auth"], http_headers=normalized["http_headers"], response_mapping=normalized["response_mapping"],
                         timeout_seconds=normalized["timeout_seconds"],
                         max_retries=normalized["max_retries"],

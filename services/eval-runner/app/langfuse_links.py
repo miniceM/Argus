@@ -834,13 +834,20 @@ class LangfuseLaunchLinkService:
             return LinkResult(NO_REMOTE_RUN, reason=evidence_error or NO_REMOTE_RUN)
 
         # Phase B: no DB session, no transaction, no row lock while doing remote IO.
-        resolution = self.resolver.resolve(
-            run_id=run_id,
-            dataset_name=snapshot.dataset_name,
-            run_names=(*snapshot.run_names, snapshot.launch_name),
-            manifest_dataset_id=snapshot.manifest_dataset_id,
-            launch_dataset_id=snapshot.launch_dataset_id,
-        )
+        from .langfuse_connection import BoundLangfuseClient, is_bound, manifest_for_launch, resolve_manifest_connection
+        manifest = manifest_for_launch(self.db_mgr, launch_id)
+        kwargs = dict(run_id=run_id, dataset_name=snapshot.dataset_name,
+                      run_names=(*snapshot.run_names, snapshot.launch_name),
+                      manifest_dataset_id=snapshot.manifest_dataset_id, launch_dataset_id=snapshot.launch_dataset_id)
+        if is_bound(manifest):
+            try:
+                connection = resolve_manifest_connection(self.db_mgr, manifest, operation="LINKS", actor="launch:" + launch_id)
+                with BoundLangfuseClient(connection) as client:
+                    resolution = LangfuseLinkResolver(client, connection.base_url).resolve(**kwargs)
+            except Exception:
+                return LinkResult(UNAVAILABLE, reason="CREDENTIAL_UNAVAILABLE", run_id=run_id)
+        else:
+            resolution = self.resolver.resolve(**kwargs)
         if not resolution.ok or not resolution.url:
             logger.info(
                 "Langfuse link backfill unavailable launch=%s run=%s reason=%s",

@@ -544,6 +544,11 @@ export const CreateLaunch: React.FC = () => {
                   </select>
                 )}
               </Field>
+              {selectedAgentVersion && <p className="mt-2 text-xs text-muted-foreground" role="note">
+                Langfuse 连接来源：{versions?.find(v => v.version === selectedAgentVersion)?.langfuse_connection
+                  ? `BOUND · ${versions.find(v => v.version === selectedAgentVersion)?.langfuse_connection?.project_id}`
+                  : "GLOBAL_ENV（部署全局配置）"}。Project ID 采纳条件不会更改此路由。
+              </p>}
               {versions && versions.length === 0 && (
                 <p className="text-micro text-fail mt-1">
                   当前 Agent 没有处于 ACTIVE 状态的版本。请先去 Agent 详情页创建新版本。

@@ -249,7 +249,28 @@ class LangfuseRunScoreSyncer:
         return dataset_run_id, all_terminal, has_failed
 
     def _process_one(self, task_id: str, token: str, snapshot_id: str, client: Any | None, client_error: str | None) -> bool:
+        from .langfuse_connection import BoundLangfuseClient, is_bound, resolve_manifest_connection
+        from .langfuse_scores_client import ScoresReadError
+        from .secret_providers import CredentialUnavailable
+
+        with self.db_mgr.get_session() as session:
+            snapshot = session.get(RunResultSnapshotRecord, snapshot_id)
+            manifest = snapshot.manifest if snapshot else {}
+        if is_bound(manifest):
+            try:
+                connection = resolve_manifest_connection(self.db_mgr, manifest, operation="RUN_SCORES", actor="snapshot:" + snapshot_id)
+                with BoundLangfuseClient(connection) as bound_client:
+                    bound_client.verify_project()
+                    return self._process_with_client(task_id, token, snapshot_id, bound_client, None)
+            except (CredentialUnavailable, ScoresReadError) as exc:
+                return self._finish(task_id, token, status="FAILED", error=getattr(exc, "code", "CREDENTIAL_UNAVAILABLE"))
+        return self._process_with_client(task_id, token, snapshot_id, client, client_error)
+
+    def _process_with_client(self, task_id, token, snapshot_id, client, client_error):
+        from .langfuse_connection import is_bound
+
         missing_data = False
+        bound = False
         with self.db_mgr.get_session() as session:
             task = session.get(LangfuseRunScoreTaskRecord, task_id)
             snapshot = session.get(RunResultSnapshotRecord, snapshot_id)
@@ -258,6 +279,7 @@ class LangfuseRunScoreSyncer:
                 missing_data = True
                 scores, source, launch_id, revision = {}, None, "", 0
             else:
+                bound = is_bound(snapshot.manifest)
                 scores = dict(task.scores_payload or {})
                 source = snapshot.manifest.get("dataset", {}).get("source")
                 launch_id = launch.id
@@ -311,7 +333,10 @@ class LangfuseRunScoreSyncer:
                     timeout_seconds=timeout_seconds,
                 )
         except Exception as exc:
-            logger.exception("Failed to publish Run scores for Launch %s snapshot %s", launch_id, snapshot_id)
+            if bound:
+                logger.warning("Failed to publish bound Run scores for Launch %s snapshot %s", launch_id, snapshot_id)
+            else:
+                logger.exception("Failed to publish Run scores for Launch %s snapshot %s", launch_id, snapshot_id)
             http_status = _http_status_code(exc)
             if http_status is not None and 400 <= http_status < 500 and http_status not in {408, 425, 429}:
                 return self._finish(task_id, token, status="FAILED", error=f"LANGFUSE_HTTP_{http_status}")
@@ -320,6 +345,17 @@ class LangfuseRunScoreSyncer:
         return self._finish(task_id, token, status="SYNCED")
 
     def process_batch(self, batch_size: int = 1) -> int:
-        client, client_error = self._client()
+        from .langfuse_connection import is_bound
+
         claimed = self._claim(batch_size)
-        return sum(self._process_one(task_id, token, snapshot_id, client, client_error) for task_id, token, snapshot_id in claimed)
+        global_client = None
+        success = 0
+        for task_id, token, snapshot_id in claimed:
+            with self.db_mgr.get_session() as session:
+                snapshot = session.get(RunResultSnapshotRecord, snapshot_id)
+                bound = snapshot is not None and is_bound(snapshot.manifest)
+            if not bound and global_client is None:
+                global_client = self._client()
+            client, error = (None, None) if bound else global_client
+            success += self._process_one(task_id, token, snapshot_id, client, error)
+        return success

@@ -89,6 +89,7 @@ class AgentVersionRecord(Base):
     response_schema: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     credential_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     credential_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("credentials.id", ondelete="RESTRICT"), nullable=True)
+    langfuse_connection: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     http_auth: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     http_headers: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
     response_mapping: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)

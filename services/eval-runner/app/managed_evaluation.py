@@ -58,17 +58,18 @@ def _reject(code: str, message: str) -> None:
 
 
 def freeze_managed_evaluation(
-    payload: dict[str, Any], *, environment: str, policy_rules: list[dict[str, Any]] | None
+    payload: dict[str, Any], *, environment: str, policy_rules: list[dict[str, Any]] | None,
+    project_id: str | None = None, bound: bool = False
 ) -> tuple[dict[str, Any], QualityPolicy]:
     """仅冻结用户确认的身份/条件。外部 Rule 始终使用 Langfuse latest。"""
     contract = ManagedEvaluationContract.model_validate(copy.deepcopy(payload)).model_dump(exclude_none=True)
     project = contract["project_id"]
     if not project.strip() or project != project.strip():
         _reject("MANAGED_IDENTITY_REQUIRED", "必须提供非空且无首尾空白的 Langfuse project_id。")
-    configured_project = os.getenv("LANGFUSE_PROJECT_ID")
+    configured_project = project_id if bound else os.getenv("LANGFUSE_PROJECT_ID")
     if configured_project and configured_project != project:
         _reject("MANAGED_PROJECT_MISMATCH", "所选 project 与服务端 LANGFUSE_PROJECT_ID 不一致。")
-    tracing_environment = os.getenv("LANGFUSE_TRACING_ENVIRONMENT")
+    tracing_environment = None if bound else os.getenv("LANGFUSE_TRACING_ENVIRONMENT")
     if contract["environment"] != environment or (tracing_environment and tracing_environment != environment):
         _reject("MANAGED_ENVIRONMENT_MISMATCH", "Launch、采纳条件及已配置的 Observation environment 必须一致。")
     if contract["target"] != {"name": "remote-agent-http", "type": "TOOL"}:

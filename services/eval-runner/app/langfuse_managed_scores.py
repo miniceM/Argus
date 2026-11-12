@@ -111,9 +111,10 @@ def _check(condition, code):
 
 
 class ManagedScoreCollector:
-    def __init__(self, db_manager, client):
+    def __init__(self, db_manager, client, *, client_error=None):
         self.db = db_manager
         self.client = client
+        self.client_error = client_error
 
     def _context(self, session, launch_id, item_id):
         launch = session.get(ExperimentLaunchRecord, launch_id)
@@ -182,6 +183,7 @@ class ManagedScoreCollector:
         return context, contract
 
     def _observation(self, ctx, contract):
+        _check(self.client_error is None, self.client_error)
         _check(self.client is not None, "CLIENT_NOT_CONFIGURED")
         rows = self.client.observations(ctx["trace_id"])
         matches = [

@@ -4,6 +4,8 @@
 
 Credentials 是一等资源：稳定 ID、名称、类型（`bearer_token` / `api_key` / `basic_auth` / `header_value`）、环境、Provider、启用状态与当前修订。
 同步 HTTP 认证、Headers 与 DataAgent 接入步骤见 [HTTP Agent 接入](http-agent-integration.md)。
+Langfuse 项目 pk/sk 同样复用 Basic Auth Credential，配置见
+[多项目连接](langfuse-project-connections.md)；绑定也需要管理授权并保留版本引用。
 
 Console 的 Credentials 页面支持创建、查看使用关系、轮换、停用与删除；AgentVersion
 按名称选择凭据，仅保存 `credential_id`。Token 写入一次，所有 API 响应只返回元数据。

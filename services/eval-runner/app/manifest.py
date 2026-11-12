@@ -13,7 +13,7 @@ from .comparison_contracts import (
     COMPARISON_CONTRACT_SCHEMA_VERSION,
     aggregation_comparison_digest,
 )
-from .dataset import DatasetResolver
+from .dataset import DatasetResolver, parse_dataset_version
 from .db import DatabaseManager
 from .db_models import ExperimentLaunchRecord
 from .evaluator_binding import (
@@ -23,6 +23,7 @@ from .evaluator_binding import (
     manifest_measurement_digest,
 )
 from .evaluators import EvaluatorSelectionError, default_evaluator_registry
+from .langfuse_connection import BoundLangfuseClient, global_projection, resolve_connection, verify_connection
 from .managed_evaluation import ManagedEvaluationError, freeze_managed_evaluation
 from .quality_policy import (
     QUALITY_POLICY_SCHEMA_VERSION,
@@ -90,6 +91,8 @@ class LaunchService:
         identity_error = validate_runner_identity(runner_identity.model_dump(), runner_identity)
         if identity_error:
             raise ValueError(f"{identity_error}: runner build identity is unavailable")
+        ver_rec = self.registry.get_version(agent_id, agent_version)
+        connection_binding = ver_rec.langfuse_connection if ver_rec else None
         managed_contract = None
         managed_policy = None
         if evaluation_source not in ("builtin", "langfuse_managed"):
@@ -103,6 +106,7 @@ class LaunchService:
                 raise ManagedEvaluationError("EVALUATION_SOURCE_CONFLICT", "Managed 不能混用 Builtin Evaluator。")
             managed_contract, managed_policy = freeze_managed_evaluation(
                 managed_evaluation, environment=normalized_environment, policy_rules=quality_policy_rules,
+                project_id=connection_binding["project_id"] if connection_binding else None, bound=bool(connection_binding),
             )
         # ---- Issue #80: normalize the request into explicit (id, version) selections ----
         if evaluator_selections is not None and evaluator_ids is not None:
@@ -250,14 +254,28 @@ class LaunchService:
         else:
             effective_concurrency = ver_rec.max_concurrency
 
+        connection = resolve_connection(self.db_manager, connection_binding, normalized_environment) if connection_binding else None
+
+        if connection is not None:
+            verify_connection(connection)
+
         # Resolve full frozen dataset snapshot
         if dataset_snapshot is not None:
             resolved_snapshot = dataset_snapshot
         else:
             resolver = DatasetResolver()
-            resolved_snapshot = resolver.resolve(
-                dataset_name, dataset_version, dataset_client=dataset_client
-            )
+            if connection is not None:
+                from datetime import UTC
+                if dataset_client is not None:
+                    raise ValueError("Bound datasets must be fetched through their frozen Langfuse connection")
+                version = parse_dataset_version(dataset_version) or datetime.now(UTC)
+                with BoundLangfuseClient(connection) as client:
+                    dataset = client.get_dataset(dataset_name, version=version)
+                resolved_snapshot = resolver.resolve(dataset_name, version.isoformat(), dataset_client=dataset)
+            else:
+                resolved_snapshot = resolver.resolve(
+                    dataset_name, dataset_version, dataset_client=dataset_client
+                )
         effective_dataset_id = dataset_id or resolved_snapshot["dataset_id"]
 
 
@@ -267,6 +285,7 @@ class LaunchService:
         manifest = {
             "schema_version": MANIFEST_BINDING_SCHEMA_VERSION,
             "dataset": resolved_snapshot,
+            "langfuse_connection": connection.projection() if connection else global_projection(),
             "comparison": {
                 "environment": normalized_environment,
                 "baseline_snapshot_id": None,

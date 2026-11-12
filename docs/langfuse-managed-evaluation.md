@@ -25,6 +25,10 @@ Argus Runner 必须能访问该 Endpoint。容器内 `localhost` 不是宿主或
 
 ## 2. 准备 Langfuse 与两个原生 Rule
 
+不同团队使用独立项目时，先按[项目连接说明](langfuse-project-connections.md)在
+AgentVersion 绑定项目和凭据；后续 Dataset、OTLP 与 Score 采纳统一使用该绑定。
+未绑定版本继续使用下面的全局部署配置。
+
 部署方配置 Runner 的 `LANGFUSE_BASE_URL`、项目 Public/Secret Key（仅服务端）、
 `ARGUS_DATASET_SOURCE=langfuse`、`ARGUS_LANGFUSE_RUN_ITEM_STRATEGY=otel`。
 正式服务配置 Redis、Worker / Reconciler 与固定 `ARGUS_BUILD_ID`；独立 standalone

@@ -109,6 +109,8 @@ def create_experiment_launch(
             ),
         )
         return _enrich_launch(launch, orchestrator)
+    except ScoresReadError as exc:
+        raise HTTPException(status_code=400, detail={"code": exc.code}) from None
     except ManagedEvaluationError as exc:
         raise HTTPException(status_code=400, detail=exc.to_payload()) from exc
     except EnvironmentContractError as exc:
@@ -713,13 +715,16 @@ def get_managed_score_client():
 def collect_managed_scores(launch_id: str, item_id: str, services=Depends(get_services)):
     db, _, _, _ = services
     client = None
+    client_error = None
     try:
         try:
-            client = get_managed_score_client()
-        except ScoresReadError:
-            # 未配置时也保留一次可读诊断，不回退到 Builtin 或伪造缺省值。
-            pass
-        return ManagedScoreCollector(db, client).collect(launch_id, item_id)
+            from .langfuse_connection import is_bound, manifest_for_launch, scores_client_for_manifest
+            manifest = manifest_for_launch(db, launch_id)
+            client = scores_client_for_manifest(db, manifest) if is_bound(manifest) else get_managed_score_client()
+        except ScoresReadError as exc:
+            # 保留真实失败码，不把绑定认证失败改写为全局配置缺失。
+            client_error = exc.code
+        return ManagedScoreCollector(db, client, client_error=client_error).collect(launch_id, item_id)
     except ScoresReadError as exc:
         raise HTTPException(status_code=404 if exc.code == "ITEM_NOT_FOUND" else 409,
             detail={"code": exc.code}) from None

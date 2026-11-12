@@ -18,6 +18,7 @@ from .db_models import (
     ExecutionAttemptRecord,
     ExperimentItemExecutionRecord,
     ExperimentLaunchRecord,
+    LangfuseSyncTaskRecord,
 )
 from .evaluation_result_store import persist_typed_results
 from .evaluator_binding import (
@@ -27,7 +28,14 @@ from .evaluator_binding import (
     resolve_langfuse_evaluators,
 )
 from .executor import AttemptAuthorizationError, RemoteAgentExecutor
+from .langfuse_connection import (
+    is_bound,
+    manifest_for_launch,
+    resolve_manifest_connection,
+    verify_connection,
+)
 from .langfuse_links import resolve_dataset_run_link
+from .langfuse_scores_client import ScoresReadError
 from .manifest import acquire_launch_execution
 from .registry import AgentRegistry, AgentVersionSpec, map_request
 from .runner_identity import current_runner_identity, validate_runner_identity
@@ -128,7 +136,19 @@ async def _execute_single_item(
                 started_at=datetime.utcnow(),
             )
             # invoke() 已在授权 Attempt 前解析凭据；记录本次实际使用的修订。
-            att_rec.credential_usage = executor.credential_usage
+            att_rec.credential_usage = list(executor.credential_usage)
+            if is_bound(manifest):
+                try:
+                    connection = resolve_manifest_connection(db_mgr, manifest)
+                    verify_connection(connection)
+                except Exception as exc:
+                    att_rec.status = "FAILED"
+                    att_rec.error_type = getattr(exc, "code", "CREDENTIAL_UNAVAILABLE")
+                    att_rec.error_message = att_rec.error_type
+                    session.add(att_rec)
+                    session.commit()
+                    raise ValueError(att_rec.error_message) from None
+                att_rec.credential_usage = [*att_rec.credential_usage, connection.evidence()]
             credential = executor.resolved_credential
             if credential is not None:
                 att_rec.credential_id = credential.credential_id
@@ -237,6 +257,9 @@ async def _execute_single_item(
                     },
                 )
         else:
+            if is_bound(manifest):
+                trace_id, observation_id = uuid.uuid4().hex, uuid.uuid4().hex[:16]
+                headers["traceparent"] = f"00-{trace_id}-{observation_id}-01"
             call_res = await executor.invoke(
                 mapped_payload,
                 headers,
@@ -314,7 +337,7 @@ async def _execute_single_item(
         if last_attempt_id:
             values_to_update["final_attempt_id"] = last_attempt_id
 
-        session.execute(
+        updated = session.execute(
             update(ExperimentItemExecutionRecord)
             .where(
                 ExperimentItemExecutionRecord.id == item_exec_id,
@@ -322,6 +345,17 @@ async def _execute_single_item(
             )
             .values(**values_to_update)
         )
+        if updated.rowcount and is_bound(manifest) and trace_id:
+            dataset = manifest["dataset"]
+            session.add(LangfuseSyncTaskRecord(
+                id=str(uuid.uuid4()), launch_id=launch_id, item_id=item_exec_id,
+                dataset_item_id=item_id, dataset_version=dataset["dataset_version"], dispatch_generation=1,
+                trace_id=trace_id, observation_id=observation_id, dataset_run_name=f"argus-{launch_id[:12]}",
+                scores_payload={**scores_dict, "_dataset_source": dataset["source"],
+                    "_typed_results": [result.to_payload() for result in typed_results],
+                    "_evaluation_source": manifest.get("evaluation_source", "builtin"),
+                    "_policy_digest": manifest.get("quality_policy", {}).get("policy_digest")},
+            ))
         if typed_results:
             persist_typed_results(
                 session,
@@ -391,6 +425,13 @@ class LaunchExecutionService:
         self.gather_fn = gather_fn or asyncio.gather
 
     async def execute_launch(self, launch_id: str, dataset_client: Any = None) -> LaunchExecutionOutcome:
+        try:
+            manifest = manifest_for_launch(self.db_manager, launch_id)
+        except ScoresReadError:
+            raise HTTPException(status_code=404, detail=f"Launch '{launch_id}' not found") from None
+        return await self._execute_launch(launch_id, dataset_client=dataset_client, bound=is_bound(manifest))
+
+    async def _execute_launch(self, launch_id, dataset_client=None, bound=False):
         # Reject an incompatible frozen Runner before taking the execution lock or making outbound calls.
         with self.db_manager.get_session() as session:
             preflight_launch = session.get(ExperimentLaunchRecord, launch_id)
@@ -489,9 +530,9 @@ class LaunchExecutionService:
                 session.commit()
 
             # 3. Check Langfuse integration
-            lf = get_langfuse_client_safe()
-            lf_dataset = dataset_client
-            if lf and lf_dataset is None:
+            lf = None if bound else get_langfuse_client_safe()
+            lf_dataset = None if bound else dataset_client
+            if not bound and lf and lf_dataset is None:
                 try:
                     version_dt = None
                     try:
@@ -509,7 +550,7 @@ class LaunchExecutionService:
 
             run_id = None
             run_url = None
-            sync_status = "NOT_APPLICABLE"
+            sync_status = "PENDING" if bound else "NOT_APPLICABLE"
             sync_error = None
             result_summary: dict[str, Any] = {}
 

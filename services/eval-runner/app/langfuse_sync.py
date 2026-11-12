@@ -653,8 +653,23 @@ class LangfuseOutboxSyncer:
         """Executes remote HTTP sync calls outside of DB transactions, renews lease during execution,
         and strongly verifies responses with post-lock instantaneous clock CAS.
         """
-        client_st, lf, err_detail = self.resolve_client_status()
+        from .langfuse_connection import BoundLangfuseClient, is_bound, manifest_for_launch, resolve_manifest_connection
+        from .langfuse_scores_client import ScoresReadError
+        from .secret_providers import CredentialUnavailable
 
+        manifest = manifest_for_launch(self.db_mgr, payload["launch_id"])
+        if is_bound(manifest):
+            try:
+                connection = resolve_manifest_connection(self.db_mgr, manifest, operation="OTLP", actor="launch:" + payload["launch_id"])
+                with BoundLangfuseClient(connection) as client:
+                    client.verify_project()
+                    return self._process_single_task(task_id, claim_token, payload, "READY", client, None, connection)
+            except (CredentialUnavailable, ScoresReadError) as exc:
+                return self._process_single_task(task_id, claim_token, payload, "ERROR", None, getattr(exc, "code", "CREDENTIAL_UNAVAILABLE"))
+        client_st, lf, err_detail = self.resolve_client_status()
+        return self._process_single_task(task_id, claim_token, payload, client_st, lf, err_detail)
+
+    def _process_single_task(self, task_id, claim_token, payload, client_st, lf, err_detail, connection=None):
         # Explicitly unconfigured branch -> transition to SKIPPED
         if client_st == "UNCONFIGURED":
             return self._mark_task_skipped(
@@ -758,7 +773,7 @@ class LangfuseOutboxSyncer:
                     except Exception:
                         version_val = str(raw_ver)
 
-                    strategy = resolve_run_item_strategy()
+                    strategy = "otel" if connection is not None else resolve_run_item_strategy()
                     launch_kwargs: dict[str, Any] = {
                         "strategy": strategy,
                         "lf": lf,
@@ -778,9 +793,9 @@ class LangfuseOutboxSyncer:
                                 "langfuse.observation.metadata.argus_checkpoint_digest"
                             ]
                         launch_kwargs.update({
-                            "langfuse_base_url": settings.langfuse_base_url,
-                            "langfuse_public_key": os.getenv("LANGFUSE_PUBLIC_KEY", ""),
-                            "langfuse_secret_key": os.getenv("LANGFUSE_SECRET_KEY", ""),
+                            "langfuse_base_url": connection.base_url if connection else settings.langfuse_base_url,
+                            "langfuse_public_key": connection.public_key if connection else os.getenv("LANGFUSE_PUBLIC_KEY", ""),
+                            "langfuse_secret_key": connection.secret_key if connection else os.getenv("LANGFUSE_SECRET_KEY", ""),
                         })
                     run_id = _invoke_with_timeout(
                         link_dataset_run_item,
@@ -833,8 +848,8 @@ class LangfuseOutboxSyncer:
                 error_msg = f"Task execution deadline exceeded: {exc}"
                 logger.warning("Syncer %s task %s timed out during remote call: %s", self.syncer_id, task_id, exc)
             except Exception as exc:
-                error_msg = str(exc)
-                logger.exception("Failed to sync Langfuse task %s: %s", task_id, error_msg)
+                error_msg = "LANGFUSE_SYNC_FAILED" if connection else str(exc)
+                logger.warning("Failed to sync Langfuse task %s: %s", task_id, error_msg)
             finally:
                 stop_hb.set()
                 hb_thread.join(timeout=0.5)

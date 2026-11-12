@@ -231,6 +231,14 @@ export const ManifestAuditTab: React.FC<ManifestAuditTabProps> = ({
           </p>
         ))}
 
+        {!frozenManifestUnavailable && <div className="rounded-lg border border-border bg-surface-subtle p-3 text-xs space-y-1" aria-label="冻结 Langfuse 项目连接">
+          <p className="font-semibold">Langfuse 连接来源：{manifest.langfuse_connection?.source ?? "未记录（历史 Manifest）"}</p>
+          {manifest.langfuse_connection && <>
+            <p>Project：{manifest.langfuse_connection.project_id ?? "未配置"}</p>
+            <p className="font-mono break-all">{manifest.langfuse_connection.base_url}</p>
+            {manifest.langfuse_connection.source === "BOUND" && <p>凭据引用：{manifest.langfuse_connection.credential_id} · 创建时修订：{manifest.langfuse_connection.credential_version}（实际调用修订见 Attempt）</p>}
+          </>}
+        </div>}
         {/* 四维网格 */}
         {!frozenManifestUnavailable && (
         <div data-testid="manifest-4d-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">

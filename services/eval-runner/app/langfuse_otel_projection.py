@@ -142,8 +142,13 @@ def projection_http_post(
     """Raw HTTP POST; exposed so tests can stub it without reimplementing urllib."""
     import urllib.request
 
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
     req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=timeout_seconds) as response:  # noqa: S310
+    opener = urllib.request.build_opener(NoRedirect)
+    with opener.open(req, timeout=timeout_seconds) as response:  # noqa: S310
         return response.status, response.read()
 
 

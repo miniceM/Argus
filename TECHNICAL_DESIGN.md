@@ -244,6 +244,13 @@ Langfuse 原生对象不需要复制。企业侧只新增少量对象。
 
 ### 8.3 ExperimentLaunch
 
+AgentVersion 可选 `langfuse_connection` 将项目 origin、Project ID 与既有 Basic Auth
+Credential 引用绑定为不可变配置；非空绑定进入 spec_digest。新 Launch 在顶层
+`langfuse_connection` 冻结 `BOUND` / `GLOBAL_ENV` 来源及创建时解析修订，
+Dataset / OTLP / Score 统一按此路由。绑定失败不回落全局；轮换后实际使用修订
+由 Attempt 和 Credential 操作审计记录，不改写历史 Manifest / Snapshot / Gate。
+生命周期、维护成本和验证边界见[项目连接契约](docs/langfuse-project-connections.md)。
+
 表示“用户希望平台按什么配置执行一次评测”，与最终 Langfuse Experiment 结果区分。
 
 ```json

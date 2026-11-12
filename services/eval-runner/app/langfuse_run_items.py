@@ -133,8 +133,8 @@ class OtelProjectionCredentials:
 def read_managed_observation_projection(db_mgr: Any, payload: dict[str, Any]) -> dict[str, Any] | None:
     """从成功 Checkpoint 为现有 Outbox 恢复可评分 TOOL，不依赖 SDK 的内存缓冲。
 
-    同一 trace/span、固定时间和输入输出保证重放身份稳定；Builtin/失败执行
-    仍使用原始关联标记。Checkpoint 损坏/失配必须走现有 Outbox 失败恢复，
+    同一 trace/span、固定时间和输入输出保证重放身份稳定；未绑定 Builtin
+    与失败执行仍使用原始关联标记。Checkpoint 损坏/失配必须走现有 Outbox 失败恢复，
     不能伪造空输入输出，更不能重调 Agent。
     """
     import json
@@ -142,11 +142,13 @@ def read_managed_observation_projection(db_mgr: Any, payload: dict[str, Any]) ->
 
     from .db_models import ExperimentItemExecutionRecord, ExperimentLaunchRecord
     from .execution_checkpoint import CheckpointUnavailableError, load_recoverable_checkpoint
+    from .langfuse_connection import is_bound
     from .managed_evaluation import evaluation_source
+    from .registry import map_request
 
     with db_mgr.get_session() as session:
         launch = session.get(ExperimentLaunchRecord, payload["launch_id"])
-        if launch is None or evaluation_source(launch.manifest) != "langfuse_managed":
+        if launch is None or (evaluation_source(launch.manifest) != "langfuse_managed" and not is_bound(launch.manifest)):
             return None
         item = session.get(ExperimentItemExecutionRecord, payload["item_id"])
         if item is None or item.execution_status != "succeeded":
@@ -158,7 +160,10 @@ def read_managed_observation_projection(db_mgr: Any, payload: dict[str, Any]) ->
                 or checkpoint.trace_id != payload["trace_id"]
                 or checkpoint.observation_id != payload.get("observation_id")):
             raise CheckpointUnavailableError("CHECKPOINT_MISMATCH")
-        contract = (launch.manifest or {}).get("managed_evaluation") or {}
+        contract = (launch.manifest or {}).get("managed_evaluation") or {
+            "environment": (launch.manifest.get("comparison") or {}).get("environment", "production"),
+            "target": {"name": "remote-agent-http"},
+        }
         created = checkpoint.created_at
         if created.tzinfo is None:
             created = created.replace(tzinfo=UTC)
@@ -166,7 +171,8 @@ def read_managed_observation_projection(db_mgr: Any, payload: dict[str, Any]) ->
             ("langfuse.observation.type", "tool"),
             ("langfuse.environment", contract["environment"]),
             ("langfuse.observation.input", json.dumps(
-                {"agent": f"{launch.agent_id}:{launch.agent_version}", "request": checkpoint.input_payload},
+                {"agent": f"{launch.agent_id}:{launch.agent_version}", "request": map_request(
+                    checkpoint.input_payload, launch.manifest["agent"].get("request_mapping") or {})},
                 ensure_ascii=False, allow_nan=False,
             )),
             ("langfuse.observation.output", json.dumps(checkpoint.agent_output, ensure_ascii=False, allow_nan=False)),

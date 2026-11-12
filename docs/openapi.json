@@ -2925,6 +2925,16 @@
             "title": "Credential Id",
             "description": "稳定 Credential ID，与 legacy credential_ref 互斥"
           },
+          "langfuse_connection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LangfuseConnection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "http_auth": {
             "anyOf": [
               {
@@ -3162,6 +3172,16 @@
               }
             ],
             "title": "Credential Id"
+          },
+          "langfuse_connection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LangfuseConnection"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "http_auth": {
             "anyOf": [
@@ -6064,6 +6084,37 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "LangfuseConnection": {
+        "properties": {
+          "base_url": {
+            "type": "string",
+            "maxLength": 1024,
+            "title": "Base Url"
+          },
+          "project_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Project Id"
+          },
+          "credential_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Credential Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "base_url",
+          "project_id",
+          "credential_id"
+        ],
+        "title": "LangfuseConnection"
       },
       "LangfuseSyncScopeResponse": {
         "properties": {

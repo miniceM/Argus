@@ -177,6 +177,7 @@ Langfuse：Dataset / Trace / 托管评分 / 实验分析    CI/CD：核验质量
 | 领域模型、状态机、API 设计细节 | [TECHNICAL_DESIGN.md](./TECHNICAL_DESIGN.md) |
 | 完整 API 合约 | [docs/openapi.json](./docs/openapi.json) 或运行时的 `/docs` |
 | Agent 凭据管理 | [凭据 Provider 与部署边界](./docs/secret-providers.md) |
+| 多团队 Langfuse 项目接入 | [项目绑定、凭据与冻结来源](./docs/langfuse-project-connections.md) |
 | 端到端演示流程 | [walkthrough.md](./walkthrough.md) |
 | Langfuse `zh-CN` 镜像构建与发布 | [deploy/langfuse/README.md](./deploy/langfuse/README.md) |
 | Console 托管评分、冻结报告与 Release Gate | [Flowise → Argus → Langfuse 用户指南](./docs/langfuse-managed-evaluation.md) |

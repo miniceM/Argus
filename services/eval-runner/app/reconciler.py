@@ -72,6 +72,10 @@ class ExecutionReconciler:
         """Attempts to fetch Langfuse execution evidence for a terminal launch.
         Returns a dict mapping dataset_item_id -> evidence_item if found, or None.
         """
+        from .langfuse_connection import is_bound
+        # 新绑定 Launch 的执行事实由持久 Attempt/Checkpoint 决定，不能读取全局项目来修补。
+        if is_bound(t_launch.manifest):
+            return None
         lf = self.langfuse_client
         if not lf:
             return None

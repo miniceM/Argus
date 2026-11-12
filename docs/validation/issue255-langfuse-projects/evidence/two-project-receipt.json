@@ -1,0 +1,40 @@
+{
+  "observed_at": "2026-11-12T08:15:01.029989+00:00",
+  "test": "two_real_projects",
+  "score_source": "API",
+  "native_rule_eval_verified": false,
+  "projects": [
+    {
+      "project_id": "s4-project-24365d5d03264766a8dc48be07e19577",
+      "launch_id": "8938b54f-a099-408c-9647-0202ea7be0da",
+      "credential_id": "bc54df0a-fdc1-4b31-8bc6-4359e7ec830c",
+      "credential_version": 1,
+      "dataset_item_id": "case-a",
+      "trace_id": "ddb28d5db9234be0985d81a0910a82ad",
+      "observation_id": "efa8859928f74f77",
+      "score_ids": [
+        "score:5253853f-a8d9-45ed-9500-afe9ff42c476:gen1:intent_match"
+      ],
+      "execution": "succeeded",
+      "quality": "pass",
+      "cross_project_observations": 0,
+      "cross_project_scores": 0
+    },
+    {
+      "project_id": "project-b-b74c48253c634baf8bf338146920ec8a",
+      "launch_id": "c9b733d4-f272-48ac-92d8-dd53e55e0cee",
+      "credential_id": "8240c901-ef99-45d1-bd0f-32837ef5fb66",
+      "credential_version": 1,
+      "dataset_item_id": "case-b",
+      "trace_id": "e6fbda4cc95e46a0a4732bae35b98da3",
+      "observation_id": "394e90a25fbb4c38",
+      "score_ids": [
+        "score:604acb8c-53f3-41df-a918-6e9b6d4197f4:gen1:intent_match"
+      ],
+      "execution": "succeeded",
+      "quality": "pass",
+      "cross_project_observations": 0,
+      "cross_project_scores": 0
+    }
+  ]
+}

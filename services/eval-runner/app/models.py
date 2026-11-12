@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .http_invocation import HTTPAuth, HTTPHeader, ResponseMapping
+from .langfuse_connection import LangfuseConnection
 from .managed_evaluation import ManagedEvaluationContract
 from .security import validate_credential_ref, validate_endpoint_url
 from .trajectory.schema import Identity
@@ -214,6 +215,7 @@ class AgentVersionSpecValidator(BaseModel):
     response_schema: dict[str, Any] | None = None
     credential_ref: str | None = Field(default=None, description="Legacy Provider reference; prefer credential_id. env://NAME requires development mode")
     credential_id: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9_-]+$", description="稳定 Credential ID，与 legacy credential_ref 互斥")
+    langfuse_connection: LangfuseConnection | None = None
     http_auth: HTTPAuth | None = None
     http_headers: list[HTTPHeader] = Field(default_factory=list, max_length=32)
     response_mapping: ResponseMapping | None = None
@@ -312,6 +314,7 @@ class AgentVersionResponse(BaseModel):
     response_schema: dict[str, Any] | None = None
     credential_ref: str | None = None
     credential_id: str | None = None
+    langfuse_connection: LangfuseConnection | None = None
     http_auth: HTTPAuth | None = None
     http_headers: list[HTTPHeader] = Field(default_factory=list)
     response_mapping: ResponseMapping | None = None

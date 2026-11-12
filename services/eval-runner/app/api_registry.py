@@ -200,7 +200,7 @@ def create_agent_version(
     authorization: str | None = Header(default=None),
 ) -> AgentVersionResponse:
     # 绑定即授权 Runner 向该不可变端点发送 Secret，复用现有管理授权。
-    if payload.credential_id or any(header.credential_id for header in payload.http_headers):
+    if payload.credential_id or payload.langfuse_connection or any(header.credential_id for header in payload.http_headers):
         authorize_credential(authorization)
     try:
         version = reg.create_version(
@@ -215,6 +215,7 @@ def create_agent_version(
             response_schema=payload.response_schema,
             credential_ref=payload.credential_ref,
             credential_id=payload.credential_id,
+            langfuse_connection=payload.langfuse_connection.model_dump() if payload.langfuse_connection else None,
             http_auth=payload.http_auth.model_dump(exclude_none=True, exclude_defaults=True) if payload.http_auth else None,
             http_headers=[header.model_dump(exclude_none=True, exclude_defaults=True) for header in payload.http_headers],
             response_mapping=payload.response_mapping.model_dump() if payload.response_mapping else None,

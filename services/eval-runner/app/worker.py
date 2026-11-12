@@ -685,15 +685,22 @@ class ExecutionWorker:
             executor = RemoteAgentExecutor(spec, credential_db_manager=self.db_mgr)
             mapped_payload = map_request(dataset_input, spec.request_mapping)
             # 在可能发送标记、Agent Trace 和 HTTP 调用之前预取凭据。
+            from .langfuse_connection import is_bound, resolve_manifest_connection, verify_connection
+            from .langfuse_scores_client import ScoresReadError
+            connection = None
             try:
+                connection = await asyncio.to_thread(resolve_manifest_connection, self.db_mgr, manifest)
+                if connection is not None:
+                    await asyncio.to_thread(verify_connection, connection)
                 await executor.prepare_credential()
-            except ValueError:
+            except (ValueError, ScoresReadError) as exc:
+                code = getattr(exc, "code", "CREDENTIAL_UNAVAILABLE")
                 finalized = self.finalize_execution_and_attempt(
                     item_id=item_id, generation=generation, lease_token=token,
                     target_item_status="FAILED", target_eval_status="skipped", target_quality_conclusion="unknown",
-                    current_attempt_id=current_attempt_id, execution_error="CREDENTIAL_UNAVAILABLE",
-                    attempt_updates={"status": "FAILED", "error_type": "CREDENTIAL_UNAVAILABLE",
-                                     "error_message": "CREDENTIAL_UNAVAILABLE", "request_phase": "PREPARED"},
+                    current_attempt_id=current_attempt_id, execution_error=code,
+                    attempt_updates={"status": "FAILED", "error_type": code,
+                                     "error_message": code, "request_phase": "PREPARED"},
                 )
                 self.limiter.release_concurrency_permit(spec.id, permit_id)
                 await executor._client.aclose()
@@ -707,7 +714,7 @@ class ExecutionWorker:
                 "Idempotency-Key": f"argus:{item_id}",
             }
 
-            lf = get_langfuse_client_safe()
+            lf = None if is_bound(manifest) else get_langfuse_client_safe()
             trace_id: str | None = None
             trace_url: str | None = None
             obs_id: str | None = None
@@ -764,6 +771,10 @@ class ExecutionWorker:
                         )
                         return res
                 else:
+                    if connection is not None:
+                        trace_id, obs_id = default_tid, default_sid
+                        headers["traceparent"] = f"00-{trace_id}-{obs_id}-01"
+                        return await executor.invoke_once(mapped_payload, headers)
                     try:
                         from opentelemetry import trace
                         tracer = trace.get_tracer("argus-eval-runner")
@@ -787,7 +798,7 @@ class ExecutionWorker:
 
             # 解析期间可能已失去租约或被取消，禁止旧 Worker 标记发送或调用 Agent。
             if not current_attempt_id or not self.mark_attempt_dispatched(
-                item_id, launch_id, token, generation, current_attempt_id, executor.resolved_credential, executor.credential_usage,
+                item_id, launch_id, token, generation, current_attempt_id, executor.resolved_credential, executor.credential_usage + ([connection.evidence()] if connection else []),
             ):
                 self.limiter.release_concurrency_permit(spec.id, permit_id)
                 await executor._client.aclose()

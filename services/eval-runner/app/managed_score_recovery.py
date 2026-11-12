@@ -72,6 +72,8 @@ TERMINAL_CODES = frozenset(
         "AUTHORIZATION_FAILED",
         "CLIENT_NOT_CONFIGURED",
         "CLIENT_CONFIG_INVALID",
+        "CREDENTIAL_UNAVAILABLE",
+        "MANAGED_PROJECT_MISMATCH",
         "MANAGED_NOT_SELECTED",
         "CONTRACT_INVALID",
         "ITEM_NOT_FOUND",
@@ -272,9 +274,9 @@ def _managed_projection_reason(db_mgr, claim, output_digest: str) -> str | None:
     from .db_models import ExperimentItemExecutionRecord as Item
     from .db_models import ExperimentLaunchRecord as Launch
     from .db_models import LangfuseSyncTaskRecord as Task
+    from .langfuse_connection import is_bound, manifest_for_launch
     from .langfuse_run_items import resolve_run_item_strategy
-
-    if resolve_run_item_strategy() != "otel":
+    if resolve_run_item_strategy() != "otel" and not is_bound(manifest_for_launch(db_mgr, claim["launch_id"])):
         return None
     is_pg = db_mgr.engine.dialect.name == "postgresql"
     with db_mgr.get_session() as session:
@@ -1201,7 +1203,12 @@ def recover_managed_scores(
         "lease_token": claim["lease_token"],
         "dispatch_generation": expected_dispatch,
     }
-    factory = client_factory or get_managed_score_client
+    from .langfuse_connection import is_bound, manifest_for_launch, scores_client_for_manifest
+    frozen_manifest = manifest_for_launch(db_mgr, launch_id)
+    factory = client_factory or (
+        (lambda: scores_client_for_manifest(db_mgr, frozen_manifest))
+        if is_bound(frozen_manifest) else get_managed_score_client
+    )
     projection_reason = _managed_projection_reason(db_mgr, claim, output_digest)
     if projection_reason is not None:
         report = {"decisions": [{"reason": projection_reason}], "retry_after": None}

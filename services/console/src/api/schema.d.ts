@@ -922,6 +922,7 @@ export interface components {
              * @description 稳定 Credential ID，与 legacy credential_ref 互斥
              */
             credential_id?: string | null;
+            langfuse_connection?: components["schemas"]["LangfuseConnection"] | null;
             http_auth?: components["schemas"]["HTTPAuth"] | null;
             /** Http Headers */
             http_headers?: components["schemas"]["HTTPHeader"][];
@@ -1020,6 +1021,7 @@ export interface components {
             credential_ref?: string | null;
             /** Credential Id */
             credential_id?: string | null;
+            langfuse_connection?: components["schemas"]["LangfuseConnection"] | null;
             http_auth?: components["schemas"]["HTTPAuth"] | null;
             /** Http Headers */
             http_headers?: components["schemas"]["HTTPHeader"][];
@@ -2095,6 +2097,15 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** LangfuseConnection */
+        LangfuseConnection: {
+            /** Base Url */
+            base_url: string;
+            /** Project Id */
+            project_id: string;
+            /** Credential Id */
+            credential_id: string;
         };
         /**
          * LangfuseSyncScopeResponse

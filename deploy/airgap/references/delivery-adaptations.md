@@ -1,6 +1,6 @@
-# 2026-11-13 本次交付工具适配
+# 2026-11-13 上一批交付工具适配（历史记录）
 
-仅本次工具快照调整，未修改已安装技能或 Argus 源码。
+以下记录上一批 bb30177 交付时的工具快照调整，不代表当前实现。当前脚本已纳入仓库，并由本次更新同步到已安装技能；Managed Secret 规则以 [managed-secrets.md](managed-secrets.md) 为准。
 
 - 真实 Docker Desktop 28.5.1 containerd 后端的 inspect Image ID 是 OCI manifest digest；传统后端为 config digest。load 同时支持二者，但 OCI manifest 必须重新计算 SHA256 并精确引用归档中的同一 config；无关同 tag、损坏及错 config 仍拒绝。
 - 新增 6 项回归测试，实际 RED 为 4 errors、2 passed，修正后工具全套 26 passed、1 skipped。Docker 恢复专项未在本轮运行。

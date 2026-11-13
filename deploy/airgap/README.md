@@ -127,7 +127,7 @@ bash "$SKILL/scripts/linux-adopt.sh" --root "$ROOT" \
 bash "$SKILL/scripts/linux-backup.sh" --root "$ROOT" --maintenance-window
 ```
 
-adopt核对运行时与内嵌SHA、真实镜像/命名卷/网络，以及.env/Compose和实际容器环境是否一致，保存原配置和源码副本，不重启容器。当前Runner的PG/Redis地址必须唯一解析到Argus容器；发现通用DNS名歧义或备份数据库不符时停止诊断。通过后为下一次Runner启动改用实际Argus PG/Redis容器名。额外Secret文件等非标准挂载会拒绝自动接管；先适配并保留真实密钥/管理授权文件，不能只保留环境变量中的文件名。
+adopt核对运行时与内嵌SHA、真实镜像/命名卷/网络，以及.env/Compose和实际容器环境是否一致，保存原配置和源码副本，不重启容器。当前Runner的PG/Redis地址必须唯一解析到Argus容器；发现通用DNS名歧义或备份数据库不符时停止诊断。通过后为下一次Runner启动改用实际Argus PG/Redis容器名。标准两个 Managed Secret 文件和旧 config/.secrets 按站点密钥规则迁移；其他未知挂载仍拒绝自动接管，不能只保留环境变量中的文件名。
 
 旧Redis若用默认RDB，需确认save非空并备份完整/data。新安装模板显式AOF/RDB。把旧Redis切到AOF是独立维护操作，必须验证持久启动参数；仅在线CONFIG SET不构成重启持久化证明。
 

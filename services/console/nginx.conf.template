@@ -1,6 +1,7 @@
 # Docker/other container DNS comes from /etc/resolv.conf at startup.
 upstream argus_runner {
-    zone argus_runner 64k;
+    # Nginx 要求至少 8 个内存页；兼容鲲鹏 64 KiB 页内核。
+    zone argus_runner 1m;
     resolver ${ARGUS_DNS_RESOLVERS} valid=2s ipv6=off;
     resolver_timeout 2s;
     server ${RUNNER_HOST}:${RUNNER_PORT} resolve;

@@ -497,7 +497,10 @@ def load_images(root, sha, smoke=True):
             elif name == 'demo-agent':
                 cmd = ['--entrypoint', 'python', row['ref'], '-c', 'import sys,ssl,uvicorn,pydantic;print(sys.version)']
             elif name == 'console':
-                cmd = ['--entrypoint', 'nginx', row['ref'], '-v']
+                # 保留 entrypoint 执行 envsubst；离线无网络时用回环地址，
+                # 在目标内核上验证实际配置（包括共享内存页大小约束）。
+                cmd = ['-e', 'RUNNER_HOST=127.0.0.1', '-e', 'ARGUS_DNS_RESOLVERS=127.0.0.1',
+                       row['ref'], 'nginx', '-t']
             else:
                 cmd = ['--entrypoint', 'postgres' if name == 'postgres' else 'redis-server', row['ref'], '--version']
             docker('run', '--rm', '--pull', 'never', '--network', 'none', *cmd, timeout=60)

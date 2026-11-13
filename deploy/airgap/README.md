@@ -10,6 +10,8 @@
 
 本包包含Skill、脚本、Compose示例、操作说明和验收清单，**不含具体版本Docker镜像**；用Mac脚本生成每次的镜像交付包。工具本地验证与内网现场验收分开，见 [验证报告](references/validation-report.md)。
 
+Console 报 `zone "argus_runner" is too small` 时，见 [内存页兼容与恢复](references/console-pages.md)。
+
 ## 安装和导航
 
 把完整目录 `argus-airgap-update/` 放入 `~/.codex/skills/`，新会话可调用 `$argus-airgap-update`。麒麟不需要Codex，复制本目录即可运行脚本。

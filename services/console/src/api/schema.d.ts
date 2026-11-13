@@ -443,6 +443,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/langfuse/managed-score-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 只读列出 Langfuse 可用托管 Score 候选，辅助新建评测填写 */
+        get: operations["list_managed_score_candidates_api_v1_langfuse_managed_score_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/evaluators": {
         parameters: {
             query?: never;
@@ -2191,6 +2208,27 @@ export interface components {
             /** Type */
             type: string;
         };
+        /** ManagedScoreCandidateResponse */
+        ManagedScoreCandidateResponse: {
+            /** Rule Id */
+            rule_id: string;
+            /** Evaluator Id */
+            evaluator_id: string;
+            /** Evaluator Name */
+            evaluator_name: string;
+            /** Evaluator Type */
+            evaluator_type: string;
+            /** Data Type */
+            data_type?: string | null;
+            /** Score Name */
+            score_name?: string | null;
+            /** Verified */
+            verified: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Sampling */
+            sampling: number;
+        };
         /** ManagedScoreCollectionResponse */
         ManagedScoreCollectionResponse: {
             /** Launch Id */
@@ -3877,6 +3915,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ManagedScoreDiagnosticsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_managed_score_candidates_api_v1_langfuse_managed_score_candidates_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+                environment?: string;
+                agent_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedScoreCandidateResponse"][];
                 };
             };
             /** @description Validation Error */

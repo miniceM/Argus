@@ -58,4 +58,70 @@ describe("Managed Score 与既有 QualityPolicy 对齐", () => {
     expect(screen.queryByRole("button", { name: /执行|创建 Rule|编辑 Prompt/ })).not.toBeInTheDocument();
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it("Agent 已绑定 Project 时 Project ID 自动只读展示，支持从候选选择 verified 与 unverified 项", () => {
+    const candidates = [
+      {
+        rule_id: "rule-judge",
+        evaluator_id: "eval-judge",
+        evaluator_name: "Judge Accuracy",
+        evaluator_type: "llm_as_judge",
+        data_type: "numeric",
+        score_name: "judge_score",
+        verified: true,
+        enabled: true,
+        sampling: 1,
+      },
+      {
+        rule_id: "rule-code",
+        evaluator_id: "eval-code",
+        evaluator_name: "Code Check",
+        evaluator_type: "code",
+        data_type: null,
+        score_name: null,
+        verified: false,
+        enabled: true,
+        sampling: 1,
+      },
+    ];
+    function BoundEditor() {
+      const [value, setValue] = useState(() => {
+        const d = newManagedDraft();
+        d.contract.project_id = "proj-bound-1";
+        return d;
+      });
+      return (
+        <>
+          <ManagedEvaluationFields
+            value={value}
+            onChange={setValue}
+            boundProjectId="proj-bound-1"
+            candidates={candidates}
+          />
+          <output data-testid="draft">{JSON.stringify(value)}</output>
+        </>
+      );
+    }
+    render(<BoundEditor />);
+    const projectInput = screen.getByLabelText("Langfuse Project ID") as HTMLInputElement;
+    expect(projectInput).toHaveValue("proj-bound-1");
+    expect(projectInput).toHaveAttribute("readonly");
+
+    const selector = screen.getByLabelText("从 Langfuse 选择 Score 1");
+    fireEvent.change(selector, { target: { value: "rule-judge::eval-judge" } });
+    expect(draft().contract.scores[0]).toMatchObject({
+      name: "judge_score",
+      data_type: "numeric",
+      rule_id: "rule-judge",
+      evaluator_id: "eval-judge",
+    });
+
+    fireEvent.change(selector, { target: { value: "rule-code::eval-code" } });
+    expect(draft().contract.scores[0]).toMatchObject({
+      name: "",
+      rule_id: "rule-code",
+      evaluator_id: "eval-code",
+    });
+    expect(screen.getByText(/名称尚未被真实 Score 验证/)).toBeInTheDocument();
+  });
 });

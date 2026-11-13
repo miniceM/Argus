@@ -1838,6 +1838,85 @@
         }
       }
     },
+    "/api/v1/langfuse/managed-score-candidates": {
+      "get": {
+        "tags": [
+          "Experiment Launches"
+        ],
+        "summary": "只读列出 Langfuse 可用托管 Score 候选，辅助新建评测填写",
+        "operationId": "list_managed_score_candidates_api_v1_langfuse_managed_score_candidates_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "production",
+              "title": "Environment"
+            }
+          },
+          {
+            "name": "agent_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ManagedScoreCandidateResponse"
+                  },
+                  "title": "Response List Managed Score Candidates Api V1 Langfuse Managed Score Candidates Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/evaluators": {
       "get": {
         "tags": [
@@ -6373,6 +6452,71 @@
           "type"
         ],
         "title": "ManagedObservationTarget"
+      },
+      "ManagedScoreCandidateResponse": {
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "evaluator_id": {
+            "type": "string",
+            "title": "Evaluator Id"
+          },
+          "evaluator_name": {
+            "type": "string",
+            "title": "Evaluator Name"
+          },
+          "evaluator_type": {
+            "type": "string",
+            "title": "Evaluator Type"
+          },
+          "data_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Type"
+          },
+          "score_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Name"
+          },
+          "verified": {
+            "type": "boolean",
+            "title": "Verified"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "sampling": {
+            "type": "number",
+            "title": "Sampling"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rule_id",
+          "evaluator_id",
+          "evaluator_name",
+          "evaluator_type",
+          "verified",
+          "enabled",
+          "sampling"
+        ],
+        "title": "ManagedScoreCandidateResponse"
       },
       "ManagedScoreCollectionResponse": {
         "properties": {

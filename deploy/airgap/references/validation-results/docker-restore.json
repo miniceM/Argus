@@ -1,0 +1,13 @@
+{
+  "postgres_dump_real_restore": "PASS",
+  "postgres_schema_and_row_restore": "PASS",
+  "postgres_table_grants_restored": "PASS",
+  "redis_aof_data_restore": "PASS",
+  "post_upgrade_database_retained": "PASS",
+  "original_redis_volume_retained": "PASS",
+  "postgres_container_unchanged": "PASS",
+  "rollback_journal_before_database_swap": "PASS",
+  "external_network_id_unchanged": "PASS",
+  "argus_app_start": "MOCKED_NOT_TESTED",
+  "langfuse_business_e2e": "NOT_RUN"
+}

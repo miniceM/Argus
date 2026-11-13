@@ -475,3 +475,14 @@ def test_binding_credential_to_an_endpoint_requires_existing_admin_authorization
     assert (registry.get_version('test-agent','untrusted-binding') is not None)==(expected==201)
     public=client.post('/api/v1/agent-versions',json={'agent_id':'test-agent','version':'public-version','endpoint':'https://agent.example/invoke'})
     assert public.status_code==201
+
+
+def test_configuration_failures_have_distinct_safe_codes(credentials, monkeypatch):
+    client = credentials[0]
+    monkeypatch.delenv('ARGUS_MANAGED_SECRET_KEY_FILE')
+    response = create(client)
+    assert response.headers.get('X-Argus-Error-Code') == 'MANAGED_SECRET_UNAVAILABLE'
+    monkeypatch.delenv('ARGUS_CREDENTIAL_ADMIN_TOKEN_FILE')
+    response = create(client)
+    assert response.headers.get('X-Argus-Error-Code') == 'CREDENTIAL_ADMIN_UNAVAILABLE'
+    assert 'example-admin-token' not in response.text

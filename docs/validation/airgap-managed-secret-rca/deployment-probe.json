@@ -1,0 +1,16 @@
+{
+  "tested_git_sha": "bb30177e9d0a30dbbd4840b5f67bd4e02004172e",
+  "shipped_toolkit_sha256": "9a5869eec99bdcaec569ce5ae4594e081b95cbdc927711abb88ac3be7645bd91",
+  "shipped_functions_match_inspected_toolkit": true,
+  "synthetic_only": true,
+  "initial_model_has_managed_secret_environment": false,
+  "initial_model_mount_targets": [
+    "/app/config",
+    "/app/data",
+    "/app/migrations"
+  ],
+  "workaround_master_key_copied_into_source_backup": true,
+  "next_upgrade_switches_config_to_new_source": true,
+  "next_upgrade_env_still_points_to_config_secrets": true,
+  "next_upgrade_config_contains_key": false
+}

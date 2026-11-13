@@ -1,3 +1,11 @@
+# Docker/other container DNS comes from /etc/resolv.conf at startup.
+upstream argus_runner {
+    zone argus_runner 64k;
+    resolver ${ARGUS_DNS_RESOLVERS} valid=2s ipv6=off;
+    resolver_timeout 2s;
+    server ${RUNNER_HOST}:${RUNNER_PORT} resolve;
+}
+
 server {
     listen 8080;
     server_name localhost;
@@ -20,7 +28,7 @@ server {
     # Proxy to Argus Eval Runner Control Plane API
     # NOTE: NO trailing slash on proxy_pass so /api/v1/... is sent verbatim to eval-runner!
     location /api/ {
-        proxy_pass http://${RUNNER_HOST}:${RUNNER_PORT};
+        proxy_pass http://argus_runner;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

@@ -29,7 +29,7 @@ describe("Credentials 管理", () => {
     vi.mocked(api.GET).mockResolvedValue({ data: [], response: new Response() } as any);
     vi.mocked(api.POST).mockResolvedValue({
       error: { detail: "secret manager not initialized" },
-      response: { status: 503 } as any,
+      response: new Response(null, { status: 503, headers: { "X-Argus-Error-Code": "MANAGED_SECRET_UNAVAILABLE" } }),
     } as any);
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><CredentialsPage /></QueryClientProvider>);
     fireEvent.click(screen.getByRole("button", { name: "创建凭据" }));
@@ -79,4 +79,36 @@ it("creates Basic credentials as protected fields with explicit target origins",
     type: "basic_auth", allowed_origins: ["https://agent.example"], secret: { username: "test-user", password: "test-password" },
   }) })));
   await waitFor(() => expect(screen.queryByDisplayValue("test-password")).not.toBeInTheDocument());
+});
+
+it("defaults to the service environment without overwriting explicit input on late response", async () => {
+  let resolveInfo!: (value: any) => void;
+  vi.mocked(api.GET).mockImplementation(((url: string) => url === "/api/v1/system/info"
+    ? new Promise(resolve => { resolveInfo = resolve; })
+    : Promise.resolve({ data: [], response: new Response() })) as any);
+  render(<QueryClientProvider client={new QueryClient()}><CredentialsPage /></QueryClientProvider>);
+  fireEvent.click(screen.getByRole("button", { name: "创建凭据" }));
+  fireEvent.change(screen.getByLabelText("环境"), { target: { value: "explicit-env" } });
+  resolveInfo({ data: { environment: "argus-kunpeng-test" }, response: new Response() });
+  await waitFor(() => expect(api.GET).toHaveBeenCalledWith("/api/v1/system/info"));
+  await waitFor(() => expect(screen.getByLabelText("环境")).toHaveValue("explicit-env"));
+  expect(screen.getByLabelText("环境")).toHaveValue("explicit-env");
+  fireEvent.click(screen.getByRole("button", { name: "取消" }));
+  fireEvent.click(screen.getByRole("button", { name: "创建凭据" }));
+  await waitFor(() => expect(screen.getByLabelText("环境")).toHaveValue("argus-kunpeng-test"));
+});
+
+it.each([
+  ["CREDENTIAL_ADMIN_UNAVAILABLE", "未配置凭据管理授权文件"],
+  ["MANAGED_SECRET_UNAVAILABLE", "Managed Secret 主密钥"],
+  ["", "服务暂不可用，无法确认主密钥状态"],
+])("uses only safe error code %s for 503 diagnostics", async (code, message) => {
+  vi.mocked(api.GET).mockResolvedValue({ data: [], response: new Response() } as any);
+  vi.mocked(api.POST).mockResolvedValue({ error: { detail: "never-echo-secret" },
+    response: new Response(null, { status: 503, headers: { "X-Argus-Error-Code": code } }) } as any);
+  render(<QueryClientProvider client={new QueryClient()}><CredentialsPage /></QueryClientProvider>);
+  fireEvent.click(screen.getByRole("button", { name: "创建凭据" }));
+  fireEvent.submit(screen.getByLabelText("创建凭据表单"));
+  expect(await screen.findByRole("alert")).toHaveTextContent(message);
+  expect(screen.queryByText(/never-echo-secret/)).not.toBeInTheDocument();
 });

@@ -1,0 +1,22 @@
+{
+  "environment": "isolated local Docker ARM64, synthetic HTTP server, no credentials",
+  "old_ip": "172.30.239.2",
+  "new_ip": "172.30.239.4",
+  "before": {
+    "code": 0,
+    "body": "before /api/probe?value=1"
+  },
+  "after_runner_replaced_without_console_restart": {
+    "code": 1,
+    "body": ""
+  },
+  "console_health_while_proxy_broken": {
+    "code": 0,
+    "body": "healthy"
+  },
+  "after_only_console_restart": {
+    "code": 0,
+    "body": "after /api/probe?value=1"
+  },
+  "conclusion": "STALE_DNS_AND_HEALTH_FALSE_POSITIVE_REPRODUCED"
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Argus 离线更新部署"
+  short_description: "Mac ARM64 打包、麒麟鲲鹏离线升级、数据恢复回滚与证据验收"
+  default_prompt: "使用 $argus-airgap-update，以固定 Git SHA 为已有 Langfuse 环境准备 Argus ARM64 离线更新包，完成备份、升级、验证和可恢复回滚。"

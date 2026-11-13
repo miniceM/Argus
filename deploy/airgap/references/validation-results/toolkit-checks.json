@@ -1,0 +1,11 @@
+{
+  "observed_at": "2026-11-09T03:43:15.594996+00:00",
+  "skill_structure": "PASS",
+  "python_3_8_ast_compatibility": "PASS",
+  "shell_syntax_and_12_help_entrypoints": "PASS",
+  "local_markdown_links": "PASS",
+  "json_syntax": "PASS",
+  "docker_daemon_architecture_guard": "PASS",
+  "tested_host_python": "3.11.14",
+  "real_kylin_runtime": "NOT_RUN"
+}

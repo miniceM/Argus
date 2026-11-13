@@ -98,9 +98,15 @@ class CredentialUsageVersion(BaseModel):
     is_active: bool
 
 
+class CredentialUsageAgent(BaseModel):
+    agent_id: str
+    is_current: bool
+
+
 class CredentialUsage(BaseModel):
     credential_id: str
     versions: list[CredentialUsageVersion]
+    agents: list[CredentialUsageAgent] = Field(default_factory=list)
 
 
 @router.get("", response_model=list[CredentialResponse])
@@ -165,7 +171,8 @@ def disable_credential(credential_id: str, payload: CredentialDisable, actor=Dep
             raise HTTPException(404, "Credential not found")
         if record.name != payload.confirm_name:
             raise HTTPException(400, "Credential name confirmation mismatch")
-        if svc.usage(record.id)["versions"] and not payload.force:
+        usage = svc.usage(record.id)
+        if (usage["versions"] or usage["agents"]) and not payload.force:
             raise HTTPException(409, "Credential is referenced; confirm forced disable")
         record.enabled = False
         svc.audit(session, record, "DISABLE", actor)
@@ -182,8 +189,9 @@ def delete_credential(credential_id: str, confirm_name: str = Query(...), actor=
                 raise HTTPException(404, "Credential not found")
             if record.name != confirm_name:
                 raise HTTPException(400, "Credential name confirmation mismatch")
-            if svc.usage(record.id)["versions"]:
-                raise HTTPException(409, "Credential is referenced by immutable AgentVersions")
+            usage = svc.usage(record.id)
+            if usage["versions"] or usage["agents"]:
+                raise HTTPException(409, "Credential is referenced by Agents or immutable history")
             svc.audit(session, record, "DELETE", actor)
             session.delete(record)
             session.commit()

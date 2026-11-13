@@ -23,7 +23,7 @@ from .evaluator_binding import (
     manifest_measurement_digest,
 )
 from .evaluators import EvaluatorSelectionError, default_evaluator_registry
-from .langfuse_connection import BoundLangfuseClient, global_projection, resolve_connection, verify_connection
+from .langfuse_connection import BoundLangfuseClient, global_projection, is_bound, resolve_connection, verify_connection
 from .managed_evaluation import ManagedEvaluationError, freeze_managed_evaluation
 from .quality_policy import (
     QUALITY_POLICY_SCHEMA_VERSION,
@@ -92,7 +92,15 @@ class LaunchService:
         if identity_error:
             raise ValueError(f"{identity_error}: runner build identity is unavailable")
         ver_rec = self.registry.get_version(agent_id, agent_version)
-        connection_binding = ver_rec.langfuse_connection if ver_rec else None
+        agent_rec = self.registry.get_agent(agent_id)
+        connection_binding = agent_rec.langfuse_connection if agent_rec else None
+        if idempotency_key:
+            with self.db_manager.get_session() as session:
+                existing = session.scalar(select(ExperimentLaunchRecord).where(
+                    ExperimentLaunchRecord.idempotency_key == idempotency_key))
+                if existing:
+                    # 幂等重放校验原冻结项目，不受 Agent 后续重新绑定影响。
+                    connection_binding = existing.manifest["langfuse_connection"] if is_bound(existing.manifest) else None
         managed_contract = None
         managed_policy = None
         if evaluation_source not in ("builtin", "langfuse_managed"):
@@ -233,6 +241,8 @@ class LaunchService:
             raise ValueError(f"AgentVersion '{agent_id}:{agent_version}' not found")
         if not ver_rec.is_active:
             raise ValueError(f"AgentVersion '{agent_id}:{agent_version}' is archived/inactive")
+        if ver_rec.langfuse_connection and connection_binding is None:
+            raise ValueError("Legacy version Langfuse binding requires explicit Agent connection configuration")
 
         version_environment = ver_rec.environment or ("production" if ver_rec.credential_id else None)
         if version_environment is not None and normalize_environment(version_environment) != normalized_environment:
@@ -384,6 +394,10 @@ class LaunchService:
                     raise ValueError(
                         f"Agent '{agent_id}' 处于不可用状态 '{getattr(agent_rec, 'status', 'not_found')}'，不可创建新的评测任务"
                     )
+
+                # Dataset 可能已从外部读取；配置并发改变时拒绝提交，避免混用项目。
+                if agent_rec.langfuse_connection != connection_binding:
+                    raise ValueError("Agent Langfuse connection changed during Launch creation; retry the request")
 
                 from .baselines import validate_baseline_snapshot
                 from .db_models import BaselineBindingRecord, RunResultSnapshotRecord

@@ -1,19 +1,22 @@
 {
-  "observed_at": "2026-11-12T08:15:01.029989+00:00",
+  "observed_at": "2026-11-12T09:52:24.871709+00:00",
   "test": "two_real_projects",
   "score_source": "API",
   "native_rule_eval_verified": false,
+  "binding_scope": "agent",
   "projects": [
     {
-      "project_id": "s4-project-24365d5d03264766a8dc48be07e19577",
-      "launch_id": "8938b54f-a099-408c-9647-0202ea7be0da",
-      "credential_id": "bc54df0a-fdc1-4b31-8bc6-4359e7ec830c",
+      "agent_id": "team-a",
+      "agent_version": "v1",
+      "project_id": "s4-project-d332344e68dc49419bb118fa3d0d4ed9",
+      "launch_id": "180bfa95-ecb0-4291-a80a-8391b3b60df4",
+      "credential_id": "cae334cb-eb18-46f9-8e81-24940b767ae1",
       "credential_version": 1,
       "dataset_item_id": "case-a",
-      "trace_id": "ddb28d5db9234be0985d81a0910a82ad",
-      "observation_id": "efa8859928f74f77",
+      "trace_id": "e4da11c4ffa24ef3979930501ae9803f",
+      "observation_id": "0c48d0e40c714740",
       "score_ids": [
-        "score:5253853f-a8d9-45ed-9500-afe9ff42c476:gen1:intent_match"
+        "score:bcfca53f-1bff-4fa1-81e3-46cb90cff062:gen1:intent_match"
       ],
       "execution": "succeeded",
       "quality": "pass",
@@ -21,15 +24,53 @@
       "cross_project_scores": 0
     },
     {
-      "project_id": "project-b-b74c48253c634baf8bf338146920ec8a",
-      "launch_id": "c9b733d4-f272-48ac-92d8-dd53e55e0cee",
-      "credential_id": "8240c901-ef99-45d1-bd0f-32837ef5fb66",
+      "agent_id": "team-a",
+      "agent_version": "v2",
+      "project_id": "s4-project-d332344e68dc49419bb118fa3d0d4ed9",
+      "launch_id": "a62270b0-1ea5-4ce3-b330-43d0f8619fb0",
+      "credential_id": "cae334cb-eb18-46f9-8e81-24940b767ae1",
+      "credential_version": 1,
+      "dataset_item_id": "case-a",
+      "trace_id": "27dd006a76de48ab9389dafe6c76530c",
+      "observation_id": "3bc6c0a8a50246fe",
+      "score_ids": [
+        "score:5808be0d-9df8-4c1f-b4a2-a2f705af7372:gen1:intent_match"
+      ],
+      "execution": "succeeded",
+      "quality": "pass",
+      "cross_project_observations": 0,
+      "cross_project_scores": 0
+    },
+    {
+      "agent_id": "team-b",
+      "agent_version": "v1",
+      "project_id": "project-b-fd72e91ff5f44ed28f199e2771facf2b",
+      "launch_id": "6a987d1b-40d8-472c-b84b-a74dfdf961de",
+      "credential_id": "c9deddcf-f2cd-4d56-b0e9-b5728235aaf9",
       "credential_version": 1,
       "dataset_item_id": "case-b",
-      "trace_id": "e6fbda4cc95e46a0a4732bae35b98da3",
-      "observation_id": "394e90a25fbb4c38",
+      "trace_id": "dd3bacdc7dab4f38930ea6049fdea27d",
+      "observation_id": "b966a26c1a8746a0",
       "score_ids": [
-        "score:604acb8c-53f3-41df-a918-6e9b6d4197f4:gen1:intent_match"
+        "score:18089c6b-6137-49e3-8839-1583e609a867:gen1:intent_match"
+      ],
+      "execution": "succeeded",
+      "quality": "pass",
+      "cross_project_observations": 0,
+      "cross_project_scores": 0
+    },
+    {
+      "agent_id": "team-b",
+      "agent_version": "v2",
+      "project_id": "project-b-fd72e91ff5f44ed28f199e2771facf2b",
+      "launch_id": "b0d17783-4835-4f5a-aa90-e48ec769497b",
+      "credential_id": "c9deddcf-f2cd-4d56-b0e9-b5728235aaf9",
+      "credential_version": 1,
+      "dataset_item_id": "case-b",
+      "trace_id": "774d6d2d423b4f3aa6a194a21b046c17",
+      "observation_id": "0869fa2f860a4e79",
+      "score_ids": [
+        "score:87f0e719-c6d4-4e76-990f-519a24e77641:gen1:intent_match"
       ],
       "execution": "succeeded",
       "quality": "pass",

@@ -83,36 +83,36 @@ def test_two_real_projects_isolate_dataset_observation_and_scores(credentials, s
                     {"username": public, "password": secret}, "integration",
                     type="basic_auth", allowed_origins=[runtime.base_url])
                 binding = {"base_url": runtime.base_url, "project_id": project, "credential_id": credential["id"]}
-                registry.create_agent("team-" + label, "Team " + label)
-                registry.create_version("team-" + label, "v1", f"http://127.0.0.1:{server.server_port}/invoke",
-                                        langfuse_connection=binding, max_retries=0)
+                registry.create_agent("team-" + label, "Team " + label, langfuse_connection=binding)
                 connection = resolve_manifest_connection(db, {"langfuse_connection": {**binding, "source": "BOUND"}})
                 with BoundLangfuseClient(connection) as client:
                     client.verify_project()
                     client.api.datasets.create(name="same-dataset-name")
                     client.api.dataset_items.create(dataset_name="same-dataset-name", input={"team": label},
                                                     expected_output={"intent": "ok"}, id="case-" + label)
-                launch = LaunchService(db, registry).create_launch("team-" + label, "v1", "same-dataset-name",
-                                                                  evaluator_ids=["intent_match"])
-                assert launch.manifest["dataset"]["items"][0]["id"] == "case-" + label
-                assert launch.manifest["langfuse_connection"] == {**binding, "source": "BOUND", "credential_version": 1}
-                orchestrator.start_launch(launch.id)
-                launches.append(launch)
+                for version in ("v1", "v2"):
+                    registry.create_version("team-" + label, version, f"http://127.0.0.1:{server.server_port}/invoke", max_retries=0)
+                    launch = LaunchService(db, registry).create_launch("team-" + label, version, "same-dataset-name",
+                                                                      evaluator_ids=["intent_match"])
+                    assert launch.manifest["dataset"]["items"][0]["id"] == "case-" + label
+                    assert launch.manifest["langfuse_connection"] == {**binding, "source": "BOUND", "credential_version": 1}
+                    orchestrator.start_launch(launch.id)
+                    launches.append(launch)
             for message in queue.read_group("two-projects", count=10):
                 assert asyncio.run(worker.execute_item_message(*message))
             reconciler.reconcile_launch_states()
             syncer = LangfuseOutboxSyncer(db, langfuse_client=lambda: pytest.fail("global client used"))
-            assert syncer.process_batch(batch_size=10) == 2
-            assert len(received) == 2 and received[0] != received[1]
+            assert syncer.process_batch(batch_size=10) == 4
+            assert len(received) == 4 and len(set(received)) == 4
             with db.get_session() as session:
                 items = [session.scalar(select(ExperimentItemExecutionRecord).where(
                     ExperimentItemExecutionRecord.launch_id == launch.id)) for launch in launches]
             assert all(item.execution_status == "succeeded" and item.quality_conclusion == "pass" for item in items)
             deadline = time.monotonic() + 90
             receipt = {"observed_at": datetime.now(UTC).isoformat(), "test": "two_real_projects",
-                       "score_source": "API", "native_rule_eval_verified": False, "projects": []}
+                       "score_source": "API", "native_rule_eval_verified": False, "binding_scope": "agent", "projects": []}
             for index, launch in enumerate(launches):
-                own, other = items[index], items[1 - index]
+                own, other = items[index], items[2 if index < 2 else 0]
                 with scores_client_for_manifest(db, launch.manifest) as client:
                     while True:
                         observations = client.observations(own.trace_id)
@@ -131,7 +131,8 @@ def test_two_real_projects_isolate_dataset_observation_and_scores(credentials, s
                     evidence = attempt.credential_usage[-1]
                     binding = launch.manifest["langfuse_connection"]
                     assert evidence["credential_id"] == binding["credential_id"] and evidence["version"] == 1
-                    receipt["projects"].append({"project_id": binding["project_id"], "launch_id": launch.id,
+                    receipt["projects"].append({"agent_id": launch.agent_id, "agent_version": launch.agent_version,
+                        "project_id": binding["project_id"], "launch_id": launch.id,
                         "credential_id": evidence["credential_id"], "credential_version": evidence["version"],
                         "dataset_item_id": own.dataset_item_id, "trace_id": own.trace_id, "observation_id": own.observation_id,
                         "score_ids": [row["id"] for row in scores], "execution": own.execution_status,

@@ -13,6 +13,7 @@ from .models import (
     AgentDeleteResponse,
     AgentHasActiveLaunchesError,
     AgentHasLaunchesError,
+    AgentLangfuseConnectionRequest,
     AgentNameMismatchError,
     AgentNotFoundError,
     AgentPurgeRequest,
@@ -76,17 +77,37 @@ def _handle_agent_error(exc: Exception) -> JSONResponse:
 def create_agent(
     payload: AgentCreateRequest,
     reg: AgentRegistry = Depends(get_registry),
+    authorization: str | None = Header(default=None),
 ) -> AgentResponse:
+    actor = authorize_credential(authorization) if payload.langfuse_connection else "system"
     try:
         agent = reg.create_agent(
             agent_id=payload.id,
             name=payload.name,
             description=payload.description,
             owner=payload.owner,
+            langfuse_connection=payload.langfuse_connection.model_dump() if payload.langfuse_connection else None,
+            actor=actor,
         )
         return AgentResponse.model_validate(agent)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.put("/agents/langfuse-connection", response_model=AgentResponse, summary="配置 Agent 全部版本共用的 Langfuse 项目")
+def set_agent_langfuse_connection(
+    payload: AgentLangfuseConnectionRequest,
+    id: str = Query(..., description="Agent ID"),
+    actor: str = Depends(authorize_credential),
+    reg: AgentRegistry = Depends(get_registry),
+) -> AgentResponse:
+    try:
+        agent = reg.set_langfuse_connection(id, payload.langfuse_connection.model_dump() if payload.langfuse_connection else None, actor=actor)
+        return AgentResponse.model_validate(agent)
+    except AgentNotFoundError as exc:
+        raise HTTPException(404, detail=exc.message) from None
+    except ValueError:
+        raise HTTPException(400, detail="Invalid Agent Langfuse connection or credential target") from None
 
 
 @router.get(
@@ -200,7 +221,7 @@ def create_agent_version(
     authorization: str | None = Header(default=None),
 ) -> AgentVersionResponse:
     # 绑定即授权 Runner 向该不可变端点发送 Secret，复用现有管理授权。
-    if payload.credential_id or payload.langfuse_connection or any(header.credential_id for header in payload.http_headers):
+    if payload.credential_id or any(header.credential_id for header in payload.http_headers):
         authorize_credential(authorization)
     try:
         version = reg.create_version(
@@ -215,7 +236,6 @@ def create_agent_version(
             response_schema=payload.response_schema,
             credential_ref=payload.credential_ref,
             credential_id=payload.credential_id,
-            langfuse_connection=payload.langfuse_connection.model_dump() if payload.langfuse_connection else None,
             http_auth=payload.http_auth.model_dump(exclude_none=True, exclude_defaults=True) if payload.http_auth else None,
             http_headers=[header.model_dump(exclude_none=True, exclude_defaults=True) for header in payload.http_headers],
             response_mapping=payload.response_mapping.model_dump() if payload.response_mapping else None,

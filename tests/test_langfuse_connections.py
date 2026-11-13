@@ -23,43 +23,23 @@ def binding(credentials, project="project-b"):
     return client, service, registry, connection
 
 
-def test_binding_requires_admin_and_is_retained_by_credential_usage(credentials):
-    client, _, registry, connection = binding(credentials)
-    payload = {"agent_id": "test-agent", "version": "bound", "endpoint": "https://agent.example/invoke",
-               "langfuse_connection": connection}
-    client.headers.pop("Authorization")
-    assert client.post("/api/v1/agent-versions", json=payload).status_code == 401
-    client.headers["Authorization"] = "Bearer example-admin-token"
-    response = client.post("/api/v1/agent-versions", json=payload)
-    assert response.status_code == 201, response.text
-    assert response.json()["langfuse_connection"] == connection
-    assert registry.get_version("test-agent", "bound").environment == "production"
-    usage = client.get(f"/api/v1/credentials/{connection['credential_id']}/usage").json()
-    assert usage["versions"][0]["version"] == "bound"
-    assert client.delete(f"/api/v1/credentials/{connection['credential_id']}",
-                         params={"confirm_name": "project-b"}).status_code == 409
-
-
-def test_connection_target_and_environment_are_enforced(credentials):
+def test_connection_target_and_state_are_enforced(credentials):
     _, _, registry, connection = binding(credentials)
     for changes in ({"base_url": "https://other.example"}, {"base_url": "https://user:secret@lf.example"},
                     {"base_url": "https://lf.example/path"}, {"project_id": " "}):
         with pytest.raises(ValueError):
-            registry.create_version("test-agent", "bad", "https://agent.example/invoke",
-                                    langfuse_connection={**connection, **changes})
-    with pytest.raises(ValueError):
-        registry.create_version("test-agent", "bad-env", "https://agent.example/invoke",
-                                environment="staging", langfuse_connection=connection)
+            registry.set_langfuse_connection("test-agent", {**connection, **changes})
 
 
-def test_admin_yaml_import_retains_project_binding(credentials, tmp_path):
+def test_admin_yaml_import_retains_agent_project_binding(credentials, tmp_path):
     _, _, registry, connection = binding(credentials)
     path = tmp_path / "agents.yaml"
-    path.write_text(json.dumps({"agents": {"yaml-bound": {"versions": {"v1": {
-        "endpoint": "https://agent.example/invoke", "langfuse_connection": connection,
+    path.write_text(json.dumps({"agents": {"yaml-bound": {"langfuse_connection": connection, "versions": {"v1": {
+        "endpoint": "https://agent.example/invoke",
     }}}}}))
     assert registry.import_yaml(path)["created"] == ["yaml-bound:v1"]
-    assert registry.get_version("yaml-bound", "v1").langfuse_connection == connection
+    assert registry.get_agent("yaml-bound").langfuse_connection == connection
+    assert registry.get_version("yaml-bound", "v1").langfuse_connection is None
 
 
 def test_bound_dataset_uses_same_frozen_connection_and_not_global_project(credentials, setup_runtime, monkeypatch):
@@ -67,7 +47,8 @@ def test_bound_dataset_uses_same_frozen_connection_and_not_global_project(creden
     monkeypatch.setattr(BoundLangfuseClient, "verify_project", lambda _: None)
 
     _, _, registry, connection = binding(credentials)
-    registry.create_version("test-agent", "bound", "https://agent.example/invoke", langfuse_connection=connection)
+    registry.set_langfuse_connection("test-agent", connection)
+    registry.create_version("test-agent", "bound", "https://agent.example/invoke")
     monkeypatch.setenv("LANGFUSE_PROJECT_ID", "project-a")
     calls = []
 
@@ -265,7 +246,8 @@ def test_bound_synchronous_execution_uses_outbox_and_never_fetches_global_datase
     _, _, registry, connection = binding(credentials)
     db = setup_runtime[0]
     monkeypatch.setattr("app.langfuse_connection.BoundLangfuseClient.verify_project", lambda _: None)
-    registry.create_version("test-agent", "bound-sync", "https://agent.example/invoke", langfuse_connection=connection)
+    registry.set_langfuse_connection("test-agent", connection)
+    registry.create_version("test-agent", "bound-sync", "https://agent.example/invoke")
     evaluation = {"evaluator_ids": ["intent_match"]}
     if managed:
         from test_issue_215_managed_evaluation import contract, rules
@@ -338,7 +320,8 @@ def test_bound_sync_disabled_credential_records_prepared_attempt(credentials, se
     _, _, registry, connection = binding(credentials)
     db = setup_runtime[0]
     monkeypatch.setattr("app.langfuse_connection.BoundLangfuseClient.verify_project", lambda _: None)
-    registry.create_version("test-agent", "bound-sync-disabled", "https://agent.example/invoke", langfuse_connection=connection)
+    registry.set_langfuse_connection("test-agent", connection)
+    registry.create_version("test-agent", "bound-sync-disabled", "https://agent.example/invoke")
     launch = LaunchService(db, registry).create_launch("test-agent", "bound-sync-disabled", "dataset-b",
         evaluator_ids=["intent_match"], dataset_snapshot={"source": "langfuse", "dataset_id": "dataset-b",
         "dataset_version": "2026-11-12T00:00:00+00:00", "items_count": 1, "snapshot_digest": "fixture",

@@ -26,6 +26,7 @@ from .executor import RemoteAgentExecutor
 from .langfuse_managed_scores import ManagedScoreCollector
 from .langfuse_scores_client import ScoresReadError, ScoresV3Client
 from .managed_evaluation import ManagedEvaluationError
+from .managed_score_candidates import discover_managed_score_candidates
 from .models import (
     EvaluationResultResponse,
     EvaluationRetryBlockedItem,
@@ -36,6 +37,7 @@ from .models import (
     ExperimentLaunchResponse,
     ExperimentLaunchRunActionResponse,
     ExperimentLaunchRunRequest,
+    ManagedScoreCandidateResponse,
     ManagedScoreCollectionResponse,
     ManagedScoreDiagnosticsResponse,
     RetryEvaluationResponse,
@@ -741,3 +743,68 @@ def get_managed_scores(launch_id: str, item_id: str, services=Depends(get_servic
         return ManagedScoreCollector(db, None).diagnostics(launch_id, item_id)
     except ScoresReadError as exc:
         raise HTTPException(status_code=404, detail={"code": exc.code}) from None
+
+
+@router.get(
+    "/langfuse/managed-score-candidates",
+    response_model=list[ManagedScoreCandidateResponse],
+    summary="只读列出 Langfuse 可用托管 Score 候选，辅助新建评测填写",
+)
+def list_managed_score_candidates(
+    project_id: str | None = Query(default=None),
+    environment: str = Query(default="production"),
+    agent_id: str | None = Query(default=None),
+    services=Depends(get_services),
+) -> list[ManagedScoreCandidateResponse]:
+    import os
+
+    from .langfuse_connection import resolve_connection, verify_connection
+    from .secret_providers import CredentialUnavailable
+
+    db, reg, _, _ = services
+    client: ScoresV3Client | None = None
+    try:
+        normalized_env = normalize_environment(environment)
+        agent_rec = reg.get_agent(agent_id) if agent_id else None
+        connection_binding = agent_rec.langfuse_connection if agent_rec else None
+
+        if connection_binding:
+            bound_project = str(connection_binding["project_id"])
+            if project_id is not None and project_id.strip() and project_id.strip() != bound_project:
+                raise ManagedEvaluationError(
+                    "MANAGED_PROJECT_MISMATCH",
+                    "所选 project 与当前 Agent 绑定的 Langfuse Project ID 不一致。",
+                )
+            try:
+                resolved = resolve_connection(
+                    db, connection_binding, normalized_env, operation="CANDIDATES", actor="console"
+                )
+            except CredentialUnavailable:
+                raise ScoresReadError("CREDENTIAL_UNAVAILABLE") from None
+            verify_connection(resolved)
+            client = ScoresV3Client(resolved.base_url, resolved.public_key, resolved.secret_key)
+            cache_key = ("BOUND", resolved.base_url, resolved.project_id, resolved.credential_id, resolved.credential_version, normalized_env)
+        else:
+            configured_project = os.getenv("LANGFUSE_PROJECT_ID")
+            effective_project = (project_id or "").strip() or (configured_project or "").strip()
+            if not effective_project:
+                raise ManagedEvaluationError("MANAGED_IDENTITY_REQUIRED", "必须提供非空且无首尾空白的 Langfuse project_id。")
+            if configured_project and effective_project != configured_project:
+                raise ManagedEvaluationError("MANAGED_PROJECT_MISMATCH", "所选 project 与服务端 LANGFUSE_PROJECT_ID 不一致。")
+            client = get_managed_score_client()
+            cache_key = ("GLOBAL", client.base_url, effective_project, normalized_env)
+
+        rows = discover_managed_score_candidates(client, environment=normalized_env, cache_key=cache_key)
+        return [ManagedScoreCandidateResponse.model_validate(row) for row in rows]
+    except ManagedEvaluationError as exc:
+        raise HTTPException(status_code=400, detail=exc.to_payload()) from exc
+    except EnvironmentContractError as exc:
+        raise HTTPException(status_code=400, detail=exc.to_payload()) from exc
+    except ScoresReadError as exc:
+        raise HTTPException(
+            status_code=502 if exc.code in ("AUTHENTICATION_FAILED", "AUTHORIZATION_FAILED", "UPSTREAM_UNAVAILABLE", "TIMEOUT", "NETWORK_UNAVAILABLE") else 409,
+            detail={"code": exc.code, "message": f"无法从 Langfuse 读取候选 Score（{exc.code}）。"},
+        ) from None
+    finally:
+        if isinstance(client, ScoresV3Client):
+            client.close()

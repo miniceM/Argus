@@ -1,6 +1,8 @@
-# 按 AgentVersion 连接 Langfuse 项目
+# 按 Agent 连接 Langfuse 项目
 
-共用 Argus 的团队可在不可变 AgentVersion 上绑定各自的 Langfuse 项目。
+共用 Argus 的团队可为每个 Agent 配置一个 Langfuse 项目和一套项目密钥。
+该 Agent 的所有已有版本与后续版本共用此连接，创建版本时无需重复配置，
+也不支持按版本覆盖项目。每次 Launch 单独冻结实际使用的连接。
 Dataset 读取、Observation / DatasetRun 投影、Builtin Score 写入和 Managed Score
 采纳使用同一绑定。Langfuse 仍管理 Dataset、Evaluator、Rule、Trace 和 Score；
 Argus 只保存连接引用、冻结输入与采纳证据，不提供项目管理或多租户权限体系。
@@ -10,9 +12,10 @@ Argus 只保存连接引用、冻结输入与采纳证据，不提供项目管�
 1. 按[凭据部署说明](secret-providers.md)配置 Managed Secret 主密钥和管理授权。
 2. 在 **Credentials** 创建同环境的 `basic_auth` 凭据：username 为项目 Public Key，
    password 为 Secret Key，allowed origins 精确填写 Langfuse 的 HTTP(S) origin。
-   密钥只在此表单写入一次，AgentVersion 与 Launch 不保存明文。
-3. 在 **Agent → 创建新版本** 勾选“绑定独立 Langfuse 项目”，填写 Base URL、
-   Project ID，选择上述凭据，并提交现有“凭据绑定管理授权 Token”。
+   密钥只在此表单写入一次，Agent 与 Launch 不保存明文。
+3. 在 **Agent 详情 → 配置 Langfuse 项目** 勾选“使用 Agent 独立 Langfuse 项目”，
+   填写 Base URL、Project ID，选择上述凭据，并提交“项目连接管理授权 Token”。
+   之后创建 v1、v2 等版本时只填写业务调用配置，无需再次填写项目或密钥。
 4. 创建 Launch，检查版本环境及 `BOUND` 来源。Managed 配置中的 Project ID
    必须与绑定一致；只填该文本字段不会切换凭据。Rule 继续在 Langfuse 配置。
 
@@ -21,9 +24,14 @@ Base URL 只接受 origin，不接受路径、查询参数、用户信息或片�
 TLS 使用正常证书校验。私网部署可使用管理员明确授权的 origin；这不构成
 按租户隔离的网络边界，DNS 与出口访问仍由部署方控制。
 
-API 字段为 `langfuse_connection`，完整请求与响应以
+Agent 的 API 字段为 `langfuse_connection`；可在注册 Agent 时传入，或通过
+`PUT /api/v1/agents/langfuse-connection?id=...` 配置。配置和清除均需管理授权。
+YAML bootstrap 将此字段放在 Agent 节点，与 `versions` 平级；版本级配置会被拒绝。
+完整请求与响应以
 [OpenAPI](openapi.json) 为准。绑定字段仅包含 `base_url`、`project_id`、
-`credential_id`。迁移 021 给既有版本增加 nullable 字段，不回填历史版本或摘要。
+`credential_id`。迁移 022 追加 Agent 连接及凭据引用表，保留迁移 021 和旧版本列，
+不改写历史版本、摘要、Manifest 或 Snapshot。若试用旧 PR 已有版本级绑定，
+须由管理员在 Agent 上明确配置；未配置时新建 Launch 失败，不静默改用全局项目。
 
 ## 冻结、轮换与退出
 
@@ -34,7 +42,7 @@ API 字段为 `langfuse_connection`，完整请求与响应以
 | `BOUND` | 使用冻结的 Base URL、Project ID、Credential ID；解析失败不回落全局 |
 | `GLOBAL_ENV` | 沿用已有全局环境配置与同步策略，无需修改既有单项目部署 |
 
-绑定版本从该项目读取并冻结 Dataset，不受全局 `ARGUS_DATASET_SOURCE` 的本地
+已绑定 Agent 的任一版本从该项目读取并冻结 Dataset，不受全局 `ARGUS_DATASET_SOURCE` 的本地
 Demo 选择影响。创建时验证凭据实际所属项目；每次 Agent Attempt 前重新解析并核验。
 Managed 的 environment、Observation 身份、Score 类型、Rule / Evaluator 来源
 核验仍生效。项目不匹配、缺分或来源不可信保持 UNKNOWN，不以默认值补齐。
@@ -50,8 +58,15 @@ Manifest 中 `credential_version` 是创建时实际解析的修订。Attempt �
 分别返回 `AUTHENTICATION_FAILED` / `AUTHORIZATION_FAILED`。OTLP 失败由原 Outbox
 退避重试，只改变同步状态，不把既有质量结论改成失败或通过。
 
-修改目标项目或取消绑定须创建新 AgentVersion；新版本不填绑定即可使用全局路径。
-被任何版本引用的 Credential 不能删除。旧 Manifest、Snapshot、digest 和 Gate
+修改目标项目或清除绑定在 Agent 详情完成，无需创建新 AgentVersion。更改只影响
+之后新建的 Launch；已有 Launch 的执行、恢复、OTLP 和 Score 继续使用冻结连接。
+清除绑定后新的 Launch 使用全局配置（旧版本级绑定的兼容限制见上文）。
+凭据环境仍须与 Launch 环境一致；此配置不授予跨环境使用凭据的权限。
+若读取 Dataset 期间连接被并发修改，本次创建失败，重试后使用统一的新连接。
+
+当前及历史 Agent 项目凭据引用会保留至该 Agent 及其本地证据被清理，期间不可
+删除，停用需显式强制确认；这也包括绑定后尚未创建 Launch 的凭据。Credentials
+使用关系区分当前与历史项目引用。旧 Manifest、Snapshot、版本 digest 和 Gate
 保持原样；历史 Manifest 缺少来源字段时仍按旧全局路径读取，不伪造冻结来源。
 
 ## 连接与恢复成本
@@ -71,6 +86,8 @@ Manifest 中 `credential_version` 是创建时实际解析的修订。Attempt �
 2026-11-12 的执行结果及无密钥双项目回执见
 [验证记录](validation/issue255-langfuse-projects/README.md)。
 
+`tests/test_agent_langfuse_binding.py` 覆盖一次绑定、多版本共用、拒绝版本覆盖、
+重新绑定与历史保护、权限、环境、并发变更和 YAML 层级。
 `tests/test_langfuse_connections.py` 覆盖管理授权、环境和 origin、冻结 Dataset、
 凭据轮换 / 停用、PREPARED、项目与认证失败、全局 SDK 隔离、OTLP 故障、
 同步入口与 Managed 恢复。Console 的真实 API 测试覆盖绑定、来源展示、

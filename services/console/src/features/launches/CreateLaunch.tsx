@@ -190,6 +190,44 @@ export const CreateLaunch: React.FC = () => {
     }
   }, [agents, selectedAgentId]);
 
+  const selectedAgent = agents?.find((a) => a.id === selectedAgentId);
+  const boundProjectId = selectedAgent?.langfuse_connection?.project_id ?? null;
+
+  useEffect(() => {
+    if (boundProjectId && managedDraft.contract.project_id !== boundProjectId) {
+      setManagedDraft((prev) => ({
+        ...prev,
+        contract: { ...prev.contract, project_id: boundProjectId },
+      }));
+    }
+  }, [boundProjectId, managedDraft.contract.project_id]);
+
+  const effectiveManagedProjectId = (boundProjectId ?? managedDraft.contract.project_id).trim();
+  const effectiveManagedEnv = environment.trim() || "production";
+  const {
+    data: managedCandidates,
+    isLoading: isCandidatesLoading,
+    error: candidatesQueryError,
+  } = useQuery({
+    queryKey: ["managed-score-candidates", selectedAgentId, effectiveManagedProjectId, effectiveManagedEnv],
+    queryFn: async () => {
+      const res = await api.GET("/api/v1/langfuse/managed-score-candidates", {
+        params: {
+          query: {
+            project_id: effectiveManagedProjectId || undefined,
+            environment: effectiveManagedEnv,
+            agent_id: selectedAgentId || undefined,
+          },
+        },
+      });
+      if (res.error) throw res.error;
+      return Array.isArray(res.data) ? res.data : [];
+    },
+    enabled: isManaged && Boolean(boundProjectId || effectiveManagedProjectId || selectedAgentId),
+    retry: false,
+    staleTime: 30_000,
+  });
+
   // Auto select latest active version when versions loaded
   useEffect(() => {
     if (versions && versions.length > 0) {
@@ -381,7 +419,11 @@ export const CreateLaunch: React.FC = () => {
           environment: environment.trim() || "production",
           ...(isManaged ? {
             evaluation_source: evaluationSource,
-            managed_evaluation: { ...managedDraft.contract, environment: environment.trim() || "production" },
+            managed_evaluation: {
+              ...managedDraft.contract,
+              project_id: boundProjectId ?? managedDraft.contract.project_id,
+              environment: environment.trim() || "production",
+            },
             quality_policy: { rules: managedDraft.rules },
           } : { evaluator_selections, quality_policy: toQualityPolicyRequest(ruleDrafts) }),
           max_concurrency: concurrency,
@@ -545,8 +587,8 @@ export const CreateLaunch: React.FC = () => {
                 )}
               </Field>
               {selectedAgentVersion && <p className="mt-2 text-xs text-muted-foreground" role="note">
-                Langfuse 连接来源：{versions?.find(v => v.version === selectedAgentVersion)?.langfuse_connection
-                  ? `BOUND · ${versions.find(v => v.version === selectedAgentVersion)?.langfuse_connection?.project_id}`
+                Agent 共用的 Langfuse 连接：{agents?.find(a => a.id === selectedAgentId)?.langfuse_connection
+                  ? `BOUND · ${agents?.find(a => a.id === selectedAgentId)?.langfuse_connection?.project_id}`
                   : "GLOBAL_ENV（部署全局配置）"}。Project ID 采纳条件不会更改此路由。
               </p>}
               {versions && versions.length === 0 && (
@@ -633,7 +675,19 @@ export const CreateLaunch: React.FC = () => {
             <option value="langfuse_managed">Langfuse Managed Evaluation</option>
           </select>}
         </Field>
-        {isManaged ? <ManagedEvaluationFields value={managedDraft} onChange={(next) => { setManagedDraft(next); setFormError(null); }} /> : <>
+        {isManaged ? (
+          <ManagedEvaluationFields
+            value={managedDraft}
+            onChange={(next) => {
+              setManagedDraft(next);
+              setFormError(null);
+            }}
+            boundProjectId={boundProjectId}
+            candidates={managedCandidates}
+            candidatesLoading={isCandidatesLoading}
+            candidatesError={candidatesQueryError ? formatApiError(candidatesQueryError) : null}
+          />
+        ) : <>
         {/* Section 3: Evaluator Presets & Progressive Disclosure (Issue 229) */}
         <div className="space-y-4">
           <div className="flex items-center justify-between border-b border-border pb-2">

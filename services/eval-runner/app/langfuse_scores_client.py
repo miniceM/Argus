@@ -127,3 +127,15 @@ class ScoresV3Client:
         return self._pages(
             "/api/public/v2/observations", {"traceId": trace_id, "fields": "core,basic,io,metadata,trace_context"}
         )
+
+    def evaluation_rules(self) -> list[dict]:
+        return self._pages("/api/public/v2/evaluation-rules", {})
+
+    def evaluators(self) -> list[dict]:
+        return self._pages("/api/public/v2/evaluators", {})
+
+    def eval_scores(self, environment: str) -> list[dict]:
+        return self._pages(
+            "/api/public/v3/scores",
+            {"source": "EVAL", "environment": environment, "fields": "details,subject"},
+        )

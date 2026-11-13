@@ -380,9 +380,9 @@ async def run_experiment(request: ExperimentRequest) -> ExperimentResult:
         # Pre-validate agent existence according to legacy contract (raises KeyError -> 404)
         registry.get(request.agent_id, request.agent_version)
 
-        version_record = registry.get_version(request.agent_id, request.agent_version)
+        agent_record = registry.get_agent(request.agent_id)
         dataset_version_dt = datetime.now(UTC)
-        if version_record.langfuse_connection:
+        if agent_record.langfuse_connection or registry.get_version(request.agent_id, request.agent_version).langfuse_connection:
             dataset = None
         else:
             await asyncio.to_thread(_wait_for_langfuse)

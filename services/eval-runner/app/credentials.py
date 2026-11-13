@@ -13,6 +13,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import select
 
 from .db_models import (
+    AgentLangfuseCredentialRecord,
+    AgentRecord,
     AgentVersionCredentialRecord,
     AgentVersionRecord,
     CredentialAuditRecord,
@@ -93,7 +95,11 @@ class CredentialService:
             refs = select(AgentVersionCredentialRecord.agent_version_id).where(AgentVersionCredentialRecord.credential_id == credential_id)
             versions = session.scalars(select(AgentVersionRecord).where(
                 (AgentVersionRecord.credential_id == credential_id) | AgentVersionRecord.id.in_(refs))).all()
-            return {"credential_id": credential_id, "versions": [
+            agents = session.scalars(select(AgentRecord).join(AgentLangfuseCredentialRecord).where(
+                AgentLangfuseCredentialRecord.credential_id == credential_id)).all()
+            return {"credential_id": credential_id, "agents": [
+                {"agent_id": agent.id, "is_current": (agent.langfuse_connection or {}).get("credential_id") == credential_id}
+                for agent in agents], "versions": [
                 {"agent_id": version.agent_id, "version": version.version, "is_active": version.is_active}
                 for version in versions]}
 

@@ -43,11 +43,7 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
   const [authPrefix, setAuthPrefix] = useState("");
   const [httpHeaders, setHttpHeaders] = useState<HeaderRow[]>([]);
   const [answerPath, setAnswerPath] = useState("");
-  const [langfuseEnabled, setLangfuseEnabled] = useState(false);
-  const [langfuseBaseUrl, setLangfuseBaseUrl] = useState("");
-  const [langfuseProjectId, setLangfuseProjectId] = useState("");
-  const [langfuseCredentialId, setLangfuseCredentialId] = useState("");
-  const hasCredentialRefs = Boolean(langfuseEnabled || credentialId || httpHeaders.some(header => header.mode === "credential" && header.credentialId));
+  const hasCredentialRefs = Boolean(credentialId || httpHeaders.some(header => header.mode === "credential" && header.credentialId));
   useEffect(() => {
     if (!isOpen || !hasCredentialRefs) setCredentialAuthorization("");
   }, [isOpen, hasCredentialRefs]);
@@ -101,7 +97,6 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
           credential_id: credentialId || null,
           http_auth: authScheme === "legacy" ? null : authScheme === "api_key" ? { scheme: "api_key", header_name: authHeader.trim(), prefix: authPrefix } : { scheme: authScheme, prefix: "" },
           http_headers: frozenHeaders,
-          langfuse_connection: langfuseEnabled ? { base_url: langfuseBaseUrl.trim(), project_id: langfuseProjectId.trim(), credential_id: langfuseCredentialId } : null,
           response_mapping: answerPath.trim() ? { answer_path: answerPath.trim() } : null,
           artifact_ref: artifactRef.trim() || null,
           environment: environment.trim().toLowerCase() || null,
@@ -400,23 +395,7 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
             )}
           </section>
 
-          <section aria-label="Langfuse 项目连接" className="space-y-3 rounded-lg border border-border bg-surface-muted p-4">
-            <label className="flex items-center gap-2 text-sm font-semibold">
-              <input type="checkbox" checked={langfuseEnabled} onChange={e => { setLangfuseEnabled(e.target.checked); setCredentialAuthorization(""); }} />
-              绑定独立 Langfuse 项目
-            </label>
-            <p className="text-xs text-muted-foreground">{langfuseEnabled ? "BOUND：Dataset、Observation 和 Score 使用同一项目绑定，失败时不会回落全局凭据。" : "GLOBAL_ENV：使用部署的全局 Langfuse 配置。"}</p>
-            {langfuseEnabled && <>
-              <Field label="Langfuse Base URL" required>{({ id }) => <TextInput id={id} type="url" required placeholder="https://cloud.langfuse.com" value={langfuseBaseUrl} onChange={e => setLangfuseBaseUrl(e.target.value)} />}</Field>
-              <Field label="Langfuse Project ID" required>{({ id }) => <TextInput id={id} required value={langfuseProjectId} onChange={e => setLangfuseProjectId(e.target.value)} />}</Field>
-              <Field label="Langfuse 凭据" required hint="在 Credentials 创建 Basic Auth 凭据，username 填 pk，password 填 sk，并授权此 Base URL 的 origin。">
-                {({ id }) => <SelectInput id={id} required value={langfuseCredentialId} onChange={e => { setLangfuseCredentialId(e.target.value); setCredentialAuthorization(""); }}>
-                  <option value="">选择项目的 Basic Auth 凭据</option>
-                  {credentials.data?.filter(c => c.enabled && c.type === "basic_auth" && c.environment === environment.trim().toLowerCase()).map(c => <option key={c.id} value={c.id}>{c.name} · {c.id.slice(-8)}</option>)}
-                </SelectInput>}
-              </Field>
-            </>}
-          </section>
+          <p className="text-xs text-muted-foreground">Langfuse 项目在 Agent 详情页统一配置，全部版本共用，无需在此重复绑定。</p>
 
           {hasCredentialRefs && <Field label="凭据绑定管理授权 Token" hint="绑定会允许 Runner 向此端点发送凭据，需管理员确认端点可信。授权仅用于本次操作。">
             {({ id }) => <TextInput id={id} type="password" autoComplete="off" required value={credentialAuthorization} onChange={e => setCredentialAuthorization(e.target.value)} />}

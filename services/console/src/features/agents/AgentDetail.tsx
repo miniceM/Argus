@@ -6,6 +6,7 @@ import { api } from "../../api/client";
 import { queryKeys } from "../../api/query-keys";
 import { formatApiError } from "../../api/errors";
 import { CreateVersionDialog } from "./CreateVersionDialog";
+import { AgentLangfuseConnection } from "./AgentLangfuseConnection";
 import { DeleteAgentModal } from "./DeleteAgentModal";
 import { EmptyState, ErrorState, LoadingState } from "../../components/StateViews";
 import { Badge } from "../../components/Badge";
@@ -158,6 +159,8 @@ export const AgentDetail: React.FC = () => {
       </Panel>
 
       {/* Versions Section */}
+      <AgentLangfuseConnection agent={agent} />
+
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

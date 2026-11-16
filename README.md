@@ -193,6 +193,7 @@ Langfuse：Dataset / Trace / 托管评分 / 实验分析    CI/CD：核验质量
 
 ## 部署要点
 
+- **ARM64 内网离线更新**：[交付与操作指南](deploy/airgap/README.md)，包含站点密钥、仅 Argus 升级、备份恢复及验收边界。
 - **本地环境**：`make up` 使用 `.env.poc` 中的演示凭据启动全栈，仅适用于开发与回归验证。
 - **构建身份**：`make up` 会把当前 Git commit SHA 作为 `ARGUS_BUILD_ID` 注入 Runner 镜像；自建镜像部署时必须设置不可变、可定位的 commit SHA 或镜像摘要，空值与 `dev` / `latest` 不会被接受为正式 Launch。
 - **Langfuse Cloud**：在 `.env.cloud` 中同时配置 API 地址（`LANGFUSE_BASE_URL`）与浏览器地址（`ARGUS_LANGFUSE_DASHBOARD_URL`），示例见 [`.env.cloud.example`](./.env.cloud.example)。

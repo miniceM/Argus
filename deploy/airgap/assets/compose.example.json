@@ -1,0 +1,251 @@
+{
+  "services": {
+    "postgres": {
+      "pull_policy": "never",
+      "restart": "unless-stopped",
+      "networks": {
+        "argus_internal": {
+          "aliases": [
+            "argus-postgres"
+          ]
+        }
+      },
+      "image": "argus-offline/postgres:locked-IMAGE_ID",
+      "environment": {
+        "POSTGRES_USER": "argus",
+        "POSTGRES_DB": "argus",
+        "POSTGRES_PASSWORD": "REPLACE_WITH_RANDOM_HEX"
+      },
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "argus_pg_data",
+          "target": "/var/lib/postgresql/data"
+        }
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "pg_isready",
+          "-U",
+          "argus",
+          "-d",
+          "argus"
+        ],
+        "interval": "5s",
+        "timeout": "5s",
+        "retries": 36
+      }
+    },
+    "redis": {
+      "pull_policy": "never",
+      "restart": "unless-stopped",
+      "networks": {
+        "argus_internal": {
+          "aliases": [
+            "argus-redis"
+          ]
+        }
+      },
+      "image": "argus-offline/redis:locked-IMAGE_ID",
+      "environment": {
+        "REDISCLI_AUTH": "REPLACE_WITH_RANDOM_HEX"
+      },
+      "command": [
+        "redis-server",
+        "--requirepass",
+        "REPLACE_WITH_RANDOM_HEX",
+        "--appendonly",
+        "yes",
+        "--appendfsync",
+        "everysec",
+        "--save",
+        "900 1 300 10 60 10000",
+        "--maxmemory-policy",
+        "noeviction"
+      ],
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "argus_redis_data",
+          "target": "/data"
+        }
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "redis-cli",
+          "ping"
+        ],
+        "interval": "5s",
+        "timeout": "5s",
+        "retries": 36
+      }
+    },
+    "demo-agent-v1": {
+      "pull_policy": "never",
+      "restart": "unless-stopped",
+      "networks": {
+        "argus_internal": {}
+      },
+      "image": "argus/demo-agent:git-FIXED_SHA12",
+      "environment": {
+        "AGENT_VERSION": "v1"
+      },
+      "ports": [
+        "127.0.0.1:18081:8080"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8080/health',timeout=3)"
+        ],
+        "interval": "5s",
+        "timeout": "5s",
+        "retries": 36,
+        "start_period": "20s"
+      }
+    },
+    "demo-agent-v2": {
+      "pull_policy": "never",
+      "restart": "unless-stopped",
+      "networks": {
+        "argus_internal": {}
+      },
+      "image": "argus/demo-agent:git-FIXED_SHA12",
+      "environment": {
+        "AGENT_VERSION": "v2"
+      },
+      "ports": [
+        "127.0.0.1:18082:8080"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8080/health',timeout=3)"
+        ],
+        "interval": "5s",
+        "timeout": "5s",
+        "retries": 36,
+        "start_period": "20s"
+      }
+    },
+    "eval-runner": {
+      "pull_policy": "never",
+      "restart": "unless-stopped",
+      "networks": {
+        "argus_internal": {},
+        "langfuse_external": {}
+      },
+      "image": "argus/eval-runner:git-FIXED_SHA12",
+      "environment": {
+        "DATABASE_URL": "postgresql+psycopg://argus:REPLACE_WITH_RANDOM_HEX@argus-postgres:5432/argus",
+        "ARGUS_REDIS_URL": "redis://:REPLACE_WITH_RANDOM_HEX@argus-redis:6379/0",
+        "ARGUS_DB_MODE": "prod",
+        "ARGUS_AUTO_IMPORT_YAML": "true",
+        "ARGUS_WORKER_ENABLED": "true",
+        "ARGUS_RECONCILER_ENABLED": "true",
+        "ARGUS_WORKER_CONCURRENCY": "2",
+        "ARGUS_ENVIRONMENT": "argus-kunpeng-test",
+        "ARGUS_SECRET_MODE": "production",
+        "LANGFUSE_BASE_URL": "http://langfuse-web:3000",
+        "LANGFUSE_HOST": "http://langfuse-web:3000",
+        "LANGFUSE_PUBLIC_KEY": "SET_TEST_PROJECT_PUBLIC_KEY",
+        "LANGFUSE_SECRET_KEY": "SET_TEST_PROJECT_SECRET_KEY",
+        "LANGFUSE_TRACING_ENVIRONMENT": "argus-kunpeng-test",
+        "OTEL_SDK_DISABLED": "false",
+        "ARGUS_LANGFUSE_DASHBOARD_URL": "http://10.102.0.70:13000",
+        "ARGUS_CONSOLE_BASE_URL": "http://10.102.0.70:18083",
+        "AGENT_REGISTRY_PATH": "/app/config/agents.yaml",
+        "DATASET_SEED_PATH": "/app/data/dataset.json",
+        "ARGUS_MIGRATIONS_PATH": "/app/migrations",
+        "ARGUS_DATASET_SOURCE": "langfuse",
+        "ARGUS_LANGFUSE_RUN_ITEM_STRATEGY": "otel"
+      },
+      "ports": [
+        "127.0.0.1:18080:8080"
+      ],
+      "stop_grace_period": "60s",
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/data/argus-offline/releases/FULL_GIT_SHA/source/config",
+          "target": "/app/config",
+          "read_only": true
+        },
+        {
+          "type": "bind",
+          "source": "/data/argus-offline/releases/FULL_GIT_SHA/source/data",
+          "target": "/app/data",
+          "read_only": true
+        },
+        {
+          "type": "bind",
+          "source": "/data/argus-offline/releases/FULL_GIT_SHA/source/migrations",
+          "target": "/app/migrations",
+          "read_only": true
+        }
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8080/health',timeout=3)"
+        ],
+        "interval": "5s",
+        "timeout": "5s",
+        "retries": 36,
+        "start_period": "20s"
+      }
+    },
+    "argus-console": {
+      "pull_policy": "never",
+      "restart": "unless-stopped",
+      "networks": {
+        "argus_internal": {}
+      },
+      "image": "argus/console:git-FIXED_SHA12",
+      "environment": {
+        "RUNNER_HOST": "eval-runner",
+        "RUNNER_PORT": "8080"
+      },
+      "ports": [
+        "10.102.0.70:18083:8080"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:8080/health >/dev/null || exit 1"
+        ],
+        "interval": "5s",
+        "timeout": "5s",
+        "retries": 36
+      }
+    }
+  },
+  "networks": {
+    "argus_internal": {
+      "external": true,
+      "name": "argus-kunpeng-e2e_argus_internal"
+    },
+    "langfuse_external": {
+      "external": true,
+      "name": "SET_REAL_EXISTING_LANGFUSE_NETWORK"
+    }
+  },
+  "volumes": {
+    "argus_pg_data": {
+      "external": true,
+      "name": "argus-kunpeng-e2e_argus_pg_data"
+    },
+    "argus_redis_data": {
+      "external": true,
+      "name": "argus-kunpeng-e2e_argus_redis_data"
+    }
+  }
+}

@@ -8,6 +8,7 @@ test("HTTP 配置：API Key + 秘密引用 + 普通 Header + 输出提取及拒�
   const createCredential = async (type: string, name: string) => {
     await page.goto("/credentials");
     await page.getByRole("button", { name: "创建凭据" }).click();
+    await page.getByLabel("环境", { exact: true }).fill("production");
     await page.getByLabel("凭据名称", { exact: true }).fill(name);
     await page.getByLabel("凭据类型").selectOption(type);
     await page.getByLabel("允许的目标 Origin（每行一个）").fill("https://agent.example");

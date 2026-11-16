@@ -21,7 +21,13 @@ export function CredentialsPage() {
   const [operation, setOperation] = useState<Operation | null>(null);
   const [selected, setSelected] = useState<Credential | null>(null);
   const [name, setName] = useState("");
-  const [environment, setEnvironment] = useState("production");
+  const system = useQuery({ queryKey: ["system-info"], queryFn: async () => {
+    const result = await api.GET("/api/v1/system/info");
+    if (result.error || !result.data) throw new Error("无法读取服务环境");
+    return result.data;
+  }});
+  const [environmentInput, setEnvironment] = useState<string | null>(null);
+  const environment = environmentInput ?? system.data?.environment ?? "";
   const [secret, setSecret] = useState("");
   const [type, setType] = useState<Credential["type"]>("bearer_token");
   const [origins, setOrigins] = useState("");
@@ -39,6 +45,7 @@ export function CredentialsPage() {
   };
   const open = (action: Operation, credential: Credential | null = null) => {
     setSelected(credential); setOperation(action); setName(""); setConfirmation("");
+    setEnvironment(null);
     setType(credential?.type || "bearer_token"); setOrigins(""); setUsername(""); setPassword("");
     setSecret(""); setAuthorization(""); setForce(false); setError(null);
   };
@@ -70,7 +77,14 @@ export function CredentialsPage() {
         // 不渲染服务端原始请求内容，避免代理错误回显 Secret。
         const status = response?.response?.status;
         if (status === 503) {
-          setError("当前服务环境未挂载或未启用 Managed Secret 主密钥，暂不支持凭据新增与修改。");
+          const code = response?.response?.headers?.get("X-Argus-Error-Code");
+          if (code === "CREDENTIAL_ADMIN_UNAVAILABLE") {
+            setError("当前服务未配置凭据管理授权文件，请联系部署管理员。");
+          } else if (code === "MANAGED_SECRET_UNAVAILABLE") {
+            setError("当前服务环境未挂载或未启用 Managed Secret 主密钥，暂不支持凭据新增与修改。");
+          } else {
+            setError("服务暂不可用，无法确认主密钥状态，请联系部署管理员检查 API 连接。");
+          }
         } else if (status === 401 || status === 403) {
           setError("管理授权 Token 无效或无权操作，请检查部署管理授权凭据。");
         } else if (status === 409) {
@@ -97,7 +111,7 @@ export function CredentialsPage() {
     </div>
     <div className="rounded-lg border border-border bg-surface-subtle p-3 text-xs text-muted-foreground flex items-center gap-2">
       <span className="font-semibold text-foreground">环境说明：</span>
-      <span>托管凭据采用 Argus 主密钥加密存储；若后端未挂载 Managed Secret 主密钥，新增凭据将返回 503。</span>
+      <span>托管凭据采用 Argus 主密钥加密存储；管理授权与主密钥由部署管理员配置。环境默认使用当前服务环境。</span>
     </div>
     {error && !operation && <p role="alert" className="text-sm text-fail">{error}</p>}
     {list.isPending && <p role="status">正在加载凭据…</p>}

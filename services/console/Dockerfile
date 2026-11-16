@@ -18,7 +18,9 @@ FROM nginxinc/nginx-unprivileged:1.29-alpine
 
 ENV RUNNER_HOST=eval-runner
 ENV RUNNER_PORT=8080
+ENV NGINX_ENVSUBST_FILTER="^(RUNNER_HOST|RUNNER_PORT|ARGUS_DNS_RESOLVERS)$"
 
+COPY 15-argus-resolvers.envsh /docker-entrypoint.d/15-argus-resolvers.envsh
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=builder /app/dist /usr/share/nginx/html
 

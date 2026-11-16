@@ -25,6 +25,7 @@ PY
 echo "[2/7] Compile Python sources and check code quality"
 "$PYTHON_BIN" -m compileall -q services tests
 "$PYTHON_BIN" -m ruff check services tests
+PYTHONDONTWRITEBYTECODE=1 "$PYTHON_BIN" -m unittest discover -s deploy/airgap/tests -q
 
 echo "[3/7] Verify zero evaluation-SDK dependency in Demo Agent and Real LLM Agent"
 if grep -RinE '^[[:space:]]*(from|import)[[:space:]]+langfuse|Evaluation\(|run_experiment' services/demo-agent services/real-llm-agent --include='*.py' || grep -in 'langfuse' services/demo-agent/requirements.txt services/real-llm-agent/requirements.txt; then

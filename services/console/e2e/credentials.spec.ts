@@ -5,6 +5,9 @@ test("真实 API：创建凭据、Agent 选择、轮换、引用保护和停用"
   const agent = `credential-e2e-${Date.now()}`;
   await page.goto("/credentials");
   await page.getByRole("button", { name: "创建凭据" }).click();
+  const system = await (await request.get("/api/v1/system/info")).json();
+  await expect(page.getByLabel("环境", { exact: true })).toHaveValue(system.environment);
+  await page.getByLabel("环境", { exact: true }).fill("production");
   await page.getByLabel("凭据名称", { exact: true }).fill(name);
   await page.getByLabel("Agent Token（仅输入一次）").fill("example-e2e-first-token");
   await page.getByLabel("管理授权 Token").fill("argus-e2e-admin-token");

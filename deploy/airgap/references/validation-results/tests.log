@@ -1,0 +1,35 @@
+test_backup_restore_preserves_old_and_new_data (test_docker_restore.DockerRestoreTests.test_backup_restore_preserves_old_and_new_data) ... ok
+test_mac_pack_fixed_git_snapshot_to_linux_receiver (test_pack_flow.PackFlowTests.test_mac_pack_fixed_git_snapshot_to_linux_receiver) ... ok
+test_backup_failure_never_starts_new_runner (test_safety.IntegrityTests.test_backup_failure_never_starts_new_runner) ... ok
+test_candidate_changes_only_apps_and_preserves_credentials (test_safety.IntegrityTests.test_candidate_changes_only_apps_and_preserves_credentials) ... ok
+test_checksums_exact_set_and_path_injection (test_safety.IntegrityTests.test_checksums_exact_set_and_path_injection) ... ok
+test_images_require_cpu_and_embedded_sha (test_safety.IntegrityTests.test_images_require_cpu_and_embedded_sha) ... ok
+test_lock_and_env_literal (test_safety.IntegrityTests.test_lock_and_env_literal) ... ok
+test_migration_mutation_missing_and_new (test_safety.IntegrityTests.test_migration_mutation_missing_and_new) ... ok
+test_only_runner_joins_selected_langfuse_network (test_safety.IntegrityTests.test_only_runner_joins_selected_langfuse_network) ... ok
+test_protected_root_and_selected_langfuse_url (test_safety.IntegrityTests.test_protected_root_and_selected_langfuse_url) ... ok
+test_quiesce_recognizes_partial_failed_as_terminal (test_safety.IntegrityTests.test_quiesce_recognizes_partial_failed_as_terminal) ... ok
+test_receive_round_trip_and_source_tamper (test_safety.IntegrityTests.test_receive_round_trip_and_source_tamper) ... ok
+test_receiver_checks_gzip_footer_even_with_matching_part_hashes (test_safety.IntegrityTests.test_receiver_checks_gzip_footer_even_with_matching_part_hashes) ... ok
+test_receiver_rejects_extra_missing_and_corrupt_parts (test_safety.IntegrityTests.test_receiver_rejects_extra_missing_and_corrupt_parts) ... ok
+test_runner_connections_reject_ambiguous_dns_and_wrong_database (test_safety.IntegrityTests.test_runner_connections_reject_ambiguous_dns_and_wrong_database) ... ok
+test_tar_rejects_traversal_links_duplicates (test_safety.IntegrityTests.test_tar_rejects_traversal_links_duplicates) ... ok
+test_upgrade_refuses_modified_migrations_before_stopping (test_safety.IntegrityTests.test_upgrade_refuses_modified_migrations_before_stopping) ... ok
+test_wrong_outer_hash_stops_before_extract (test_safety.IntegrityTests.test_wrong_outer_hash_stops_before_extract) ... ok
+test_cursor_pagination_and_repeated_cursor_rejection (test_verification.EvidenceTests.test_cursor_pagination_and_repeated_cursor_rejection) ... ok
+test_exact_identity_accepts_and_wrong_source_subject_join_value_rejects (test_verification.EvidenceTests.test_exact_identity_accepts_and_wrong_source_subject_join_value_rejects) ... ok
+test_partial_failed_launch_returns_without_reinvoking_agent (test_verification.EvidenceTests.test_partial_failed_launch_returns_without_reinvoking_agent) ... ok
+
+----------------------------------------------------------------------
+Ran 21 tests in 30.245s
+
+OK
+备份及实际恢复演练完成: /private/var/folders/sl/3gz5dqqd3glb3rr478hr6rnc0000gn/T/argus-skill-test-sxopzlee/backups/backup-20261109T033943654175Z
+请独立记录备份 SHA256SUMS 自身 SHA256: 11e392ecdfcb070bde859d5785076874bbe2fc65364273297b293df6e2d851a6
+备份及实际恢复演练完成: /private/var/folders/sl/3gz5dqqd3glb3rr478hr6rnc0000gn/T/argus-skill-test-sxopzlee/backups/rescue-before-rollback-20261109T033952279121Z
+请独立记录备份 SHA256SUMS 自身 SHA256: ea3a118c670ede3077c8edbc017dbed6316b4a2037518844523fab3bcd0152f2
+服务检查通过；活动版本 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa，业务/页面验收仍为 PENDING。
+已保留升级后数据库 argus_hold_83705248568bc710、原 Redis 卷和 rescue 备份；待验收后另行决定保留期限。
+{"postgres_dump_real_restore": "PASS", "postgres_schema_and_row_restore": "PASS", "postgres_table_grants_restored": "PASS", "redis_aof_data_restore": "PASS", "post_upgrade_database_retained": "PASS", "original_redis_volume_retained": "PASS", "postgres_container_unchanged": "PASS", "rollback_journal_before_database_swap": "PASS", "external_network_id_unchanged": "PASS", "argus_app_start": "MOCKED_NOT_TESTED", "langfuse_business_e2e": "NOT_RUN"}
+接收与双层校验完成: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+源码与工具目录: /private/var/folders/sl/3gz5dqqd3glb3rr478hr6rnc0000gn/T/tmpmqnhd0lf/install/releases/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

@@ -1,0 +1,18 @@
+{
+  "git_sha": "FULL_40_HEX_SHA",
+  "observed_at": "ISO8601",
+  "operator": "填写操作者",
+  "decision": "PENDING",
+  "checks": {
+    "console_resources": "NOT_RUN",
+    "console_runner_proxy": "NOT_RUN",
+    "frozen_snapshot_navigation": "NOT_RUN",
+    "gate_scope": "NOT_RUN",
+    "langfuse_dataset_trace_score": "NOT_RUN",
+    "historical_data": "NOT_RUN",
+    "credential_recovery": "NOT_RUN",
+    "persistence_restart": "NOT_RUN"
+  },
+  "artifacts": [],
+  "rollback_point": "填写明确备份路径与清单SHA256"
+}

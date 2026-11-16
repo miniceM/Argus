@@ -1,0 +1,16 @@
+{
+  "git_sha": "FULL_40_HEX_SHA",
+  "observed_at": "ISO8601",
+  "operator": "填写操作者",
+  "overall": "NOT_RUN",
+  "checks": {
+    "make_validate": "NOT_RUN",
+    "trajectory_test_if_in_scope": "NOT_RUN",
+    "console_test": "NOT_RUN",
+    "console_e2e": "NOT_RUN",
+    "remote_ci": "NOT_RUN",
+    "cloud_acceptance": "NOT_RUN"
+  },
+  "evidence": [],
+  "notes": "区分本地、CI、Cloud；skipped_by_policy不是实测通过。"
+}

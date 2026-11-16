@@ -1,0 +1,10 @@
+#!/bin/sh
+# 由官方 entrypoint 在 envsubst 前 source；复用实际 DNS，不硬编码 Docker 地址。
+if [ -z "${ARGUS_DNS_RESOLVERS:-}" ]; then
+    ARGUS_DNS_RESOLVERS=$(awk '$1 == "nameserver" { if (index($2, ":")) printf "[%s] ", $2; else printf "%s ", $2 }' /etc/resolv.conf)
+fi
+if [ -z "$ARGUS_DNS_RESOLVERS" ]; then
+    echo "Argus Console: no DNS resolver configured" >&2
+    exit 1
+fi
+export ARGUS_DNS_RESOLVERS

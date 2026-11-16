@@ -42,7 +42,8 @@ def authorize(authorization: str | None = Header(default=None)) -> str:
     try:
         expected = _token(protected_file("ARGUS_CREDENTIAL_ADMIN_TOKEN_FILE").strip())
     except CredentialUnavailable:
-        raise HTTPException(503, "Credential management authorization is not configured") from None
+        raise HTTPException(503, "Credential management authorization is not configured",
+                            headers={"X-Argus-Error-Code": "CREDENTIAL_ADMIN_UNAVAILABLE"}) from None
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "Credential management authorization required")
     if not hmac.compare_digest(authorization[7:].encode(), expected.encode()):
@@ -125,7 +126,8 @@ def create_credential(payload: CredentialCreate, actor=Depends(authorize), svc=D
     try:
         return svc.create(payload.name, payload.environment, secret, actor, type=payload.type, allowed_origins=payload.allowed_origins)
     except CredentialUnavailable:
-        raise HTTPException(503, "Credential provider is unavailable or not configured") from None
+        raise HTTPException(503, "Credential provider is unavailable or not configured",
+                            headers={"X-Argus-Error-Code": "MANAGED_SECRET_UNAVAILABLE"}) from None
     except ValueError:
         raise HTTPException(422, "Invalid credential provider configuration") from None
 
@@ -135,7 +137,8 @@ def rewrap_credentials(actor=Depends(authorize), svc=Depends(service)):
     try:
         return svc.rewrap(actor)
     except CredentialUnavailable:
-        raise HTTPException(503, "Credential keyring is unavailable") from None
+        raise HTTPException(503, "Credential keyring is unavailable",
+                            headers={"X-Argus-Error-Code": "MANAGED_SECRET_UNAVAILABLE"}) from None
 
 
 @router.get("/{credential_id}/usage", response_model=CredentialUsage)
@@ -158,7 +161,8 @@ def rotate_credential(credential_id: str, payload: CredentialRotate, actor=Depen
     try:
         return svc.rotate(credential_id, secret, actor)
     except CredentialUnavailable:
-        raise HTTPException(503, "Credential keyring is unavailable") from None
+        raise HTTPException(503, "Credential keyring is unavailable",
+                            headers={"X-Argus-Error-Code": "MANAGED_SECRET_UNAVAILABLE"}) from None
     except (ValueError, IntegrityError):
         raise HTTPException(409, "Credential cannot be rotated or was changed concurrently") from None
 

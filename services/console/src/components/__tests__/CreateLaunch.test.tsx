@@ -638,4 +638,146 @@ describe("Issue #215 Managed 选择", () => {
     expect(await screen.findByText(/所选 project 与服务端不一致/)).toBeInTheDocument();
     expect(screen.getByLabelText("评测来源 (Evaluation Source)")).toHaveValue("langfuse_managed");
   });
+
+  it("Issue #258: 绑定独立 Project 的 Agent 自动带出 Project ID 并拉取 Langfuse Score 候选", async () => {
+    vi.mocked(api.GET).mockImplementation((path: string) => {
+      if (path === "/api/v1/agents") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "agent-1",
+              name: "Bound Agent",
+              status: "active",
+              langfuse_connection: {
+                base_url: "https://lf.example",
+                project_id: "proj-bound-258",
+                credential_id: "cred-1",
+              },
+            },
+          ],
+        }) as never;
+      }
+      if (path === "/api/v1/agent-versions") {
+        return Promise.resolve({
+          data: [{ id: "ver-1", agent_id: "agent-1", version: "v1", is_active: true, environment: "production" }],
+        }) as never;
+      }
+      if (path === "/api/v1/evaluators") {
+        return Promise.resolve({ data: evaluators }) as never;
+      }
+      if (path === "/api/v1/langfuse/managed-score-candidates") {
+        return Promise.resolve({
+          data: [
+            {
+              rule_id: "rule-auto-1",
+              evaluator_id: "eval-auto-1",
+              evaluator_name: "Auto Judge",
+              evaluator_type: "llm_as_judge",
+              data_type: "boolean",
+              score_name: "auto_correctness",
+              verified: true,
+              enabled: true,
+              sampling: 1,
+            },
+          ],
+        }) as never;
+      }
+      return Promise.resolve({ data: [] }) as never;
+    });
+    vi.mocked(api.POST).mockResolvedValue({ data: { id: "launch-bound-258" } } as never);
+
+    renderCreateLaunch();
+    const agentVersion = await screen.findByLabelText(/选择版本规格/);
+    await waitFor(() => expect(agentVersion).toHaveValue("v1"));
+
+    fireEvent.change(await screen.findByLabelText("评测来源 (Evaluation Source)"), {
+      target: { value: "langfuse_managed" },
+    });
+
+    const projectInput = (await screen.findByLabelText("Langfuse Project ID")) as HTMLInputElement;
+    await waitFor(() => expect(projectInput).toHaveValue("proj-bound-258"));
+    expect(projectInput).toHaveAttribute("readonly");
+
+    const candidateSelect = await screen.findByLabelText("从 Langfuse 选择 Score 1");
+    await waitFor(() => expect(screen.getByRole("option", { name: /auto_correctness/ })).toBeInTheDocument());
+    fireEvent.change(candidateSelect, { target: { value: "rule-auto-1::eval-auto-1" } });
+
+    const submit = screen.getByRole("button", { name: /创建评测任务/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(api.POST).toHaveBeenCalled());
+    const request = (vi.mocked(api.POST).mock.calls as unknown as [string, { body: Record<string, unknown> }][])[0][1].body;
+    expect(request).toMatchObject({
+      evaluation_source: "langfuse_managed",
+      managed_evaluation: {
+        project_id: "proj-bound-258",
+        environment: "production",
+        scores: [
+          {
+            name: "auto_correctness",
+            data_type: "boolean",
+            rule_id: "rule-auto-1",
+            evaluator_id: "eval-auto-1",
+            required: true,
+          },
+        ],
+      },
+    });
+  });
+
+  it("Issue #258: 候选接口不可用时降级为纯手填且不阻塞提交", async () => {
+    vi.mocked(api.GET).mockImplementation((path: string) => {
+      if (path === "/api/v1/agents") {
+        return Promise.resolve({
+          data: [
+            {
+              id: "agent-1",
+              name: "Bound Agent",
+              status: "active",
+              langfuse_connection: {
+                base_url: "https://lf.example",
+                project_id: "proj-bound-258",
+                credential_id: "cred-1",
+              },
+            },
+          ],
+        }) as never;
+      }
+      if (path === "/api/v1/agent-versions") {
+        return Promise.resolve({
+          data: [{ id: "ver-1", agent_id: "agent-1", version: "v1", is_active: true, environment: "production" }],
+        }) as never;
+      }
+      if (path === "/api/v1/evaluators") {
+        return Promise.resolve({ data: evaluators }) as never;
+      }
+      if (path === "/api/v1/langfuse/managed-score-candidates") {
+        return Promise.resolve({
+          error: { detail: { code: "TIMEOUT", message: "无法从 Langfuse 读取候选 Score（TIMEOUT）。" } },
+        }) as never;
+      }
+      return Promise.resolve({ data: [] }) as never;
+    });
+    vi.mocked(api.POST).mockResolvedValue({ data: { id: "launch-fallback-258" } } as never);
+
+    renderCreateLaunch();
+    const agentVersion = await screen.findByLabelText(/选择版本规格/);
+    await waitFor(() => expect(agentVersion).toHaveValue("v1"));
+
+    fireEvent.change(await screen.findByLabelText("评测来源 (Evaluation Source)"), {
+      target: { value: "langfuse_managed" },
+    });
+
+    expect(await screen.findByText(/已切换为手动填写模式，不阻塞直接提交/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Score 名称 1"), { target: { value: "manual_score" } });
+    fireEvent.change(screen.getByLabelText("Rule ID 1"), { target: { value: "rule-manual-1" } });
+
+    const submit = screen.getByRole("button", { name: /创建评测任务/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(api.POST).toHaveBeenCalled());
+  });
 });

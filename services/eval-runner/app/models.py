@@ -996,6 +996,18 @@ class ManagedScoreDiagnosticsResponse(BaseModel):
     evidence: list[ManagedScoreEvidenceResponse]
 
 
+class ManagedScoreCandidateResponse(BaseModel):
+    rule_id: str
+    evaluator_id: str
+    evaluator_name: str
+    evaluator_type: str
+    data_type: str | None = None
+    score_name: str | None = None
+    verified: bool
+    enabled: bool
+    sampling: float
+
+
 class ExperimentItemExecutionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

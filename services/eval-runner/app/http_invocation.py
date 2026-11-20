@@ -159,10 +159,20 @@ def credential_bindings(spec: dict) -> list[tuple[str, str, str]]:
     return result
 
 
+class CredentialTargetError(ValueError):
+    def __init__(self, reason: str, message: str):
+        self.reason = reason
+        super().__init__(message)
+
+
 def check_credential_target(credential, kind: str, endpoint: str, environment: str | None):
-    if not credential.enabled or credential.type != kind or credential.environment != (environment or "production"):
-        raise ValueError("Credential type, state or environment does not match target")
+    if not credential.enabled:
+        raise CredentialTargetError("CREDENTIAL_DISABLED", "Credential type, state or environment does not match target")
+    if credential.type != kind:
+        raise CredentialTargetError("CREDENTIAL_TYPE_MISMATCH", "Credential type, state or environment does not match target")
+    if credential.environment != (environment or "production"):
+        raise CredentialTargetError("ENVIRONMENT_MISMATCH", "Credential type, state or environment does not match target")
     if credential.allowed_origins and endpoint_origin(endpoint) not in credential.allowed_origins:
-        raise ValueError("Credential is not authorized for target origin")
+        raise CredentialTargetError("ORIGIN_NOT_ALLOWED", "Credential is not authorized for target origin")
     if kind != "bearer_token" and not credential.allowed_origins:
-        raise ValueError("New credential types require explicit target origins")
+        raise CredentialTargetError("ALLOWED_ORIGINS_REQUIRED", "New credential types require explicit target origins")

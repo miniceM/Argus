@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
+import logging
 import os
 import stat
 import uuid
@@ -21,8 +23,12 @@ from .db_models import (
     CredentialRecord,
     CredentialSecretRecord,
 )
-from .http_invocation import allowed_origin, check_credential_target, encode_secret
-from .secret_providers import CredentialUnavailable, _token
+from .http_invocation import CredentialTargetError, allowed_origin, check_credential_target, encode_secret
+from .secret_providers import CredentialUnavailable, _token, is_dev_keyring_fallback
+
+logger = logging.getLogger(__name__)
+_DEV_LOCAL_KEY_ID = "dev-local-v1"
+_DEV_LOCAL_KEY_BYTES = hashlib.sha256(b"argus-dev-managed-secret-key-v1").digest()
 
 
 @dataclass(frozen=True)
@@ -34,27 +40,45 @@ class ResolvedCredential:
     type: str = "bearer_token"
 
 
-def protected_file(variable: str) -> str:
+def protected_file(
+    variable: str,
+    *,
+    missing_reason: str = "KEYRING_MISSING",
+    permission_reason: str = "KEYRING_INSECURE_PERMISSIONS",
+) -> str:
+    raw = os.environ.get(variable, "").strip()
+    if not raw:
+        raise CredentialUnavailable(reason=missing_reason)
     try:
-        path = Path(os.environ[variable])
-        if not path.is_file() or stat.S_IMODE(path.stat().st_mode) & 0o077:
-            raise CredentialUnavailable()
+        path = Path(raw)
+        if not path.is_file():
+            raise CredentialUnavailable(reason=missing_reason)
+        if stat.S_IMODE(path.stat().st_mode) & 0o077:
+            raise CredentialUnavailable(reason=permission_reason)
         return path.read_text(encoding="utf-8")
-    except (OSError, KeyError, ValueError):
-        raise CredentialUnavailable() from None
+    except CredentialUnavailable:
+        raise
+    except (OSError, ValueError):
+        raise CredentialUnavailable(reason=missing_reason) from None
 
 
 class ManagedSecretProvider:
     """AES-256-GCM；Keyring 轮换顺序：保留旧密钥、重包裹、移除旧密钥。"""
     def __init__(self):
+        if is_dev_keyring_fallback():
+            self.active_key_id = _DEV_LOCAL_KEY_ID
+            self.keys = {_DEV_LOCAL_KEY_ID: _DEV_LOCAL_KEY_BYTES}
+            return
         try:
             ring = json.loads(protected_file("ARGUS_MANAGED_SECRET_KEY_FILE"))
             self.active_key_id = ring["active_key_id"]
             self.keys = {key_id: base64.b64decode(value, validate=True) for key_id, value in ring["keys"].items()}
             if self.active_key_id not in self.keys or any(len(key) != 32 for key in self.keys.values()):
-                raise CredentialUnavailable()
+                raise CredentialUnavailable(reason="KEYRING_INVALID")
+        except CredentialUnavailable:
+            raise
         except (KeyError, TypeError, ValueError, AttributeError):
-            raise CredentialUnavailable() from None
+            raise CredentialUnavailable(reason="KEYRING_INVALID") from None
 
     def encrypt(self, credential_id: str, version: int, token: str) -> dict:
         nonce = os.urandom(12)
@@ -66,14 +90,16 @@ class ManagedSecretProvider:
     def decrypt(self, credential_id: str, version: int, envelope: dict) -> str:
         try:
             if envelope["algorithm"] != "AES-256-GCM":
-                raise CredentialUnavailable()
+                raise CredentialUnavailable(reason="DECRYPT_FAILED")
             key_id = envelope["key_id"]
             aad = f"argus-credential-v1:{credential_id}:{version}:{key_id}".encode()
             token = AESGCM(self.keys[key_id]).decrypt(base64.b64decode(envelope["nonce"], validate=True),
                     base64.b64decode(envelope["ciphertext"], validate=True), aad).decode()
             return _token(token)
+        except CredentialUnavailable:
+            raise
         except Exception:
-            raise CredentialUnavailable() from None
+            raise CredentialUnavailable(reason="DECRYPT_FAILED") from None
 
 
 class CredentialService:
@@ -155,18 +181,41 @@ class CredentialService:
         try:
             with self.manager.get_session() as session:
                 record = session.get(CredentialRecord, credential_id)
-                if record is None or not record.enabled:
-                    raise CredentialUnavailable()
+                if record is None:
+                    raise CredentialUnavailable(reason="CREDENTIAL_NOT_FOUND")
+                if not record.enabled:
+                    raise CredentialUnavailable(reason="CREDENTIAL_DISABLED")
                 if kind is not None:
                     check_credential_target(record, kind, endpoint, environment)
                 credential_type = record.type
                 revision = session.get(CredentialSecretRecord, (record.id, record.active_version))
                 if revision is None:
-                    raise CredentialUnavailable()
+                    raise CredentialUnavailable(reason="SECRET_REVISION_MISSING")
                 provider, version, envelope = record.provider, record.active_version, revision.envelope
             if provider != "managed":
-                raise CredentialUnavailable()
+                raise CredentialUnavailable(reason="UNSUPPORTED_PROVIDER")
             token = ManagedSecretProvider().decrypt(credential_id, version, envelope)
             return ResolvedCredential(token, credential_id, version, provider, credential_type)
+        except CredentialTargetError as exc:
+            logger.warning(
+                "Credential target validation failed: reason=%s credential_id=%s environment=%s",
+                exc.reason,
+                credential_id,
+                environment,
+            )
+            raise CredentialUnavailable(reason=exc.reason) from None
+        except CredentialUnavailable as exc:
+            logger.warning(
+                "Credential resolution failed: reason=%s credential_id=%s environment=%s",
+                exc.reason or "UNKNOWN",
+                credential_id,
+                environment,
+            )
+            raise
         except Exception:
+            logger.warning(
+                "Credential resolution failed: reason=UNKNOWN credential_id=%s environment=%s",
+                credential_id,
+                environment,
+            )
             raise CredentialUnavailable() from None

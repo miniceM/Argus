@@ -12,9 +12,10 @@ from .config import sanitize_langfuse_input, validate_langfuse_dashboard_url
 
 
 class ScoresReadError(RuntimeError):
-    def __init__(self, code: str, *, retry_after: str | None = None):
+    def __init__(self, code: str, *, retry_after: str | None = None, reason: str | None = None):
         self.code = code
         self.retry_after = retry_after
+        self.reason = reason
         # 不回显上游响应、请求头、凭据或异常原文。
         super().__init__(code)
 

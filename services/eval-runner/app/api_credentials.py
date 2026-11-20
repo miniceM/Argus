@@ -16,7 +16,7 @@ from .baselines import normalize_environment
 from .credentials import CredentialService, protected_file
 from .db_models import CredentialRecord
 from .http_invocation import BasicSecret, CredentialType, allowed_origin, encode_secret
-from .secret_providers import CredentialUnavailable, _token
+from .secret_providers import CredentialUnavailable, _token, is_dev_admin_bypass
 
 
 class SecretSafeRoute(APIRoute):
@@ -39,8 +39,16 @@ def service():
 
 
 def authorize(authorization: str | None = Header(default=None)) -> str:
+    if is_dev_admin_bypass():
+        return "credential-admin:dev-bypass"
     try:
-        expected = _token(protected_file("ARGUS_CREDENTIAL_ADMIN_TOKEN_FILE").strip())
+        expected = _token(
+            protected_file(
+                "ARGUS_CREDENTIAL_ADMIN_TOKEN_FILE",
+                missing_reason="ADMIN_TOKEN_MISSING",
+                permission_reason="ADMIN_TOKEN_INSECURE_PERMISSIONS",
+            ).strip()
+        )
     except CredentialUnavailable:
         raise HTTPException(503, "Credential management authorization is not configured",
                             headers={"X-Argus-Error-Code": "CREDENTIAL_ADMIN_UNAVAILABLE"}) from None

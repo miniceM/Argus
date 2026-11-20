@@ -786,6 +786,8 @@ class SystemInfoResponse(BaseModel):
     build_id: str
     environment: str
     langfuse_dashboard_url: str | None = None
+    credential_admin_required: bool = True
+    secret_dev_mode: bool = False
 
 
 class ExperimentLaunchProgressResponse(BaseModel):

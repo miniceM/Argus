@@ -7999,6 +7999,16 @@
               }
             ],
             "title": "Langfuse Dashboard Url"
+          },
+          "credential_admin_required": {
+            "type": "boolean",
+            "title": "Credential Admin Required",
+            "default": true
+          },
+          "secret_dev_mode": {
+            "type": "boolean",
+            "title": "Secret Dev Mode",
+            "default": false
           }
         },
         "type": "object",

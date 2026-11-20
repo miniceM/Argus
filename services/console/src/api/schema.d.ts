@@ -2816,6 +2816,16 @@ export interface components {
             environment: string;
             /** Langfuse Dashboard Url */
             langfuse_dashboard_url?: string | null;
+            /**
+             * Credential Admin Required
+             * @default true
+             */
+            credential_admin_required: boolean;
+            /**
+             * Secret Dev Mode
+             * @default false
+             */
+            secret_dev_mode: boolean;
         };
         /**
          * UsageCostMapping

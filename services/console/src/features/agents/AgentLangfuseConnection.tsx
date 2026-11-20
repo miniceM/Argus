@@ -23,6 +23,12 @@ export function AgentLangfuseConnection({ agent }: { agent: components["schemas"
     if (result.error || !result.data) throw new Error("无法加载凭据");
     return result.data;
   }});
+  const system = useQuery({ queryKey: ["system-info"], enabled: open, queryFn: async () => {
+    const result = await api.GET("/api/v1/system/info");
+    if (result.error || !result.data) return null;
+    return result.data;
+  }});
+  const credentialAdminRequired = system.data?.credential_admin_required !== false;
   const close = () => { setOpen(false); setAuthorization(""); setError(null); };
   const edit = () => {
     setEnabled(Boolean(connection)); setBaseUrl(connection?.base_url || "");
@@ -30,10 +36,11 @@ export function AgentLangfuseConnection({ agent }: { agent: components["schemas"
     setAuthorization(""); setError(null); setOpen(true);
   };
   const mutation = useMutation({ mutationFn: async () => {
-    if (!authorization.trim()) throw new Error("配置或清除项目连接需要管理授权 Token。");
+    if (credentialAdminRequired && !authorization.trim()) throw new Error("配置或清除项目连接需要管理授权 Token。");
     if (enabled && (!baseUrl.trim() || !projectId.trim() || !credentialId)) throw new Error("请填写项目地址、Project ID 并选择凭据。");
     const result = await api.PUT("/api/v1/agents/langfuse-connection", {
-      params: { query: { id: agent.id } }, headers: { Authorization: `Bearer ${authorization}` },
+      params: { query: { id: agent.id } },
+      headers: credentialAdminRequired ? { Authorization: `Bearer ${authorization}` } : {},
       body: { langfuse_connection: enabled ? { base_url: baseUrl.trim(), project_id: projectId.trim(), credential_id: credentialId } : null },
     });
     if (result.error) throw result.error;
@@ -77,9 +84,13 @@ export function AgentLangfuseConnection({ agent }: { agent: components["schemas"
             </SelectInput>}
           </Field>
         </>}
-        <Field label="项目连接管理授权 Token" required hint="仅用于本次配置，不保存到 Agent 或浏览器。">
-          {({ id }) => <TextInput id={id} type="password" required autoComplete="off" value={authorization} onChange={e => setAuthorization(e.target.value)} />}
-        </Field>
+        {credentialAdminRequired ? (
+          <Field label="项目连接管理授权 Token" required hint="仅用于本次配置，不保存到 Agent 或浏览器。">
+            {({ id }) => <TextInput id={id} type="password" required autoComplete="off" value={authorization} onChange={e => setAuthorization(e.target.value)} />}
+          </Field>
+        ) : (
+          <p className="rounded-lg border border-timeout-border bg-timeout-subtle p-3 text-xs text-timeout">开发测试模式已免管理授权 Token（仅限本地/非生产联调）。</p>
+        )}
         {credentials.isError && <p role="alert" className="text-sm text-fail">凭据列表加载失败，请关闭后重试。</p>}
         {error && <p role="alert" className="text-sm text-fail">{error}</p>}
       </form>

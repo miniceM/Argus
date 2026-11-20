@@ -338,6 +338,8 @@ def test_system_info_exposes_only_validated_langfuse_dashboard_url(client, monke
         "build_id": "commit-abc1234",
         "environment": "staging",
         "langfuse_dashboard_url": "https://observability.example.com/langfuse/",
+        "credential_admin_required": True,
+        "secret_dev_mode": False,
     }
 
 

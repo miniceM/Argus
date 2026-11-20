@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import os
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -13,6 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .config import settings, validate_langfuse_dashboard_url
 from .langfuse_scores_client import ScoresReadError, ScoresV3Client
 from .secret_providers import CredentialUnavailable, _token
+
+logger = logging.getLogger(__name__)
 
 
 class LangfuseConnection(BaseModel):
@@ -69,17 +72,38 @@ def resolve_connection(manager, binding, environment, *, operation="DATASET", ac
     from .db_models import CredentialRecord
 
     try:
-        connection = LangfuseConnection.model_validate({key: binding[key] for key in LangfuseConnection.model_fields})
+        try:
+            connection = LangfuseConnection.model_validate({key: binding[key] for key in LangfuseConnection.model_fields})
+        except Exception:
+            raise CredentialUnavailable(reason="INVALID_CONNECTION_BINDING") from None
         resolved = CredentialService(manager).resolve(connection.credential_id, "basic_auth", connection.base_url, environment)
-        public, secret = base64.b64decode(resolved.token, validate=True).decode().split(":", 1)
-        public, secret = _token(public), _token(secret)
+        try:
+            public, secret = base64.b64decode(resolved.token, validate=True).decode().split(":", 1)
+            public, secret = _token(public), _token(secret)
+        except CredentialUnavailable:
+            raise
+        except Exception:
+            raise CredentialUnavailable(reason="MALFORMED_SECRET_FORMAT") from None
         # 记录本次解析修订；后续轮换不改写 Manifest 或历史 Attempt。
         with manager.get_session() as session:
             record = session.get(CredentialRecord, connection.credential_id)
             CredentialService.audit(session, record, "RESOLVE_LANGFUSE_" + operation, actor, version=resolved.version)
         return ResolvedLangfuseConnection(connection.base_url, connection.project_id, connection.credential_id,
                                          resolved.version, public, secret)
+    except CredentialUnavailable as exc:
+        logger.warning(
+            "Langfuse connection credential resolution failed: reason=%s environment=%s operation=%s",
+            exc.reason or "UNKNOWN",
+            environment,
+            operation,
+        )
+        raise
     except Exception:
+        logger.warning(
+            "Langfuse connection credential resolution failed: reason=UNKNOWN environment=%s operation=%s",
+            environment,
+            operation,
+        )
         raise CredentialUnavailable() from None
 
 
@@ -101,8 +125,8 @@ def global_projection():
 def scores_client_for_manifest(manager, manifest):
     try:
         connection = resolve_manifest_connection(manager, manifest, operation="SCORES")
-    except CredentialUnavailable:
-        raise ScoresReadError("CREDENTIAL_UNAVAILABLE") from None
+    except CredentialUnavailable as exc:
+        raise ScoresReadError("CREDENTIAL_UNAVAILABLE", reason=exc.reason) from None
     if connection is None:
         return ScoresV3Client.from_env()
     verify_connection(connection)

@@ -52,6 +52,12 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
     if (result.error || !result.data) throw new Error("无法加载凭据");
     return result.data;
   }});
+  const system = useQuery({ queryKey: ["system-info"], enabled: isOpen, queryFn: async () => {
+    const result = await api.GET("/api/v1/system/info");
+    if (result.error || !result.data) return null;
+    return result.data;
+  }});
+  const credentialAdminRequired = system.data?.credential_admin_required !== false;
   const [artifactRef, setArtifactRef] = useState("");
   const [environment, setEnvironment] = useState("staging");
   const [requestMappingStr, setRequestMappingStr] = useState('{"query": "input.user_message"}');
@@ -80,7 +86,7 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
         ? { name: header.name.trim(), value: header.value, prefix: "" }
         : { name: header.name.trim(), credential_id: header.credentialId, prefix: header.prefix });
       const res = await api.POST("/api/v1/agent-versions", {
-        ...(hasCredentialRefs ? { headers: { Authorization: `Bearer ${credentialAuthorization}` } } : {}),
+        ...(hasCredentialRefs && credentialAdminRequired ? { headers: { Authorization: `Bearer ${credentialAuthorization}` } } : {}),
         body: {
           agent_id: agentId,
           version: version.trim(),
@@ -140,7 +146,7 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
       setErrorMsg("已选择该认证方式，请选择要绑定的凭据（若无需鉴权请切换为 No Auth）。");
       return;
     }
-    if (hasCredentialRefs && !credentialAuthorization.trim()) {
+    if (hasCredentialRefs && credentialAdminRequired && !credentialAuthorization.trim()) {
       setErrorMsg("绑定凭据需要管理授权 Token，请由管理员确认端点可信。");
       return;
     }
@@ -397,9 +403,13 @@ export const CreateVersionDialog: React.FC<CreateVersionDialogProps> = ({
 
           <p className="text-xs text-muted-foreground">Langfuse 项目在 Agent 详情页统一配置，全部版本共用，无需在此重复绑定。</p>
 
-          {hasCredentialRefs && <Field label="凭据绑定管理授权 Token" hint="绑定会允许 Runner 向此端点发送凭据，需管理员确认端点可信。授权仅用于本次操作。">
-            {({ id }) => <TextInput id={id} type="password" autoComplete="off" required value={credentialAuthorization} onChange={e => setCredentialAuthorization(e.target.value)} />}
-          </Field>}
+          {hasCredentialRefs && (credentialAdminRequired ? (
+            <Field label="凭据绑定管理授权 Token" hint="绑定会允许 Runner 向此端点发送凭据，需管理员确认端点可信。授权仅用于本次操作。">
+              {({ id }) => <TextInput id={id} type="password" autoComplete="off" required value={credentialAuthorization} onChange={e => setCredentialAuthorization(e.target.value)} />}
+            </Field>
+          ) : (
+            <p className="rounded-lg border border-timeout-border bg-timeout-subtle p-3 text-xs text-timeout">开发测试模式已免管理授权 Token（仅限本地/非生产联调）。</p>
+          ))}
 
           {credentials.isError && <p role="alert" className="text-sm text-fail">凭据列表加载失败，请关闭并重试，或前往 Credentials 检查服务状态。</p>}
 

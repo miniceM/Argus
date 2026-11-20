@@ -82,7 +82,18 @@ ARGUS_ALLOWED_CREDENTIAL_ENVS=DEMO_AUTH_TOKEN
 DEMO_AUTH_TOKEN=<本地演示 Token>
 ```
 
-根 Compose 显式把这三个变量传入 Runner，`env://DEMO_AUTH_TOKEN` 因此可解析。
+在显式开启 `ARGUS_SECRET_MODE=development` 后：
+
+- **零配置 Managed Secret 联调（仅限本地/非生产）**：当未配置 `ARGUS_MANAGED_SECRET_KEY_FILE` 时，Runner 自动使用内置开发密钥加密存储凭据；当未配置 `ARGUS_CREDENTIAL_ADMIN_TOKEN_FILE` 时，凭据管理与 Agent/Langfuse 绑定写操作免管理授权 Token（审计记录标记为 `credential-admin:dev-bypass`，Console 自动隐藏管理授权输入框并展示开发模式提示）。若在开发模式下显式配置了上述任一文件，则仍严格校验该文件，不会静默绕过。
+- **生产默认 fail-closed**：未设置或设置为 `ARGUS_SECRET_MODE=production` 时，缺主密钥文件或管理授权文件均严格拒绝。
+- **非敏感故障诊断码**：凭据解析失败仍统一脱敏为 `CREDENTIAL_UNAVAILABLE`（不回显任何 Secret 原文或底层异常），并在服务端日志与接口诊断字段中附带白名单原因码，便于快速排查：
+  - `ENVIRONMENT_MISMATCH`：凭据环境与当前评测/请求环境不一致；
+  - `CREDENTIAL_DISABLED` / `CREDENTIAL_NOT_FOUND`：凭据已停用或不存在；
+  - `ORIGIN_NOT_ALLOWED` / `ALLOWED_ORIGINS_REQUIRED`：目标 URL 的 `scheme://host:port` 未在 `allowed_origins` 中授权；
+  - `KEYRING_MISSING` / `KEYRING_INSECURE_PERMISSIONS` / `KEYRING_INVALID` / `DECRYPT_FAILED`：主密钥文件缺失、权限过宽（须仅所有者可读）、格式非法或密钥不匹配；
+  - `MALFORMED_SECRET_FORMAT`：解密后的 Token / Langfuse `pk:sk` 包含非法空白或非 ASCII 字符。
+
+根 Compose 显式把 `ARGUS_SECRET_MODE`、`ARGUS_ALLOWED_CREDENTIAL_ENVS`、`DEMO_AUTH_TOKEN` 传入 Runner，`env://DEMO_AUTH_TOKEN` 因此可解析。
 其他白名单变量还需 Compose override 显式注入对应值，不能只改白名单。
 这是 Runner 进程的变量，宿主管理员可读；轮换需要更新容器配置，不用于生产隔离承诺。
 

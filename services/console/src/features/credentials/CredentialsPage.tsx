@@ -28,6 +28,8 @@ export function CredentialsPage() {
   }});
   const [environmentInput, setEnvironment] = useState<string | null>(null);
   const environment = environmentInput ?? system.data?.environment ?? "";
+  const credentialAdminRequired = system.data?.credential_admin_required !== false;
+  const secretDevMode = system.data?.secret_dev_mode === true;
   const [secret, setSecret] = useState("");
   const [type, setType] = useState<Credential["type"]>("bearer_token");
   const [origins, setOrigins] = useState("");
@@ -59,7 +61,7 @@ export function CredentialsPage() {
     if (!operation) return;
     setPending(true); setError(null);
     const protectedSecret = type === "basic_auth" ? { username, password } : secret;
-    const headers = { Authorization: `Bearer ${authorization}` };
+    const headers: Record<string, string> = credentialAdminRequired ? { Authorization: `Bearer ${authorization}` } : {};
     try {
       let response;
       if (operation === "create") {
@@ -109,10 +111,17 @@ export function CredentialsPage() {
       </div>
       <Button onClick={() => open("create")}>创建凭据</Button>
     </div>
-    <div className="rounded-lg border border-border bg-surface-subtle p-3 text-xs text-muted-foreground flex items-center gap-2">
-      <span className="font-semibold text-foreground">环境说明：</span>
-      <span>托管凭据采用 Argus 主密钥加密存储；管理授权与主密钥由部署管理员配置。环境默认使用当前服务环境。</span>
-    </div>
+    {secretDevMode ? (
+      <div className="rounded-lg border border-timeout-border bg-timeout-subtle p-3 text-xs text-timeout flex items-center gap-2">
+        <span className="font-semibold">开发测试模式（非生产）：</span>
+        <span>已启用显式开发凭据模式（自动使用本地开发密钥{credentialAdminRequired ? "" : "并免管理授权 Token"}）。凭据仍加密落库；切换生产环境请恢复默认配置并挂载真实 Keyring 与管理授权文件。</span>
+      </div>
+    ) : (
+      <div className="rounded-lg border border-border bg-surface-subtle p-3 text-xs text-muted-foreground flex items-center gap-2">
+        <span className="font-semibold text-foreground">环境说明：</span>
+        <span>托管凭据采用 Argus 主密钥加密存储；管理授权与主密钥由部署管理员配置。环境默认使用当前服务环境。</span>
+      </div>
+    )}
     {error && !operation && <p role="alert" className="text-sm text-fail">{error}</p>}
     {list.isPending && <p role="status">正在加载凭据…</p>}
     {list.isError && <p role="alert" className="text-fail">无法加载凭据。<Button variant="secondary" onClick={() => list.refetch()}>重试</Button></p>}
@@ -157,7 +166,11 @@ export function CredentialsPage() {
           <Field label={`输入凭据名称确认：${selected?.name}`}>{({ id }) => <TextInput id={id} required value={confirmation} onChange={e => setConfirmation(e.target.value)} />}</Field>
           {operation === "disable" && <label className="flex gap-2 text-sm"><input type="checkbox" checked={force} onChange={e => setForce(e.target.checked)} />明确确认停用已被 Agent 版本引用的凭据</label>}
         </>}
-        <Field label="管理授权 Token" hint="由部署管理员提供，仅用于本次写操作，不存入浏览器。">{({ id }) => <TextInput id={id} type="password" autoComplete="off" required value={authorization} onChange={e => setAuthorization(e.target.value)} />}</Field>
+        {credentialAdminRequired ? (
+          <Field label="管理授权 Token" hint="由部署管理员提供，仅用于本次写操作，不存入浏览器。">{({ id }) => <TextInput id={id} type="password" autoComplete="off" required value={authorization} onChange={e => setAuthorization(e.target.value)} />}</Field>
+        ) : (
+          <p className="rounded-lg border border-timeout-border bg-timeout-subtle p-3 text-xs text-timeout">开发测试模式已免管理授权 Token（仅限本地/非生产联调）。</p>
+        )}
       </form>
     </Modal>
   </div>;

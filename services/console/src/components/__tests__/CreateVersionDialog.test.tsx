@@ -247,4 +247,26 @@ describe("CreateVersionDialog unified authentication card (Issue #250)", () => {
     expect(api.POST).not.toHaveBeenCalled();
     expect(screen.getByText(/已选择该认证方式，请选择要绑定的凭据/)).toBeInTheDocument();
   });
+
+  it("allows binding a credential without admin token in explicit dev secret mode (Issue #251)", async () => {
+    vi.mocked(api.POST).mockClear().mockResolvedValue({ data: {}, response: new Response() } as any);
+    vi.mocked(api.GET).mockImplementation(((url: string) => url === "/api/v1/system/info"
+      ? Promise.resolve({ data: { environment: "staging", credential_admin_required: false, secret_dev_mode: true }, response: new Response() })
+      : Promise.resolve({ data: [{ id: "cred-dev", name: "开发凭据", type: "bearer_token", environment: "staging", provider: "managed", enabled: true, version: 1 }], response: new Response() })) as any);
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <CreateVersionDialog agentId="banking-agent" isOpen onClose={vi.fn()} />
+      </QueryClientProvider>
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: /版本号/ }), { target: { value: "dev-v1" } });
+    fireEvent.change(screen.getByRole("textbox", { name: /^运行环境$/ }), { target: { value: "staging" } });
+    await screen.findByRole("option", { name: /开发凭据/ });
+    fireEvent.change(screen.getByRole("combobox", { name: /选择凭据/ }), { target: { value: "cred-dev" } });
+    await screen.findByText(/开发测试模式/);
+    expect(screen.queryByLabelText("凭据绑定管理授权 Token")).not.toBeInTheDocument();
+    fireEvent.submit(document.getElementById("create-version-form")!);
+    await waitFor(() => expect(api.POST).toHaveBeenCalledWith("/api/v1/agent-versions", expect.objectContaining({
+      body: expect.objectContaining({ version: "dev-v1", credential_id: "cred-dev" }),
+    })));
+  });
 });

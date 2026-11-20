@@ -112,3 +112,21 @@ it.each([
   expect(await screen.findByRole("alert")).toHaveTextContent(message);
   expect(screen.queryByText(/never-echo-secret/)).not.toBeInTheDocument();
 });
+
+it("allows creating credentials without admin token in explicit dev secret mode (Issue #251)", async () => {
+  vi.mocked(api.GET).mockImplementation(((url: string) => url === "/api/v1/system/info"
+    ? Promise.resolve({ data: { environment: "staging", credential_admin_required: false, secret_dev_mode: true }, response: new Response() })
+    : Promise.resolve({ data: [], response: new Response() })) as any);
+  vi.mocked(api.POST).mockResolvedValue({ data: { id: "dev-1", name: "Dev Key", environment: "staging", provider: "managed", type: "bearer_token", enabled: true, version: 1 }, response: new Response() } as any);
+  render(<QueryClientProvider client={new QueryClient()}><CredentialsPage /></QueryClientProvider>);
+  expect(await screen.findByText(/开发测试模式/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "创建凭据" }));
+  expect(screen.queryByLabelText("管理授权 Token")).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("凭据名称"), { target: { value: "Dev Key" } });
+  fireEvent.change(screen.getByLabelText("Agent Token（仅输入一次）"), { target: { value: "dev-secret" } });
+  fireEvent.submit(screen.getByLabelText("创建凭据表单"));
+  await waitFor(() => expect(api.POST).toHaveBeenCalledWith("/api/v1/credentials", expect.objectContaining({
+    headers: {},
+    body: expect.objectContaining({ name: "Dev Key", environment: "staging", secret: "dev-secret" }),
+  })));
+});

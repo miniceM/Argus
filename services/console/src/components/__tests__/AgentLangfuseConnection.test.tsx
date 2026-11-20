@@ -65,3 +65,24 @@ it("保存失败时保留表单并展示错误", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("Invalid project");
   expect(screen.getByRole("dialog")).toBeInTheDocument();
 });
+
+it("开发测试模式免管理授权 Token 时可直接保存项目连接 (Issue #251)", async () => {
+  vi.mocked(api.GET).mockImplementation(((url: string) => url === "/api/v1/system/info"
+    ? Promise.resolve({ data: { environment: "staging", credential_admin_required: false, secret_dev_mode: true } })
+    : Promise.resolve({ data: [{ id: "lf-credential", name: "团队 B", type: "basic_auth", enabled: true, environment: "staging" }] })) as any);
+  renderConnection();
+  fireEvent.click(screen.getByRole("button", { name: "配置 Langfuse 项目" }));
+  await screen.findByText(/开发测试模式/);
+  expect(screen.queryByLabelText(/项目连接管理授权 Token/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("checkbox", { name: "使用 Agent 独立 Langfuse 项目" }));
+  fireEvent.change(screen.getByLabelText(/Langfuse Base URL/), { target: { value: binding.base_url } });
+  fireEvent.change(screen.getByLabelText(/Langfuse Project ID/), { target: { value: binding.project_id } });
+  await screen.findByRole("option", { name: /团队 B.*staging/ });
+  fireEvent.change(screen.getByLabelText(/Langfuse 凭据/), { target: { value: binding.credential_id } });
+  fireEvent.submit(document.getElementById("agent-langfuse-form")!);
+  await waitFor(() => expect(api.PUT).toHaveBeenCalledWith("/api/v1/agents/langfuse-connection", expect.objectContaining({
+    headers: {},
+    params: { query: { id: "team-b" } },
+    body: { langfuse_connection: binding },
+  })));
+});

@@ -779,8 +779,8 @@ def list_managed_score_candidates(
                 resolved = resolve_connection(
                     db, connection_binding, normalized_env, operation="CANDIDATES", actor="console"
                 )
-            except CredentialUnavailable:
-                raise ScoresReadError("CREDENTIAL_UNAVAILABLE") from None
+            except CredentialUnavailable as exc:
+                raise ScoresReadError("CREDENTIAL_UNAVAILABLE", reason=exc.reason) from None
             verify_connection(resolved)
             client = ScoresV3Client(resolved.base_url, resolved.public_key, resolved.secret_key)
             cache_key = ("BOUND", resolved.base_url, resolved.project_id, resolved.credential_id, resolved.credential_version, normalized_env)
@@ -801,9 +801,19 @@ def list_managed_score_candidates(
     except EnvironmentContractError as exc:
         raise HTTPException(status_code=400, detail=exc.to_payload()) from exc
     except ScoresReadError as exc:
+        detail: dict[str, Any] = {
+            "code": exc.code,
+            "message": (
+                f"无法从 Langfuse 读取候选 Score（{exc.code}: {exc.reason}）。"
+                if exc.reason
+                else f"无法从 Langfuse 读取候选 Score（{exc.code}）。"
+            ),
+        }
+        if exc.reason:
+            detail["reason"] = exc.reason
         raise HTTPException(
             status_code=502 if exc.code in ("AUTHENTICATION_FAILED", "AUTHORIZATION_FAILED", "UPSTREAM_UNAVAILABLE", "TIMEOUT", "NETWORK_UNAVAILABLE") else 409,
-            detail={"code": exc.code, "message": f"无法从 Langfuse 读取候选 Score（{exc.code}）。"},
+            detail=detail,
         ) from None
     finally:
         if isinstance(client, ScoresV3Client):
